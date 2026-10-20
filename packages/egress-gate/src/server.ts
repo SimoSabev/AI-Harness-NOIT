@@ -191,6 +191,11 @@ export async function startGate(o: GateOptions): Promise<{ close(): Promise<void
     log({ kind: "proxy_block", method: "CONNECT", path: req.url ?? "", status: 403 });
     socket.end("HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\n\r\n");
   });
+  // E3в: no websocket (Codex's built-in provider prefers websockets; ours is plain HTTPS through the proxy)
+  server.on("upgrade", (req: http.IncomingMessage, socket: Duplex) => {
+    log({ kind: "proxy_block", method: `${req.method ?? "GET"} upgrade`, path: (req.url ?? "").split("?")[0] ?? "", status: 403 });
+    socket.end("HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\n\r\n");
+  });
 
   const udp = dgram.createSocket("udp4");
   udp.on("message", (msg, rinfo) => {

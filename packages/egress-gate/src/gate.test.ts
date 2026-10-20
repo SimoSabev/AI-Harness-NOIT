@@ -256,6 +256,20 @@ describe("gate server", () => {
     expect(lines().some((l) => l.kind === "proxy_block" && l.path === "/api/hello")).toBe(false);
   });
 
+  it("E3в: Upgrade (websocket) към /v1/responses → 403, логва се, upstream не вижда нищо", async () => {
+    const up = await stub((_q, res) => res.end());
+    const { g, lines } = await gate(pol("agent"), { llmProxyUrl: up.url });
+    const answer = await new Promise<string>((resolve) => {
+      const s = net.connect(g.httpPort, "127.0.0.1", () => s.write("GET /v1/responses HTTP/1.1\r\nHost: egress-gate\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"));
+      let b = "";
+      s.on("data", (c) => (b += c.toString()));
+      s.on("close", () => resolve(b));
+    });
+    expect(answer).toMatch(/^HTTP\/1\.1 403/);
+    expect(up.calls()).toBe(0);
+    await waitFor(() => lines().some((l) => l.kind === "proxy_block" && l.method === "GET upgrade"));
+  });
+
   it("upstream недостъпен → 502", async () => {
     const { base } = await gate(pol("agent"), { llmProxyUrl: "http://127.0.0.1:1" });
     expect((await req(base, "POST", "/v1/messages", {}, "{}")).status).toBe(502);
