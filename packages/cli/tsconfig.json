@@ -38,6 +38,12 @@
     },
     {
       "path": "../../bench"
+    },
+    {
+      "path": "../verify"
+    },
+    {
+      "path": "../core"
     }
   ]
 }

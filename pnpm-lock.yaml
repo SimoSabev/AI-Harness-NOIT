@@ -281,6 +281,9 @@ importers:
       '@mandat/contract':
         specifier: workspace:*
         version: link:../contract
+      '@mandat/core':
+        specifier: workspace:*
+        version: link:../core
       '@mandat/export':
         specifier: workspace:*
         version: link:../export
@@ -296,6 +299,9 @@ importers:
       '@mandat/sandbox':
         specifier: workspace:*
         version: link:../sandbox
+      '@mandat/verify':
+        specifier: workspace:*
+        version: link:../verify
       '@mandat/worker':
         specifier: workspace:*
         version: link:../../apps/worker

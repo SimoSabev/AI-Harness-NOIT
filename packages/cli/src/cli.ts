@@ -7,6 +7,8 @@ import { fixturesBuild } from "./commands/fixtures.js";
 import { runCommand } from "./commands/run.js";
 import { benchCommand, redteamCommand } from "./commands/bench.js";
 import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
+import { verifyAlias } from "./commands/verify.js";
+import { ladderSim } from "./commands/ladder.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -17,6 +19,16 @@ import path from "node:path";
 
 /** Runs the CLI in-process and returns the exit code (D-026, D-128). Usage errors → 2. */
 export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<number> {
+  // `mandat [--home <dir>] verify …` → the mandat-verify process (D-238); its flags pass through untouched.
+  const rest = argv.slice(2);
+  const vi = rest.indexOf("verify");
+  if (vi >= 0 && rest.slice(0, vi).every((a, k, xs) => a === "--home" || xs[k - 1] === "--home" || a === "--json")) {
+    const pre = rest.slice(0, vi);
+    const h = pre.includes("--home") ? pre[pre.indexOf("--home") + 1] : io.env.MANDAT_HOME;
+    const args = rest.slice(vi + 1);
+    if (pre.includes("--json") && !args.includes("--json")) args.push("--json");
+    return verifyAlias(io, args, h ? { home: path.resolve(io.cwd, h) } : { home: mandatHome({ home: undefined, env: io.env }) });
+  }
   let code = 0;
   let cached: CliDeps | undefined = depsIn;
   const deps = (): CliDeps => (cached ??= realDeps());
@@ -139,6 +151,21 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .action(async (o: { json?: boolean }) => {
       code = await proxyStatus(io, deps(), { json: json(o), port: hostConfig(io.env).proxyAdminPort });
     });
+
+  program
+    .command("ladder")
+    .description("trust ladder tools")
+    .command("sim")
+    .description("mean number of tasks until the first promotion (spec т. 7: ≈ 87)")
+    .requiredOption("--p <p>", "success probability")
+    .option("--h <h>", "h_up threshold (default 5)")
+    .option("--runs <n>", "simulations (default 10000)")
+    .option("--seed <n>", "PRNG seed (default 1)")
+    .option("--json", "machine output")
+    .action((o: { p: string; h?: string; runs?: string; seed?: string; json?: boolean }) => {
+      code = ladderSim(io, { ...o, json: json(o) });
+    });
+  program.command("verify").description("alias of mandat-verify (Apache-2.0), run as a separate process");
 
   try {
     await program.parseAsync(argv);

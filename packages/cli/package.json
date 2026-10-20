@@ -31,6 +31,8 @@
     "@mandat/export": "workspace:*",
     "@mandat/redaction": "workspace:*",
     "@mandat/agents": "workspace:*",
-    "@mandat/bench": "workspace:*"
+    "@mandat/bench": "workspace:*",
+    "@mandat/verify": "workspace:*",
+    "@mandat/core": "workspace:*"
   }
 }
