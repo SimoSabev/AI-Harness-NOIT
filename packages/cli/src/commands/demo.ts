@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 import type { SqlClient } from "@mandat/ledger";
-import { buildFixture, seedDemo, seedMinimal, seedScene1 } from "@mandat/worker";
+import { buildFixture, demoSpillFake, seedDemo, seedMinimal, seedScene1, spillLine } from "@mandat/worker";
 import os from "node:os";
 import { mkdtempSync } from "node:fs";
 import { OBSERVER_APP_ID, WRITER_APP_ID, checkLine, deleteM, demoRepoWithPull, editFile, externalPrVerdict, fakeGitHub } from "@mandat/gate-github";
@@ -101,4 +101,27 @@ export async function demoExternalPr(io: Io, o: { home: string; fake: boolean; j
   if (o.json) printJson(io, { check: r.check, effective_level: r.outcome.effective_level, exit: 0 });
   else io.stdout(`${checkLine(r.outcome.verdict)}\n${r.check.title}\nниво: ${r.outcome.effective_level}\n`);
   return 0;
+}
+
+/** т. 8.3 „Готово, когато“: `mandat demo spill --fake` — the limit chain offline (stub 429 → spill → fake Codex). */
+export async function demoSpill(io: Io, o: { home: string; fake: boolean; json: boolean; docker: DockerRunner }): Promise<number> {
+  if (!o.fake) throw new MandatError("E_USAGE", "only --fake exists (the live path needs OPENAI_API_KEY in the proxy, docs/setup/keys.md)");
+  const images = await imageTags(repoRoot);
+  for (const t of [images.sandbox, images.gate, images.proxy]) {
+    if ((await dockerText(o.docker, ["image", "inspect", t])).exitCode !== 0) {
+      io.stderr(`image missing: ${t} (pnpm mandat images build)\n`);
+      return 3;
+    }
+  }
+  await ensureUpstreamNetwork(o.docker);
+  const { user } = await infraUserFor(o.docker);
+  const home = mkdtempSync(path.join(os.tmpdir(), "mandat-spill-"));
+  const s = await demoSpillFake({ repoRoot, home, docker: o.docker, images, user, ipv6Sysctl: await probeIpv6(o.docker, images.sandbox) });
+  if (o.json) printJson(io, { ...s, line: spillLine(s), exit: s.result === "VERIFIED" ? 0 : 1 });
+  else {
+    for (const l of s.lines) io.stderr(`${l}\n`);
+    io.stdout(`${spillLine(s)}\n`);
+    io.stdout("демо: лимитът е симулиран (stub-upstream --429)\n");
+  }
+  return s.result === "VERIFIED" ? 0 : 1;
 }

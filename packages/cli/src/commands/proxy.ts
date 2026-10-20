@@ -53,13 +53,16 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   if (recreate) await dockerText(deps.docker, ["rm", "-f", NAME], 60_000);
   const { user } = await infraUserFor(deps.docker);
   const publicEnv: Record<string, string> = { MANDAT_PROXY_SECRET_FILE: "/var/lib/mandat-proxy/secret" };
+  // E3в: OpenAI only when given for this command; prices and upstreams are not secrets (S33, docs/setup/keys.md)
+  for (const k of ["MANDAT_PROXY_OPENAI_PRICES", "MANDAT_UPSTREAM_ANTHROPIC", "MANDAT_UPSTREAM_OPENAI"] as const) if (io.env[k]) publicEnv[k] = io.env[k] as string;
+  const openai = io.env.OPENAI_API_KEY;
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
     name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port,
-    envNames: ["ANTHROPIC_API_KEY"], publicEnv, ...(o.host.extraCa !== undefined ? { caFile: o.host.extraCa } : {}),
+    envNames: openai ? ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] : ["ANTHROPIC_API_KEY"], publicEnv, ...(o.host.extraCa !== undefined ? { caFile: o.host.extraCa } : {}),
   });
   // The key value lives only in the env of the docker CLI process; argv has just `-e ANTHROPIC_API_KEY`.
-  const started = await deps.docker.run(args, { env: { ANTHROPIC_API_KEY: key }, stdin: "closed", timeoutMs: 60_000 });
+  const started = await deps.docker.run(args, { env: { ANTHROPIC_API_KEY: key, ...(openai ? { OPENAI_API_KEY: openai } : {}) }, stdin: "closed", timeoutMs: 60_000 });
   if (started.exitCode !== 0) {
     io.stderr("cannot start mandat-llm-proxy\n");
     return 3;

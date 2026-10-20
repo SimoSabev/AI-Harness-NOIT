@@ -11,7 +11,7 @@ import { verifyAlias } from "./commands/verify.js";
 import { initCommand } from "./commands/init.js";
 import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
-import { demoExternalPr, demoSeed } from "./commands/demo.js";
+import { demoExternalPr, demoSeed, demoSpill } from "./commands/demo.js";
 import { workerCommand } from "./commands/worker.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
@@ -210,6 +210,14 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--json", "machine output")
     .action(async (o: { fake?: boolean; json?: boolean }) => {
       code = await demoExternalPr(io, { home: home(), fake: Boolean(o.fake), json: json(o), docker: depsIn?.docker ?? deps().docker });
+    });
+  demo
+    .command("spill")
+    .description("scene 2 offline: Anthropic 429 → spill → OpenAI channel, fake Codex (т. 8.3)")
+    .option("--fake", "stub upstream + test proxy + fake agents (no network)")
+    .option("--json", "machine output")
+    .action(async (o: { fake?: boolean; json?: boolean }) => {
+      code = await demoSpill(io, { home: home(), fake: Boolean(o.fake), json: json(o), docker: depsIn?.docker ?? deps().docker });
     });
   demo
     .command("seed")

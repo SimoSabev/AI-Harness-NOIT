@@ -78,6 +78,16 @@ describe("proxy start", () => {
     const runFail = docker([(a) => (a[0] === "inspect" ? { exit: 1 } : a[0] === "run" ? { exit: 125 } : undefined)]);
     expect((await cli(["--home", h, "proxy", "start"], deps(runFail), { ANTHROPIC_API_KEY: key })).code).toBe(3);
     expect(existsSync(path.join(h, "proxy", "secret"))).toBe(true);
+    // E3в: OPENAI_API_KEY only by name; the prices go as public env
+    const oai = ["sk", "proj", "y".repeat(30)].join("-");
+    const calls2: { args: string[]; env: Record<string, string> }[] = [];
+    const nr2 = docker([(a) => (a[0] === "inspect" ? { exit: 1 } : undefined), (a) => (a[0] === "info" && a.includes("{{json .SecurityOptions}}") ? { out: "[]" } : undefined)], calls2);
+    expect((await cli(["--home", h, "proxy", "start"], deps(nr2), { ANTHROPIC_API_KEY: key, OPENAI_API_KEY: oai, MANDAT_PROXY_OPENAI_PRICES: '{"m":{"input":1,"cached_input":0.1,"output":2}}' })).code).toBe(0);
+    const run2 = calls2.find((c) => c.args[0] === "run");
+    expect(run2?.args.join(" ")).not.toContain(oai);
+    expect(run2?.args).toContain("OPENAI_API_KEY");
+    expect(run2?.env.OPENAI_API_KEY).toBe(oai);
+    expect(run2?.args.some((x) => x.startsWith("MANDAT_PROXY_OPENAI_PRICES="))).toBe(true);
   });
 });
 
