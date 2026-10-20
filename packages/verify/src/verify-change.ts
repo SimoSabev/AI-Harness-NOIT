@@ -34,6 +34,8 @@ export interface VerifyDeps {
   ladderLevel?: number | null;
   rulesetStrict?: boolean;
   d7?: D7Status;
+  /** D7.ci lite evidence for head_sha (external PRs, т. 6.4); otherwise n/a */
+  d7Evidence?: Evidence;
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
   recompute?: typeof recomputeTreeSha;
@@ -99,7 +101,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
   let riskCap = 1;
   const timings = { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 };
   set(na("CANARY", external ? "agent is not in our sandbox" : "not run"));
-  set(na("D7.ci", "no CI signal"));
+  set(deps.d7Evidence ?? na("D7.ci", "no CI signal"));
 
   const finish = (): VerifyOutcome => {
     const evidence = EVIDENCE_ORDER.map((d) => evd.get(d) ?? na(d));

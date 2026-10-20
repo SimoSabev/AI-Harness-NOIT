@@ -11,7 +11,7 @@ export { RunWriter } from "./run-dir.js";
 export { writeAtomic } from "./fsx.js";
 export { VerifyInfraError, verifyTrees } from "./verify-trees.js";
 export type { VerifyTreesInput, VerifyTreesResult } from "./verify-trees.js";
-export { REF_NAME, mirrorPathFor, readAtBase, resolveTrustedBase } from "./trusted-base.js";
+export { REF_NAME, mirrorPathFor, pinTrustedRemote, readAtBase, resolveTrustedBase } from "./trusted-base.js";
 export type { BaseUntrusted, TrustedBase } from "./trusted-base.js";
 export { tarOf, workingTreeFiles } from "./worktree.js";
 export { EVIDENCE_ORDER, flakyHistory, historyFile, syntheticTaskId, verifyChange } from "./verify-change.js";

@@ -25,13 +25,11 @@ async function out(git: CleanGit, args: string[], cwd: string): Promise<{ ok: bo
   return { ok: r.code === 0, text: r.stdout.toString("utf8").trim(), err: r.stderr.slice(0, 300) };
 }
 
-export async function resolveTrustedBase(o: { repo: string; remote: string | null; home: string; tmpHome: string }): Promise<TrustedBase> {
+/** (а)+(б) of т. 5.7 (2): fetch the default branch of a human-named remote into Mandat's own mirror. */
+export async function pinTrustedRemote(o: { remote: string | null; home: string; tmpHome: string }): Promise<{ ok: true; mirror: string; branch: string; tip: string } | { ok: false; reason: BaseUntrusted; detail: string }> {
   if (!o.remote) return { ok: false, reason: "no_remote", detail: "--remote is required" };
   if (o.remote.startsWith("-")) return { ok: false, reason: "bad_ref", detail: "remote starts with -" };
   const git = cleanGit({ tmpHome: o.tmpHome });
-  const repo = path.resolve(o.repo);
-  const top = await out(git, ["rev-parse", "--show-toplevel"], repo);
-  if (!top.ok) return { ok: false, reason: "not_a_repo", detail: top.err };
   const mirror = mirrorPathFor(o.home, o.remote);
   if (!existsSync(path.join(mirror, "HEAD"))) {
     mkdirSync(mirror, { recursive: true });
@@ -48,6 +46,25 @@ export async function resolveTrustedBase(o: { repo: string; remote: string | nul
   const trustedRef = `refs/mandat/trusted/${branch}`;
   const f1 = await out(git, [...FSYNC, "fetch", "-q", "--no-tags", "--end-of-options", o.remote, `+refs/heads/${branch}:${trustedRef}`], mirror);
   if (!f1.ok) return { ok: false, reason: "fetch_failed", detail: f1.err };
+  const tip = await out(git, ["rev-parse", "--verify", "--end-of-options", `${trustedRef}^{commit}`], mirror);
+  /* v8 ignore next */
+  if (!tip.ok) return { ok: false, reason: "fetch_failed", detail: tip.err };
+  return { ok: true, mirror, branch, tip: tip.text };
+}
+
+export async function resolveTrustedBase(o: { repo: string; remote: string | null; home: string; tmpHome: string }): Promise<TrustedBase> {
+  const git = cleanGit({ tmpHome: o.tmpHome });
+  const repo = path.resolve(o.repo);
+  if (o.remote && !o.remote.startsWith("-")) {
+    const top0 = await out(git, ["rev-parse", "--show-toplevel"], repo);
+    if (!top0.ok) return { ok: false, reason: "not_a_repo", detail: top0.err };
+  }
+  const pin = await pinTrustedRemote(o);
+  if (!pin.ok) return pin;
+  const { mirror, branch } = pin;
+  const trustedRef = `refs/mandat/trusted/${branch}`;
+  const top = await out(git, ["rev-parse", "--show-toplevel"], repo);
+  if (!top.ok) return { ok: false, reason: "not_a_repo", detail: top.err };
   const sym = await out(git, ["symbolic-ref", "-q", "HEAD"], repo);
   if (sym.ok && sym.text === `refs/heads/${branch}`) return { ok: false, reason: "on_default_branch", detail: branch };
   const f2 = await out(git, [...FSYNC, "fetch", "-q", "--no-tags", "--end-of-options", top.text, "+HEAD:refs/mandat/agent/head"], mirror);

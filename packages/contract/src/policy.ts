@@ -76,6 +76,8 @@ export const MandatPolicy = z
         max_file_mb: z.number().positive().max(100),
         max_diff_mb: z.number().positive().max(500),
         max_files: z.number().int().positive().max(10000),
+        /** GitHub user ids whose PRs are verified without a human approval (т. 6.4, S13) */
+        external_agents: z.array(z.number().int().positive()).max(100).optional(),
       })
       .strict(),
   })
