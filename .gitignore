@@ -11,3 +11,5 @@ coverage/
 test-results/
 .next/
 .mandat.yml.proposed
+demo/recordings/*.webm
+demo/screenshots/*.tmp.png

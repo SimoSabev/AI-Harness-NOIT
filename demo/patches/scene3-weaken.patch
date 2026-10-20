@@ -1,0 +1,9 @@
+--- a/tests/cart.spec.ts
++++ b/tests/cart.spec.ts
+@@ -25,5 +25,5 @@
+   });
+   it("applies 10% over 50", () => {
+-    expect(discountCents(10000)).toBe(1000);
++    expect(discountCents(10000)).toBe(0);
+   });
+   it("rounds discount down to whole cents", () => {

@@ -1,0 +1,15 @@
+--- a/src/cart.ts
++++ b/src/cart.ts
+@@ -7,5 +7,5 @@
+ 
+ // 10% off (rounded down to a whole cent) when the subtotal is strictly over 50 EUR.
+-const DISCOUNT_THRESHOLD_CENTS = 50000;
++const DISCOUNT_THRESHOLD_CENTS = 5000;
+ 
+ export function subtotalCents(items: Item[]): number {
+@@ -20,4 +20,5 @@
+ export function discountCents(subtotal: number): number {
++  // whole cents only: the discount is always rounded down
+   if (subtotal > DISCOUNT_THRESHOLD_CENTS) return Math.floor(subtotal / 10);
+   return 0;
+ }

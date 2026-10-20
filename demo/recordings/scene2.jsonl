@@ -1,0 +1,6 @@
+{"type":"thread.started","thread_id":"replay-scene2"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"The working tree may contain partial work; checking src/cart.ts."}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"src/cart.ts","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Fixed the discount threshold (5000 cents)."}}
+{"type":"turn.completed","usage":{"input_tokens":0,"cached_input_tokens":0,"cache_write_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0}}
