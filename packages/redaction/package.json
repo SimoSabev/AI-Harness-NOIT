@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Secret redaction for everything Mandat writes as text",
-  "license": "GPL-3.0-or-later",
+  "license": "Apache-2.0",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {

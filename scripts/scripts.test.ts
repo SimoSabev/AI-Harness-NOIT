@@ -3,17 +3,15 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { checkLicenses, flatten } from "./check-licenses.mjs";
+import { checkGroups, flatten } from "./check-licenses.mjs";
 import { scanForDotenv } from "./check-no-dotenv.mjs";
 import { renderThirdParty } from "./gen-third-party.mjs";
 import { spdxAllowed } from "./spdx.mjs";
 import { config as vitestConfig } from "../vitest.config.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const allowlist = JSON.parse(readFileSync(path.join(repo, "license-allowlist.json"), "utf8")) as {
-  allowed: string[];
-  exceptions: { license: string; reason: string; devOnly: boolean }[];
-};
+type Group = { allowed: string[]; devOnlyExceptions: { license: string; reason: string; devOnly: boolean }[] };
+const allowlist = JSON.parse(readFileSync(path.join(repo, "license-allowlist.json"), "utf8")) as { core: Group; harness: Group };
 const lic = (name: string) => JSON.parse(readFileSync(path.join(repo, "fixtures/licenses", name), "utf8")) as Record<string, { name: string; versions: string[]; license: string }[]>;
 const one = (id: string, license: string) => new Map([[id, license]]);
 
@@ -33,7 +31,7 @@ describe("check-no-dotenv (D-065)", () => {
 });
 
 describe("check-licenses (D-052, D-077)", () => {
-  const allowed = new Set(allowlist.allowed);
+  const allowed = new Set(allowlist.core.allowed);
   it("SPDX изрази", () => {
     expect(spdxAllowed("MIT OR CC0-1.0", allowed)).toBe(true);
     expect(spdxAllowed("(BSD-2-Clause OR MIT OR Apache-2.0)", allowed)).toBe(true);
@@ -43,14 +41,27 @@ describe("check-licenses (D-052, D-077)", () => {
     expect(() => spdxAllowed("(MIT", allowed)).toThrow();
     expect(() => spdxAllowed("MIT OR", allowed)).toThrow();
   });
+  const empty = new Map<string, string>();
+  const pkg = (name: string, group: "core" | "harness" | null, prod: Map<string, string>, workspaceDeps: string[] = []) => ({ name, group, prod, workspaceDeps });
   it("prod / dev изключения", () => {
-    const empty = new Map<string, string>();
-    expect(checkLicenses({ all: one("x@1.0.0", "Python-2.0"), prod: empty, allowlist }).ok).toBe(true);
-    const prodFail = checkLicenses({ all: one("x@1.0.0", "Python-2.0"), prod: one("x@1.0.0", "Python-2.0"), allowlist });
+    expect(checkGroups({ packages: [], dev: one("x@1.0.0", "Python-2.0"), allowlist }).ok).toBe(true);
+    const prodFail = checkGroups({ packages: [pkg("@mandat/cli", "harness", one("x@1.0.0", "Python-2.0"))], dev: empty, allowlist });
     expect(prodFail.ok).toBe(false);
     expect(prodFail.failures.join("\n")).toContain("x@1.0.0");
-    expect(checkLicenses({ all: one("y@1.0.0", "CC0-1.0"), prod: one("y@1.0.0", "CC0-1.0"), allowlist }).ok).toBe(false);
-    expect(checkLicenses({ all: one("z@1.0.0", "SEE LICENSE IN LICENSE.md"), prod: empty, allowlist }).ok).toBe(false);
+    expect(checkGroups({ packages: [pkg("@mandat/cli", "harness", one("y@1.0.0", "CC0-1.0"))], dev: empty, allowlist }).ok).toBe(false);
+    expect(checkGroups({ packages: [], dev: one("z@1.0.0", "SEE LICENSE IN LICENSE.md"), allowlist }).ok).toBe(false);
+  });
+  it("групи (В-1): GPL транзитивно в ядрото → fail; MPL в ядрото → fail; MPL в харнеса → ok", () => {
+    const gpl = checkGroups({ packages: [pkg("@mandat/core", "core", one("left-pad-gpl@1.0.0", "GPL-3.0-only"))], dev: empty, allowlist });
+    expect(gpl.ok).toBe(false);
+    expect(gpl.failures.join("\n")).toContain("left-pad-gpl@1.0.0");
+    const mplCore = checkGroups({ packages: [pkg("@mandat/contract", "core", one("web-push@3.6.7", "MPL-2.0"))], dev: empty, allowlist });
+    expect(mplCore.ok).toBe(false);
+    const mplHarness = checkGroups({ packages: [pkg("@mandat/web", "harness", one("web-push@3.6.7", "MPL-2.0"))], dev: empty, allowlist });
+    expect(mplHarness).toEqual({ ok: true, failures: [], counts: { core: 0, harness: 1 } });
+    const crossDep = checkGroups({ packages: [pkg("@mandat/core", "core", empty, ["@mandat/cli"])], dev: empty, allowlist });
+    expect(crossDep.failures).toEqual(["@mandat/core (core) depends on @mandat/cli (harness)"]);
+    expect(checkGroups({ packages: [pkg("@mandat/x", null, empty)], dev: empty, allowlist }).ok).toBe(false);
   });
   it("записаният изход на pnpm 12.14.0 (--recursive, --prod)", () => {
     const all = flatten(lic("pnpm-12.14.0.json"));
@@ -59,7 +70,7 @@ describe("check-licenses (D-052, D-077)", () => {
     expect(all.has("tar@7.5.22")).toBe(true);
     expect(prod.has("tar@7.5.22")).toBe(true);
     expect([...prod.keys()].some((k) => k.startsWith("vitest@"))).toBe(false);
-    expect(checkLicenses({ all, prod, allowlist }).ok).toBe(true);
+    expect(checkGroups({ packages: [pkg("@mandat/export", "core", prod)], dev: all, allowlist }).ok).toBe(true);
     const md = renderThirdParty(lic("pnpm-12.14.0.json"), lic("pnpm-12.14.0-prod.json"));
     expect(md).toContain("| tar | 7.5.22 | BlueOak-1.0.0 | runtime |");
     expect(md).toContain("| vitest | 5.0.5 | MIT | dev |");

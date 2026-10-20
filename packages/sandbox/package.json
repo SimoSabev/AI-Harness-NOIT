@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Docker sandbox: hardening flags, runner, networks, image tags",
-  "license": "GPL-3.0-or-later",
+  "license": "Apache-2.0",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": {

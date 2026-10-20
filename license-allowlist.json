@@ -1,34 +1,69 @@
 {
-  "allowed": [
-    "MIT",
-    "Apache-2.0",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "ISC",
-    "0BSD",
-    "BlueOak-1.0.0",
-    "MPL-2.0"
-  ],
-  "exceptions": [
-    {
-      "license": "CC0-1.0",
-      "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
-      "devOnly": true
-    },
-    {
-      "license": "Python-2.0",
-      "reason": "permissive PSF license; pre-approved for dev-only tooling (D-052)",
-      "devOnly": true
-    },
-    {
-      "license": "CC-BY-4.0",
-      "reason": "attribution-only data license; pre-approved for dev-only tooling (D-052)",
-      "devOnly": true
-    },
-    {
-      "license": "Unlicense",
-      "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
-      "devOnly": true
-    }
-  ]
+  "core": {
+    "allowed": [
+      "MIT",
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "ISC",
+      "0BSD",
+      "BlueOak-1.0.0"
+    ],
+    "devOnlyExceptions": [
+      {
+        "license": "CC0-1.0",
+        "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      },
+      {
+        "license": "Python-2.0",
+        "reason": "permissive PSF license; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      },
+      {
+        "license": "CC-BY-4.0",
+        "reason": "attribution-only data license; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      },
+      {
+        "license": "Unlicense",
+        "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      }
+    ]
+  },
+  "harness": {
+    "allowed": [
+      "MIT",
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "ISC",
+      "0BSD",
+      "BlueOak-1.0.0",
+      "MPL-2.0"
+    ],
+    "devOnlyExceptions": [
+      {
+        "license": "CC0-1.0",
+        "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      },
+      {
+        "license": "Python-2.0",
+        "reason": "permissive PSF license; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      },
+      {
+        "license": "CC-BY-4.0",
+        "reason": "attribution-only data license; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      },
+      {
+        "license": "Unlicense",
+        "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
+        "devOnly": true
+      }
+    ]
+  }
 }

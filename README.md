@@ -85,9 +85,28 @@ pnpm mandat proxy stop
 | B7 | partial-fix | `>=` вместо `>` | FAILED | D1:regression |
 | B8 | it-only | поправка + `it.only` | FAILED | D2:only |
 
-## Лиценз
-GPL-3.0-or-later (LICENSE). Зависимостите са само с MIT/Apache-2.0/BSD-2-Clause/BSD-3-Clause/ISC/0BSD/BlueOak-1.0.0/MPL-2.0
-(`pnpm licenses:check`; списък: THIRD_PARTY_LICENSES.md). **Claude Code е несвободен софтуер на Anthropic**: не е
-зависимост, върви като отделен немодифициран процес в локално построен образ и не се разпространява.
+## Лицензи
+Мандат има две лицензни групи (решение В-1; D-204, D-238). Проверката е `pnpm licenses:check` → `licenses ok (core: N packages, harness: M packages)`.
+
+| Група | Лиценз | Пакети | Позволени зависимости (prod, транзитивно) |
+| --- | --- | --- | --- |
+| Ядро | Apache-2.0 (`packages/<p>/LICENSE`, `NOTICE`) | contract, core, ledger, export, sandbox, redaction; от E1б–E2: verify, gate-github, mcp | MIT, Apache-2.0, BSD-2/3-Clause, ISC, 0BSD, BlueOak-1.0.0 (без MPL, без GPL) |
+| Харнес | GPL-3.0-or-later (коренът `LICENSE`) | egress-gate, llm-proxy, channels, agents, cli, apps/worker, apps/web, onboard, bench, spikes | ядрото + MPL-2.0 |
+
+Защо така: Apache-2.0 код може да се ползва от GPL-3.0 проект, обратното не може
+([apache.org/licenses/GPL-compatibility.html](https://www.apache.org/licenses/GPL-compatibility.html);
+[gnu.org/licenses/license-list.html](https://www.gnu.org/licenses/license-list.html), проверено 20.10.2026). Затова
+ядрото не импортира харнес пакети (тест `scripts/license-groups.test.ts`, и по import-ите, и по `workspace:*`
+зависимостите). `mandat verify` в cli (GPL) е само псевдоним, който пуска `mandat-verify` (Apache) като процес.
+MPL-2.0 (`web-push`, само в харнеса) е съвместим с GPL-3.0 по MPL-2.0 §3.3, освен ако файлът носи „Incompatible With
+Secondary Licenses“ (проверява се в E3г).
+
+Целият проект се подава за НОИТ като GPL-3.0-or-later комбинирана творба. Регламентът 2026/27 още не е излязъл [НП];
+ако поиска GPL за целия код, ядрото става dual: `node scripts/set-core-license.mjs --mode dual` слага
+`"license": "Apache-2.0 OR GPL-3.0-or-later"` (GPL текстът вече е в `packages/<p>/licenses/`, неактивен). Решава Симо
+(docs/questions-for-simo.md, Q-017). Списък на зависимостите: THIRD_PARTY_LICENSES.md.
+
+**Claude Code и Codex са отделни процеси**: не са зависимости, вървят немодифицирани в локално построен образ и не
+се разпространяват. Claude Code е несвободен софтуер на Anthropic.
 
 Решенията и „защо“: docs/decisions.md. Сигурност: docs/security-e0.md. Правила за агенти: AGENTS.md.
