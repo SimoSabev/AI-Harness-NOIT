@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_KEY_ROUTES } from "@mandat/channels";
 import { dockerText, names } from "@mandat/sandbox";
 import { runSandbox, startRunGate } from "@mandat/worker";
-import { cleanupRun, dockerEnv, repoRoot, tempRun } from "../../../apps/worker/src/testing.js";
+import { cleanupRun, dockerEnv, repoRoot, tempRun } from "./testing.js";
 
 let env: Awaited<ReturnType<typeof dockerEnv>>;
 const run = tempRun();
