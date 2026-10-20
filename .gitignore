@@ -9,3 +9,4 @@ coverage/
 *.tsbuildinfo
 .turbo/
 test-results/
+.next/

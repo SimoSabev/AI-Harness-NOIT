@@ -7,7 +7,7 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     languageOptions: {
-      globals: { process: "readonly", console: "readonly", Buffer: "readonly", URL: "readonly", setTimeout: "readonly", clearTimeout: "readonly", setInterval: "readonly", clearInterval: "readonly", fetch: "readonly", AbortSignal: "readonly", Response: "readonly", Headers: "readonly" },
+      globals: { process: "readonly", console: "readonly", Buffer: "readonly", URL: "readonly", setTimeout: "readonly", clearTimeout: "readonly", setInterval: "readonly", clearInterval: "readonly", fetch: "readonly", AbortSignal: "readonly", Response: "readonly", Headers: "readonly", Request: "readonly", document: "readonly", localStorage: "readonly" },
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",
@@ -15,6 +15,11 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "no-restricted-syntax": ["error", { selector: "ExportDefaultDeclaration", message: "Named exports only (AGENTS.md)." }],
     },
+  },
+  {
+    // Next.js App Router (page/layout) and Playwright globalSetup require default exports (D-285)
+    files: ["apps/web/src/app/**/page.tsx", "apps/web/src/app/**/layout.tsx", "apps/web/e2e/global-setup.ts"],
+    rules: { "no-restricted-syntax": "off" },
   },
   {
     files: ["**/*.config.ts", "**/*.config.js", "eslint.config.js"],
