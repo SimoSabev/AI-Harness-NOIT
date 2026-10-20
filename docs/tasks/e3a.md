@@ -1,0 +1,12 @@
+# E3а — Inbox, дъска, карта, живо обновяване (docs/spec/НОИТ_Мандат_v4_демо_промпт_кодер.md т. 8.1)
+- [x] миграции 0004 (board_column, approve_changeset с CAS, topic RLS) и 0005 (diff/activities само approver+, dev вход) — pgTAP 56/56 (PGlite и локален Supabase)
+- [x] daemon на worker-а (D-275, D-280) + `mandat worker [--once]`; diff в changeset_diffs
+- [x] `mandat demo seed` (4 акаунта, стълбата на claude, 3 карти; пароли и TOTP веднъж) + `--scene 1`
+- [x] apps/web: `/` inbox (обобщение 24 ч, брояч в header и title), `/board` (7 колони, 20 + „още“, подсказка), `/tasks/[id]` (5 таба), `/login`
+- [x] API: inbox, board (?since, ?column, ?before), tasks, tasks/:id, stop, retry, approve, failure-label — zod, Origin + CSRF, ≤ 1 MB, 10/мин
+- [x] одобрение: tap + потвърждение; TOTP при requires_second_factor; една транзакция (approve-cas, approve-head-sha, approve-totp)
+- [x] живо: private Broadcast + polling 15 s; aria-live polite/assertive — realtime.docker.test.ts (локален Supabase)
+- [x] board-column (TS = SQL), inbox-summary, ladder-hint, verdict-view, guard, totp, session, rls-web, api
+- [x] service-role-scope (статичен), sentinel build (0 съвпадения), e2e + axe (светла/тъмна) 8/8
+- [x] docs/setup/vercel.md; D-284…D-286; Q-024, Q-025
+- [x] Готово, когато: build ok · test:e2e зелено · a11y 0 serious/critical · seed + start → 3 карти + обобщение · sentinel 0
