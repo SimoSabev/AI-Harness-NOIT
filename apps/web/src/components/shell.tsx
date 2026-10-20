@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ThemeSelect } from "./theme";
 
 // Header with the counter (also in <title>, via generateMetadata of each page).
-export function Shell({ current, waiting, children, wide = false }: { current: "inbox" | "board" | "task" | "login" | "harness"; waiting: number | null; children: React.ReactNode; wide?: boolean }) {
+export function Shell({ current, waiting, children, wide = false }: { current: "inbox" | "board" | "task" | "login" | "harness" | "channels"; waiting: number | null; children: React.ReactNode; wide?: boolean }) {
   return (
     <>
       <a className="skip" href="#main">Към съдържанието</a>
@@ -15,6 +15,7 @@ export function Shell({ current, waiting, children, wide = false }: { current: "
             </Link>
             <Link href="/board" aria-current={current === "board" ? "page" : undefined}>Дъска</Link>
             <Link href="/harness" aria-current={current === "harness" ? "page" : undefined}>Харнес</Link>
+            <Link href="/channels" aria-current={current === "channels" ? "page" : undefined}>Канали</Link>
             <form action="/api/auth/logout" method="post">
               <button className="btn" type="submit">Изход</button>
             </form>

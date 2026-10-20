@@ -13,6 +13,7 @@
     "test:sentinel": "node scripts/sentinel.mjs"
   },
   "dependencies": {
+    "@mandat/channels": "workspace:*",
     "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
     "@mandat/onboard": "workspace:*",

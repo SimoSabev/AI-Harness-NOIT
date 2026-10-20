@@ -2,6 +2,7 @@ import { ApproveBody, CreateTaskBody, FailureLabelBody, approve, createTask, lab
 import type { Result, SecondFactor } from "./actions";
 import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
 import type { RateLimiter } from "./guard";
+import { SwitchBody, listChannels, switchChannel } from "./channels";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { board, inbox, membership, taskDetail } from "./queries";
 import type { Db } from "./sql";
@@ -125,4 +126,18 @@ export async function postHarnessApprove(req: Request, d: ApiDeps, repoId: strin
   const b = HarnessApproveBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await approveHarness(d.db, { uid: p.uid, repoId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+
+export async function getChannels(req: Request, d: ApiDeps): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  return json(200, { channels: await listChannels(d.db, c.uid, c.org) });
+}
+
+export async function postSwitchChannel(req: Request, d: ApiDeps, taskId: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = SwitchBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await switchChannel(d.db, { uid: p.uid, taskId, body: b.data }), d);
 }
