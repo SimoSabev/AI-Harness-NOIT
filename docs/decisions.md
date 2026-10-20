@@ -934,3 +934,39 @@ D-001…D-138 са преписани от т. 4.2 на промпта v4 (20.10
 Защо: пробите минаха.
 Алтернативи: резервът от D-037 не е нужен.
 Източник: docs/spikes/S3.md.
+
+## D-154 E0.2б и E0.3а в една поредица; PLACEHOLDER не се ползва (20.10.2026)
+Решение: Симо поиска работа без спирки между подфазите. Worker-ът минава направо към истинската проверка (VERIFY A/Б, D1–D4, D10, MUST_PASS); детекторът PLACEHOLDER остава в схемата (DetectorId), но не се произвежда. Тестовете от E0.2б, които очакват PLACEHOLDER (walking skeleton → UNKNOWN), са написани в крайната им E0.3а форма (honest-fix → VERIFIED).
+Защо: PLACEHOLDER е временна стъпка; след E0.3а тестът му така или иначе се сменя.
+Алтернативи: два прохода по worker-а.
+Източник: инструкцията на Симо „продължавай без да спираш“, 20.10.2026.
+
+## D-155 npmAllowlistFromLockfile е в @mandat/contract (20.10.2026)
+Решение: Функцията (чиста, само данни) е преместена от egress-gate в contract/src/npm-allowlist.ts; egress-gate я реекспортира (сигнатурата от 6.9 е същата).
+Защо: D10.lockfile в core трябва същото правило, а core не бива да импортира egress-gate (т. 5, правило 6). Един източник вместо копие.
+Алтернативи: дублиране в core.
+Източник: решение на кодера.
+
+## D-156 Подробности по runTask (20.10.2026)
+Решение: (а) RunTaskInput има незадължителен `internals` (env, progress, fake gate/tests/recompute, images, healthz, channel…) — шевове за unit тестовете с fake docker (D-091); `mandat run` не ги излага (D-040). (б) Записите в transcript.jsonl и agent-stderr.txt са последователна опашка (иначе редовете могат да разменят реда си — открито от теста „transcript формат“). (в) Дърветата A/B се строят от файловете на base и H (без .git и топ-ниво node_modules). (г) verify/report-a/b.json са сурови; ако съдържат canary/токен → {"redacted":true} (D-031). (д) При timeout на агента собственият таймер прави `docker stop -t 30 mandat-agent-<run>`; таймаутът на docker CLI е с 2 min резерв.
+Защо: детерминистични тестове и ред на транскрипта.
+Алтернативи: —
+Източник: решение на кодера.
+
+## D-157 Червеният отбор: R6 и R8(б) (20.10.2026)
+Решение: R6 добавя към export/diff.patch валиден diff за НОВ файл src/extra.ts (вместо втори hunk към src/cart.ts) — пак валиден patch, пак друго дърво → INTEGRITY:mismatch:post_verify. R8(б) парсва notes.txt от диска (минал през redaction; полетата hits и anthropic_api_key_prefix="mdt_" не се редактират), защото RunHooks (D-040) няма hook за суровите notes.
+Защо: по-прост и стабилен patch; без нов hook в публичния интерфейс.
+Алтернативи: RunHooks.onNotes.
+Източник: решение на кодера.
+
+## D-158 bench MISMATCH и при infra причина (20.10.2026)
+Решение: Ред е MISMATCH и когато reasons съдържат "infra:" (освен по D-110 при agentExit 3); bench спира с exit 3, ако run върне грешка без присъда (preflight).
+Защо: infra не бива да минава като „очаквана“ присъда UNKNOWN.
+Алтернативи: —
+Източник: решение на кодера.
+
+## D-159 Спайкове S0–S2 не са пуснати (20.10.2026)
+Решение: spikes/harness.mjs, s0-run.mjs, s1-run.mjs (+ s1-mcp-server.mjs, docker/spike-mcp/Dockerfile), s2-run.mjs са написани и проверени до границата без ключ (импорт, guard „прокси не върви“, MCP сървърът отговаря на tools/list, образът се билдва). Пускането иска `ANTHROPIC_API_KEY=… pnpm mandat proxy start` от Симо. Тестът „stream парсер: фикстура“ се активира, когато S0 запише fixtures/stream-json/claude-2.1.302-s0.jsonl.
+Защо: в облачната сесия ключ няма (И1: кодерът не пуска proxy start с ключ, т. 14.4).
+Алтернативи: —
+Източник: т. 13, 14.4.

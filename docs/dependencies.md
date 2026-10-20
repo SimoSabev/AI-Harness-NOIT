@@ -4,6 +4,10 @@
 Правило: точна версия, лиценз от license-allowlist.json, ≥ 3 дни от публикуването (pnpm `minimumReleaseAge: 4320`, D-036).
 Нова зависимост = нов ред тук + въпрос към Симо, ако е извън таблицата.
 
+Състояние след E0.3б: всички пакети от таблицата са инсталирани (picomatch и @types/picomatch в @mandat/core,
+@modelcontextprotocol/sdk само в spikes; zod е пряка зависимост и на spikes заради s1-mcp-server.mjs). `pnpm licenses:check`:
+`licenses ok (238 packages)`.
+
 Състояние в E0.1: инсталирани са zod, canonicalize, tar (декларирана, още неползвана, D-076), commander и всички dev
 инструменти. zod е пряка зависимост и на @mandat/ledger (`LedgerEntry.extend`, D-107). picomatch, @types/picomatch и
 @modelcontextprotocol/sdk влизат в E0.2а–E0.3а.
