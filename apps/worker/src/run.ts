@@ -1,26 +1,26 @@
 import { randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, hashJcs, parseContract, parseVitestReport, renderAgentContract, sha256Tag, ulid, npmAllowlistFromLockfile,
+  MandatError, Verdict, contractForAgent, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, npmAllowlistFromLockfile,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, ParsedReport, SecurityEvent } from "@mandat/contract";
+import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent } from "@mandat/contract";
 import { claudeAdapter, fakeAdapter, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
-import { buildReasons, canaryCheck, d1, d10Lockfile, d2, d3, d3CoveredPaths, d4, decideVerdict, ev, mustPass, na } from "@mandat/core";
-import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha, removeTree } from "@mandat/export";
+import { buildReasons, canaryCheck, decideVerdict, ev, na } from "@mandat/core";
+import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha } from "@mandat/export";
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
 import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { RunWriter, acquireRunLock, buildVerifyTree, hostConfig, infraUserFor, readGateLog, runSandbox, runTestProcedure, safeReadVolume, snapshot, startRunGate } from "@mandat/verify";
-import type { RunGate, TestProcedureResult } from "@mandat/verify";
+import { RunWriter, VerifyInfraError, acquireRunLock, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
+import type { RunGate, runTestProcedure } from "@mandat/verify";
 
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
@@ -419,78 +419,27 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
           await timed("verify", async () => {
-            const rcfg = contract.repo_config;
-            const testsInput = (tree: "base" | "a" | "b", treeDir: string) => ({
-              docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, treeDir, testsCommand: rcfg.tests.command, testsEnv: rcfg.tests.env,
-              images, timeoutMs: 600_000, infraUser: user, extraCa: host.extraCa, ipv6Sysctl, startGate,
-            });
-            const runTests = x.runTests ?? runTestProcedure;
-            // 1) baseline (cache D-018, D-097)
-            const cacheFile = path.join(i.home, "cache", "baseline", `${contract.base_commit}-${hashJcs(rcfg.tests).slice("sha256:".length)}.json`);
-            let baseline: ParsedReport | null = null;
-            if (existsSync(cacheFile)) {
-              const p = parseVitestReport(readFileSync(cacheFile, "utf8"), "/m/work");
-              if (p.valid) baseline = p;
-              else rmSync(cacheFile, { force: true });
-            }
-            let cached = baseline !== null;
-            if (baseline === null) {
-              const b = await runTests(testsInput("base", baseDir));
-              gateLogs.push({ tree: "base", file: path.join(runDir, "gate", "base", "log", "events.jsonl") });
-              if (!b.ok) infra(b.code, `baseline: ${b.code}`);
-              const okB = b as Extract<TestProcedureResult, { ok: true }>;
-              if (!okB.report.valid || okB.raw === null) infra("E_BASELINE_INVALID", "baseline report invalid");
-              baseline = okB.report;
-              mkdirSync(path.dirname(cacheFile), { recursive: true });
-              writeFileSync(cacheFile, okB.raw as string);
-              cached = false;
-            }
-            const bl = baseline as ParsedReport;
-            // 2) trees H, A, B
-            const head = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "h" });
-            if ((diffPatch as Buffer).length > 0) {
-              const ap = await head.git.run(["apply", "--index", "--binary", "--whitespace=nowarn", "-"], { cwd: head.dir, input: diffPatch as Buffer });
-              if (ap.code !== 0) infra("E_DOCKER", "cannot materialize head");
-            }
-            const files = ex.files;
-            const baseSnap = snapshot(baseDir);
-            const headSnap = snapshot(head.dir);
-            const D3 = d3({ files, base: baseSnap, head: headSnap, rc: rcfg });
-            for (const h of D3.security) sec({ kind: h.kind, severity: h.severity, detail: h.detail, source: "worker" });
-            const D4 = d4({ files, allowedPaths: contract.allowed_paths, coveredByD3: d3CoveredPaths(files, rcfg, baseSnap, headSnap) });
-            const D10 = d10Lockfile({ baseLock: readLockfile(baseDir), headLock: readLockfile(head.dir) });
-            set(D10.evidence);
-            set(D3.evidence);
-            set(D4.evidence);
-            if (D10.evidence.status === "fail") {
-              set(na("D1.base_tests", "lockfile rejected"));
-              set(na("D2.inventory", "lockfile rejected"));
-              set(na("MUST_PASS", "lockfile rejected"));
-              removeTree(head.dir);
-              return;
-            }
-            const aDir = path.join(tmpRoot, "tree-a");
-            const bDir = path.join(tmpRoot, "tree-b");
-            buildVerifyTree({ baseDir, headDir: head.dir, outDir: aDir, rc: rcfg, kind: "a" });
-            buildVerifyTree({ baseDir, headDir: head.dir, outDir: bDir, rc: rcfg, kind: "b" });
-            removeTree(head.dir);
-            const A = await runTests(testsInput("a", aDir));
-            gateLogs.push({ tree: "a", file: path.join(runDir, "gate", "a", "log", "events.jsonl") });
-            if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
-            const B = await runTests(testsInput("b", bDir));
-            gateLogs.push({ tree: "b", file: path.join(runDir, "gate", "b", "log", "events.jsonl") });
-            if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
-            const a = A as Extract<TestProcedureResult, { ok: true }>;
-            const b = B as Extract<TestProcedureResult, { ok: true }>;
             const redactReport = (raw: string | null): string => (raw === null ? "" : raw.includes(canary) || raw.includes(token) ? JSON.stringify({ redacted: true }) : raw);
-            w.raw("verify/report-a.json", redactReport(a.raw));
-            w.raw("verify/report-b.json", redactReport(b.raw));
-            await w.text("verify/exits.json", { a: a.exit, b: b.exit });
-            set(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report).evidence);
-            set(b.timedOut ? ev("D2.inventory", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d2({ baseline: bl, b: b.report, exitB: b.exit ?? 1, diffPatch: (diffPatch as Buffer).toString("utf8"), mayChangeTests: contract.may_change_tests }).evidence);
-            set(mustPass({ ids: contract.must_pass, a: a.report, b: b.report }).evidence);
-            const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
-            out(`[verify]    baseline${cached ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}`);
+            try {
+              const r = await verifyTrees({
+                docker, runId, runDir, mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
+                mirrorPath, baseSha: contract.base_commit, baseDir, diffPatch: diffPatch as Buffer, files: ex.files, rc: contract.repo_config,
+                allowedPaths: contract.allowed_paths, mayChangeTests: contract.may_change_tests, mustPass: contract.must_pass, external: false, tmpRoot,
+                startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
+                onReports: async (a, b) => {
+                  w.raw("verify/report-a.json", redactReport(a.raw));
+                  w.raw("verify/report-b.json", redactReport(b.raw));
+                  await w.text("verify/exits.json", { a: a.exit, b: b.exit });
+                },
+                onSecurity: (h) => sec({ kind: h.kind, severity: h.severity, detail: h.detail, source: "worker" }),
+                onGateLog: (tree, file) => gateLogs.push({ tree, file }),
+                progress: out,
+              });
+              for (const e of r.evidence) set(e);
+            } catch (e) {
+              if (e instanceof VerifyInfraError) infra(e.code, e.message);
+              throw e;
+            }
           });
           // 6) R6: recompute again from the diff.patch on disk before the verdict (D-074, D-126)
           if (i.hooks?.beforeVerdict) await i.hooks.beforeVerdict(runDir);
