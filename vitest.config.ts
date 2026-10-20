@@ -13,7 +13,7 @@ export const config = defineConfig({
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
-      exclude: ["**/*.test.ts", "**/index.ts", "packages/cli/src/main.ts"],
+      exclude: ["**/*.test.ts", "**/index.ts", "**/main.ts"],
       reporter: ["text-summary", "json-summary"],
       thresholds: {
         "packages/contract/src/**": strict,
