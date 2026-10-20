@@ -1174,3 +1174,27 @@ MCP сървърът се пуска през serveStdio (двете ери на
 Защо: unit тестовете без Docker покриват доверения base, К-1, F12, F15, S27 и no-write.
 Алтернативи: —
 Източник: решение на кодера. Статус: решено.
+
+## D-273 MANDAT_DB_URL (НОВО env име) (20.10.2026)
+Решение: worker-ът и CLI (`verify-log --org`, `anchor --org`, `demo seed`) се свързват с Postgres по MANDAT_DB_URL; без него — локалният Supabase по подразбиране postgresql://postgres:postgres@127.0.0.1:54322/postgres (публична стойност на CLI-то, не тайна). Името е в .env.example.
+Защо: т. 0.7 няма име за DB URL на worker-а (има SUPABASE_URL за REST и SUPABASE_DB_PASSWORD).
+Алтернативи: сглобяване от SUPABASE_DB_PASSWORD + хост (повече env логика).
+Източник: решение на кодера. Статус: отворено за Симо.
+
+## D-274 Обход за `supabase start`: PGlite + postgres:17.6-alpine (20.10.2026)
+Решение: виж docs/blockers/supabase-start.md. `pnpm test:db` пуска миграциите и pgTAP файловете в PGlite с shim; `pnpm test:db:supabase` е истинският `supabase test db`. Паралелните неща (advisory lock, SKIP LOCKED) се проверяват срещу истински Postgres в Docker. Нови dev зависимости: supabase 2.119.0 (MIT), @electric-sql/pglite 0.5.8 (Apache-2.0), @electric-sql/pglite-pgtap 0.0.9 (Apache-2.0).
+Защо: т. 0.3 (ж) — обходът е документиран; фазата не е БЛОКИРАНА.
+Алтернативи: само Postgres контейнер без pgTAP (по-малко покритие на RLS матрицата).
+Източник: демо промпт т. 5.1, 0.3 (ж). Статус: отворено за Симо (Q-022).
+
+## D-275 Daemon-ът на worker-а (MANDAT_MODE=worker) влиза в E3а (20.10.2026)
+Решение: в E1б са чистите части на т. 5.8 — преходите на state machine (state.ts), решението на sweeper-а (lease.ts), outbox (MemoryOutbox + PgOutbox) и стъпковите ключове. Цикълът, който взима задачи от task_steps, пуска runTask и пише присъди в базата, се прави в E3а, когато има UI, което създава задачи.
+Защо: в E1б няма източник на задачи; „Готово, когато“ на E1б не го изисква.
+Алтернативи: —
+Източник: демо промпт т. 5.8. Статус: отворено за Симо.
+
+## D-276 Live тестове без env (20.10.2026)
+Решение: *.live.test.ts са в отделен vitest проект (vitest.live.config.ts, `pnpm test:live`); без env са `it.skipIf(...)` с коментар `// D-276:` и check-test-counts ги изброява като НЕПОКРИТИ, без да прави фазата ЧАСТИЧНО (статусът става „ГОТОВО (live чака Симо)“). Липсващ live отчет не е грешка.
+Защо: т. 0.5 / D-228 — SKIPPED никога не е минал, но не е и провал на кода.
+Алтернативи: —
+Източник: демо промпт т. 0.3 (е), 0.5. Статус: решено.

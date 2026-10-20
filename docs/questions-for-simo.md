@@ -167,3 +167,10 @@
 Ако избереш друго: runTask → verifyChange, ≈ 4–6 ч + повторение на bench/redteam.
 Блокира ли: не.
 Статус: отворен.
+## Q-022 `supabase start` на твоята машина — 20.10.2026 — D-274
+Контекст: в облачната сесия Docker Hub връща 429 / „Data limit exceeded“ за образите на Supabase; миграциите и pgTAP минават в PGlite и срещу Postgres 17.
+Въпрос: Ще пуснеш ли `pnpm db:start && pnpm db:reset && pnpm test:db:supabase` при теб?
+Избрах по подразбиране: PGlite + Postgres контейнер (docs/blockers/supabase-start.md).
+Ако избереш друго: нищо в кода; заменям SKIPPED с реалния изход в доклада.
+Блокира ли: частично (E3а Realtime/Auth локално — ще ползвам polling и dev вход при MANDAT_DEMO_DEV_AUTH=1, ако пак не тръгне).
+Статус: отворен.
