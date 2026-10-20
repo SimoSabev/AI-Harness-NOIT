@@ -66,6 +66,27 @@ pnpm mandat proxy stop
 и го монтира само в gate и proxy (D-150). Без достъп до Debian огледалата: `MANDAT_SANDBOX_APT=0 pnpm mandat images build`
 (R14 пробите минават на Node, D-151).
 
+## Демото и уеб интерфейсът (E1б–E4)
+```sh
+# след git pull / clone
+pnpm install --frozen-lockfile && pnpm build
+pnpm mandat images build                          # образите (веднъж; след промяна в пясъчника — пак)
+node demo/run.mjs --offline --preflight           # "preflight: готово"
+node demo/run.mjs --scene 1 --offline --replay    # СЦЕНА 1: OK (харнес → VERIFIED → стълбата расте)
+node demo/run.mjs --scene 2 --offline --replay    # СЦЕНА 2: OK (лимит на Claude → Codex)
+node demo/run.mjs --scene 3 --offline --replay    # СЦЕНА 3: OK (изтрит/отслабен тест → FAILED)
+
+# уеб интерфейсът локално (Supabase CLI + Docker; supabase start прилага supabase/migrations)
+supabase start
+pnpm mandat demo seed                              # печата демо акаунтите, паролите и TOTP (само първия път)
+MANDAT_DEMO_DEV_AUTH=1 pnpm --filter @mandat/web dev   # http://localhost:3000/login
+pnpm mandat worker                                 # в друг терминал: изпълнява задачите (офлайн: fakeGitHub)
+```
+Офлайн демото не ползва мрежа и ключове. Живите варианти (ключове, GitHub App-ове, VAPID): docs/setup/*.md,
+сценарият пред журито: docs/demo/rehearsal.md, финалният доклад: docs/reports/FINAL.md.
+E2e тестовете (`pnpm test:e2e`) търсят браузъра в `MANDAT_CHROMIUM` (по подразбиране /opt/pw-browsers/chromium, облачната
+среда); локално задай `MANDAT_CHROMIUM=<път до Chrome или Chromium>`.
+
 ## Изходни кодове
 | Команда | 0 | 1 | 2 | 3 | 5 | 10 | 20 | 130 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
