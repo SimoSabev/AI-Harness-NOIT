@@ -34,7 +34,8 @@ export interface FakeGitHubState {
   repos: Map<string, FakeRepo>;
   pulls: Map<string, PullInfo & { merged: boolean; merge_commit_sha: string | null }>;
   refs: Map<string, string>;
-  commits: Map<string, { tree: string; parent: string | null }>;
+  /** diff = the patch the commit was made from (tests read the delivered files) */
+  commits: Map<string, { tree: string; parent: string | null; diff?: string }>;
   checks: FakeCheck[];
   statuses: { repo: string; sha: string; context: string; state: "error" | "failure" | "pending" | "success"; creator_id: number }[];
   /** every call, for tests (method + key args) */
@@ -142,7 +143,7 @@ export function fakeGitHub(seed: FakeSeed = {}): GitHubPort & { state: FakeGitHu
       repoOf(repo);
       const tree = sha1(`tree:${st.commits.get(i.parentSha)?.tree ?? i.parentSha}:${createHash("sha1").update(i.treeFromDiff).digest("hex")}`);
       const commitSha = sha1(`commit:${i.parentSha}:${tree}:${i.message}`);
-      st.commits.set(commitSha, { tree, parent: i.parentSha });
+      st.commits.set(commitSha, { tree, parent: i.parentSha, diff: i.treeFromDiff.toString("utf8") });
       return Promise.resolve({ commitSha, treeSha: tree });
     },
     createPull: (repo, i) => {

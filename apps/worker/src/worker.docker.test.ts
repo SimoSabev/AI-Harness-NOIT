@@ -80,6 +80,13 @@ describe("worker (docker)", () => {
     expect(echo.exit).toBe(10);
     expect(echo.stdout).toContain("VERDICT: UNKNOWN");
   });
+
+  it("touch-config (E3б): агентът пипа AGENTS.md → UNKNOWN D3:protected_path (10)", () => {
+    const r = cli("run", "--contract", path.join(repoRoot, "contracts/fix-discount.json"), "--agent", "fake:touch-config");
+    expect(r.exit).toBe(10);
+    expect(r.stdout).toContain("VERDICT: UNKNOWN");
+    expect(r.stdout).toContain("D3:protected_path:AGENTS.md");
+  });
 });
 
 function readLines(f: string): string[] {

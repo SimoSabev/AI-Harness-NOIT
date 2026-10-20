@@ -18,3 +18,4 @@ export { startWebhookServer, webhookHandler } from "./online/webhook.js";
 export type { WebhookDeps } from "./online/webhook.js";
 export { broadcasterFromEnv, contractForTask, finishOutcome, processTask, realtimeBroadcaster, runDaemonOnce } from "./online/daemon.js";
 export type { DaemonDeps } from "./online/daemon.js";
+export { deliverHarnessPr, drainHarnessOutbox, harnessHandlers, scanForProposal } from "./online/harness.js";

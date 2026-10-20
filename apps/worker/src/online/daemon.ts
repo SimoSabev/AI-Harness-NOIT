@@ -6,6 +6,7 @@ import type { Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract
 import { decideDelivery, ladderStepFor } from "@mandat/core";
 import type { LadderState } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
+import { drift } from "@mandat/onboard";
 import type { SqlClient } from "@mandat/ledger";
 import { autoMerge, deliver } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
@@ -102,6 +103,26 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     });
     await bc("BLOCKED", seq, { wait_reason: "policy_missing" });
     return { state: "BLOCKED", verdict: null };
+  }
+  // E3б Поток 2 минимум: drift of the base policy against the approved harness (hard → harness_stale; soft → marker)
+  const approved = (await d.db.query<{ policy_yaml: string }>(
+    "select h.policy_yaml from public.harness_proposals h join public.repos r on r.id = h.repo_id and r.config_hash = h.yaml_sha256 where h.repo_id = $1::uuid and h.status = 'approved' order by h.approved_at desc limit 1",
+    [t.repo_id],
+  )).rows[0];
+  const ap = approved ? parseMandatYml(approved.policy_yaml) : null;
+  if (ap?.ok) {
+    const dr = drift(ap.policy, parsed.policy);
+    if (dr.stale) {
+      const seq = await inTransaction(d.db, async (tx) => {
+        await tx.query("update public.repos set harness_stale = true where id = $1::uuid", [t.repo_id]);
+        const s = await setState(tx, t, "BLOCKED", { wait_reason: "harness_stale" });
+        await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "harness_stale", fields: dr.hard.slice(0, 20) } });
+        return s;
+      });
+      await bc("BLOCKED", seq, { wait_reason: "harness_stale" });
+      return { state: "BLOCKED", verdict: null };
+    }
+    if (dr.soft.length > 0) await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'harness_drift', $3)", [t.org_id, t.id, `! меко отклонение от харнеса: ${dr.soft.slice(0, 10).join(", ")}`.slice(0, 500)]);
   }
   const contract = contractForTask(t, parsed.policy, baseSha);
   const dir = path.join(d.home, "contracts");

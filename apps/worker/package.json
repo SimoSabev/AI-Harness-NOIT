@@ -32,7 +32,8 @@
     "@mandat/sandbox": "workspace:*",
     "@mandat/verify": "workspace:*",
     "@octokit/webhooks": "14.2.0",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "@mandat/onboard": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",

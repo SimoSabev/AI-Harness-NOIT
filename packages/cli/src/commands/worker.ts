@@ -1,6 +1,6 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, dbUrl, openDb, runDaemonOnce } from "@mandat/worker";
+import { broadcasterFromEnv, dbUrl, drainHarnessOutbox, openDb, runDaemonOnce } from "@mandat/worker";
 import type { Io } from "../output.js";
 
 // Демо промпт т. 5.8 / 8.1 (D-275): `mandat worker` = MANDAT_MODE=worker. Offline: fakeGitHub in memory; online: the
@@ -18,6 +18,8 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   try {
     for (;;) {
       const id = await runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n") });
+      const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo });
+      if (fx.done + fx.failed > 0) io.stderr(`[outbox] harness: ${fx.done} done, ${fx.failed} failed\n`);
       if (o.once) return 0;
       if (o.signal?.aborted) return 0;
       if (!id) await new Promise((r) => setTimeout(r, o.pollMs ?? 2000));

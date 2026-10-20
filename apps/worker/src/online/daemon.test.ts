@@ -80,6 +80,26 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(kinds).toEqual(expect.arrayContaining(["delivered", "outcome", "ladder_change"]));
     expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(1);
   });
+  it("drift (E3б): твърдо поле спрямо одобрения харнес → BLOCKED harness_stale; меко → маркер и продължава", async () => {
+    const { readFileSync } = await import("node:fs");
+    const yml = readFileSync(path.join(repoRoot, "fixtures/demo-shop/.mandat.yml"), "utf8");
+    const { sha256Tag } = await import("@mandat/contract");
+    const approve = async (s: Awaited<ReturnType<typeof setup>>, text: string) => {
+      await s.db.query("update public.repos set config_hash = $2, config_version = 1 where id = $1", [DEMO_REPO_ID, sha256Tag(text)]);
+      await s.db.query("insert into public.harness_proposals (org_id, repo_id, status, policy_yaml, yaml_sha256, approved_at) values ($1, $2, 'approved', $3, $4, now())", [DEMO_ORG_ID, DEMO_REPO_ID, text, sha256Tag(text)]);
+    };
+    const hard = await setup(0);
+    await approve(hard, yml.replace("--outputFile=$MANDAT_REPORT", "--outputFile=$MANDAT_REPORT --bail=1"));
+    await runDaemonOnce(hard.deps);
+    expect((await hard.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "BLOCKED", wait_reason: "harness_stale" });
+    expect((await hard.db.query<{ harness_stale: boolean }>("select harness_stale from public.repos")).rows[0]?.harness_stale).toBe(true);
+    expect(hard.runs).toHaveLength(0);
+    const soft = await setup(0);
+    await approve(soft, yml.replace("task_usd: 2", "task_usd: 3"));
+    await runDaemonOnce(soft.deps);
+    expect((await soft.db.query<{ state: string }>("select state from public.tasks where id = 't_web_1'")).rows[0]?.state).toBe("HELD");
+    expect((await soft.db.query<{ text: string }>("select text from public.task_activities where kind = 'harness_drift'")).rows[0]?.text).toContain("budgets.task_usd");
+  });
   it("FAILED → BLOCKED „failed“ без доставка", async () => {
     const s = await setup(2, "FAILED");
     await runDaemonOnce(s.deps);
