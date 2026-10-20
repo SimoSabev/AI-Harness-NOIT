@@ -49,9 +49,9 @@ export function boardColumn(t: { state: BoardState; result: VerdictResult | null
 }
 
 /** Ф4 S34: „Чака теб“ = a gate decision (HELD; GATED needing approval) + BLOCKED for any reason but stopped. */
-export function isInboxItem(t: { state: string; approval_needed: boolean; blocked_reason: string | null }): boolean {
+export function isInboxItem(t: { state: string; approval_needed: boolean; wait_reason: string | null }): boolean {
   if (t.state === "HELD") return true;
   if (t.state === "GATED") return t.approval_needed;
-  if (t.state === "BLOCKED") return t.blocked_reason !== "stopped";
+  if (t.state === "BLOCKED") return t.wait_reason !== "stopped";
   return false;
 }

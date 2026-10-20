@@ -42,12 +42,12 @@ describe("board column", () => {
   });
 
   it("inbox: решение по вратата + BLOCKED с всяка причина освен stopped", () => {
-    const base = { result: null, approval_needed: false, blocked_reason: null };
+    const base = { result: null, approval_needed: false, wait_reason: null };
     expect(isInboxItem({ ...base, state: "HELD" })).toBe(true);
     expect(isInboxItem({ ...base, state: "GATED", approval_needed: true })).toBe(true);
     expect(isInboxItem({ ...base, state: "GATED" })).toBe(false);
-    expect(isInboxItem({ ...base, state: "BLOCKED", blocked_reason: "budget" })).toBe(true);
-    expect(isInboxItem({ ...base, state: "BLOCKED", blocked_reason: "stopped" })).toBe(false);
+    expect(isInboxItem({ ...base, state: "BLOCKED", wait_reason: "budget" })).toBe(true);
+    expect(isInboxItem({ ...base, state: "BLOCKED", wait_reason: "stopped" })).toBe(false);
     expect(isInboxItem({ ...base, state: "RUNNING" })).toBe(false);
   });
 });

@@ -10,6 +10,7 @@ export const config = defineConfig({
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "bench/**/*.test.ts", "scripts/**/*.test.ts"],
     exclude: [...EXCLUDE, "**/*.docker.test.ts", "**/*.live.test.ts"],
     testTimeout: 20_000,
+    hookTimeout: 30_000, // PGlite + all migrations per suite (apps/web, apps/worker)
     passWithNoTests: false,
     reporters: ["default", "json"],
     includeTaskLocation: true,

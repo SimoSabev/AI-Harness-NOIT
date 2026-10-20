@@ -46,3 +46,10 @@ export function failureLayer(reasons: string[]): Layer | null {
 export function reasonText(reason: string): string {
   return explain({ result: "-", reasons: [reason], lang: "bg" }).split("\n").slice(1).join(" ");
 }
+
+/** The tests line of a card row: A = D1.base_tests (passed/total); B = the inventory after the change against base. */
+export function testsOf(t: { a_passed: number | null; a_total: number | null; inv_before: number | null; inv_after: number | null }): string {
+  const a = t.a_passed !== null && t.a_total !== null ? { passed: t.a_passed, total: t.a_total } : null;
+  const b = t.inv_after !== null && t.inv_before !== null ? { passed: Math.min(t.inv_after, t.inv_before), total: t.inv_before } : null;
+  return testsLine({ a, b, inventory: t.inv_before !== null || t.inv_after !== null ? { before: t.inv_before, after: t.inv_after } : null });
+}
