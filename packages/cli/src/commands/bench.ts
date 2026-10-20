@@ -1,5 +1,5 @@
 import path from "node:path";
-import { fmtDuration, runBench, runRedteam } from "@mandat/bench";
+import { fmtDuration, runBench, runFailGate, runRedteam } from "@mandat/bench";
 import type { DockerRunner } from "@mandat/sandbox";
 import { printJson } from "../output.js";
 import type { Io } from "../output.js";
@@ -28,6 +28,20 @@ export async function benchCommand(io: Io, o: { mandatHome: string; only?: strin
     io.stdout(`RESULT ${r.pass}/${total} · false VERIFIED ${r.false_verified} · false FAILED ${r.false_failed} · ${fmtDuration(r.ms)}\n`);
   }
   return r.pass === total && total > 0 ? 0 : 1;
+}
+
+/** T3-3 / D-223: exit 1 = the broken verifier was caught (expected); 0 = bench is broken; 3 = environment. */
+export async function failGateCommand(io: Io, o: { mandatHome: string; json: boolean; docker?: DockerRunner }): Promise<number> {
+  const r = await runFailGate({ home: o.mandatHome, contractPath: contractPath(), env: io.env, ...(o.docker ? { docker: o.docker } : {}) });
+  if (r.error) {
+    io.stderr(`bench --fail-gate: ${r.error}\n`);
+    if (o.json) printJson(io, { error: r.error, exit: 3 });
+    return 3;
+  }
+  if (o.json) printJson(io, { result: r.result, reasons: r.reasons, detected: r.detected, exit: r.detected ? 1 : 0 });
+  else if (r.detected) io.stdout(`fail-gate: verifier fault detected (D1:report_invalid:missing) · verdict ${r.result}\n`);
+  else io.stdout(`fail-gate: NOT detected (verdict ${r.result}) — the bench is broken\n`);
+  return r.detected ? 1 : 0;
 }
 
 /** 6.13 / D-090. */

@@ -1,6 +1,7 @@
+import { parseVitestReport } from "@mandat/contract";
 import type { VerdictResult } from "@mandat/contract";
 import type { DockerRunner } from "@mandat/sandbox";
-import { runTask } from "@mandat/worker";
+import { runTask, runTestProcedure } from "@mandat/worker";
 import { SCENARIOS } from "./scenarios.js";
 
 export interface BenchRow {
@@ -60,3 +61,29 @@ export async function runBench(o: { home: string; contractPath: string; only?: s
 }
 
 export const fmtDuration = (ms: number): string => `${Math.floor(ms / 60000)}m${String(Math.round((ms % 60000) / 1000)).padStart(2, "0")}s`;
+
+export interface FailGateResult {
+  result: VerdictResult | "ERROR";
+  reasons: string[];
+  detected: boolean;
+  error: string | null;
+}
+
+/**
+ * T3-3 / D-223: B1 (honest-fix) with a broken verifier — the report of run A is dropped before D1. The verdict must
+ * not be VERIFIED; `detected` = the verifier fault showed up as D1:report_invalid:missing.
+ */
+export async function runFailGate(o: { home: string; contractPath: string; docker?: DockerRunner; env?: Record<string, string | undefined>; runTests?: typeof runTestProcedure }): Promise<FailGateResult> {
+  const real = o.runTests ?? runTestProcedure;
+  const broken: typeof runTestProcedure = async (i) => {
+    const r = await real(i);
+    if (i.tree !== "a" || !r.ok) return r;
+    return { ...r, raw: null, report: parseVitestReport(null, "/m/work") };
+  };
+  const r = await runTask({
+    home: o.home, contractPath: o.contractPath, agent: "fake:honest-fix", keep: false, json: true,
+    ...(o.docker ? { docker: o.docker } : {}), internals: { ...(o.env ? { env: o.env } : {}), runTests: broken },
+  });
+  if (!r.verdict) return { result: "ERROR", reasons: [], detected: false, error: `${r.error?.code ?? "?"}: ${r.error?.message ?? ""}` };
+  return { result: r.verdict.result, reasons: r.verdict.reasons, detected: r.verdict.result !== "VERIFIED" && r.verdict.reasons.includes("D1:report_invalid:missing"), error: null };
+}

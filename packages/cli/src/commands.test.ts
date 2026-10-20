@@ -97,6 +97,8 @@ describe("run / bench / redteam / fixtures", () => {
     expect((await cli(["--home", h, "redteam", "--only", "R5"], d)).code).toBe(3);
     expect((await cli(["--home", h, "redteam", "--only", "R99"], d)).code).toBe(2);
     expect((await cli(["--home", h, "bench", "--json", "--only", "B1"], d)).stdout).toContain('"exit":3');
+    expect((await cli(["--home", h, "bench", "--fail-gate"], d)).code).toBe(3);
+    expect((await cli(["--home", h, "bench", "--fail-gate", "--json"], d)).stdout).toContain('"exit":3');
   });
 
   it("fixtures build и formatVerdict", async () => {
