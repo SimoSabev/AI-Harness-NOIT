@@ -100,7 +100,7 @@ describe("runTask (fake docker)", () => {
   });
 
   it("edge: no-op → EXPORT pass 0 файла, MUST_PASS fail → FAILED, exit 20", async () => {
-    const { r } = await go({ docker: new FakeDocker({ head: () => shopCopy() }), tests: (i) => ok(BASE_RAW) });
+    const { r } = await go({ docker: new FakeDocker({ head: () => shopCopy() }), tests: () => ok(BASE_RAW) });
     expect(det(r, "EXPORT")?.status).toBe("pass");
     expect(det(r, "EXPORT")?.data.files).toBe(0);
     expect(r.verdict?.reasons).toContain(`MUST_PASS:not_passed:${M}`);

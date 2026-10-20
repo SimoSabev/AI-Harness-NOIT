@@ -6,7 +6,7 @@ import { ev } from "./evidence.js";
 export function d10Lockfile(o: { baseLock: Buffer | null; headLock: Buffer | null }): Detected {
   const same = o.baseLock === null ? o.headLock === null : o.headLock !== null && o.baseLock.equals(o.headLock);
   if (same) return { evidence: ev("D10.lockfile", "n/a", "lockfile unchanged"), security: [] };
-  let parsed: unknown = null;
+  let parsed: unknown;
   try {
     parsed = o.headLock === null ? null : JSON.parse(o.headLock.toString("utf8"));
   } catch {

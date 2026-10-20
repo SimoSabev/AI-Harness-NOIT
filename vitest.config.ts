@@ -13,7 +13,7 @@ export const config = defineConfig({
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
-      exclude: ["**/*.test.ts", "**/index.ts", "**/main.ts"],
+      exclude: ["**/*.test.ts", "**/*.test-helper.ts", "**/testing.ts", "**/index.ts", "**/main.ts"],
       reporter: ["text-summary", "json-summary"],
       thresholds: {
         "packages/contract/src/**": strict,
@@ -22,6 +22,12 @@ export const config = defineConfig({
         "packages/core/src/**": strict,
         "packages/export/src/**": strict,
         "packages/cli/src/**": loose,
+        "packages/sandbox/src/**": loose,
+        "packages/egress-gate/src/**": loose,
+        "packages/llm-proxy/src/**": loose,
+        "packages/channels/src/**": loose,
+        "packages/agents/src/**": loose,
+        "apps/worker/src/**": loose,
       },
     },
   },
