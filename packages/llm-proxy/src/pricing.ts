@@ -34,3 +34,12 @@ export function costUsd(model: string, u: Usage): number | null {
   const micro = u.input_tokens * rate.input + w5 * rate.cacheWrite5m + w1 * rate.cacheWrite1h + read * rate.cacheRead + u.output_tokens * rate.output;
   return Math.round(micro * 1e6) / 1e12;
 }
+
+/** E3в: OpenAI prices are [НП] (Simo sets them, docs/setup/keys.md); a model without a price is model_not_allowed. */
+export interface OpenAiRate { input: number; cached_input: number; output: number }
+export interface ResponsesUsage { input_tokens: number; cached_tokens: number; output_tokens: number; reasoning_tokens: number }
+export function costUsdOpenAi(rate: OpenAiRate, u: ResponsesUsage): number {
+  const fresh = Math.max(0, u.input_tokens - u.cached_tokens);
+  const micro = fresh * rate.input + u.cached_tokens * rate.cached_input + u.output_tokens * rate.output;
+  return Math.round(micro * 1e6) / 1e12;
+}

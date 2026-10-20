@@ -1,14 +1,40 @@
 import http from "node:http";
 import https from "node:https";
-import { ALLOWED_MODELS, costUsd } from "./pricing.js";
-import type { Usage } from "./pricing.js";
-import { SseUsage, mergeUsage } from "./sse-usage.js";
+import { ALLOWED_MODELS, costUsd, costUsdOpenAi } from "./pricing.js";
+import type { OpenAiRate, ResponsesUsage, Usage } from "./pricing.js";
+import { SseResponsesUsage, SseUsage, mergeUsage, responsesUsageOf } from "./sse-usage.js";
 import { ProxyState } from "./state.js";
 import type { RequestLine } from "./state.js";
 import { adminBearer, tokenPrefix8, verifyTaskToken } from "./token.js";
 
 export const PROXY_VERSION = "0.1.0";
-const INFERENCE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens"]);
+const INFERENCE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens", "/v1/responses"]);
+const providerOf = (p: string): "anthropic" | "openai" => (p === "/v1/responses" ? "openai" : "anthropic");
+
+/** E3в (Ф3 П6): retry-after (seconds or HTTP date) and the reset time of the limit from the upstream headers. */
+export function limitOf(h: http.IncomingHttpHeaders, nowMs: number): { retry_after_s: number | null; resets_at: string | null } {
+  const one = (k: string) => {
+    const v = h[k];
+    return typeof v === "string" ? v.trim() : null;
+  };
+  const ra = one("retry-after");
+  let retry: number | null = null;
+  if (ra !== null) retry = /^\d+$/.test(ra) ? Number(ra) : Number.isFinite(Date.parse(ra)) ? Math.max(0, Math.round((Date.parse(ra) - nowMs) / 1000)) : null;
+  let resets: string | null = null;
+  for (const k of ["anthropic-ratelimit-unified-reset", "anthropic-ratelimit-requests-reset", "anthropic-ratelimit-tokens-reset", "x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"]) {
+    const v = one(k);
+    if (v === null) continue;
+    if (/^\d{9,11}$/.test(v)) resets = new Date(Number(v) * 1000).toISOString();
+    else if (/^\d{4}-\d\d-\d\dT/.test(v) && Number.isFinite(Date.parse(v))) resets = new Date(Date.parse(v)).toISOString();
+    else {
+      const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?(?:(\d+)ms)?$/.exec(v);
+      if (m && v !== "") resets = new Date(nowMs + ((Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0)) * 60 + Number(m[3] ?? 0)) * 1000 + Number(m[4] ?? 0)).toISOString();
+    }
+    if (resets) break;
+  }
+  if (resets === null && retry !== null) resets = new Date(nowMs + retry * 1000).toISOString();
+  return { retry_after_s: retry, resets_at: resets };
+}
 const MAX_BODY = 32 * 1024 * 1024;
 const DROP_REQ = new Set(["host", "connection", "keep-alive", "proxy-authorization", "authorization", "x-api-key", "content-length", "transfer-encoding", "te", "upgrade"]);
 const DROP_RES = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade"]);
@@ -49,6 +75,8 @@ export interface ProxyServerOptions {
   secret: Buffer;
   apiKey: string;
   upstream: string;
+  /** E3в: the OpenAI upstream (Responses API) with the real key; prices per model ([НП], from Simo) */
+  openai?: { apiKey: string; upstream: string; prices: Record<string, OpenAiRate> };
   usageLogPath: string;
   /** stdout log line (never bodies, headers or token values; 8.1). */
   log?: (line: RequestLine) => void;
@@ -58,6 +86,7 @@ export interface ProxyServerOptions {
 export function createProxyServer(o: ProxyServerOptions): { inference: http.Server; admin: http.Server; state: ProxyState } {
   const state = new ProxyState(o.usageLogPath, (m) => process.stdout.write(`${m}\n`));
   const upstream = new URL(o.upstream);
+  const openaiUpstream = o.openai ? new URL(o.openai.upstream) : null;
   const now = o.now ?? (() => Date.now());
   const log = o.log ?? ((l: RequestLine) => process.stdout.write(JSON.stringify(l) + "\n"));
   const admin = adminBearer(o.secret);
@@ -79,14 +108,18 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         record({ ...base, run_id: runId, status, token_prefix8: token ? tokenPrefix8(token) : null });
         apiError(res, status, type, code, extra);
       };
-      if (method !== "POST" || !INFERENCE_PATHS.has(p)) {
+      if (method !== "POST" || !INFERENCE_PATHS.has(p) || req.headers.upgrade !== undefined) {
         req.resume();
         return reject(403, "permission_error", "path_not_allowed", null);
       }
+      const provider = providerOf(p);
       if (token === null) return reject(401, "authentication_error", "token_invalid", null);
       const v = verifyTaskToken(o.secret, token, Math.floor(now() / 1000));
       if (!v.ok) return reject(401, "authentication_error", v.code, null);
       const runId = v.claims.r;
+      // E3в: a token is for ONE channel; an anthropic token on /v1/responses (or the reverse) → 401
+      if ((v.claims.p ?? "anthropic") !== provider) return reject(401, "authentication_error", "token_channel_mismatch", runId);
+      if (provider === "openai" && (!o.openai || !openaiUpstream)) return reject(403, "permission_error", "provider_not_configured", runId);
       if (state.revoked.has(runId)) return reject(401, "authentication_error", "token_revoked", runId);
       const run = state.get(runId);
       run.budget = v.claims.b;
@@ -102,13 +135,15 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       } catch {
         model = null;
       }
-      if (model === null || !ALLOWED_MODELS.includes(model)) return reject(403, "permission_error", "model_not_allowed", runId);
+      const rate = provider === "openai" && model !== null ? o.openai?.prices[model] : undefined;
+      if (model === null || (provider === "anthropic" ? !ALLOWED_MODELS.includes(model) : rate === undefined)) return reject(403, "permission_error", "model_not_allowed", runId);
 
       const headers: http.OutgoingHttpHeaders = {};
       for (const [k, val] of Object.entries(req.headers)) if (!DROP_REQ.has(k.toLowerCase()) && val !== undefined) headers[k] = val;
-      headers["x-api-key"] = o.apiKey;
+      if (provider === "openai") headers.authorization = `Bearer ${o.openai?.apiKey ?? ""}`;
+      else headers["x-api-key"] = o.apiKey;
       headers["content-length"] = body.length;
-      const target = new URL(fullPath, upstream);
+      const target = new URL(fullPath, provider === "openai" ? (openaiUpstream as URL) : upstream);
       const mod = target.protocol === "https:" ? https : http;
       const isCount = p === "/v1/messages/count_tokens";
       const up = mod.request(target, { method: "POST", headers }, (ur) => {
@@ -118,10 +153,12 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         res.flushHeaders();
         const sse = String(ur.headers["content-type"] ?? "").includes("text/event-stream");
         const parser = new SseUsage();
+        const rparser = new SseResponsesUsage();
         const jsonChunks: Buffer[] = [];
         let jsonBytes = 0;
         ur.on("data", (c: Buffer) => {
-          if (sse) parser.push(c.toString("utf8"));
+          if (sse && provider === "openai") rparser.push(c.toString("utf8"));
+          else if (sse) parser.push(c.toString("utf8"));
           else if (jsonBytes < MAX_BODY) {
             jsonChunks.push(c);
             jsonBytes += c.length;
@@ -130,6 +167,24 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         });
         ur.on("end", () => {
           res.end();
+          const status = ur.statusCode ?? 0;
+          const limit = status === 429 ? { limit: limitOf(ur.headers, now()) } : {};
+          if (provider === "openai") {
+            let ru: ResponsesUsage | null;
+            if (sse) {
+              rparser.end();
+              ru = rparser.usage;
+            } else {
+              try {
+                ru = responsesUsageOf(JSON.parse(Buffer.concat(jsonChunks).toString("utf8")));
+              } catch {
+                ru = null;
+              }
+            }
+            const usdO = status >= 400 || !ru || !rate ? 0 : costUsdOpenAi(rate, ru);
+            record({ method, path: p, run_id: runId, status, model, input_tokens: ru?.input_tokens ?? 0, output_tokens: ru?.output_tokens ?? 0, cache_read: ru?.cached_tokens ?? 0, cache_write: 0, usd: usdO, token_prefix8: tokenPrefix8(token), provider, ...limit });
+            return;
+          }
           let usage: Usage = { input_tokens: 0, output_tokens: 0 };
           if (sse) {
             parser.end();
@@ -151,7 +206,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
             method, path: p, run_id: runId, status: ur.statusCode ?? 0, model,
             input_tokens: isCount ? 0 : usage.input_tokens, output_tokens: isCount ? 0 : usage.output_tokens,
             cache_read: isCount ? 0 : (usage.cache_read_input_tokens ?? 0), cache_write: isCount ? 0 : cacheWrite,
-            usd, token_prefix8: tokenPrefix8(token),
+            usd, token_prefix8: tokenPrefix8(token), ...limit,
           });
         });
       });

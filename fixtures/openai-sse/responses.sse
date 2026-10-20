@@ -1,0 +1,9 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_stub","object":"response","status":"in_progress","model":"gpt-5-codex","usage":null}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"msg_stub","output_index":0,"content_index":0,"delta":"ok"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"resp_stub","object":"response","status":"completed","model":"gpt-5-codex","usage":{"input_tokens":1000,"input_tokens_details":{"cached_tokens":400},"output_tokens":200,"output_tokens_details":{"reasoning_tokens":50},"total_tokens":1200}}}
+

@@ -7,6 +7,8 @@ export interface TokenClaims {
   e: number; // expiry, unix seconds
   b: number; // budget USD
   n: string; // 16 hex nonce
+  /** E3в: the provider of the channel this token is for (absent = anthropic, E0 tokens) */
+  p?: "anthropic" | "openai";
 }
 
 const b64 = (b: Buffer | string): string => Buffer.from(b).toString("base64url");
@@ -35,7 +37,7 @@ export function verifyTaskToken(
   } catch {
     return { ok: false, code: "token_invalid" };
   }
-  if (typeof c.r !== "string" || typeof c.t !== "string" || typeof c.e !== "number" || typeof c.b !== "number" || c.a !== 1) {
+  if (typeof c.r !== "string" || typeof c.t !== "string" || typeof c.e !== "number" || typeof c.b !== "number" || c.a !== 1 || (c.p !== undefined && c.p !== "anthropic" && c.p !== "openai")) {
     return { ok: false, code: "token_invalid" };
   }
   if (c.e < nowS) return { ok: false, code: "token_expired" };
