@@ -13,3 +13,5 @@ export { MemoryOutbox, drainOutbox } from "./online/outbox.js";
 export type { OutboxKind, OutboxRow, OutboxStore } from "./online/outbox.js";
 export { PgOutbox, enqueueOutbox } from "./online/pg-outbox.js";
 export { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./online/seed.js";
+export { startWebhookServer, webhookHandler } from "./online/webhook.js";
+export type { WebhookDeps } from "./online/webhook.js";
