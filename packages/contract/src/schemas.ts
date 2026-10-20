@@ -8,7 +8,8 @@ export const TaskId = z.string().regex(/^t_[a-z0-9_]{1,40}$/);
 export type TaskId = z.infer<typeof TaskId>;
 export const RunId = z.string().regex(/^r_[0-9A-HJKMNP-TV-Z]{26}$/); // ULID (Crockford)
 export type RunId = z.infer<typeof RunId>;
-export const OrgId = z.literal("o_local");
+// D-226: the E0 local org or a Supabase org uuid.
+export const OrgId = z.union([z.literal("o_local"), z.string().uuid()]);
 export type OrgId = z.infer<typeof OrgId>;
 export const TaskType = z.enum(["bugfix", "feature", "css", "docs"]);
 export type TaskType = z.infer<typeof TaskType>;
@@ -52,7 +53,7 @@ export const Contract = z
   .object({
     task_id: TaskId,
     type: TaskType,
-    agent: z.literal("claude"),
+    agent: z.enum(["claude", "codex"]),
     text: z.string().min(1).max(4000),
     base_commit: GitSha,
     config_hash: Sha256,
@@ -105,16 +106,18 @@ export const DetectorId = z.enum([
   "AGENT",
   "INFRA",
   "PLACEHOLDER",
+  "D7.ci",
+  "POLICY",
 ]);
 export type DetectorId = z.infer<typeof DetectorId>;
 export const Evidence = z
   .object({
     detector: DetectorId,
-    phase: z.literal(1),
+    phase: z.union([z.literal(1), z.literal(2)]),
     status: z.enum(["pass", "fail", "unknown", "n/a"]),
     summary: z.string().max(300), // after redaction
     data: z.record(z.string(), z.unknown()), // after redaction
-    source: z.enum(["sandbox:verify", "worker", "export", "gate", "proxy"]),
+    source: z.enum(["sandbox:verify", "worker", "export", "gate", "proxy", "github:observer"]),
     artifact_hash: Sha256.optional(),
     agent_visible: z.boolean(), // true for everything in E0 (no D5)
     signature: z.string().max(300).optional(), // required for fail/unknown
@@ -123,12 +126,16 @@ export const Evidence = z
 export type Evidence = z.infer<typeof Evidence>;
 export const VerdictResult = z.enum(["VERIFIED", "FAILED", "UNKNOWN"]);
 export type VerdictResult = z.infer<typeof VerdictResult>;
+// Демо промпт т. 3.3: full = our harness; external = a change from an agent outside our sandbox.
+export const VerifyMode = z.enum(["full", "external"]);
+export type VerifyMode = z.infer<typeof VerifyMode>;
 export const TimingKey = z.enum(["provision", "install", "agent", "export", "verify", "verdict", "total"]);
 export const Verdict = z
   .object({
     run_id: RunId,
     task_id: TaskId,
-    attempt: z.literal(1),
+    attempt: z.number().int().min(1),
+    mode: VerifyMode.default("full"),
     agent: z.string(),
     result: VerdictResult,
     reasons: z.array(z.string()), // D-039
@@ -198,7 +205,33 @@ export const ExportRejection = z
 export type ExportRejection = z.infer<typeof ExportRejection>;
 
 // 6.5 Ledger and security events (JSON Lines, UTF-8, LF).
-export const LedgerKind = z.enum(["task_created", "memory_snapshot", "security_event", "verdict"]);
+// D-226 / спец. т. 10: E0 kinds + the online ones; "external_verdict" is new in the demo prompt.
+export const LedgerKind = z.enum([
+  "task_created",
+  "memory_snapshot",
+  "security_event",
+  "verdict",
+  "gated",
+  "delivered",
+  "approval",
+  "outcome",
+  "ladder_change",
+  "ladder_pin",
+  "config_change",
+  "channel_change",
+  "routing_change",
+  "channel_limit",
+  "channel_spill",
+  "channel_manual_switch",
+  "task_stopped",
+  "task_retry",
+  "failure_label",
+  "lease_lost",
+  "step_requeued",
+  "integrity_mismatch",
+  "demo_reset",
+  "external_verdict",
+]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
   .object({
@@ -229,7 +262,7 @@ export const SecurityEvent = z
     org_id: OrgId,
     task_id: TaskId.nullable(),
     run_id: RunId.nullable(),
-    attempt: z.literal(1).nullable(),
+    attempt: z.number().int().min(1).nullable(),
     kind: SecurityEventKind,
     severity: z.enum(["info", "warn", "incident"]),
     detail: z.record(z.string(), z.union([z.string().max(300), z.number(), z.boolean(), z.null()])), // after redaction

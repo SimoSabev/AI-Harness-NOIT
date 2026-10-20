@@ -4,6 +4,7 @@ import { signature } from "./signature.js";
 const SOURCE: Record<DetectorId, Evidence["source"]> = {
   EXPORT: "export", CANARY: "export", INTEGRITY: "worker", "D10.lockfile": "worker", "D3.protected": "worker", "D4.contract": "worker",
   MUST_PASS: "worker", AGENT: "worker", INFRA: "worker", PLACEHOLDER: "worker", "D1.base_tests": "sandbox:verify", "D2.inventory": "sandbox:verify",
+  "D7.ci": "github:observer", POLICY: "worker",
 };
 
 /** D-129 sources; signature only for fail/unknown. */
