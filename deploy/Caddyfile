@@ -1,0 +1,10 @@
+# Демо промпт т. 9.8: only GitHub webhooks reach the worker; everything else is 404. Auto TLS for {$MANDAT_DOMAIN}.
+# The LLM proxy is never routed here (S19).
+{$MANDAT_DOMAIN} {
+	handle /api/webhooks/* {
+		reverse_proxy worker:8790
+	}
+	handle {
+		respond 404
+	}
+}

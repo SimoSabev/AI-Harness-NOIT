@@ -1,0 +1,61 @@
+# Демо промпт т. 9.8 (S19): only caddy publishes a port (443). The worker and the LLM proxy live on the internal
+# network; the proxy (the real keys) has NO public path. Deployed by Simo (docs/setup/vps.md), never by the coder.
+name: mandat-core
+services:
+  caddy:
+    image: caddy:2.10.2
+    ports: ["443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    environment:
+      MANDAT_DOMAIN: ${MANDAT_DOMAIN:?set MANDAT_DOMAIN}
+    networks: [edge]
+    restart: unless-stopped
+  worker:
+    build: { context: .., dockerfile: docker/worker/Dockerfile }
+    expose: ["8790"]
+    environment:
+      MANDAT_MODE: worker
+      MANDAT_WEBHOOK_HOST: 0.0.0.0
+      MANDAT_WEBHOOK_PORT: "8790"
+      MANDAT_DB_URL: ${MANDAT_DB_URL:?set MANDAT_DB_URL}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      GITHUB_WRITER_APP_ID: ${GITHUB_WRITER_APP_ID:-}
+      GITHUB_WRITER_PRIVATE_KEY: ${GITHUB_WRITER_PRIVATE_KEY:-}
+      GITHUB_WRITER_INSTALLATION_ID: ${GITHUB_WRITER_INSTALLATION_ID:-}
+      GITHUB_WRITER_WEBHOOK_SECRET: ${GITHUB_WRITER_WEBHOOK_SECRET:-}
+      GITHUB_DEMO_REPO: ${GITHUB_DEMO_REPO:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      DOCKER_HOST: unix:///run/mandat/docker.sock
+    volumes:
+      # the host's ROOTLESS Docker of the user mandat (sandboxes are started with SANDBOX_HARDENING; docs/setup/vps.md)
+      - ${MANDAT_ROOTLESS_DOCKER_SOCK:?set MANDAT_ROOTLESS_DOCKER_SOCK}:/run/mandat/docker.sock
+      - mandat-home:/home/mandat/.mandat
+    networks: [edge, internal]
+    restart: unless-stopped
+  llm-proxy:
+    image: ${MANDAT_LLM_PROXY_IMAGE:?pnpm mandat images build}
+    expose: ["8787", "8788"]
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set in this terminal only}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MANDAT_PROXY_OPENAI_PRICES: ${MANDAT_PROXY_OPENAI_PRICES:-}
+      MANDAT_PROXY_SECRET_FILE: /var/lib/mandat-proxy/secret
+    volumes:
+      - mandat-proxy:/var/lib/mandat-proxy
+    networks: [internal]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+networks:
+  edge: {}
+  internal: { internal: true }
+volumes:
+  caddy-data: {}
+  mandat-home: {}
+  mandat-proxy: {}
