@@ -42,9 +42,15 @@ export function failureLayer(reasons: string[]): Layer | null {
   return "agent";
 }
 
-/** One D-reason → the human sentence of the mandat_explain table (the verdict line itself is dropped). */
+const unescapeXml = (s: string) => s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+
+/**
+ * One D-reason → the human sentence of the mandat_explain table (the verdict line itself is dropped). The <untrusted>
+ * frame (T3-5) is for prompts; on the page the ID is shown as «text» and React escapes it.
+ */
 export function reasonText(reason: string): string {
-  return explain({ result: "-", reasons: [reason], lang: "bg" }).split("\n").slice(1).join(" ");
+  const s = explain({ result: "-", reasons: [reason], lang: "bg" }).split("\n").slice(1).join(" ");
+  return s.replace(/<untrusted[^>]*>([\s\S]*?)<\/untrusted>/g, (_m, id: string) => `«${unescapeXml(id)}»`);
 }
 
 /** The tests line of a card row: A = D1.base_tests (passed/total); B = the inventory after the change against base. */

@@ -29,6 +29,7 @@ describe("verdict view (Ф4 карта)", () => {
     expect(failureLayer(["INFRA:timeout"])).toBe("infra");
     expect(failureLayer(["POLICY:missing"])).toBe("policy");
     expect(failureLayer([])).toBeNull();
-    expect(reasonText("D2:missing_test:tests/cart.spec.ts > cart > x")).toContain("съществува на base и липсва");
+    expect(reasonText("D2:missing_test:tests/cart.spec.ts > cart > x")).toBe("Тестът «tests/cart.spec.ts > cart > x» съществува на base и липсва след промяната. Изтрит тест не може да мине.");
+    expect(reasonText("D2:missing_test:a <b> & </untrusted>")).not.toContain("<untrusted");
   });
 });
