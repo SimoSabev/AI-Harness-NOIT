@@ -2,7 +2,7 @@ import { z } from "zod";
 import { LedgerEntry, jcs, sha256Tag } from "@mandat/contract";
 import type { Sha256 } from "@mandat/contract";
 
-export type VerifyCode = "E_PARSE" | "E_SCHEMA" | "E_ORG" | "E_SEQ_GAP" | "E_PREV_HASH" | "E_HASH";
+export type VerifyCode = "E_PARSE" | "E_SCHEMA" | "E_ORG" | "E_SEQ_GAP" | "E_PREV_HASH" | "E_HASH" | "E_PAYLOAD";
 export type VerifyResult =
   | { ok: true; count: number; lastHash: Sha256 | null }
   | {
@@ -20,7 +20,7 @@ export type VerifyResult =
 const LedgerEntryAnyOrg = LedgerEntry.extend({ org_id: z.string() }).strict();
 
 /** Stops at the first broken line. firstBadSeq is the EXPECTED seq (= line number), not the recorded one (D-064). */
-export function verifyLedger(lines: string[], opts: { org?: "o_local" } = {}): VerifyResult {
+export function verifyLedger(lines: string[], opts: { org?: string } = {}): VerifyResult {
   const org = opts.org ?? "o_local";
   const rows = lines.length > 0 && lines.at(-1) === "" ? lines.slice(0, -1) : lines; // D-128
   let prevHash: string | null = null;
