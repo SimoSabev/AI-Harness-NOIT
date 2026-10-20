@@ -12,4 +12,5 @@ test-results/
 .next/
 .mandat.yml.proposed
 demo/recordings/*.webm
+demo/recordings/playwright/
 demo/screenshots/*.tmp.png
