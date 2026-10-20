@@ -6,7 +6,7 @@ import type { ChangedFile, ErrorCode, TaskType, VerifyOutcome } from "@mandat/co
 import { ev } from "@mandat/core";
 import { exportChangeset } from "@mandat/export";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, imageTags, probeIpv6, realDockerRunner } from "@mandat/sandbox";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { hostConfig, infraUserFor } from "./host.js";
 import { acquireRunLock } from "./lock.js";
@@ -110,8 +110,9 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     return envFail("E_LOCKED", (e as Error).message);
   }
   const tmpRoot = mkdtempSync(path.join(os.tmpdir(), "mandat-verify-"));
+  const docker = deps.docker ?? realDockerRunner();
+  let runIdForCleanup: string | null = null;
   try {
-    const docker = deps.docker ?? realDockerRunner();
     const host = hostConfig(io.env);
     const dv = await dockerText(docker, ["version", "--format", "{{.Server.Version}}"]);
     if (dv.exitCode !== 0 || compareVersions(dv.stdout.trim(), "25.0.5") < 0) return envFail("E_DOCKER_VERSION", `docker ${dv.stdout.trim() || "unreachable"} < 25.0.5`);
@@ -121,6 +122,8 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     }
     const now = deps.verify?.now ?? (() => new Date());
     const runId = `r_${ulid(now().getTime())}`;
+    runIdForCleanup = runId;
+    await ensureUpstreamNetwork(docker).catch(() => undefined);
     const runDir = path.join(a.home, "runs", runId);
     const writer = new RunWriter(a.home, runDir, createRedactor({ exactSecrets: [] }), now);
     const progress = (l: string) => (a.json ? io.stderr(l + "\n") : io.stdout(l + "\n"));
@@ -178,6 +181,7 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     await writer.text("verdict.json", out.verdict);
     return report(out, base);
   } finally {
+    if (runIdForCleanup) await cleanupRunResources(docker, runIdForCleanup);
     rmSync(tmpRoot, { recursive: true, force: true });
     release();
   }
@@ -187,5 +191,15 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     if (a.json) io.stdout(JSON.stringify({ ...out, exit }) + "\n");
     else io.stdout(formatOutcome(out, base));
     return exit;
+  }
+}
+
+/** E0 т. 7.10: containers, networks and volumes of the run. */
+export async function cleanupRunResources(docker: DockerRunner, runId: string): Promise<void> {
+  const ps = await dockerText(docker, ["ps", "-aq", "--filter", `label=mandat.run=${runId}`]);
+  for (const c of ps.stdout.split("\n").filter(Boolean)) await dockerText(docker, ["rm", "-f", c]);
+  for (const t of ["agent", "base", "a", "b"] as const) {
+    await dockerText(docker, ["network", "rm", names.net(runId, t)]);
+    await dockerText(docker, ["volume", "rm", "-f", names.vol(runId, t)]);
   }
 }
