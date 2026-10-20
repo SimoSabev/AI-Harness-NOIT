@@ -7,9 +7,23 @@
     "declarationMap": false,
     "rootDir": ".",
     "paths": {
-      "@mandat/*": ["./packages/*/src/index.ts"]
-    }
+      "@mandat/*": [
+        "./packages/*/src/index.ts"
+      ]
+    },
+    "allowJs": true
   },
-  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "vitest.config.ts", "vitest.docker.config.ts"],
-  "exclude": ["**/node_modules/**", "**/dist/**", "fixtures/**"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "apps/*/src/**/*.ts",
+    "scripts/**/*.test.ts",
+    "vitest.config.ts",
+    "vitest.docker.config.ts",
+    "vitest.shared.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "fixtures/**"
+  ]
 }

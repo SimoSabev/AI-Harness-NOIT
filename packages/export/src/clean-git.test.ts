@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CLEAN_GIT_CONFIG, EMPTY_TREE, cleanGit, cleanGitEnv } from "./index.js";
 
 const tmp = (): string => mkdtempSync(path.join(tmpdir(), "mandat-git-"));
@@ -55,6 +55,17 @@ describe("clean git", () => {
     expect(Object.keys(env).sort()).toEqual(
       ["GIT_ATTR_NOSYSTEM", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_TERMINAL_PROMPT", "HOME", "LANG", "PATH"].sort(),
     );
+  });
+
+  it("PATH по подразбиране и грешка при spawn", async () => {
+    vi.stubEnv("PATH", undefined);
+    try {
+      expect(cleanGitEnv("/h").PATH).toBe("/usr/local/bin:/usr/bin:/bin");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const git = cleanGit({ tmpHome: tmp() });
+    await expect(git.run(["status"], { cwd: path.join(tmp(), "does-not-exist") })).rejects.toThrow();
   });
 
   it("stdin, stderr и код на грешка", async () => {

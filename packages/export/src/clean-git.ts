@@ -42,7 +42,10 @@ export function cleanGit(o: { tmpHome: string }): CleanGit {
         child.stderr.on("data", (c: Buffer) => err.push(c));
         child.on("error", reject);
         child.on("close", (code) => {
-          resolve({ stdout: Buffer.concat(out), stderr: Buffer.concat(err).toString("utf8"), code: code ?? 1 });
+          // A process killed by a signal has no exit code; report it as a failure.
+          /* v8 ignore next */
+          const exit = code ?? 1;
+          resolve({ stdout: Buffer.concat(out), stderr: Buffer.concat(err).toString("utf8"), code: exit });
         });
         child.stdin.end(ro.input ?? undefined);
       });
