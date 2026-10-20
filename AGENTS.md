@@ -35,3 +35,7 @@ GPL-3.0-or-later. TypeScript, Node 24.22.0, pnpm 12.14.0, Turborepo, Vitest, zod
 ## Стил
 ESM, само именувани exports, kebab-case файлове, грешки чрез MandatError с code.
 Без `any` (lint грешка); zod на всяка граница (файл, мрежа, CLI вход).
+
+<!-- mandat-coder:begin -->
+Следваща стъпка: виж docs/progress.md (раздел „Текуща задача“) и docs/spec/НОИТ_Мандат_v4_демо_промпт_кодер.md.
+<!-- mandat-coder:end -->

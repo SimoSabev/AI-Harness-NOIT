@@ -1,17 +1,26 @@
-# Прогрес на E0
+# Прогрес (демо промпт за НОИТ; формат т. 1.5)
 
-| Подфаза | Статус | Дата | Доклад |
-| --- | --- | --- | --- |
-| E0.1 Скелет на хранилището | ГОТОВО | 20.10.2026 | docs/reports/E0.1.md |
-| E0.2а Пясъчник + gate + прокси + S0, S3 | ЧАСТИЧНО (S0 чака ключ) | 20.10.2026 | docs/reports/E0.2a.md |
-| E0.2б Агенти, износ, `mandat run` + S1, S2 | ЧАСТИЧНО (claude, S1, S2 чакат ключ) | 20.10.2026 | docs/reports/E0.2b.md |
-| E0.3а Проверка А/Б, D1–D4, присъда | ГОТОВО за fake; claude чака ключ | 20.10.2026 | docs/reports/E0.3a.md |
-| E0.3б bench, redteam, README | ГОТОВО (bench 8/8, redteam 4/4); push блокиран | 20.10.2026 | docs/reports/E0.3b.md |
+| Фаза | Клон | Статус | Последен комит | Дата | Чака Симо |
+| --- | --- | --- | --- | --- | --- |
+| E0 (E0.1–E0.3б) | claude/new-session-42gq0n | ГОТОВО (live чака Симо) | виж клона | 20.10.2026 | proxy start с ключ: S0, S1, S2, `run --agent claude` (docs/reports/E0.3b.md) |
+| E1а лиценз и граници | phase/e1a-licenses | ГОТОВО | `git log -1 phase/e1a-licenses` | 20.10.2026 | избор apache/dual (Q-017); docs/spec файловете (Q-018) |
+| E1б ядро онлайн | phase/e1b-core-online | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E1в врата GitHub | phase/e1c-github-gate | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E2 MCP сървър | phase/e2-mcp | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E3а inbox | phase/e3a-inbox | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E3б авто-харнес | phase/e3b-autoharness | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E3в канали | phase/e3c-channels | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E3г PWA | phase/e3d-pwa | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E4 демо | phase/e4-demo | НЕ Е ЗАПОЧНАТА | — | — | — |
 
-Клон: `claude/new-session-42gq0n` (D-141). Последен комит: `git log -1`.
+Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
-## Нова сесия: откъде тръгваш
-1. Прочети този файл, docs/reports/E0.3b.md и docs/decisions.md (D-139+ са новите решения).
-2. `pnpm install --frozen-lockfile && pnpm check`; Docker: `pnpm mandat images build && pnpm mandat fixtures build && pnpm test:docker`.
-   В облачна среда с TLS прихващане: `export MANDAT_EXTRA_CA_CERTS=<pem> MANDAT_SANDBOX_APT=0` (D-150, D-151).
-3. Отворено: пускане с ключ (S0, S1, S2, live run), push (историята съдържа ключоподобни фалшиви литерали, D-149).
+## Текуща задача
+E1б (т. 5): клон phase/e1b-core-online от phase/e1a-licenses; първо docs/tasks/e1b.md, после fixtures/demo-shop (т. 9.1) и supabase (т. 5.1).
+
+## Часове: план/реално по фаза
+| Фаза | План [О] | Реално |
+| --- | --- | --- |
+| E1а | 4–5 | ≈ 2 |
+
+## Разход API: $0

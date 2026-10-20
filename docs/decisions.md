@@ -970,3 +970,159 @@ D-001…D-138 са преписани от т. 4.2 на промпта v4 (20.10
 Защо: в облачната сесия ключ няма (И1: кодерът не пуска proxy start с ключ, т. 14.4).
 Алтернативи: —
 Източник: т. 13, 14.4.
+
+# Решения на демо промпта (D-200…D-239), преписани при старта на E1а (20.10.2026)
+
+Източник: docs/spec/НОИТ_Мандат_v4_демо_промпт_кодер.md т. 12 (дословно). Статусите: „решено“, „Симо: по подразбиране X“ (Q в docs/questions-for-simo.md), „техническо, отворено“. D-240…D-259 са резерв; решенията на кодера са от D-260.
+
+## D-200
+Режим без спирки (т. 0.3, 0.8) заменя E0 т. 0 (4), т. 13 и края на т. 14.6. Източник: съобщението на Симо, с което е пуснат този промпт (20.10.2026); в решения.md (В-1…В-6) няма отделен запис. Симо: по подразбиране без спирки.
+
+## D-201
+Приоритет на източниците и таблицата на разминаванията (т. 2). `.mandat.yml` runtime.node приема "24". Решено.
+
+## D-202
+Версии на НОВИ [НП] зависимости: най-новата версия, публикувана ≥ 14 дни преди деня на добавяне (по полето time в registry), точна версия; минимумът на E0 (minimumReleaseAge 4320 = 3 дни) остава като предпазител. Таблицата в т. 2.4 и закрепените версии на E0 не се пипат (F10). zod остава една версия в монорепото: 4.6.7 на E0 (pnpm overrides), защото @modelcontextprotocol/server иска ^4.2.0 и две копия на zod чупят схемите между пакетите; последната ≥ 14 дни е 4.6.5. Техническо, отворено (кодерът проверява дали 4.6.5 чупи E0 тестовете; без смяна по подразбиране).
+
+## D-203
+MCP: @modelcontextprotocol/server 2.3.1 (v2, Apache-2.0) в продукта; @modelcontextprotocol/client 2.3.1 (Apache-2.0, проверен в registry) само като devDependency за mcp-sdk-client.test.ts; @modelcontextprotocol/sdk 1.32.1 остава само в spikes (E0 D-086). Основните тестове говорят JSON-RPC ръчно (двете ери). Решено.
+
+## D-204
+Пакетите export, sandbox, redaction стават Apache-2.0 заедно с ядрото (спец. оставя избора: Apache или отделен процес). Причина: verify ги линква; Симо е единствен автор. Симо: по подразбиране Apache.
+
+## D-205
+Нов пакет packages/verify (Apache-2.0): verifyChange + runTestProcedure и останалото от т. 4.1 (преместено от apps/worker); bin `mandat-verify`; `mandat verify` в cli е псевдоним (процес). Решено.
+
+## D-206
+Външна присъда: EXPORT, INTEGRITY, D10.lockfile, D1, D2 (вкл. weakened), D3, D4 (ако има тип), D7.ci (при PR); MUST_PASS и CANARY n/a; may_change_tests = false без тип; липсващ детектор, изискан от политиката → FAILED INFRA:detector_missing (спец. T3-3, F21); липсваща политика на base → UNKNOWN POLICY:missing. Принцип: D5 (когато съществува) се пуска и за външни присъди. Симо: по подразбиране тази семантика (продуктово решение).
+
+## D-207
+Ключ на стълбата за външни: agent = external:gh:<user_id> (S38); MCP: external:mcp-local без стълба (S39); таван 1; никога сливане/ready от Мандат за външен PR. config_hash = hashJcs(policy) вместо „каноничен YAML“ (спец. т. 5). Симо: по подразбиране без праг за вдигане на тавана (В-3 го оставя отворен).
+
+## D-208
+CUSUM: стъпките са точните ln(0,95/0,85) и ln(0,05/0,15) (закръглените в спец. дават 46, не 45 успеха); смяна на ниво нулира s_up и s_down; hard_fail сваля и pinned (и го маха). Симо: по подразбиране hard_fail маха pinned (последното е продуктово).
+
+## D-209
+Conclusion: VERIFIED success, FAILED failure, UNKNOWN action_required със заглавие „UNKNOWN: …“; neutral не се ползва (освен skipped за „Мандат verdict“ на PR на харнеса). Факт: required check минава при successful, skipped или neutral [Ф, github/docs about-protected-branches.md:95, 20.10.2026]. Live L3 проверява, че action_required блокира; ако не → UNKNOWN става failure със същото заглавие. Решено (следва от факта).
+
+## D-210
+Outbox таблица (нова, не е в спец. т. 11) и правилата на т. 3.4. Решено.
+
+## D-211
+Горен таймаут на състоянията (tasks.state_deadline_at, MANDAT_STATE_MAX_MIN_<STATE>; стойности т. 3.4). Техническо, отворено (стойностите се мерят на демото).
+
+## D-212
+Имена на MCP инструментите: mandat_verify, mandat_status, mandat_explain (спец.: verify/status/explain). Причина: клиенти, които показват голите имена, няма да ги смесят с чужди. Симо: по подразбиране с префикс.
+
+## D-213
+tree_sha за MCP/CLI: ls-files (минус --deleted) + tar + износът на E0 върху огледало в MANDAT_HOME; нищо не се пише в .git на потребителя. Решено. Публично копие на котвите (спец. т. 10 го иска) — не в този промпт (иска push). Симо: по подразбиране без публично копие до след демото.
+
+## D-214
+MCP allowlist чрез --allow / --allow-project-dir; празен или относителен → отказ при старт; realpath, без symlink бягство. Решено.
+
+## D-215
+Webhooks: node:http в apps/worker, без hono; без публичен URL → polling на MANDAT_SYNC_POLL_SECONDS (30 s); без тунел. Решено.
+
+## D-216
+DB клиент на worker-а: pg (версия по D-202); apps/web: supabase-js. Техническо, отворено (версията).
+
+## D-217
+OUTCOME прозорец 0 мин само в org с is_demo = true, с видим надпис „демо“. Симо: по подразбиране 0 мин в демо org.
+
+## D-218
+Преливане към агент без история: ниво 0 → branch_only + бутон „Отвори чернова на PR“ на картата (спец. Ф3 пише „ниво 0 → чернова на PR“, а вратата на ниво 0 няма PR; човешкото действие пази правилото). Симо: по подразбиране бутонът.
+
+## D-219
+UI без Tailwind/shadcn: CSS variables токени по Ф4 (по-малко зависимости и версии за проверка). Решено.
+
+## D-220
+Втора стъпка: нов TOTP код при самото одобрение през Supabase Auth MFA (mfa.challenge + verify → approvals.mfa_verified_at; тригер approvals_method_check; спец. т. 8, т. 11, S08); passkey след НОИТ демото. Ф5 демото „Одобри + passkey“ става „Одобри + TOTP“. Симо: по подразбиране TOTP.
+
+## D-221
+Резерва за iOS без инсталирано PWA: inbox + брояч в <title>; имейл известия не са в този промпт. Симо: по подразбиране без имейл.
+
+## D-222
+Codex в пясъчника: собствен provider „mandat“ (без websockets) към /v1/responses през gate → прокси; OPENAI_API_KEY = per-task токен; @openai/codex 0.160.1; argv по т. 8.3; точните -c ключове и sandbox режимът са [НП] → S-CX. Техническо, отворено.
+
+## D-223
+`mandat bench --fail-gate` (T3-3) по т. 3.4. Решено.
+
+## D-224
+Без envelope encryption и без таблица api_keys: ключовете са само в env на проксито, както в E0. Това ОТЛАГА обещание на E0: D-055 („ключът се вижда в docker inspect — приета граница за E0, поправка в E1“; F19), а Ф3 минимумът го съдържа (M9). Симо: по подразбиране отлагане след демото.
+
+## D-225
+fixtures/demo-shop е отделен от fixtures/shop (E0 тестовете зависят от точно 10-те файла). Решено.
+
+## D-226
+Разширенията на типовете от т. 3.2 (вкл. Codex/преливане, F5). Решено.
+
+## D-227
+Формат на рамката T3-5: `<untrusted author="<login>" association="<assoc>" source="<src>">…</untrusted>`; в текста `<`, `>` и `&` се екранират; таг `</untrusted>` вътре не може да затвори рамката (тест). Решено.
+
+## D-228
+Live тестовете са в отделен vitest проект `live`; без env → SKIPPED с името на env; SKIPPED не е минал; тестовете с GitHub/VAPID private key ги пуска Симо (т. 0.5). Решено.
+
+## D-229
+Бюджет на API за този промпт: ≤ $2 на live пускане, ≤ $10 общо (E0: $5). Симо: по подразбиране $10 (парите са на Симо).
+
+## D-230
+Check run имена: „Мандат verdict“, „Мандат approval“, „Мандат harness“ (точно като в спец., с кирилица); external_id: task_id (наши задачи) / ext:<repo>#<n>@<head12> (външни PR). Решено.
+
+## D-231
+Ниво ≥ 2: Writer отваря PR (не чернова) и слага „Мандат approval“ сам преди сливането; VERIFY_2 = D7.ci lite за head_sha; без D7 pass → ниво ≤ 1 (d7_missing). fakeGitHub налага ruleset-а (F3, F8, S6). Решено.
+
+## D-232
+Доверен base за MCP/CLI/външна присъда: собствен fetch на default клона от `--remote` в огледалото на Мандат; refs от работното дърво на агента не се ползват; HEAD на default клона или незакрепен base → UNKNOWN POLICY:base_untrusted; празна промяна → UNKNOWN EXPORT:empty_change; К-1 от същия base (S1). Решено.
+
+## D-233
+D2:weakened (A failed → B passed за същото ID; детерминистичен) и D2:weakened_assertions [О] (по-малко expect/assert по AST; евристика с тестове за фалшиви положителни); fail при --external и без may_change_tests; passed → passed с по-слаб assertion не се хваща (известна граница) (S2). Решено.
+
+## D-234
+Изолация на MCP/CLI проверката: mandat-verifyd под отделен потребител `mandat`, сокет, $MANDAT_HOME извън пътищата на агента; без отделен потребител VERIFIED → UNKNOWN INFRA:same_uid; резултатът е съвет (S3, S17, S35). Решено. Симо: създава потребителя по docs/setup/verifyd.md.
+
+## D-235
+CAS при push: нов ref `mandat/<task_id>-a<attempt>` за всеки опит през POST /git/refs (422 = вече има → BLOCKED branch_changed_by_human); REST няма CAS по стара стойност (F11; бележка към спец. т. 4). Решено.
+
+## D-236
+Одобрение: Route Handler (server-only, service role, след проверка на ролята и нов TOTP при requires_second_factor) вика private.approve_changeset — approvals + ledger + outbox в една транзакция; без `aal2` (спец. S08) (F9, S9). Решено.
+
+## D-237
+Външни PR: произход по автор = Writer App + запис в БД (не по име на клон); само PR към default клона; лимити и одобрение за непознати автори; head само от refs/pull/<n>/head; D7.ci не блокира и изключва собствените check-ове по app_id (S11–S14, S24, F23). Симо: по подразбиране author_association ∈ {OWNER, MEMBER, COLLABORATOR} се проверяват автоматично.
+
+## D-238
+Лицензна граница: npmAllowlistFromLockfile и Gate типовете в @mandat/contract; bin mandat-verify в packages/verify (Apache); cli е GPL псевдоним; тестът гледа и workspace зависимостите (F6, F7). Решено.
+
+## D-239
+MCP сървърът се пуска през serveStdio (двете ери на протокола); тестове за initialize 2025-11-25 и server/discover 2026-07-28 (F1). Решено.
+
+# Решения на кодера от демо промпта (D-260+)
+
+## D-260 Docker тестът на пясъчника се мести в apps/worker (20.10.2026)
+Решение: packages/sandbox/src/sandbox.docker.test.ts → apps/worker/src/sandbox.docker.test.ts; vitest проектът „sandbox“ в vitest.docker.config.ts отпада (тестът е в проекта „worker“). Правилото „ядрото импортира само ядро“ важи и за тестовите файлове в src/.
+Защо: тестът импортира @mandat/worker и @mandat/channels (харнес); license-groups.test.ts го откри. Тестовете са част от изходния код на пакета.
+Алтернативи: изключение за *.test.ts от правилото (по-слабо).
+Източник: демо промпт т. 4 (тестове). Статус: решено.
+
+## D-261 check-test-counts: JSON отчети в test-results/ (20.10.2026)
+Решение: vitest.config.ts и vitest.docker.config.ts пишат JSON отчет (reporters default + json, includeTaskLocation) в test-results/unit.json и test-results/docker.json (в .gitignore); passWithNoTests: false в двата конфига. `pnpm test:counts` (scripts/check-test-counts.mjs) е в `pnpm check` след `pnpm test`. Коментарът `// D-2xx:` се търси на реда на теста или над него, или над обграждащ `describe.skip(...)`. Липсващ docker отчет: локално → „SKIPPED: docker: не е пускан“; при CI=true → exit 1.
+Защо: т. 0.3 (е) — skip без решение не може да мине тихо; Docker тестовете без Docker не се броят за минали.
+Алтернативи: отделен reporter модул (повече код).
+Източник: демо промпт т. 0.3 (е). Статус: решено.
+
+## D-262 Метод на проверката на лицензите по групи (20.10.2026)
+Решение: за всеки workspace пакет `pnpm licenses list --json --prod` в неговата директория + обединение по затварянето на `workspace:*` зависимостите му; проверка срещу групата му (license-allowlist.json по групи). Dev списъкът (`--recursive` от корена) се проверява срещу harness.allowed + devOnlyExceptions (dev зависимостите не се разпространяват). Групите са в scripts/license-groups.mjs; пакет без група → fail. Форматът на `pnpm licenses list --json` е проверен в E0 (fixtures/licenses/pnpm-12.14.0*.json, D-077).
+Защо: т. 4.2; методът на E0 остава.
+Алтернативи: собствен обход на pnpm-lock.yaml (повече код, дублира pnpm).
+Източник: демо промпт т. 4.2. Статус: решено.
+
+## D-263 NOTICE на ядрото (20.10.2026)
+Решение: NOTICE = „Mandat <пакет>\nCopyright 2026 Simeon Sabev\n\nLicensed under the Apache License, Version 2.0 (see LICENSE).“; contract добавя ред за canonicalize (единствената Apache-2.0 prod зависимост в ядрото; пакетът няма собствен NOTICE файл). LICENSE е каноничният текст от apache.org (sha256 cfc7749b…3d30), проверен в теста. set-core-license.mjs пише ред между `<!-- mandat-license:begin/end -->` в packages/<p>/README.md само при dual.
+Защо: т. 4.2.
+Алтернативи: —
+Източник: демо промпт т. 4.2. Статус: решено.
+
+## D-264 Спецификацията (10 файла) липсва в docs/spec (20.10.2026)
+Решение: в docs/spec има само двата промпта; /home/user/claude не съществува. Работя по текста на промптите; където промптът препраща към „спец. т. N“ без да дава съдържанието, взимам минималния вариант, нужен за демото, и го записвам като D-26x „отворено за Симо“ (Q-018).
+Защо: т. 0.6 („работиш по този текст и E0; пишеш „чака Симо: docs/spec“ в progress“).
+Алтернативи: —
+Източник: демо промпт т. 0.6. Статус: отворено за Симо.

@@ -5,3 +5,4 @@ coverage/
 LICENSE
 THIRD_PARTY_LICENSES.md
 *.md
+docs/spec/
