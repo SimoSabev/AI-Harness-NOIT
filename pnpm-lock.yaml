@@ -197,6 +197,21 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2))
 
+  packages/agents:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+
+  packages/channels:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@mandat/llm-proxy':
+        specifier: workspace:*
+        version: link:../llm-proxy
+
   packages/cli:
     dependencies:
       '@mandat/contract':
@@ -217,6 +232,28 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+
+  packages/core:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      picomatch:
+        specifier: 4.0.7
+        version: 4.0.7
+    devDependencies:
+      '@types/picomatch':
+        specifier: 4.0.3
+        version: 4.0.3
+
+  packages/egress-gate:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@mandat/redaction':
+        specifier: workspace:*
+        version: link:../redaction
 
   packages/export:
     dependencies:
@@ -239,7 +276,19 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/llm-proxy:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+
   packages/redaction: {}
+
+  packages/sandbox:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
 
 packages:
 
@@ -501,6 +550,9 @@ packages:
 
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
+
+  '@types/picomatch@4.0.3':
+    resolution: {integrity: sha512-iG0T6+nYJ9FAPmx9SsUlnwcq1ZVRuCXcVEvWnntoPlrOpwtSTKNDC9uVAxTsC3PUvJ+99n4RpAcNgBbHX3JSnQ==}
 
   '@typescript-eslint/eslint-plugin@8.71.2':
     resolution: {integrity: sha512-K72/pvT7qpm8q3k8G5u93NCSN1RcLxX5h7Gw0bQpbMXviBHeY6Nx1WEwmk9wP+eKTSQ8ecxvcgt/ZX/rB938xQ==}
@@ -1340,6 +1392,8 @@ snapshots:
   '@types/node@24.19.2':
     dependencies:
       undici-types: 7.24.6
+
+  '@types/picomatch@4.0.3': {}
 
   '@typescript-eslint/eslint-plugin@8.71.2(@typescript-eslint/parser@8.71.2(eslint@10.13.0)(typescript@6.0.3))(eslint@10.13.0)(typescript@6.0.3)':
     dependencies:

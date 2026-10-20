@@ -1,0 +1,24 @@
+{
+  "name": "@mandat/sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docker sandbox: hardening flags, runner, networks, image tags",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/sandbox/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*"
+  }
+}

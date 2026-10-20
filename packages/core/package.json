@@ -1,0 +1,28 @@
+{
+  "name": "@mandat/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Detectors and verdict: pure functions",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/core/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "picomatch": "4.0.7"
+  },
+  "devDependencies": {
+    "@types/picomatch": "4.0.3"
+  }
+}

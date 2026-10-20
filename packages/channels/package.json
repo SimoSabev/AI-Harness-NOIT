@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/channels",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Channels: how a task gets model access",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/channels/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/llm-proxy": "workspace:*"
+  }
+}

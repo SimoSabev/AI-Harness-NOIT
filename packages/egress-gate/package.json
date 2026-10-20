@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/egress-gate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HTTP reverse proxy + DNS allowlist gate between the sandbox and the world",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/egress-gate/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/redaction": "workspace:*"
+  }
+}

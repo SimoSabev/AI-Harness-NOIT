@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent adapters: claude argv, stream parser, fakes",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist",
+    "fakes"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/agents/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*"
+  }
+}
