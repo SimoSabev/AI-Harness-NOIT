@@ -8,8 +8,8 @@ import {
   MandatError, Verdict, contractForAgent, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, npmAllowlistFromLockfile,
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent } from "@mandat/contract";
-import { claudeAdapter, fakeAdapter, isFakeScenario } from "@mandat/agents";
-import type { AgentAdapter, FakeScenario } from "@mandat/agents";
+import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
+import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
 import { buildReasons, canaryCheck, decideVerdict, ev, na } from "@mandat/core";
@@ -29,7 +29,7 @@ export interface RunHooks {
 export interface RunTaskInput {
   home: string;
   contractPath: string;
-  agent: "claude" | `fake:${FakeScenario}`;
+  agent: "claude" | "codex" | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
   keep: boolean;
   json: boolean;
   docker?: DockerRunner;
@@ -52,6 +52,8 @@ export interface RunInternals {
   healthz?: (port: number) => Promise<boolean>;
   channel?: Channel;
   usagePollMs?: number;
+  /** E3в: the proxy the gate forwards to (default http://mandat-llm-proxy:8787; tests use a test proxy) */
+  llmProxyUrl?: string;
   ipv6Sysctl?: boolean;
   infraUser?: string;
 }
@@ -62,11 +64,13 @@ export interface RunTaskOutput {
   ledger: { from: number; to: number } | null;
   agentExit: number | null;
   error?: { code: ErrorCode; message: string };
+  /** E3в: the last upstream 429 of the attempt (from the proxy), for the limit chain */
+  limit?: TaskUsage["limit"];
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const base62 = (n: number): string => Array.from(randomBytes(n), (b) => BASE62[b % 62]).join("");
-const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false };
+const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null };
 const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
 
 class InfraError extends Error {
@@ -91,8 +95,14 @@ async function realHealthz(port: number): Promise<boolean> {
   }
 }
 
-function adapterFor(agent: string): AgentAdapter {
+function adapterFor(agent: string, model: string): AgentAdapter {
   if (agent === "claude") return claudeAdapter({ model: "claude-sonnet-5-5", cliVersion: "2.1.302" });
+  if (agent === "codex") return codexAdapter({ model, cliVersion: "0.160.1" });
+  if (agent.startsWith("fake-codex:")) {
+    const c = agent.slice(11);
+    if (!isFakeCodexScenario(c)) throw new MandatError("E_USAGE", `unknown agent: ${agent}`);
+    return fakeCodexAdapter(c);
+  }
   const s = agent.startsWith("fake:") ? agent.slice(5) : "";
   if (!isFakeScenario(s)) throw new MandatError("E_USAGE", `unknown agent: ${agent}`);
   return fakeAdapter(s);
@@ -135,7 +145,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     let adapter: AgentAdapter;
     try {
-      adapter = adapterFor(i.agent);
+      adapter = adapterFor(i.agent, contract.channel.model);
     } catch (e) {
       return fail("E_USAGE", (e as Error).message);
     }
@@ -145,6 +155,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       process.stderr.write("ANTHROPIC_API_KEY removed from mandat run env (D-008)\n");
     }
     if (env !== process.env && env.ANTHROPIC_API_KEY !== undefined) delete env.ANTHROPIC_API_KEY;
+    // E3в: the same for the OpenAI key (Codex never gets it; only the proxy has it)
+    if (process.env.OPENAI_API_KEY !== undefined) delete process.env.OPENAI_API_KEY;
+    if (env !== process.env && env.OPENAI_API_KEY !== undefined) delete env.OPENAI_API_KEY;
     // ---- 4: environment
     const host = hostConfig(env);
     const dv = await dockerText(docker, ["version", "--format", "{{.Server.Version}}"]);
@@ -156,7 +169,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return fail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build`);
     }
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
-    if (i.agent === "claude" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
+    if ((i.agent === "claude" || i.agent === "codex") && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
     const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
@@ -225,7 +238,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const user = x.infraUser ?? (await infraUserFor(docker).catch(() => ({ user: "1000:1000" }))).user;
     const ipv6Sysctl = x.ipv6Sysctl ?? (await probeIpv6(docker, images.sandbox));
     const sctx = { docker, runId, runDir, mandatHome: i.home, home: os.homedir(), image: images.sandbox, ipv6Sysctl };
-    const gctx = (tree: "agent" | "base" | "a" | "b") => ({ docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, gateImage: images.gate, user, extraCa: host.extraCa });
+    const gctx = (tree: "agent" | "base" | "a" | "b") => ({ docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, gateImage: images.gate, user, extraCa: host.extraCa, ...(x.llmProxyUrl !== undefined ? { llmProxyUrl: x.llmProxyUrl } : {}) });
     let baseDir = "";
 
     try {
@@ -275,16 +288,16 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
         }
         const ch = channel as Channel;
-        const useProxy = i.agent === "claude" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret")));
+        const useProxy = i.agent === "claude" || i.agent === "codex" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret")));
         if (useProxy) {
           const cred = await ch.issueTaskCredential({ taskId: contract.task_id, runId, attempt: 1, budgetUsd: contract.repo_config.budgets.task_usd, ttlMin: contract.repo_config.budgets.task_minutes + 5 });
           setToken(cred.token);
         } else {
-          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex") }));
+          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider === "openai" ? { p: "openai" as const } : {}) }));
         }
         const launch = adapter.launch(
           { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" },
-          { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
+          ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
@@ -318,7 +331,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         try {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
-            env: { phase: "agent", secrets: launch.env },
+            env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}) },
             cmd: launch.argv,
             timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
             onStdoutLine: (line) => {
@@ -526,6 +539,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     return {
       verdict: red, exit, runDir, agentExit,
       ledger: w.ledgerFrom !== null && w.ledgerTo !== null ? { from: w.ledgerFrom, to: w.ledgerTo } : null,
+      ...(usage.limit ? { limit: usage.limit } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

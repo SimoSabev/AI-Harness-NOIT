@@ -7,7 +7,7 @@ import { readLedgerOnline, verifyOnlineRows } from "@mandat/ledger";
 import { fakeGitHub } from "@mandat/gate-github";
 import { buildFixture } from "../fixtures.js";
 import { repoRoot } from "../testing.js";
-import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
+import { DEMO_CHANNELS, DEMO_ORG_ID, DEMO_REPO_ID, seedChannels, seedMinimal } from "./seed.js";
 import { contractForTask, runDaemonOnce } from "./daemon.js";
 import type { DaemonDeps } from "./daemon.js";
 import { pgliteDb } from "./pglite-db.test-helper.js";
@@ -99,6 +99,62 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     await runDaemonOnce(soft.deps);
     expect((await soft.db.query<{ state: string }>("select state from public.tasks where id = 't_web_1'")).rows[0]?.state).toBe("HELD");
     expect((await soft.db.query<{ text: string }>("select text from public.task_activities where kind = 'harness_drift'")).rows[0]?.text).toContain("budgets.task_usd");
+  });
+  it("spill (E3в): 429 на anthropic-key-demo (2 ч) → openai-key-demo · fake-codex · опит 2 · VERIFIED · ниво 0 → клон …-a2", async () => {
+    const s = await setup(0);
+    await seedChannels(s.db);
+    await s.db.query("update public.tasks set agent = 'fake:limit-429' where id = 't_web_1'");
+    const agents: string[] = [];
+    s.deps.run = (i) => {
+      agents.push(i.agent);
+      s.runs.push(i);
+      const first = agents.length === 1;
+      return Promise.resolve(first
+        ? { verdict: verdict("UNKNOWN", s.fx.sha), exit: 10, runDir: null, ledger: null, agentExit: 1, limit: { retry_after_s: 7200, resets_at: "2026-10-20T14:00:00.000Z", at: "2026-10-20T12:00:00.000Z" } }
+        : { verdict: verdict("VERIFIED", s.fx.sha), exit: 0, runDir: null, ledger: { from: 1, to: 3 }, agentExit: 0 });
+    };
+    await runDaemonOnce(s.deps);
+    expect(agents).toEqual(["fake:limit-429", "fake-codex:honest-fix"]);
+    const t = (await s.db.query<{ state: string; attempt: number; agent: string; retry_reason: string; spills: number; channel_id: string; effective_level: number }>("select state, attempt, agent, retry_reason, spills, channel_id::text as channel_id, effective_level from public.tasks where id = 't_web_1'")).rows[0];
+    expect(t).toMatchObject({ state: "HELD", attempt: 2, agent: "fake-codex:honest-fix", retry_reason: "channel", spills: 1, channel_id: DEMO_CHANNELS.openai, effective_level: 0 });
+    const kinds = (await readLedgerOnline(s.db, DEMO_ORG_ID)).map((r) => r.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["channel_limit", "channel_spill", "verdict"]));
+    const spill = JSON.parse((await readLedgerOnline(s.db, DEMO_ORG_ID)).find((r) => r.kind === "channel_spill")?.payload_jcs ?? "{}") as Record<string, unknown>;
+    expect(spill).toMatchObject({ from: "anthropic-key-demo", to: "openai-key-demo", agent_from: "fake:limit-429", agent_to: "fake-codex:honest-fix", attempt: 2 });
+    expect(s.gh.state.calls.some((c) => c.startsWith("createRef") && c.includes("mandat/t_web_1-a2"))).toBe(true);
+    const ch = (await s.db.query<{ health: string; limit_resets_at: string }>("select health, to_char(limit_resets_at at time zone 'UTC', 'HH24:MI') as limit_resets_at from public.model_channels where id = $1", [DEMO_CHANNELS.anthropic])).rows[0];
+    expect(ch).toEqual({ health: "limited", limit_resets_at: "14:00" });
+    expect((await s.db.query("select 1 from public.channel_usage")).rows).toHaveLength(2);
+    const c2 = JSON.parse((await import("node:fs")).readFileSync(path.join(s.deps.home, "contracts", "t_web_1-a2.json"), "utf8")) as { channel: { label: string }; agent: string };
+    expect([c2.channel.label, c2.agent]).toEqual(["openai-key-demo", "codex"]);
+  });
+  it("лимит: retry-after 30 s → изчакване и повтор на същия канал; второ преливане → HELD channel_limit", async () => {
+    const s = await setup(0);
+    await seedChannels(s.db);
+    const slept: number[] = [];
+    s.deps.sleep = (ms) => (slept.push(ms), Promise.resolve());
+    let n = 0;
+    s.deps.run = () => {
+      n++;
+      const lim = n === 1 ? { retry_after_s: 30, resets_at: null, at: "x" } : { retry_after_s: 7200, resets_at: null, at: "x" };
+      return Promise.resolve({ verdict: verdict("UNKNOWN", s.fx.sha), exit: 10, runDir: null, ledger: null, agentExit: 1, limit: lim });
+    };
+    await runDaemonOnce(s.deps);
+    expect(slept).toEqual([30_000]);
+    expect(n).toBe(3); // wait → same channel; 2 h → spill; 2 h again → HELD (at most one spill)
+    expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "channel_limit" });
+  });
+  it("D-288: празна промяна (EXPORT 0 файла) с VERIFIED → HELD empty_change, без доставка и без стълба", async () => {
+    const s = await setup(2);
+    s.deps.run = () => {
+      const v = verdict("VERIFIED", s.fx.sha);
+      v.evidence.unshift({ detector: "EXPORT", phase: 1, status: "pass", summary: "0 file(s) changed", data: {}, source: "export", agent_visible: true });
+      return Promise.resolve({ verdict: v, exit: 0, runDir: null, ledger: null, agentExit: 0 });
+    };
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "empty_change" });
+    expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
+    expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
   });
   it("FAILED → BLOCKED „failed“ без доставка", async () => {
     const s = await setup(2, "FAILED");

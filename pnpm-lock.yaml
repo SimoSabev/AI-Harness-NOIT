@@ -208,6 +208,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@mandat/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
       '@mandat/contract':
         specifier: workspace:*
         version: link:../../packages/contract
@@ -263,6 +266,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
       '@mandat/agents':
         specifier: workspace:*
         version: link:../../packages/agents

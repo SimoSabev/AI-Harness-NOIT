@@ -19,6 +19,7 @@
     "test": "vitest run --root ../.. apps/worker/"
   },
   "dependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@mandat/agents": "workspace:*",
     "@mandat/channels": "workspace:*",
     "@mandat/contract": "workspace:*",
@@ -28,12 +29,12 @@
     "@mandat/gate-github": "workspace:*",
     "@mandat/ledger": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",
+    "@mandat/onboard": "workspace:*",
     "@mandat/redaction": "workspace:*",
     "@mandat/sandbox": "workspace:*",
     "@mandat/verify": "workspace:*",
     "@octokit/webhooks": "14.2.0",
-    "pg": "8.23.1",
-    "@mandat/onboard": "workspace:*"
+    "pg": "8.23.1"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",

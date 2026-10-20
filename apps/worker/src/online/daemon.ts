@@ -2,8 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { effectiveLevel, hashJcs, parseMandatYml, repoConfigFromPolicy, sealContract } from "@mandat/contract";
-import type { Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
+import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
 import { decideDelivery, ladderStepFor } from "@mandat/core";
+import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
+import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
 import type { LadderState } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { drift } from "@mandat/onboard";
@@ -13,6 +15,7 @@ import type { GitHubPort } from "@mandat/gate-github";
 import { readAtBase } from "@mandat/verify";
 import { runTask } from "../run.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
+import { loadChannels, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 
@@ -31,6 +34,8 @@ export interface DaemonDeps {
   docker?: RunTaskInput["docker"];
   now?: () => Date;
   log?: (line: string) => void;
+  /** E3в: the wait of the limit chain (tests replace it) */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 interface TaskRow {
@@ -49,15 +54,15 @@ interface TaskRow {
 }
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
-export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string }, policy: MandatPolicy, baseSha: string): Contract {
+export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = policy.task_types[t.type];
   if (!tt) throw new Error(`task type ${t.type} not in the policy`);
   return sealContract({
-    task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: t.text, base_commit: baseSha, scan_facts_hash: null,
+    task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: note ? `${t.text}\n\n${note}` : t.text, base_commit: baseSha, scan_facts_hash: null,
     allowed_paths: tt.allowed_paths, may_change_tests: tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
-    memory_hash: null, channel: { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
+    memory_hash: null, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
     repo_config: rc.config,
   });
 }
@@ -124,23 +129,98 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     }
     if (dr.soft.length > 0) await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'harness_drift', $3)", [t.org_id, t.id, `! меко отклонение от харнеса: ${dr.soft.slice(0, 10).join(", ")}`.slice(0, 500)]);
   }
-  const contract = contractForTask(t, parsed.policy, baseSha);
-  const dir = path.join(d.home, "contracts");
-  mkdirSync(dir, { recursive: true });
-  const cfile = path.join(dir, `${t.id}-a${t.attempt}.json`);
-  writeFileSync(cfile, JSON.stringify(contract, null, 2) + "\n");
+  // E3в (Ф3 П4): the channel is chosen here, before contract_hash; orgs without channels keep the E0 default.
+  const chans = await loadChannels(d.db, t.org_id);
+  let current: (typeof chans)[number] | null = null;
+  if (chans.length > 0) {
+    const rule = await ruleFor(d.db, t.org_id, t.repo_id, t.type);
+    const est = parsed.policy.budgets.task_usd / 4;
+    const compatible = chans.filter((c) => c.provider === providerOfAgent(t.agent));
+    const sel = selectChannel(compatible, { estCostUsd: est, rule, now: now() });
+    if (!sel.ok) {
+      const seq = await inTransaction(d.db, async (tx) => setState(tx, t, "HELD", { wait_reason: "no_channel" }));
+      await bc("HELD", seq, { wait_reason: "no_channel" });
+      return { state: "HELD", verdict: null };
+    }
+    current = chans.find((c) => c.id === sel.channel.id) ?? null;
+    await d.db.query("update public.tasks set channel_id = $2::uuid, channel_reason = $3::jsonb where id = $1", [t.id, sel.channel.id, JSON.stringify(sel.reason)]);
+  }
+  const writeContract = (c: Contract) => {
+    const dir = path.join(d.home, "contracts");
+    mkdirSync(dir, { recursive: true });
+    const f = path.join(dir, `${t.id}-a${t.attempt}.json`);
+    writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
+    return f;
+  };
+  let contract = contractForTask(t, parsed.policy, baseSha, current ? refOf(current) : undefined);
+  let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_created", task_id: t.id, payload: { task_id: t.id, contract_hash: contract.contract_hash, agent: t.agent } });
     return s;
   });
   await bc("RUNNING", seq);
-  log(`[daemon] ${t.id}: running ${t.agent}`);
+  log(`[daemon] ${t.id}: running ${t.agent}${current ? ` on ${current.label}` : ""}`);
   const t0 = now().getTime();
-  const out = await (d.run ?? runTask)({
-    home: d.home, contractPath: cfile, agent: t.agent as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
-    ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
-  });
+  const runOnce = () =>
+    (d.run ?? runTask)({
+      home: d.home, contractPath: cfile, agent: t.agent as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
+      ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
+    });
+  const usageRow = async (o: RunTaskOutput) => {
+    if (current) await d.db.query("insert into public.channel_usage (org_id, channel_id, task_id, attempt, usd, requests, limited) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)", [t.org_id, current.id, t.id, t.attempt, o.verdict?.usage.usd ?? 0, o.verdict?.usage.requests ?? 0, o.limit !== undefined && o.limit !== null]);
+  };
+  let out = await runOnce();
+  await usageRow(out);
+  // E3в (Ф3 П6 + В-2): the limit chain. A spill is a NEW attempt on a fallback channel, at most once per task.
+  let waits = 0;
+  let spills = 0;
+  // a limit counts when the agent failed on it (a run without changes can still come out VERIFIED in E0's runTask)
+  while (current && out.limit && (out.agentExit !== 0 || out.verdict?.result !== "VERIFIED")) {
+    const rule = await ruleFor(d.db, t.org_id, t.repo_id, t.type);
+    const fallbacks = (await loadChannels(d.db, t.org_id)).filter((c) => rule.fallback_ids.includes(c.id));
+    const dec = onLimit({ ev: { retryAfterS: out.limit.retry_after_s, resetsAt: out.limit.resets_at }, current, waits, spills, prevCooldownS: current.cooldown_s, fallbacks, estCostUsd: parsed.policy.budgets.task_usd / 4, now: now() });
+    const from = current;
+    if (dec.action === "wait") {
+      waits++;
+      log(`[daemon] ${t.id}: ${from.label} 429, waiting ${dec.seconds}s (${waits}/3)`);
+      await (d.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms))))(dec.seconds * 1000);
+      out = await runOnce();
+      await usageRow(out);
+      continue;
+    }
+    await inTransaction(d.db, async (tx) => {
+      await tx.query("update public.model_channels set health = 'limited', cooldown_until = $2::timestamptz, limit_resets_at = $3::timestamptz, cooldown_s = $4, last_error = '429' where id = $1::uuid", [from.id, dec.cooldownUntil, out.limit?.resets_at ?? dec.cooldownUntil, nextCooldownS(from.cooldown_s)]);
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "channel_limit", task_id: t.id, payload: { channel: from.label, retry_after_s: out.limit?.retry_after_s ?? null, resets_at: out.limit?.resets_at ?? null } });
+    });
+    if (dec.action === "held") {
+      seq = await inTransaction(d.db, async (tx) => setState(tx, t, "HELD", { wait_reason: "channel_limit" }));
+      await bc("HELD", seq, { wait_reason: "channel_limit" });
+      return { state: "HELD", verdict: null };
+    }
+    // spill: RETRY retry_reason=channel → new attempt, new agent, new per-task token (runTask mints it)
+    const agentFrom = t.agent;
+    const partial = out.runDir && existsSync(path.join(out.runDir, "export", "diff.patch")) ? readFileSync(path.join(out.runDir, "export", "diff.patch")).length : 0;
+    t.attempt += 1;
+    t.agent = spillAgent(t.agent, FAKE_CODEX_SCENARIOS);
+    spills = 1;
+    const to = (await loadChannels(d.db, t.org_id)).find((c) => c.id === dec.to.id) ?? { ...dec.to, cooldown_s: null };
+    current = to;
+    seq = await inTransaction(d.db, async (tx) => {
+      await tx.query("update public.tasks set attempt = $2, agent = $3, channel_id = $4::uuid, channel_reason = $5::jsonb, retry_reason = 'channel', spills = 1 where id = $1", [t.id, t.attempt, t.agent, to.id, JSON.stringify(dec.selection.reason)]);
+      const s = await setState(tx, t, "RETRY", { wait_reason: null });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "channel_spill", task_id: t.id, payload: { from: from.label, to: to.label, agent_from: agentFrom, agent_to: t.agent, attempt: t.attempt, partial_diff_bytes: partial } });
+      return s;
+    });
+    await bc("RETRY", seq);
+    log(`[daemon] ${t.id}: ${from.label} 429 → spill → ${to.label} · agent ${t.agent} · attempt ${t.attempt}`);
+    contract = contractForTask(t, parsed.policy, baseSha, refOf(to), partial > 0 ? "Note: the working tree contains partial work from an interrupted session." : null);
+    cfile = writeContract(contract);
+    seq = await inTransaction(d.db, async (tx) => setState(tx, t, "RUNNING"));
+    await bc("RUNNING", seq);
+    out = await runOnce();
+    await usageRow(out);
+  }
   const minutes = Math.round(((now().getTime() - t0) / 60000) * 100) / 100;
   const v = out.verdict;
   if (!v) {
@@ -151,6 +231,16 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     });
     await bc("BLOCKED", seq, { wait_reason: `infra:${out.error?.code ?? "error"}` });
     return { state: "BLOCKED", verdict: null };
+  }
+  // D-288 (EXPORT:empty_change, т. 5.7): an empty change is never VERIFIED online — no delivery, no ladder credit.
+  if (v.result === "VERIFIED" && v.evidence.some((e) => e.detector === "EXPORT" && /^0 file\(s\) changed/.test(e.summary))) {
+    seq = await inTransaction(d.db, async (tx) => {
+      const s2 = await setState(tx, t, "HELD", { wait_reason: "empty_change", minutes });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "empty_change", run_id: v.run_id } });
+      return s2;
+    });
+    await bc("HELD", seq, { wait_reason: "empty_change" });
+    return { state: "HELD", verdict: v };
   }
   // level: ladder (repo, type, agent) × risk cap × our harness cap 3 × ruleset × D7 assumed pass after VERIFY_1 (т. 3.3)
   const lad = await d.db.query<{ level: number; s_up: number; s_down: number; pinned: boolean }>("select level, s_up, s_down, pinned from public.ladder_state where repo_id = $1 and task_type = $2 and agent = $3", [t.repo_id, t.type, t.agent]);

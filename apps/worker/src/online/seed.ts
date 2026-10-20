@@ -98,6 +98,7 @@ export async function seedDemo(db: SqlClient, o: { remoteUrl: string; password?:
     }
   }
   await db.query("insert into public.ladder_state (org_id, repo_id, task_type, agent, level, s_up, s_down, pinned) values ($1, $2, 'bugfix', 'codex', 0, 0, 0, false)", [DEMO_ORG_ID, DEMO_REPO_ID]);
+  await seedChannels(db);
   for (const c of CARDS) await seedCard(db, c);
   return { org: DEMO_ORG_ID, created: true, secrets };
 }
@@ -143,4 +144,21 @@ async function seedCard(db: SqlClient, c: Card): Promise<void> {
 
 function randomPassword(): string {
   return randomBytes(12).toString("base64url");
+}
+
+// E3в (сцена 2): two api_key channels (metadata only; the keys are in the proxy's env) + the rule for the demo repo:
+// auto, fallback = openai-key-demo. A budget of 3 $/day per channel (MANDAT_DEMO_ORG_BUDGET_USD_DAY default).
+export const DEMO_CHANNELS = { anthropic: "d0000000-0000-4000-8000-0000000000c1", openai: "d0000000-0000-4000-8000-0000000000c2" } as const;
+export async function seedChannels(db: SqlClient, o: { openaiModel?: string } = {}): Promise<void> {
+  await db.query(
+    `insert into public.model_channels (id, org_id, label, provider, kind, model, budget_usd_day, quality, cost) values
+       ($1, $3, 'anthropic-key-demo', 'anthropic', 'api_key', 'claude-sonnet-5-5', 3, 0.9, 0.6),
+       ($2, $3, 'openai-key-demo', 'openai', 'api_key', $4, 3, 0.85, 0.5)
+     on conflict (org_id, label) do nothing`,
+    [DEMO_CHANNELS.anthropic, DEMO_CHANNELS.openai, DEMO_ORG_ID, o.openaiModel ?? "gpt-5-codex"],
+  );
+  await db.query(
+    "insert into public.routing_rules (org_id, priority, match, channel_id, repo_id, mode, fallback_channel_ids) select $1, 1, '{}', $2, $3, 'auto', array[$4::uuid] where not exists (select 1 from public.routing_rules where org_id = $1 and repo_id = $3)",
+    [DEMO_ORG_ID, DEMO_CHANNELS.anthropic, DEMO_REPO_ID, DEMO_CHANNELS.openai],
+  );
 }
