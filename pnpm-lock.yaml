@@ -214,6 +214,9 @@ importers:
       '@mandat/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mandat/onboard':
+        specifier: workspace:*
+        version: link:../../packages/onboard
       '@supabase/ssr':
         specifier: 0.12.7
         version: 0.12.7(@supabase/supabase-js@2.117.2)
@@ -287,6 +290,9 @@ importers:
       '@mandat/llm-proxy':
         specifier: workspace:*
         version: link:../../packages/llm-proxy
+      '@mandat/onboard':
+        specifier: workspace:*
+        version: link:../../packages/onboard
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../../packages/redaction
@@ -369,6 +375,9 @@ importers:
       '@mandat/llm-proxy':
         specifier: workspace:*
         version: link:../llm-proxy
+      '@mandat/onboard':
+        specifier: workspace:*
+        version: link:../onboard
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../redaction
@@ -497,6 +506,15 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.3.1
         version: 2.3.1
+
+  packages/onboard:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   packages/redaction: {}
 

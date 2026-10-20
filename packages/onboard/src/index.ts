@@ -1,0 +1,14 @@
+export { classifyCommand } from "./commands.js";
+export type { CommandClass } from "./commands.js";
+export { dangerousPatterns, findInvisible, stripInvisible } from "./invisible.js";
+export type { InvisibleHit, InvisibleKind } from "./invisible.js";
+export { dirView, scanRepo } from "./scan.js";
+export type { Framework, InstructionFile, PackageManager, RepoView, ScanResult, WorkflowInfo } from "./scan.js";
+export { annotate, propose } from "./propose.js";
+export type { Baseline, Proposal, Source } from "./propose.js";
+export { BEGIN, END, MAX_LINES, applyManagedBlock, claudeMd, generateHarnessFiles, renderAgentsBlock } from "./agents-md.js";
+export type { AgentsMdInput, Generated } from "./agents-md.js";
+export { HARD, drift } from "./drift.js";
+export type { Drift } from "./drift.js";
+export { filesPatch, lineDiff } from "./patch.js";
+export type { FileChange } from "./patch.js";

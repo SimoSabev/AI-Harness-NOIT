@@ -1,0 +1,694 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest → .mandat.yml + field_sources (snapshot) 1`] = `
+{
+  "field_sources": {
+    "ci.required_checks": "ci.yml",
+    "ci.workflow": "ci.yml",
+    "risk_classes": "human",
+    "runtime.install": "lockfile",
+    "runtime.node": "human",
+    "runtime.package_manager": "lockfile",
+    "task_types": "human",
+    "tests.command": "package.json#scripts.test",
+    "tests.framework": "package.json#scripts.test",
+    "tests.test_globs": "package.json#scripts.test",
+  },
+  "needs_human": [
+    "runner npm/jest: the sandbox runs npm + vitest + node 24 only (E0)",
+  ],
+  "risk_cap": 3,
+  "warnings": [],
+  "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
+version: 2
+runtime:
+  node: "24"
+  package_manager: npm
+  install: npm ci --ignore-scripts
+tests:
+  framework: jest
+  command: npx jest --json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs:
+    - tests/**
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/*.spec.js"
+    - "**/*.test.js"
+ci:
+  provider: github_actions
+  workflow: .github/workflows/ci.yml
+  required_checks:
+    - test
+task_types:
+  bugfix:
+    allowed_paths:
+      - src/**
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths:
+      - src/**
+      - tests/**
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths:
+      - README.md
+      - docs/**
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - .github/**
+  - .mandat.yml
+  - .claude/**
+  - .mcp.json
+  - .codex/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .npmrc
+  - "**/__snapshots__/**"
+protected_json_fields:
+  package.json:
+    - scripts
+    - overrides
+    - workspaces
+    - imports
+config_paths:
+  - .mandat.yml
+  - .claude/**
+  - .codex/**
+  - .npmrc
+  - AGENTS.md
+  - CLAUDE.md
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed:
+    - claude
+    - codex
+  default: claude
+harness:
+  required_detectors:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D10
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
+",
+}
+`;
+
+exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest-turbo → .mandat.yml + field_sources (snapshot) 1`] = `
+{
+  "field_sources": {
+    "ci.required_checks": "ci.yml",
+    "ci.workflow": "ci.yml",
+    "risk_classes": "human",
+    "runtime.install": "lockfile",
+    "runtime.node": "human",
+    "runtime.package_manager": "lockfile",
+    "task_types": "human",
+    "tests.command": "package.json#scripts.test",
+    "tests.framework": "package.json#scripts.test",
+    "tests.test_globs": "package.json#scripts.test",
+  },
+  "needs_human": [
+    "runner npm/jest: the sandbox runs npm + vitest + node 24 only (E0)",
+  ],
+  "risk_cap": 3,
+  "warnings": [],
+  "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
+version: 2
+runtime:
+  node: "24"
+  package_manager: npm
+  install: npm ci --ignore-scripts
+tests:
+  framework: jest
+  command: npx jest --json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs:
+    - tests/**
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/*.spec.js"
+    - "**/*.test.js"
+ci:
+  provider: github_actions
+  workflow: .github/workflows/ci.yml
+  required_checks:
+    - test
+task_types:
+  bugfix:
+    allowed_paths:
+      - src/**
+      - packages/**
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths:
+      - src/**
+      - packages/**
+      - tests/**
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths:
+      - README.md
+      - docs/**
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - .github/**
+  - .mandat.yml
+  - .claude/**
+  - .mcp.json
+  - .codex/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .npmrc
+  - "**/__snapshots__/**"
+  - pnpm-workspace.yaml
+  - turbo.json
+protected_json_fields:
+  package.json:
+    - scripts
+    - overrides
+    - workspaces
+    - imports
+config_paths:
+  - .mandat.yml
+  - .claude/**
+  - .codex/**
+  - .npmrc
+  - AGENTS.md
+  - CLAUDE.md
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed:
+    - claude
+    - codex
+  default: claude
+harness:
+  required_detectors:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D10
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
+",
+}
+`;
+
+exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-vitest → .mandat.yml + field_sources (snapshot) 1`] = `
+{
+  "field_sources": {
+    "ci.required_checks": "ci.yml",
+    "ci.workflow": "ci.yml",
+    "risk_classes": "human",
+    "runtime.install": "lockfile",
+    "runtime.node": "human",
+    "runtime.package_manager": "lockfile",
+    "task_types": "human",
+    "tests.command": "package.json#scripts.test",
+    "tests.framework": "package.json#scripts.test",
+    "tests.test_globs": "package.json#scripts.test",
+  },
+  "needs_human": [],
+  "risk_cap": 3,
+  "warnings": [],
+  "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
+version: 2
+runtime:
+  node: "24"
+  package_manager: npm
+  install: npm ci --ignore-scripts
+tests:
+  framework: vitest
+  command: npx vitest run --reporter=json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs:
+    - tests/**
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/*.spec.js"
+    - "**/*.test.js"
+ci:
+  provider: github_actions
+  workflow: .github/workflows/ci.yml
+  required_checks:
+    - test
+task_types:
+  bugfix:
+    allowed_paths:
+      - src/**
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths:
+      - src/**
+      - tests/**
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths:
+      - README.md
+      - docs/**
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - .github/**
+  - .mandat.yml
+  - .claude/**
+  - .mcp.json
+  - .codex/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .npmrc
+  - "**/__snapshots__/**"
+  - vitest.config.ts
+protected_json_fields:
+  package.json:
+    - scripts
+    - overrides
+    - workspaces
+    - imports
+config_paths:
+  - .mandat.yml
+  - .claude/**
+  - .codex/**
+  - .npmrc
+  - AGENTS.md
+  - CLAUDE.md
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed:
+    - claude
+    - codex
+  default: claude
+harness:
+  required_detectors:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D10
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
+",
+}
+`;
+
+exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-jest → .mandat.yml + field_sources (snapshot) 1`] = `
+{
+  "field_sources": {
+    "ci.required_checks": "ci.yml",
+    "ci.workflow": "ci.yml",
+    "risk_classes": "human",
+    "runtime.install": "lockfile",
+    "runtime.node": "human",
+    "runtime.package_manager": "lockfile",
+    "task_types": "human",
+    "tests.command": "package.json#scripts.test",
+    "tests.framework": "package.json#scripts.test",
+    "tests.test_globs": "package.json#scripts.test",
+  },
+  "needs_human": [
+    "runner pnpm/jest: the sandbox runs npm + vitest + node 24 only (E0)",
+  ],
+  "risk_cap": 3,
+  "warnings": [],
+  "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
+version: 2
+runtime:
+  node: "24"
+  package_manager: pnpm
+  install: pnpm install --frozen-lockfile --ignore-scripts
+tests:
+  framework: jest
+  command: npx jest --json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs:
+    - tests/**
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/*.spec.js"
+    - "**/*.test.js"
+ci:
+  provider: github_actions
+  workflow: .github/workflows/ci.yml
+  required_checks:
+    - test
+task_types:
+  bugfix:
+    allowed_paths:
+      - src/**
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths:
+      - src/**
+      - tests/**
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths:
+      - README.md
+      - docs/**
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - .github/**
+  - .mandat.yml
+  - .claude/**
+  - .mcp.json
+  - .codex/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .npmrc
+  - "**/__snapshots__/**"
+protected_json_fields:
+  package.json:
+    - scripts
+    - overrides
+    - workspaces
+    - imports
+config_paths:
+  - .mandat.yml
+  - .claude/**
+  - .codex/**
+  - .npmrc
+  - AGENTS.md
+  - CLAUDE.md
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed:
+    - claude
+    - codex
+  default: claude
+harness:
+  required_detectors:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D10
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
+",
+}
+`;
+
+exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest → .mandat.yml + field_sources (snapshot) 1`] = `
+{
+  "field_sources": {
+    "ci.required_checks": "ci.yml",
+    "ci.workflow": "ci.yml",
+    "risk_classes": "human",
+    "runtime.install": "lockfile",
+    "runtime.node": "human",
+    "runtime.package_manager": "lockfile",
+    "task_types": "human",
+    "tests.command": "package.json#scripts.test",
+    "tests.framework": "package.json#scripts.test",
+    "tests.test_globs": "package.json#scripts.test",
+  },
+  "needs_human": [
+    "runner pnpm/vitest: the sandbox runs npm + vitest + node 24 only (E0)",
+  ],
+  "risk_cap": 3,
+  "warnings": [],
+  "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
+version: 2
+runtime:
+  node: "24"
+  package_manager: pnpm
+  install: pnpm install --frozen-lockfile --ignore-scripts
+tests:
+  framework: vitest
+  command: npx vitest run --reporter=json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs:
+    - tests/**
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/*.spec.js"
+    - "**/*.test.js"
+ci:
+  provider: github_actions
+  workflow: .github/workflows/ci.yml
+  required_checks:
+    - test
+task_types:
+  bugfix:
+    allowed_paths:
+      - src/**
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths:
+      - src/**
+      - tests/**
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths:
+      - README.md
+      - docs/**
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - .github/**
+  - .mandat.yml
+  - .claude/**
+  - .mcp.json
+  - .codex/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .npmrc
+  - "**/__snapshots__/**"
+  - vitest.config.ts
+protected_json_fields:
+  package.json:
+    - scripts
+    - overrides
+    - workspaces
+    - imports
+config_paths:
+  - .mandat.yml
+  - .claude/**
+  - .codex/**
+  - .npmrc
+  - AGENTS.md
+  - CLAUDE.md
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed:
+    - claude
+    - codex
+  default: claude
+harness:
+  required_detectors:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D10
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
+",
+}
+`;
+
+exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest-turbo → .mandat.yml + field_sources (snapshot) 1`] = `
+{
+  "field_sources": {
+    "ci.required_checks": "ci.yml",
+    "ci.workflow": "ci.yml",
+    "risk_classes": "human",
+    "runtime.install": "lockfile",
+    "runtime.node": "human",
+    "runtime.package_manager": "lockfile",
+    "task_types": "human",
+    "tests.command": "package.json#scripts.test",
+    "tests.framework": "package.json#scripts.test",
+    "tests.test_globs": "package.json#scripts.test",
+  },
+  "needs_human": [
+    "runner pnpm/vitest: the sandbox runs npm + vitest + node 24 only (E0)",
+  ],
+  "risk_cap": 3,
+  "warnings": [],
+  "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
+version: 2
+runtime:
+  node: "24"
+  package_manager: pnpm
+  install: pnpm install --frozen-lockfile --ignore-scripts
+tests:
+  framework: vitest
+  command: npx vitest run --reporter=json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs:
+    - tests/**
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/*.spec.js"
+    - "**/*.test.js"
+ci:
+  provider: github_actions
+  workflow: .github/workflows/ci.yml
+  required_checks:
+    - test
+task_types:
+  bugfix:
+    allowed_paths:
+      - src/**
+      - packages/**
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths:
+      - src/**
+      - packages/**
+      - tests/**
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths:
+      - README.md
+      - docs/**
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - .github/**
+  - .mandat.yml
+  - .claude/**
+  - .mcp.json
+  - .codex/**
+  - AGENTS.md
+  - CLAUDE.md
+  - .npmrc
+  - "**/__snapshots__/**"
+  - pnpm-workspace.yaml
+  - turbo.json
+  - vitest.config.ts
+protected_json_fields:
+  package.json:
+    - scripts
+    - overrides
+    - workspaces
+    - imports
+config_paths:
+  - .mandat.yml
+  - .claude/**
+  - .codex/**
+  - .npmrc
+  - AGENTS.md
+  - CLAUDE.md
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed:
+    - claude
+    - codex
+  default: claude
+harness:
+  required_detectors:
+    - D1
+    - D2
+    - D3
+    - D4
+    - D10
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
+",
+}
+`;

@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/onboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Auto-harness without AI: repo scanner, .mandat.yml proposal with field sources, AGENTS.md template, drift",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/onboard/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "yaml": "2.9.1"
+  }
+}
