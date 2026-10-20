@@ -395,6 +395,9 @@ importers:
       '@mandat/sandbox':
         specifier: workspace:*
         version: link:../sandbox
+      tar:
+        specifier: 7.5.22
+        version: 7.5.22
 
   spikes:
     dependencies:

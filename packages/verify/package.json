@@ -29,6 +29,7 @@
     "@mandat/export": "workspace:*",
     "@mandat/ledger": "workspace:*",
     "@mandat/redaction": "workspace:*",
-    "@mandat/sandbox": "workspace:*"
+    "@mandat/sandbox": "workspace:*",
+    "tar": "7.5.22"
   }
 }
