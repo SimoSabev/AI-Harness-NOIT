@@ -1,0 +1,7 @@
+# D-095: default rules + the redaction corpus only.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "redaction corpus"
+paths = ['''^fixtures/redaction/''']

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.mandat/
+.env
+.env.*
+!.env.example
+*.tgz
+*.tsbuildinfo
+.turbo/

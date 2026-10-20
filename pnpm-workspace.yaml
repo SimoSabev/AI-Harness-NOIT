@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+  - "bench"
+  - "spikes"
+# D-036: 3 days (in minutes); applies to transitive dependencies too.
+minimumReleaseAge: 4320

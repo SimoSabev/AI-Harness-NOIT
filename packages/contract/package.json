@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "zod schemas, JCS and hashes: the single source of types",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/contract/"
+  },
+  "dependencies": {
+    "canonicalize": "5.1.0",
+    "zod": "4.6.7"
+  }
+}

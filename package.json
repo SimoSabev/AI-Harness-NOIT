@@ -1,0 +1,40 @@
+{
+  "name": "mandat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mandat: a harness that turns each AI coding task into a changeset with a verdict from systems the agent cannot write to.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24.22.0 <25"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test": "vitest run --coverage",
+    "test:docker": "vitest run --config vitest.docker.config.ts",
+    "licenses:check": "node scripts/check-licenses.mjs",
+    "licenses:third-party": "node scripts/gen-third-party.mjs",
+    "no-dotenv": "node scripts/check-no-dotenv.mjs",
+    "gitleaks": "docker run --rm -v \"$PWD\":/repo ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --config=/repo/.gitleaks.toml --redact --no-banner",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm licenses:check && pnpm no-dotenv",
+    "ci:local": "pnpm check && pnpm gitleaks && pnpm mandat images build && pnpm mandat fixtures build && pnpm test:docker && pnpm mandat bench && pnpm mandat redteam",
+    "mandat": "node packages/cli/dist/main.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.0.5",
+    "eslint": "10.13.0",
+    "fast-check": "4.10.2",
+    "prettier": "3.9.10",
+    "turbo": "2.11.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  }
+}

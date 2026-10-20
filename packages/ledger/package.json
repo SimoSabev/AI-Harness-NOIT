@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/ledger",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hash-chained ledger (JCS, RFC 8785) and security events",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/ledger/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/redaction": "workspace:*"
+  }
+}

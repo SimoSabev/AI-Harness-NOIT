@@ -1,0 +1,30 @@
+import { defineConfig } from "vitest/config";
+import { workspaceAliases, EXCLUDE } from "./vitest.shared.js";
+
+const strict = { lines: 90, branches: 85 };
+const loose = { lines: 70 };
+
+export const config = defineConfig({
+  resolve: { alias: workspaceAliases() },
+  test: {
+    include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "bench/**/*.test.ts", "scripts/**/*.test.ts"],
+    exclude: [...EXCLUDE, "**/*.docker.test.ts"],
+    testTimeout: 20_000,
+    coverage: {
+      provider: "v8",
+      include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
+      exclude: ["**/*.test.ts", "**/index.ts", "packages/cli/src/main.ts"],
+      reporter: ["text-summary", "json-summary"],
+      thresholds: {
+        "packages/contract/src/**": strict,
+        "packages/ledger/src/**": strict,
+        "packages/redaction/src/**": strict,
+        "packages/core/src/**": strict,
+        "packages/export/src/**": strict,
+        "packages/cli/src/**": loose,
+      },
+    },
+  },
+});
+
+export default config;
