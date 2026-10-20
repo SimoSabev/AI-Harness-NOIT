@@ -56,6 +56,11 @@ export async function resolveTrustedBase(o: { repo: string; remote: string | nul
   const head = await out(git, ["rev-parse", "--verify", "--end-of-options", "refs/mandat/agent/head^{commit}"], mirror);
   const mb = await out(git, ["merge-base", "--end-of-options", trustedRef, "refs/mandat/agent/head"], mirror);
   if (!mb.ok || !/^[0-9a-f]{40}$/.test(mb.text)) return { ok: false, reason: "no_merge_base", detail: mb.err };
+  // cleanClone (E0) clones refs/heads/*: the pinned base gets a branch in Mandat's own mirror; HEAD points to it.
+  const up = await out(git, [...FSYNC, "update-ref", "refs/heads/mandat/base", mb.text], mirror);
+  const hd = await out(git, ["symbolic-ref", "HEAD", "refs/heads/mandat/base"], mirror);
+  /* v8 ignore next */
+  if (!up.ok || !hd.ok) return { ok: false, reason: "fetch_failed", detail: up.err || hd.err };
   return { ok: true, mirror, branch, baseSha: mb.text, trustedTip: tip.text, agentHead: head.text };
 }
 
