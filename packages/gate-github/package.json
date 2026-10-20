@@ -1,0 +1,32 @@
+{
+  "name": "@mandat/gate-github",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The GitHub gate: port, fake with ruleset, check rendering, delivery, external PR verdicts (Apache-2.0)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/gate-github/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/core": "workspace:*",
+    "@mandat/export": "workspace:*",
+    "@mandat/redaction": "workspace:*",
+    "@mandat/sandbox": "workspace:*",
+    "@mandat/verify": "workspace:*",
+    "@octokit/app": "16.1.4"
+  }
+}
