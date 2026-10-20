@@ -11,6 +11,7 @@ import { verifyAlias } from "./commands/verify.js";
 import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
 import { demoExternalPr, demoSeed } from "./commands/demo.js";
+import { workerCommand } from "./commands/worker.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -185,6 +186,13 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .action(async (o: { org: string; json?: boolean }) => {
       if (o.org !== "o_local" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(o.org)) throw new MandatError("E_USAGE", `--org must be o_local or a uuid`);
       code = await anchorCommand(io, { home: home(), org: o.org, json: json(o), ...(o.org !== "o_local" ? { db: depsIn?.db ?? openDb(dbUrl(io.env)) } : {}), ...(depsIn?.tsaFetcher ? { fetcher: depsIn.tsaFetcher } : {}) });
+    });
+  program
+    .command("worker")
+    .description("the online worker (MANDAT_MODE=worker): takes CREATED tasks from Postgres")
+    .option("--once", "process at most one task and exit")
+    .action(async (o: { once?: boolean }) => {
+      code = await workerCommand(io, { home: home(), once: Boolean(o.once) });
     });
   const demo = program.command("demo").description("demo data and scenes");
   demo
