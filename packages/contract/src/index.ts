@@ -7,3 +7,5 @@ export * from "./test-id.js";
 export * from "./vitest-report.js";
 export * from "./gate.js";
 export * from "./npm-allowlist.js";
+export * from "./policy.js";
+export * from "./verify.js";
