@@ -56,3 +56,10 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | yaml | 2.9.1 | 11.09.2026 | ISC | contract (runtime), worker (dev) | `.mandat.yml` v2 (https://registry.npmjs.org/yaml) |
 | typescript | 6.0.3 | (E0) | Apache-2.0 | core (runtime) | AST на тестовите файлове за D2:weakened_assertions и report_mismatch (https://registry.npmjs.org/typescript) |
 | tar | 7.5.22 | (E0) | BlueOak-1.0.0 | verify (runtime) | tar на дървото на агента за mandat-verify |
+| pg | 8.23.1 | 30.09.2026 | MIT | worker (runtime) | Postgres клиент на worker-а (D-216; https://registry.npmjs.org/pg) |
+| @types/pg | 8.23.1 | 17.08.2026 | MIT | worker (dev) | типове |
+| pkijs | 3.4.1 | 20.09.2026 | BSD-3-Clause | ledger (runtime) | RFC 3161 заявка/проверка (https://registry.npmjs.org/pkijs); транзитивни asn1js, pvutils, pvtsutils, bytestreamjs, tslib, @noble/hashes |
+| asn1js | 3.0.10 | 20.04.2026 | BSD-3-Clause | ledger (runtime) | ASN.1 за TSA заявката |
+| supabase | 2.119.0 | 30.09.2026 | MIT | root (dev) | Supabase CLI (`db:start`, `test:db:supabase`); бинарникът идва като @supabase/cli-linux-x64 от npm |
+| @electric-sql/pglite | 0.5.8 | 26.08.2026 | Apache-2.0 | root (dev) | Postgres в WASM за `pnpm test:db` (D-274) |
+| @electric-sql/pglite-pgtap | 0.0.9 | 26.08.2026 | Apache-2.0 | root (dev) | pgTAP за PGlite |
