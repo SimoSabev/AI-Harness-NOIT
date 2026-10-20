@@ -24,6 +24,7 @@ export const config = defineConfig({
       project("mcp", "packages/mcp"),
       project("verify", "packages/verify"),
       project("worker", "apps/worker"),
+      project("web", "apps/web"),
       project("bench", "bench"),
     ],
   },
