@@ -8,6 +8,7 @@ import { openDb } from "./db.js";
 import type { Db } from "./db.js";
 import { drainOutbox } from "./outbox.js";
 import { PgOutbox, enqueueOutbox } from "./pg-outbox.js";
+import { DEMO_ORG_ID, seedMinimal } from "./seed.js";
 
 // Real Postgres 17 (postgres:17.6-alpine, D-274) for what PGlite cannot do: parallel connections.
 const NAME = `mandat-pgtest-${process.pid}`;
@@ -71,6 +72,13 @@ describe("Postgres (docker)", () => {
     expect(seen).toHaveLength(10);
     const again = await drain();
     expect(again.done).toBe(0);
+  });
+  it("demo seed --minimal: идемпотентен; дневникът на demo org е цял", async () => {
+    expect(await seedMinimal(db, { remoteUrl: "file:///x/demo-shop.git" })).toMatchObject({ org: DEMO_ORG_ID, created: true });
+    expect(await seedMinimal(db, { remoteUrl: "file:///x/demo-shop.git" })).toMatchObject({ created: false });
+    const rows = await readLedgerOnline(db, DEMO_ORG_ID);
+    expect(rows.map((r) => r.kind)).toEqual(["demo_reset"]);
+    expect((await db.query<{ is_demo: boolean }>("select is_demo from public.orgs where id = $1", [DEMO_ORG_ID])).rows[0]?.is_demo).toBe(true);
   });
   it("пряка подмяна на дневника е отказана; verify-log --org през CLI", async () => {
     await expect(db.query("update public.ledger set kind = 'x' where seq = 1")).rejects.toThrow(/append-only/);

@@ -42,3 +42,21 @@ describe("verify-log --org <uuid> (т. 5.4)", () => {
     expect((await cli(["verify-log", "--org", "nope"], db([]))).code).toBe(2);
   });
 });
+
+describe("demo seed (т. 5.1)", () => {
+  it("без --minimal → 2; недостъпна база → 3; с fake база → 0", async () => {
+    const home = (await import("node:fs")).mkdtempSync((await import("node:path")).join((await import("node:os")).tmpdir(), "mandat-seed-"));
+    expect((await cli(["--home", home, "demo", "seed"], db([]))).code).toBe(2);
+    expect((await cli(["--home", home, "demo", "seed", "--minimal"], db(new Error("ECONNREFUSED")))).code).toBe(3);
+    const fake: SqlClient = {
+      query: <T>(text: string) => {
+        if (text.includes("count(*)")) return Promise.resolve({ rows: [{ n: 0 }] as T[] });
+        if (text.includes("ledger_append")) return Promise.resolve({ rows: rows(1) as T[] });
+        return Promise.resolve({ rows: [] as T[] });
+      },
+    };
+    const r = await cli(["--home", home, "demo", "seed", "--minimal", "--json"], fake);
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout)).toMatchObject({ created: true, exit: 0 });
+  });
+});
