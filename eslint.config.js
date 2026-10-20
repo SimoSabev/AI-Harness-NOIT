@@ -18,7 +18,7 @@ export default tseslint.config(
   },
   {
     // Next.js App Router (page/layout) and Playwright globalSetup require default exports (D-285)
-    files: ["apps/web/src/app/**/page.tsx", "apps/web/src/app/**/layout.tsx", "apps/web/src/app/manifest.ts", "apps/web/e2e/global-setup.ts"],
+    files: ["apps/web/src/app/**/page.tsx", "apps/web/src/app/**/layout.tsx", "apps/web/src/app/manifest.ts", "apps/web/e2e/global-setup.ts", "apps/web/demo-e2e/global-setup.ts", "apps/web/playwright.demo.config.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
   {

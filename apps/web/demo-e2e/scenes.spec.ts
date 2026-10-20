@@ -1,11 +1,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { EMAIL, TOTP, login, totpNow } from "../e2e/fixtures";
 
 // Демо промпт т. 9: demo-scene1/2/3 (offline UI): the expected texts; scene 1 starts at level 1.
 const shots = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../demo/screenshots");
-const shot = (page: import("@playwright/test").Page, name: string) => page.screenshot({ path: path.join(shots, `${name}.png`), fullPage: true });
+const shot = (page: Page, name: string) => page.screenshot({ path: path.join(shots, `${name}.png`), fullPage: true });
 test.describe.configure({ mode: "serial" });
 
 test("сцена 1: карта ✔ ПРОВЕРЕНО · ниво 1, още 1 ПРОВЕРЕНО до ниво 2 → Одобри + TOTP", async ({ page }) => {
