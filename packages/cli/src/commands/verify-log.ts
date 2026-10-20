@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { verifyLedger } from "@mandat/ledger";
+import { readLedgerOnline, verifyLedger, verifyOnlineRows } from "@mandat/ledger";
+import type { OnlineLedgerRow, SqlClient } from "@mandat/ledger";
 import { displayPath, printJson, shortHash } from "../output.js";
 import type { Io } from "../output.js";
 
@@ -31,5 +32,33 @@ export function verifyLog(io: Io, o: { ledger: string; org: "o_local"; json: boo
   io.stdout(`TAMPERED: seq ${seq} (line ${r.line}) ${r.code} — ${detail}\n`);
   const verified = r.countOk === 0 ? "no lines verified" : `lines 1..${r.countOk} verified`;
   io.stdout(`${verified}; nothing after seq ${seq} is trusted\n`);
+  return 1;
+}
+
+/** т. 5.4: `mandat verify-log --org <uuid>` reads the chain from Postgres; same output as E0. */
+export async function verifyLogOnline(io: Io, o: { org: string; json: boolean; db: SqlClient & { end?: () => Promise<void> } }): Promise<number> {
+  let rows: OnlineLedgerRow[];
+  try {
+    rows = await readLedgerOnline(o.db, o.org);
+  } catch (e) {
+    io.stderr(`ledger database not reachable: ${(e as Error).message.split("\n")[0] ?? ""}\n`);
+    return 3;
+  } finally {
+    await o.db.end?.();
+  }
+  const r = verifyOnlineRows(rows, o.org);
+  if (o.json) {
+    printJson(io, r);
+    return r.ok ? 0 : 1;
+  }
+  io.stdout(`ledger db · org ${o.org} · ${rows.length} rows\n`);
+  if (r.ok) {
+    io.stdout(r.count === 0 ? "OK: empty ledger\n" : `OK: chain intact (seq 1..${r.count}, last ${shortHash(r.lastHash)})\n`);
+    return 0;
+  }
+  const seq = r.firstBadSeq ?? "?";
+  const detail = r.expected !== undefined && r.actual !== undefined ? `expected ${shortHash(r.expected)}, recorded ${shortHash(r.actual)}` : r.message;
+  io.stdout(`TAMPERED: seq ${seq} ${r.code} — ${detail}\n`);
+  io.stdout(`${r.countOk === 0 ? "no rows verified" : `rows 1..${r.countOk} verified`}; nothing after seq ${seq} is trusted\n`);
   return 1;
 }

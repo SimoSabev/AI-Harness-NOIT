@@ -1,6 +1,6 @@
-import { Command, CommanderError, Option } from "commander";
+import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
-import { verifyLog } from "./commands/verify-log.js";
+import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
 import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
@@ -12,7 +12,7 @@ import { ladderSim } from "./commands/ladder.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
-import { hostConfig } from "@mandat/worker";
+import { dbUrl, hostConfig, openDb } from "@mandat/worker";
 import { mandatHome } from "./paths.js";
 import type { Io } from "./output.js";
 import path from "node:path";
@@ -45,12 +45,17 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .command("verify-log")
     .description("verify the hash chain of the ledger")
     .option("--ledger <path>", "ledger file (default <MANDAT_HOME>/ledger.jsonl)")
-    .addOption(new Option("--org <org>", "organisation").choices(["o_local"]).default("o_local"))
+    .option("--org <org>", "o_local (file ledger) or an org uuid (Postgres, MANDAT_DB_URL)", "o_local")
     .option("--json", "machine output")
-    .action((o: { ledger?: string; org: "o_local"; json?: boolean }) => {
+    .action(async (o: { ledger?: string; org: string; json?: boolean }) => {
       const g = globals();
+      if (o.org !== "o_local") {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(o.org)) throw new MandatError("E_USAGE", `--org must be o_local or a uuid: ${o.org}`);
+        code = await verifyLogOnline(io, { org: o.org, json: Boolean(o.json ?? g.json), db: depsIn?.db ?? openDb(dbUrl(io.env)) });
+        return;
+      }
       const ledger = o.ledger ?? path.join(mandatHome({ home: g.home, env: io.env }), "ledger.jsonl");
-      code = verifyLog(io, { ledger, org: o.org, json: Boolean(o.json ?? g.json) });
+      code = verifyLog(io, { ledger, org: "o_local", json: Boolean(o.json ?? g.json) });
     });
 
   const contract = program.command("contract").description("seal or inspect a task contract");
