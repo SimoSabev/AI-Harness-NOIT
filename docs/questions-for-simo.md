@@ -216,3 +216,10 @@
 Ако избереш друго: runTask приема seedPatch → git apply в provision + тест, ≈ 2–3 ч.
 Блокира ли: не.
 Статус: отворен.
+## Q-029 Allowlist на push хостовете — 20.10.2026 — D-289
+Контекст: хостовете от т. 8.4 са [НП]; Safari ползва web.push.apple.com, Chrome — fcm.googleapis.com, Firefox — updates.push.services.mozilla.com, Edge — *.notify.windows.com.
+Въпрос: Ще потвърдиш ли на телефона/браузърите си, че endpoint-ът им попада в списъка?
+Избрах по подразбиране: списъкът от т. 8.4 по суфикс.
+Ако избереш друго: един ред в PUSH_HOST_SUFFIXES + тест, ≈ 10 мин.
+Блокира ли: не (живото известие е SKIPPED без VAPID).
+Статус: отворен.
