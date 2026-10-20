@@ -12,9 +12,16 @@ export const API_KEY_ROUTES: readonly GateRoute[] = [
   { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" },
 ];
 
+/** E3в: the Responses API route of an openai channel (Codex); websocket upgrades are refused by the gate and the proxy. */
+export const OPENAI_KEY_ROUTES: readonly GateRoute[] = [
+  { id: "llm-responses", method: "POST", match: { kind: "exact", path: "/v1/responses" }, upstream: "llm_proxy" },
+  { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" },
+];
+
 export function apiKeyChannel(o: {
-  label: "anthropic-key-main";
-  model: "claude-sonnet-5-5";
+  label: string;
+  model: string;
+  provider?: "anthropic" | "openai";
   proxyAdminUrl: string;
   secretPath: string;
   fetchImpl?: typeof fetch;
@@ -23,15 +30,16 @@ export function apiKeyChannel(o: {
   const f = o.fetchImpl ?? fetch;
   const secret = (): Buffer => readFileSync(o.secretPath);
   const auth = (): Record<string, string> => ({ authorization: `Bearer ${adminBearer(secret())}` });
+  const provider = o.provider ?? "anthropic";
   return {
     label: o.label,
     kind: "api_key",
-    provider: "anthropic",
+    provider,
     model: o.model,
     issueTaskCredential(r) {
       const now = (o.now ?? (() => new Date()))();
       const e = Math.floor(now.getTime() / 1000) + r.ttlMin * 60;
-      const token = mintTaskToken(secret(), { t: r.taskId, r: r.runId, a: 1, e, b: r.budgetUsd, n: randomBytes(8).toString("hex") });
+      const token = mintTaskToken(secret(), { t: r.taskId, r: r.runId, a: 1, e, b: r.budgetUsd, n: randomBytes(8).toString("hex"), ...(provider === "openai" ? { p: "openai" as const } : {}) });
       return Promise.resolve({ token, tokenHash: sha256Tag(token), expiresAt: new Date(e * 1000).toISOString() });
     },
     async revokeTaskCredential(runId) {
@@ -48,10 +56,10 @@ export function apiKeyChannel(o: {
       return (await res.json()) as TaskUsage;
     },
     sandboxEnv(c) {
-      return { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: c.token };
+      return provider === "openai" ? { OPENAI_API_KEY: c.token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: c.token };
     },
     gateRoutes() {
-      return API_KEY_ROUTES.map((r) => ({ ...r, match: { ...r.match } }));
+      return (provider === "openai" ? OPENAI_KEY_ROUTES : API_KEY_ROUTES).map((r) => ({ ...r, match: { ...r.match } }));
     },
   };
 }
@@ -59,8 +67,8 @@ export function apiKeyChannel(o: {
 /** E0: only api_key; cli_profile and local → E_CHANNEL_UNSUPPORTED. */
 export function channelFor(ref: ChannelRef, o: { proxyAdminUrl: string; secretPath: string }): Channel {
   if (ref.kind !== "api_key") throw new MandatError("E_CHANNEL_UNSUPPORTED", `channel kind ${ref.kind} is not supported in E0`);
-  if (ref.label !== "anthropic-key-main" || ref.model !== "claude-sonnet-5-5") {
-    throw new MandatError("E_CHANNEL_UNSUPPORTED", `unsupported channel ${ref.label}/${ref.model}`);
-  }
-  return apiKeyChannel({ label: ref.label, model: ref.model, ...o });
+  // E3в: anthropic-key-* with the E0 model; openai-key-* (Codex, Responses API; model and price from Simo [НП])
+  if (/^anthropic-key-(main|demo)$/.test(ref.label) && ref.model === "claude-sonnet-5-5") return apiKeyChannel({ label: ref.label, model: ref.model, ...o });
+  if (/^openai-key-(main|demo)$/.test(ref.label)) return apiKeyChannel({ label: ref.label, model: ref.model, provider: "openai", ...o });
+  throw new MandatError("E_CHANNEL_UNSUPPORTED", `unsupported channel ${ref.label}/${ref.model}`);
 }

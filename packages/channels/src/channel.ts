@@ -7,14 +7,11 @@ export interface TaskCredential {
   tokenHash: string; // sha256Tag(token)
   expiresAt: string;
 }
-export interface SandboxChannelEnv {
-  ANTHROPIC_BASE_URL: "http://egress-gate";
-  ANTHROPIC_API_KEY: string; // mdt_…
-}
+export type SandboxChannelEnv = { ANTHROPIC_BASE_URL: "http://egress-gate"; ANTHROPIC_API_KEY: string } | { OPENAI_API_KEY: string }; // mdt_… only
 export interface Channel {
   readonly label: string;
   readonly kind: ChannelRef["kind"];
-  readonly provider: "anthropic";
+  readonly provider: "anthropic" | "openai";
   readonly model: string;
   issueTaskCredential(r: { taskId: string; runId: string; attempt: 1; budgetUsd: number; ttlMin: number }): Promise<TaskCredential>;
   revokeTaskCredential(runId: string): Promise<void>;
