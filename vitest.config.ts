@@ -10,6 +10,10 @@ export const config = defineConfig({
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "bench/**/*.test.ts", "scripts/**/*.test.ts"],
     exclude: [...EXCLUDE, "**/*.docker.test.ts"],
     testTimeout: 20_000,
+    passWithNoTests: false,
+    reporters: ["default", "json"],
+    includeTaskLocation: true,
+    outputFile: { json: "test-results/unit.json" },
     coverage: {
       provider: "v8",
       include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
