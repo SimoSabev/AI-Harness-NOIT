@@ -22,7 +22,8 @@
   },
   "dependencies": {
     "@mandat/contract": "workspace:*",
-    "picomatch": "4.0.7"
+    "picomatch": "4.0.7",
+    "typescript": "6.0.3"
   },
   "devDependencies": {
     "@types/picomatch": "4.0.3"

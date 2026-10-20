@@ -323,6 +323,9 @@ importers:
       picomatch:
         specifier: 4.0.7
         version: 4.0.7
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
     devDependencies:
       '@types/picomatch':
         specifier: 4.0.3
