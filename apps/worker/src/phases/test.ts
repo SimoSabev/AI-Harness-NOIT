@@ -40,7 +40,7 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
   const ctx = { docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, image: i.images.sandbox, ipv6Sysctl: i.ipv6Sysctl ?? true };
   const installCode = i.tree === "base" ? "E_INSTALL_BASE" : "E_INSTALL_TREE";
   const lockFile = path.join(i.treeDir, "package-lock.json");
-  let lock: unknown = null;
+  let lock: unknown;
   try {
     lock = existsSync(lockFile) ? JSON.parse(readFileSync(lockFile, "utf8")) : null;
   } catch {

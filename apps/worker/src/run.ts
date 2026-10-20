@@ -238,7 +238,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       await timed("provision", async () => {
         const clone = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "base" });
         baseDir = clone.dir;
-        let lock: unknown = null;
+        let lock: unknown;
         try {
           const b = readLockfile(baseDir);
           lock = b ? JSON.parse(b.toString("utf8")) : null;
@@ -295,7 +295,11 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         let events = 0;
         let lastTool = "";
         let pollWarned = false;
-        const pending: Promise<void>[] = [];
+        // Writes are chained so transcript.jsonl and agent-stderr.txt keep the stream order.
+        let queue: Promise<void> = Promise.resolve();
+        const enqueue = (fn: () => Promise<void>): void => {
+          queue = queue.then(fn, fn);
+        };
         const agentName = names.agent(runId);
         const stopAgent = async (why: "timeout" | "budget_stop"): Promise<void> => {
           if (agentStop) return;
@@ -334,17 +338,18 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               } catch {
                 row = { raw: line };
               }
-              pending.push(w.text("transcript.jsonl", row, { append: true, maxBytes: 52428800 }));
+              enqueue(() => w.text("transcript.jsonl", row, { append: true, maxBytes: 52428800 }));
             },
             onStderr: (c) => {
-              pending.push(w.text("agent-stderr.txt", c.toString("utf8"), { append: true, maxBytes: 1048576 }));
+              const text = c.toString("utf8");
+              enqueue(() => w.text("agent-stderr.txt", text, { append: true, maxBytes: 1048576 }));
             },
           });
           agentExit = agentStop ? null : r.exitCode;
         } finally {
           clearTimeout(limit);
           if (poll) clearInterval(poll);
-          await Promise.all(pending);
+          await queue;
         }
         if (useProxy) {
           usage = await ch.usage(runId).catch(() => usage);
