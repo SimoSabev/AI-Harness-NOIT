@@ -1,0 +1,585 @@
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { PassThrough } from "node:stream";
+import { spawnSync } from "node:child_process";
+import {
+  MandatError, Verdict, contractForAgent, hashJcs, parseContract, parseVitestReport, renderAgentContract, sha256Tag, ulid, npmAllowlistFromLockfile,
+} from "@mandat/contract";
+import type { Contract, ErrorCode, Evidence, GateLogLine, ParsedReport, SecurityEvent } from "@mandat/contract";
+import { claudeAdapter, fakeAdapter, isFakeScenario } from "@mandat/agents";
+import type { AgentAdapter, FakeScenario } from "@mandat/agents";
+import { channelFor } from "@mandat/channels";
+import type { Channel, TaskUsage } from "@mandat/channels";
+import { buildReasons, canaryCheck, d1, d10Lockfile, d2, d3, d3CoveredPaths, d4, decideVerdict, ev, mustPass, na } from "@mandat/core";
+import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha, removeTree } from "@mandat/export";
+import type { ChangesetExport } from "@mandat/contract";
+import { mintTaskToken } from "@mandat/llm-proxy";
+import { createRedactor } from "@mandat/redaction";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
+import type { DockerRunner } from "@mandat/sandbox";
+import { readGateLog, startRunGate } from "./gate.js";
+import type { RunGate } from "./gate.js";
+import { hostConfig, infraUserFor } from "./host.js";
+import { acquireRunLock } from "./lock.js";
+import { runTestProcedure } from "./phases/test.js";
+import type { TestProcedureResult } from "./phases/test.js";
+import { RunWriter } from "./run-dir.js";
+import { runSandbox, safeReadVolume } from "./sandbox-exec.js";
+import { buildVerifyTree, snapshot } from "./trees.js";
+
+export interface RunHooks {
+  beforeVerdict?: (runDir: string) => Promise<void>;
+  onCanary?: (value: string) => void;
+}
+export interface RunTaskInput {
+  home: string;
+  contractPath: string;
+  agent: "claude" | `fake:${FakeScenario}`;
+  keep: boolean;
+  json: boolean;
+  docker?: DockerRunner;
+  hooks?: RunHooks;
+  now?: () => Date;
+  /** test/CLI seams (not part of the 6.14 contract) */
+  internals?: RunInternals;
+}
+export interface RunInternals {
+  repoRoot?: string;
+  env?: Record<string, string | undefined>;
+  progress?: (line: string) => void;
+  startGate?: typeof startRunGate;
+  runTests?: typeof runTestProcedure;
+  recompute?: typeof recomputeTreeSha;
+  images?: { sandbox: string; gate: string; proxy: string };
+  gitVersion?: () => string | null;
+  healthz?: (port: number) => Promise<boolean>;
+  channel?: Channel;
+  usagePollMs?: number;
+  ipv6Sysctl?: boolean;
+  infraUser?: string;
+}
+export interface RunTaskOutput {
+  verdict: Verdict | null;
+  exit: 0 | 2 | 3 | 5 | 10 | 20 | 130;
+  runDir: string | null;
+  ledger: { from: number; to: number } | null;
+  agentExit: number | null;
+  error?: { code: ErrorCode; message: string };
+}
+
+const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+const base62 = (n: number): string => Array.from(randomBytes(n), (b) => BASE62[b % 62]).join("");
+const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false };
+const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
+
+class InfraError extends Error {
+  constructor(readonly code: ErrorCode, message: string) {
+    super(message);
+  }
+}
+const infra = (code: ErrorCode, message: string): never => {
+  throw new InfraError(code, message);
+};
+
+function gitVersion(): string | null {
+  const r = spawnSync("git", ["--version"], { encoding: "utf8" });
+  return r.status === 0 ? (/(\d+\.\d+\.\d+)/.exec(r.stdout)?.[1] ?? null) : null;
+}
+
+async function realHealthz(port: number): Promise<boolean> {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(1500) })).status === 200;
+  } catch {
+    return false;
+  }
+}
+
+function adapterFor(agent: string): AgentAdapter {
+  if (agent === "claude") return claudeAdapter({ model: "claude-sonnet-5-5", cliVersion: "2.1.302" });
+  const s = agent.startsWith("fake:") ? agent.slice(5) : "";
+  if (!isFakeScenario(s)) throw new MandatError("E_USAGE", `unknown agent: ${agent}`);
+  return fakeAdapter(s);
+}
+
+/** 7.3–7.10. Preflight errors (steps 1–6) never touch the ledger (D-038); after step 7 everything ends with a verdict (D-019). */
+export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
+  const x = i.internals ?? {};
+  const env = x.env ?? process.env;
+  const now = i.now ?? (() => new Date());
+  const progress = x.progress ?? (() => undefined);
+  const docker = i.docker ?? realDockerRunner();
+  const repoRoot = x.repoRoot ?? defaultRepoRoot;
+  const fail = (code: ErrorCode, message: string): RunTaskOutput => {
+    const ex = code === "E_USAGE" || code === "E_LOCKED" ? 2 : code === "E_CONTRACT_INVALID" || code === "E_CONTRACT_HASH" ? 5 : 3;
+    return { verdict: null, exit: ex, runDir: null, ledger: null, agentExit: null, error: { code, message } };
+  };
+
+  // ---- preflight 1: lock
+  let release: () => void;
+  try {
+    release = acquireRunLock(i.home);
+  } catch (e) {
+    if (e instanceof MandatError) return fail(e.code, e.message);
+    throw e;
+  }
+  let interrupted = false;
+  const onSigint = (): void => {
+    interrupted = true;
+  };
+  process.on("SIGINT", onSigint);
+  try {
+    // ---- 2: contract and agent
+    let contract: Contract;
+    try {
+      contract = parseContract(JSON.parse(readFileSync(i.contractPath, "utf8")));
+    } catch (e) {
+      if (e instanceof MandatError) return fail(e.code, e.message);
+      return fail("E_CONTRACT_INVALID", `cannot read contract: ${(e as Error).message}`);
+    }
+    let adapter: AgentAdapter;
+    try {
+      adapter = adapterFor(i.agent);
+    } catch (e) {
+      return fail("E_USAGE", (e as Error).message);
+    }
+    // ---- 3: the key never reaches mandat run (D-008)
+    if (process.env.ANTHROPIC_API_KEY !== undefined) {
+      delete process.env.ANTHROPIC_API_KEY;
+      process.stderr.write("ANTHROPIC_API_KEY removed from mandat run env (D-008)\n");
+    }
+    if (env !== process.env && env.ANTHROPIC_API_KEY !== undefined) delete env.ANTHROPIC_API_KEY;
+    // ---- 4: environment
+    const host = hostConfig(env);
+    const dv = await dockerText(docker, ["version", "--format", "{{.Server.Version}}"]);
+    if (dv.exitCode !== 0 || compareVersions(dv.stdout.trim(), "25.0.5") < 0) return fail("E_DOCKER_VERSION", `docker ${dv.stdout.trim() || "unreachable"} < 25.0.5`);
+    const gv = (x.gitVersion ?? gitVersion)();
+    if (gv === null || compareVersions(gv, "2.43.0") < 0) return fail("E_GIT_VERSION", `git ${gv ?? "missing"} < 2.43.0`);
+    const images = x.images ?? (await imageTags(repoRoot));
+    for (const t of [images.sandbox, images.gate]) {
+      if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return fail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build`);
+    }
+    const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
+    if (i.agent === "claude" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
+    // ---- 5: mirror and base
+    const mirrorPath = path.join(i.home, "mirrors", "shop.git");
+    if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
+    const cat = spawnSync("git", ["--git-dir", mirrorPath, "cat-file", "-e", `${contract.base_commit}^{commit}`], { env: { PATH: process.env.PATH ?? "", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", HOME: os.tmpdir() } });
+    if (cat.status !== 0) return fail("E_BASE_NOT_FOUND", `base_commit ${contract.base_commit} not in the mirror`);
+    // ---- 6
+    try {
+      await ensureUpstreamNetwork(docker);
+      await sweepOrphans(docker, { olderThanMs: 2 * 3600_000, now: now() });
+    } catch (e) {
+      return fail("E_DOCKER", (e as Error).message);
+    }
+    if (interrupted) return { ...fail("E_INTERRUPTED", "interrupted"), exit: 130 };
+
+    // ---- 7: the run exists from here on
+    const runId = `r_${ulid(now().getTime())}`;
+    const runDir = path.join(i.home, "runs", runId);
+    const canary = base62(40);
+    let token = "";
+    i.hooks?.onCanary?.(canary);
+    const w = new RunWriter(i.home, runDir, createRedactor({ exactSecrets: [canary] }), now);
+    let redactor = w.r;
+    const setToken = (t: string): void => {
+      token = t;
+      redactor = createRedactor({ exactSecrets: [canary, token] });
+      (w as { r: typeof redactor }).r = redactor;
+    };
+    const timings: Record<"provision" | "install" | "agent" | "export" | "verify" | "verdict" | "total", number> = { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 };
+    const t0 = Date.now();
+    const timed = async <T>(k: keyof typeof timings, fn: () => Promise<T>): Promise<T> => {
+      const s = Date.now();
+      try {
+        return await fn();
+      } finally {
+        timings[k] += Date.now() - s;
+      }
+    };
+    const out = (s: string): void => progress(s);
+    w.raw("contract.json", readFileSync(i.contractPath));
+    w.raw("canary.json", JSON.stringify({ name: "AWS_SECRET_ACCESS_KEY", value_hash: sha256Tag(canary) }) + "\n");
+    w.ledger("task_created", contract.task_id, { task_id: contract.task_id, run_id: runId, agent: adapter.id, contract_hash: contract.contract_hash });
+    w.ledger("memory_snapshot", contract.task_id, { snapshot_hash: null, reason: "memory_disabled_e0" });
+    out(`mandat run ${runId} task=${contract.task_id} agent=${adapter.id} base=${contract.base_commit.slice(0, 7)}`);
+
+    const sec = (e: { kind: SecurityEvent["kind"]; severity: SecurityEvent["severity"]; detail: SecurityEvent["detail"]; source: SecurityEvent["source"] }): void => {
+      w.security({ task_id: contract.task_id, run_id: runId, attempt: 1, ...e });
+    };
+    const tmpRoot = mkdtempSync(path.join(os.tmpdir(), `mandat-${runId}-`));
+    const vol = names.vol(runId, "agent");
+    let gate: RunGate | undefined;
+    let channel: Channel | undefined;
+    let usage: TaskUsage = ZERO_USAGE;
+    let agentExit: number | null = null;
+    let exportResult: ChangesetExport | null = null;
+    let diffPatch: Buffer | null = null;
+    let integrity: "ok" | "mismatch" | "n/a" = "n/a";
+    const aliases: string[] = [];
+    const evd = new Map<string, Evidence>();
+    const set = (e: Evidence): void => {
+      evd.set(e.detector, e);
+    };
+    const gateLogs: { tree: string; file: string }[] = [];
+    let infraCode: ErrorCode | null = null;
+    let agentStop: "timeout" | "budget_stop" | null = null;
+    const startGate = x.startGate ?? startRunGate;
+    const user = x.infraUser ?? (await infraUserFor(docker).catch(() => ({ user: "1000:1000" }))).user;
+    const ipv6Sysctl = x.ipv6Sysctl ?? (await probeIpv6(docker, images.sandbox));
+    const sctx = { docker, runId, runDir, mandatHome: i.home, home: os.homedir(), image: images.sandbox, ipv6Sysctl };
+    const gctx = (tree: "agent" | "base" | "a" | "b") => ({ docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, gateImage: images.gate, user, extraCa: host.extraCa });
+    let baseDir = "";
+
+    try {
+      // ---------- PROVISION (7.4)
+      await timed("provision", async () => {
+        const clone = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "base" });
+        baseDir = clone.dir;
+        let lock: unknown = null;
+        try {
+          const b = readLockfile(baseDir);
+          lock = b ? JSON.parse(b.toString("utf8")) : null;
+        } catch {
+          lock = null;
+        }
+        const allow = npmAllowlistFromLockfile(lock);
+        if (!allow.ok) infra("E_LOCKFILE_BASE", `base lockfile rejected: ${allow.reason}`);
+        if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
+        const seed = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(baseDir), timeoutMs: 120_000 });
+        if (seed.exitCode !== 0) infra("E_DOCKER", "seed failed");
+        const text = renderAgentContract(contractForAgent(contract));
+        await w.text("agent-contract.txt", text);
+        const c = await runSandbox(sctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "cat > /m/in/contract.txt && chmod 0444 /m/in/contract.txt"], stdin: PassThrough.from([text]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000 });
+        if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
+        try {
+          gate = await startGate(gctx("agent"), { phase: "install", routes: allow.ok ? allow.routes : [] });
+        } catch (e) {
+          infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START", (e as Error).message);
+        }
+        gateLogs.push({ tree: "agent", file: (gate as RunGate).paths.log });
+        out(`[provision] sandbox+gate ok`);
+      });
+      if (interrupted) infra("E_INTERRUPTED", "interrupted");
+      // ---------- INSTALL (7.5)
+      await timed("install", async () => {
+        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], timeoutMs: 300_000 });
+        if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `npm ci exit ${r.exitCode}`);
+        out(`[install]   npm ci --ignore-scripts via gate`);
+      });
+      if (interrupted) infra("E_INTERRUPTED", "interrupted");
+      // ---------- AGENT (7.6)
+      await timed("agent", async () => {
+        const g = gate as RunGate;
+        try {
+          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret") });
+          await g.setPolicy("agent", channel.gateRoutes());
+        } catch (e) {
+          infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
+        }
+        const ch = channel as Channel;
+        const useProxy = i.agent === "claude" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret")));
+        if (useProxy) {
+          const cred = await ch.issueTaskCredential({ taskId: contract.task_id, runId, attempt: 1, budgetUsd: contract.repo_config.budgets.task_usd, ttlMin: contract.repo_config.budgets.task_minutes + 5 });
+          setToken(cred.token);
+        } else {
+          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex") }));
+        }
+        const launch = adapter.launch(
+          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" },
+          { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
+          { name: "AWS_SECRET_ACCESS_KEY", value: canary },
+        );
+        let events = 0;
+        let lastTool = "";
+        let pollWarned = false;
+        const pending: Promise<void>[] = [];
+        const agentName = names.agent(runId);
+        const stopAgent = async (why: "timeout" | "budget_stop"): Promise<void> => {
+          if (agentStop) return;
+          agentStop = why;
+          await dockerText(docker, ["stop", "-t", "30", agentName], 90_000);
+        };
+        const poll = useProxy
+          ? setInterval(() => {
+              ch.usage(runId).then((u) => {
+                usage = u;
+                if (u.budgetStop) void stopAgent("budget_stop");
+              }, () => {
+                if (!pollWarned) {
+                  pollWarned = true;
+                  process.stderr.write("usage poll failed (ignored, D-049)\n");
+                }
+              });
+            }, x.usagePollMs ?? 2000)
+          : undefined;
+        const limit = setTimeout(() => void stopAgent("timeout"), contract.repo_config.budgets.task_minutes * 60_000);
+        try {
+          const r = await runSandbox(sctx, {
+            role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
+            env: { phase: "agent", secrets: launch.env },
+            cmd: launch.argv,
+            timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
+            onStdoutLine: (line) => {
+              for (const e of adapter.parseLine(line)) {
+                events++;
+                if (e.type === "tool_use") lastTool = e.name;
+              }
+              let row: object;
+              try {
+                const j: unknown = JSON.parse(line);
+                row = j !== null && typeof j === "object" ? (j as object) : { raw: line };
+              } catch {
+                row = { raw: line };
+              }
+              pending.push(w.text("transcript.jsonl", row, { append: true, maxBytes: 52428800 }));
+            },
+            onStderr: (c) => {
+              pending.push(w.text("agent-stderr.txt", c.toString("utf8"), { append: true, maxBytes: 1048576 }));
+            },
+          });
+          agentExit = agentStop ? null : r.exitCode;
+        } finally {
+          clearTimeout(limit);
+          if (poll) clearInterval(poll);
+          await Promise.all(pending);
+        }
+        if (useProxy) {
+          usage = await ch.usage(runId).catch(() => usage);
+          await ch.revokeTaskCredential(runId).catch(() => undefined);
+        }
+        w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
+        await g.setPolicy("closed", []).catch(() => undefined);
+        await g.stop();
+        gate = undefined;
+        out(`[agent]     exit ${agentExit ?? "-"} · ${events} events${lastTool ? ` · last ${lastTool}` : ""} · $${usage.usd.toFixed(4)}`);
+        if (agentStop === "budget_stop") sec({ kind: "budget_stop", severity: "warn", detail: { usd: usage.usd }, source: "proxy" });
+      });
+      if (interrupted) infra("E_INTERRUPTED", "interrupted");
+
+      if (agentStop) {
+        aliases.push(`agent:${agentStop}`);
+        set(ev("AGENT", "unknown", `agent stopped: ${agentStop}`, {}, { cls: agentStop, id: "-" }));
+      } else {
+        // ---------- EXPORT (7.7)
+        let notes = "";
+        await timed("export", async () => {
+          const stream = new PassThrough();
+          let stderr = "";
+          const exitP = runSandbox(sctx, {
+            role: "export", volume: vol, volumeReadonly: true, network: "none", env: { phase: "none" },
+            cmd: ["tar", "-C", "/m/work", "--numeric-owner", "--exclude=./node_modules", "-cf", "-", "."], timeoutMs: 600_000,
+            onStdout: (c) => stream.write(c), onStderr: (c) => (stderr += c.toString("utf8")),
+          }).then((r) => {
+            stream.end();
+            return { code: r.timedOut ? 124 : r.exitCode, stderr };
+          });
+          const res = await exportChangeset({ runId, mirrorPath, baseSha: contract.base_commit, tar: stream, tarExit: exitP, limits: contract.security, tmpRoot });
+          await exitP;
+          notes = (await safeReadVolume(sctx, { volume: vol, file: "/m/out/notes.txt", limit: 1048576, role: "export" }))?.toString("utf8") ?? "";
+          if (notes.length > 0) await w.text("notes.txt", notes);
+          if (!res.result.ok) {
+            await w.text("export/rejection.json", res.result);
+            for (const r of res.result.reasons) aliases.push(`export:${r.code}`);
+            const first = res.result.reasons[0];
+            set(ev("EXPORT", "fail", `export refused: ${res.result.reasons.map((r) => r.code).join(", ")}`, { reasons: res.result.reasons }, { cls: first?.code ?? "-", id: first?.path ?? "-" }));
+            out(`[export]    refused: ${res.result.reasons.map((r) => `${r.code} ${r.path}`).join(", ")}`);
+            return;
+          }
+          exportResult = res.result;
+          diffPatch = "diffPatch" in res ? res.diffPatch : Buffer.alloc(0);
+          set(ev("EXPORT", "pass", `${res.result.files.length} file(s) changed`, { files: res.result.files.length }));
+          // 3b CANARY in memory, before any write (D-031, D-071)
+          const c = canaryCheck({ diffPatch: (diffPatch as Buffer).toString("utf8"), notes, canary, token });
+          set(c.evidence);
+          for (const h of c.security) sec({ kind: h.kind, severity: h.severity, detail: h.detail, source: "export" });
+          await w.text("export/changeset.json", res.result);
+          if (c.diffHasSecret) {
+            const red = createRedactor({ exactSecrets: [canary, token] });
+            w.raw("export/diff.redacted.patch", red.redactText((diffPatch as Buffer).toString("utf8")).text);
+          } else {
+            w.raw("export/diff.patch", diffPatch as Buffer);
+          }
+          // 5 INTEGRITY
+          const rc = await (x.recompute ?? recomputeTreeSha)({ mirrorPath, baseSha: contract.base_commit, diffPatch: diffPatch as Buffer, tmpRoot });
+          if ("treeSha" in rc && rc.treeSha === res.result.tree_sha) {
+            integrity = "ok";
+            set(ev("INTEGRITY", "pass", "recomputed tree matches"));
+          } else {
+            integrity = "mismatch";
+            const why = "error" in rc ? "apply_failed" : "mismatch";
+            set(ev("INTEGRITY", "unknown", `integrity ${why}`, {}, { cls: why, id: "-" }));
+            sec({ kind: "tree_mismatch", severity: "incident", detail: why === "apply_failed" ? { reason: "apply_failed" } : { reason: "mismatch" }, source: "worker" });
+          }
+          out(`[export]    ${res.result.files.length} file(s) changed · tree ${res.result.tree_sha.slice(0, 7)} · diff ${res.result.diff_bytes} B`);
+        });
+        await dockerText(docker, ["volume", "rm", "-f", vol], 60_000);
+
+        // ---------- VERIFY (7.8)
+        const ex = exportResult as ChangesetExport | null;
+        if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
+          await timed("verify", async () => {
+            const rcfg = contract.repo_config;
+            const testsInput = (tree: "base" | "a" | "b", treeDir: string) => ({
+              docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, treeDir, testsCommand: rcfg.tests.command, testsEnv: rcfg.tests.env,
+              images, timeoutMs: 600_000, infraUser: user, extraCa: host.extraCa, ipv6Sysctl, startGate,
+            });
+            const runTests = x.runTests ?? runTestProcedure;
+            // 1) baseline (cache D-018, D-097)
+            const cacheFile = path.join(i.home, "cache", "baseline", `${contract.base_commit}-${hashJcs(rcfg.tests).slice("sha256:".length)}.json`);
+            let baseline: ParsedReport | null = null;
+            if (existsSync(cacheFile)) {
+              const p = parseVitestReport(readFileSync(cacheFile, "utf8"), "/m/work");
+              if (p.valid) baseline = p;
+              else rmSync(cacheFile, { force: true });
+            }
+            let cached = baseline !== null;
+            if (baseline === null) {
+              const b = await runTests(testsInput("base", baseDir));
+              gateLogs.push({ tree: "base", file: path.join(runDir, "gate", "base", "log", "events.jsonl") });
+              if (!b.ok) infra(b.code, `baseline: ${b.code}`);
+              const okB = b as Extract<TestProcedureResult, { ok: true }>;
+              if (!okB.report.valid || okB.raw === null) infra("E_BASELINE_INVALID", "baseline report invalid");
+              baseline = okB.report;
+              mkdirSync(path.dirname(cacheFile), { recursive: true });
+              writeFileSync(cacheFile, okB.raw as string);
+              cached = false;
+            }
+            const bl = baseline as ParsedReport;
+            // 2) trees H, A, B
+            const head = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "h" });
+            if ((diffPatch as Buffer).length > 0) {
+              const ap = await head.git.run(["apply", "--index", "--binary", "--whitespace=nowarn", "-"], { cwd: head.dir, input: diffPatch as Buffer });
+              if (ap.code !== 0) infra("E_DOCKER", "cannot materialize head");
+            }
+            const files = ex.files;
+            const baseSnap = snapshot(baseDir);
+            const headSnap = snapshot(head.dir);
+            const D3 = d3({ files, base: baseSnap, head: headSnap, rc: rcfg });
+            for (const h of D3.security) sec({ kind: h.kind, severity: h.severity, detail: h.detail, source: "worker" });
+            const D4 = d4({ files, allowedPaths: contract.allowed_paths, coveredByD3: d3CoveredPaths(files, rcfg, baseSnap, headSnap) });
+            const D10 = d10Lockfile({ baseLock: readLockfile(baseDir), headLock: readLockfile(head.dir) });
+            set(D10.evidence);
+            set(D3.evidence);
+            set(D4.evidence);
+            if (D10.evidence.status === "fail") {
+              set(na("D1.base_tests", "lockfile rejected"));
+              set(na("D2.inventory", "lockfile rejected"));
+              set(na("MUST_PASS", "lockfile rejected"));
+              removeTree(head.dir);
+              return;
+            }
+            const aDir = path.join(tmpRoot, "tree-a");
+            const bDir = path.join(tmpRoot, "tree-b");
+            buildVerifyTree({ baseDir, headDir: head.dir, outDir: aDir, rc: rcfg, kind: "a" });
+            buildVerifyTree({ baseDir, headDir: head.dir, outDir: bDir, rc: rcfg, kind: "b" });
+            removeTree(head.dir);
+            const A = await runTests(testsInput("a", aDir));
+            gateLogs.push({ tree: "a", file: path.join(runDir, "gate", "a", "log", "events.jsonl") });
+            if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
+            const B = await runTests(testsInput("b", bDir));
+            gateLogs.push({ tree: "b", file: path.join(runDir, "gate", "b", "log", "events.jsonl") });
+            if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
+            const a = A as Extract<TestProcedureResult, { ok: true }>;
+            const b = B as Extract<TestProcedureResult, { ok: true }>;
+            const redactReport = (raw: string | null): string => (raw === null ? "" : raw.includes(canary) || raw.includes(token) ? JSON.stringify({ redacted: true }) : raw);
+            w.raw("verify/report-a.json", redactReport(a.raw));
+            w.raw("verify/report-b.json", redactReport(b.raw));
+            await w.text("verify/exits.json", { a: a.exit, b: b.exit });
+            set(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report).evidence);
+            set(b.timedOut ? ev("D2.inventory", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d2({ baseline: bl, b: b.report, exitB: b.exit ?? 1, diffPatch: (diffPatch as Buffer).toString("utf8"), mayChangeTests: contract.may_change_tests }).evidence);
+            set(mustPass({ ids: contract.must_pass, a: a.report, b: b.report }).evidence);
+            const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
+            out(`[verify]    baseline${cached ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}`);
+          });
+          // 6) R6: recompute again from the diff.patch on disk before the verdict (D-074, D-126)
+          if (i.hooks?.beforeVerdict) await i.hooks.beforeVerdict(runDir);
+          const onDisk = path.join(runDir, "export", "diff.patch");
+          if (existsSync(onDisk) && ex) {
+            const again = await (x.recompute ?? recomputeTreeSha)({ mirrorPath, baseSha: contract.base_commit, diffPatch: readFileSync(onDisk), tmpRoot });
+            if (!("treeSha" in again) || again.treeSha !== ex.tree_sha) {
+              const why = "error" in again ? "apply_failed" : "mismatch";
+              integrity = "mismatch";
+              set(ev("INTEGRITY", "unknown", `integrity ${why} after verify`, {}, { cls: why, id: "post_verify" }));
+              sec({ kind: "tree_mismatch", severity: "incident", detail: { reason: why, when: "post_verify" }, source: "worker" });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      if (e instanceof InfraError) infraCode = e.code;
+      else if (e instanceof MandatError) infraCode = e.code;
+      else {
+        infraCode = "E_DOCKER";
+        process.stderr.write(`internal error: ${(e as Error).message}\n`);
+      }
+      if (interrupted) infraCode = "E_INTERRUPTED";
+    } finally {
+      if (gate) await (gate as RunGate).stop().catch(() => undefined);
+      // gate logs → security events (D-042, D-081): aggregate blocks by (kind, qname | method+path)
+      const agg = new Map<string, { line: GateLogLine; tree: string; count: number }>();
+      for (const g of gateLogs) {
+        for (const l of readGateLog(g.file)) {
+          if (l.kind !== "proxy_block" && l.kind !== "dns_block") continue;
+          const k = `${g.tree}|${l.kind}|${l.kind === "dns_block" ? l.qname : `${l.method} ${l.path}`}`;
+          const cur = agg.get(k);
+          if (cur) cur.count++;
+          else agg.set(k, { line: l, tree: g.tree, count: 1 });
+        }
+      }
+      for (const { line, tree, count } of agg.values()) {
+        const detail: SecurityEvent["detail"] = line.kind === "dns_block" ? { qname: line.qname ?? "", qtype: line.qtype ?? 0, count } : { method: line.method ?? "", path: line.path ?? "", count };
+        if (tree !== "agent") detail.tree = tree;
+        sec({ kind: line.kind as "proxy_block" | "dns_block", severity: "warn", detail, source: "gate" });
+      }
+    }
+
+    // ---------- VERDICT (7.9)
+    const s = Date.now();
+    if (infraCode) {
+      aliases.push(`infra:${infraCode.replace(/^E_/, "").toLowerCase()}`);
+      set(ev("INFRA", "unknown", `infra: ${infraCode}`, {}, { cls: infraCode.replace(/^E_/, ""), id: "-" }));
+    }
+    const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "CANARY"] as const;
+    const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
+    for (const extra of ["AGENT", "INFRA"] as const) {
+      const e = evd.get(extra);
+      if (e) evidence.push(e);
+    }
+    const result = decideVerdict(evidence);
+    timings.verdict = Date.now() - s;
+    timings.total = Date.now() - t0;
+    const ex = exportResult as ChangesetExport | null;
+    const verdict = Verdict.parse({
+      run_id: runId, task_id: contract.task_id, attempt: 1, agent: adapter.id, result, reasons: buildReasons(evidence, aliases), evidence,
+      contract_hash: contract.contract_hash, base_sha: contract.base_commit, tree_sha: ex?.tree_sha ?? null,
+      diff_hash: diffPatch ? sha256Tag(diffPatch) : null, integrity,
+      usage: { usd: usage.usd, input_tokens: usage.inputTokens, output_tokens: usage.outputTokens, requests: usage.requests },
+      timings_ms: timings, created_at: now().toISOString(),
+    });
+    const red = w.r.redactJson(verdict).value as Verdict;
+    await w.text("verdict.json", red);
+    await w.text("timings.json", timings);
+    w.ledger("verdict", contract.task_id, { run_id: runId, result: red.result, reasons: red.reasons, verdict_hash: hashJcs(red) });
+    const totalHits = Object.values(w.hits).reduce((a, b) => a + b, 0);
+    if (totalHits > 0) sec({ kind: "redaction_hit", severity: "info", detail: { ...w.hits }, source: "worker" });
+
+    // ---------- cleanup (7.10)
+    const ps = await dockerText(docker, ["ps", "-aq", "--filter", `label=mandat.run=${runId}`]);
+    for (const c of ps.stdout.split("\n").filter(Boolean)) await dockerText(docker, ["rm", "-f", c]);
+    for (const t of ["agent", "base", "a", "b"] as const) await dockerText(docker, ["network", "rm", names.net(runId, t)]);
+    if (!i.keep) for (const t of ["agent", "base", "a", "b"] as const) await dockerText(docker, ["volume", "rm", "-f", names.vol(runId, t)]);
+    rmSync(tmpRoot, { recursive: true, force: true });
+
+    const exit = infraCode === "E_INTERRUPTED" ? 130 : infraCode ? 3 : result === "VERIFIED" ? 0 : result === "UNKNOWN" ? 10 : 20;
+    return {
+      verdict: red, exit, runDir, agentExit,
+      ledger: w.ledgerFrom !== null && w.ledgerTo !== null ? { from: w.ledgerFrom, to: w.ledgerTo } : null,
+    };
+  } finally {
+    process.off("SIGINT", onSigint);
+    release();
+  }
+}

@@ -4,6 +4,7 @@ import { verifyLog } from "./commands/verify-log.js";
 import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
+import { runCommand } from "./commands/run.js";
 import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
@@ -73,6 +74,17 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--force", "docker build --no-cache even if the tag exists")
     .action(async (o: { force?: boolean }) => {
       code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env) });
+    });
+
+  program
+    .command("run")
+    .description("run one task: agent in a sandbox → export → verify → verdict → ledger")
+    .requiredOption("--contract <file>", "sealed contract JSON")
+    .requiredOption("--agent <agent>", "claude | fake:<scenario>")
+    .option("--keep", "keep the Docker volumes")
+    .option("--json", "machine output (progress on stderr)")
+    .action(async (o: { contract: string; agent: string; keep?: boolean; json?: boolean }) => {
+      code = await runCommand(io, { mandatHome: home(), contract: o.contract, agent: o.agent, keep: Boolean(o.keep), json: json(o), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
 
   program
