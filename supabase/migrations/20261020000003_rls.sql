@@ -10,7 +10,8 @@ begin
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('alter table public.%I force row level security', t);
-    execute format('revoke all on public.%I from anon', t);
+    -- Supabase grants ALL on new public tables to anon/authenticated by default: start from nothing (defense in depth)
+    execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
 end $$;
 
@@ -44,4 +45,5 @@ grant usage on all sequences in schema public to mandat_runner;
 create policy runner_channel_usage on public.channel_usage for insert to mandat_runner with check (true);
 create policy runner_activities on public.task_activities for insert to mandat_runner with check (true);
 create policy runner_changesets on public.changesets for insert to mandat_runner with check (integrity = 'pending');
+revoke all on public.inbox_items from anon, authenticated;
 grant select on public.inbox_items to authenticated;

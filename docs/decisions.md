@@ -1185,7 +1185,7 @@ MCP сървърът се пуска през serveStdio (двете ери на
 Решение: виж docs/blockers/supabase-start.md. `pnpm test:db` пуска миграциите и pgTAP файловете в PGlite с shim; `pnpm test:db:supabase` е истинският `supabase test db`. Паралелните неща (advisory lock, SKIP LOCKED) се проверяват срещу истински Postgres в Docker. Нови dev зависимости: supabase 2.119.0 (MIT), @electric-sql/pglite 0.5.8 (Apache-2.0), @electric-sql/pglite-pgtap 0.0.9 (Apache-2.0).
 Защо: т. 0.3 (ж) — обходът е документиран; фазата не е БЛОКИРАНА.
 Алтернативи: само Postgres контейнер без pgTAP (по-малко покритие на RLS матрицата).
-Източник: демо промпт т. 5.1, 0.3 (ж). Статус: отворено за Симо (Q-022).
+Източник: демо промпт т. 5.1, 0.3 (ж). Статус: отворено за Симо (Q-022). Обновление: `supabase start` мина на втория опит; `pnpm test:db:supabase` (psql) → 38/38 на истинската база; само `supabase test db` (pg_prove образ) остава недостъпен тук.
 
 ## D-275 Daemon-ът на worker-а (MANDAT_MODE=worker) влиза в E3а (20.10.2026)
 Решение: в E1б са чистите части на т. 5.8 — преходите на state machine (state.ts), решението на sweeper-а (lease.ts), outbox (MemoryOutbox + PgOutbox) и стъпковите ключове. Цикълът, който взима задачи от task_steps, пуска runTask и пише присъди в базата, се прави в E3а, когато има UI, което създава задачи.

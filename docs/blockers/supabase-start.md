@@ -23,3 +23,11 @@ Supabase CLI 2.119.0) пада при теглене на `docker.io/supabase/po
 ## Предложение
 На машината на Симо (без лимита на облачната сесия): `pnpm db:start && pnpm db:reset && pnpm test:db:supabase`
 (docs/setup/supabase.md). Ако мине — в доклада на E1б се заменя SKIPPED с реалния изход.
+
+## Обновление 20.10.2026, ≈ 16:50 UTC — РЕШЕНО (с обход за pg_prove)
+Вторият `pnpm db:start` е минал след вътрешните повторни опити на CLI (логът завършва с „Applying migration … 3 файла“ и
+DB_URL/API_URL). `pnpm db:reset` → „Finished supabase db reset“. `supabase test db` иска образа supabase/pg_prove:3.36,
+който пак не се тегли (429 / 403) → `pnpm test:db:supabase` пуска СЪЩИТЕ pgTAP файлове през psql срещу истинската
+Supabase база: 38/38. Сверката с истинската база откри грешка, която PGlite не виждаше: Supabase дава ALL на anon и
+authenticated за всяка нова таблица в public, затова RLS без политика връщаше 0 реда вместо „permission denied“;
+миграцията вече отнема правата и на двете роли, а shim-ът повтаря поведението на Supabase.

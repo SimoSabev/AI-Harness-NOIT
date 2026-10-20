@@ -44,6 +44,9 @@ select throws_ok($$ insert into public.approvals (org_id, changeset_id, user_id,
 reset role;
 
 -- mandat_runner: INSERT channel_usage / task_activities / changesets(pending) only
+-- (Supabase's postgres is not a superuser: it needs membership to SET ROLE; rolled back with the test)
+grant mandat_runner to current_user;
+grant usage on schema extensions to mandat_runner; -- pgTAP lives in `extensions` on Supabase
 set local role mandat_runner;
 select lives_ok($$ insert into public.task_activities (org_id, task_id, kind, text) values ('00000000-0000-4000-8000-000000000001', 't_demo', 'agent', 'hi') $$, 'runner: task_activities');
 select lives_ok($$ insert into public.changesets (org_id, task_id, base_sha) values ('00000000-0000-4000-8000-000000000001', 't_demo', repeat('b', 40)) $$, 'runner: changeset pending');
