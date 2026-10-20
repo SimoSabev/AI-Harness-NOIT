@@ -1282,3 +1282,15 @@ MCP сървърът се пуска през serveStdio (двете ери на
 Защо: т. 9; детерминизъм пред журито, всичко след агента е истинско.
 Алтернативи: запис на целия UI с реален Supabase (зависи от Auth/MFA enrollment) — офлайн вариантът е по-надежден.
 Източник: демо промпт т. 9.0–9.9. Статус: решено (живите варианти чакат Симо).
+
+## D-291 CI на GitHub: отчетите по job и две точни изключения в gitleaks (20.10.2026)
+Решение: (1) `check-test-counts.mjs` чете `MANDAT_COUNTS_REQUIRE` (списък от unit, docker, live): задължителните отчети. Без
+променливата: unit винаги, docker при CI=true (D-261 непроменено). Job-ът `check` в .github/workflows/ci.yml е без Docker и
+задава `MANDAT_COUNTS_REQUIRE=unit`; Docker тестовете минават/падат в job-а `docker-it`. (2) `.gitleaks.toml`: освен корпуса
+(D-095) втори `[[allowlists]]` с `regexTarget = "secret"` и два котвени точни низа — примерният `Sec-WebSocket-Key` от
+RFC 6455 §1.3 (`dGhlIHNhbXBsZSBub25jZQ==` = „the sample nonce“, тест на egress-gate) и SQL текстът `excluded.secret_b32`
+(демо seed). Други пътища не се добавят; scripts/gitleaks-config.test.ts пази това.
+Защо: първото пускане на CI на GitHub (20.10.2026) падна: check — „ГРЕШКА: docker: няма отчет“ (докер тестовете са в друг
+job); gitleaks — 2 находки generic-api-key, и двете фалшиви и в историята (inline `gitleaks:allow` не покрива стари комити).
+Алтернативи: `pnpm check` да пуска Docker в CI (дублира docker-it); пренаписване на историята — отхвърлено.
+Източник: gitleaks v8.30.1 README (`[[allowlists]]`, `regexTarget`, `regexes`), https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/README.md, 20.10.2026; локално `gitleaks git .` → „no leaks found“ (149 комита). Статус: решено.

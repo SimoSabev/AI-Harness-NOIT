@@ -19,7 +19,10 @@ jobs:
           node-version: 24.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # D-291: no Docker in this job; docker tests run in docker-it.
       - run: pnpm check
+        env:
+          MANDAT_COUNTS_REQUIRE: unit
 
   gitleaks:
     runs-on: ubuntu-24.04

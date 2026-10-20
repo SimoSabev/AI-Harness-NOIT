@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyze, decisionFor } from "./check-test-counts.mjs";
+import { analyze, decisionFor, requiredFromEnv } from "./check-test-counts.mjs";
 
 const cfg = { "vitest.config.ts": "passWithNoTests: false," };
 type T = { title: string; ancestorTitles: string[]; status: string; location?: { line: number } };
@@ -56,6 +56,19 @@ describe("check-test-counts (т. 0.3 е)", () => {
     expect(analyze({ reports: { unit: report("a.test.ts", [pass]), docker: null }, readSource: () => "", configs: cfg, ci: true }).ok).toBe(false);
     expect(analyze({ reports: { unit: report("a.test.ts", [pass]) }, readSource: () => "", configs: { c: "passWithNoTests: true" }, ci: false }).ok).toBe(false);
     expect(analyze({ reports: { unit: report("a.test.ts", [pass]) }, readSource: () => "", configs: { c: "" }, ci: false }).ok).toBe(false);
+  });
+  it("required (D-291): CI job без Docker изисква само unit; required docker без отчет → fail", () => {
+    const unitOnly = analyze({ reports: { unit: report("a.test.ts", [pass]), docker: null }, readSource: () => "", configs: cfg, ci: true, required: ["unit"] });
+    expect(unitOnly.ok).toBe(true);
+    expect(unitOnly.lines).toContain("SKIPPED: docker: не е пускан (няма test-results/docker.json); не се брои за минал");
+    expect(analyze({ reports: { unit: report("a.test.ts", [pass]), docker: null }, readSource: () => "", configs: cfg, ci: false, required: ["unit", "docker"] }).ok).toBe(false);
+    expect(analyze({ reports: { unit: null }, readSource: () => "", configs: cfg, ci: true, required: ["unit"] }).ok).toBe(false);
+  });
+  it("requiredFromEnv: празно → по подразбиране; непознат вид → грешка", () => {
+    expect(requiredFromEnv(undefined)).toBe(undefined);
+    expect(requiredFromEnv("unit")).toEqual(["unit"]);
+    expect(requiredFromEnv(" unit , docker ")).toEqual(["unit", "docker"]);
+    expect(() => requiredFromEnv("unit,bogus")).toThrow(/bogus/);
   });
   it("decisionFor без location търси по заглавие", () => {
     expect(decisionFor(["// D-265: y", 'it.skipIf(true)("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe("D-265");

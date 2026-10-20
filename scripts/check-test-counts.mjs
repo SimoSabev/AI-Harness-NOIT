@@ -3,6 +3,8 @@
 // skipped/pending/todo test as "НЕПОКРИТИ: <file> > <test> (D-2xx)", fails on a skip without a `// D-2xx:` comment,
 // on failed tests and on `passWithNoTests` not being false. A skip in a core package makes the phase ЧАСТИЧНО.
 // Docker tests that did not run: CI=true → fail; locally → listed as SKIPPED, never as passed.
+// D-291: MANDAT_COUNTS_REQUIRE=unit[,docker,live] names the reports that must exist (the CI `check` job has no Docker;
+// Docker tests run and fail on their own in the `docker-it` job).
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,8 +41,16 @@ export function decisionFor(lines, t) {
   return null;
 }
 
+/** @param {string | undefined} v @returns {string[] | undefined} */
+export function requiredFromEnv(v) {
+  if (v === undefined || v.trim() === "") return undefined;
+  const kinds = v.split(",").map((k) => k.trim()).filter(Boolean);
+  for (const k of kinds) if (!(k in REPORTS)) throw new Error(`MANDAT_COUNTS_REQUIRE: unknown report kind ${k}`);
+  return kinds;
+}
+
 /**
- * @param {{ reports: Record<string, unknown | null>, readSource: (file: string) => string, configs: Record<string, string>, ci: boolean }} o
+ * @param {{ reports: Record<string, unknown | null>, readSource: (file: string) => string, configs: Record<string, string>, ci: boolean, required?: readonly string[] }} o
  * @returns {{ ok: boolean, partial: boolean, lines: string[], skipped: number }}
  */
 export function analyze(o) {
@@ -48,6 +58,7 @@ export function analyze(o) {
   let ok = true;
   let partial = false;
   let skipped = 0;
+  const required = o.required ?? ["unit", ...(o.ci ? ["docker"] : [])];
   for (const [name, text] of Object.entries(o.configs)) {
     if (!/passWithNoTests:\s*false/.test(text) || /passWithNoTests:\s*true/.test(text)) {
       out.push(`ГРЕШКА: ${name}: passWithNoTests трябва да е false`);
@@ -56,7 +67,7 @@ export function analyze(o) {
   }
   for (const [kind, report] of Object.entries(o.reports)) {
     if (report === null) {
-      if (kind === "unit" || (kind === "docker" && o.ci)) {
+      if (required.includes(kind)) {
         out.push(`ГРЕШКА: ${kind}: няма отчет (${REPORTS[kind] ?? kind})`);
         ok = false;
       } else {
@@ -106,6 +117,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     readSource: (f) => readFileSync(path.isAbsolute(f) ? f : path.join(repo, f), "utf8"),
     configs: Object.fromEntries(CONFIGS.map((c) => [c, readFileSync(path.join(repo, c), "utf8")])),
     ci: process.env.CI === "true",
+    required: requiredFromEnv(process.env.MANDAT_COUNTS_REQUIRE),
   });
   for (const l of r.lines) console.log(l);
   if (!r.ok) process.exit(1);

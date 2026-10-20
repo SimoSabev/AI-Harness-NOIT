@@ -5,3 +5,10 @@ useDefault = true
 [[allowlists]]
 description = "redaction corpus"
 paths = ['''^fixtures/redaction/''']
+
+# D-291: two public false positives of generic-api-key, matched exactly on the captured secret:
+# the RFC 6455 §1.3 sample Sec-WebSocket-Key (egress-gate test) and SQL text in the demo seed.
+[[allowlists]]
+description = "exact public false positives"
+regexTarget = "secret"
+regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''', '''^excluded\.secret_b32$''']
