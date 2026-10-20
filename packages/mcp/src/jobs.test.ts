@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { inProcessBackend } from "./backend.js";
-import { explain } from "./explain.js";
+import { explain } from "@mandat/contract";
 import { JobRunner, LIMITS } from "./jobs.js";
 import type { SpawnVerify } from "./jobs.js";
 

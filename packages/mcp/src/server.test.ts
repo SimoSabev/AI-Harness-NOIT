@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/client";
 import { InMemoryTransport } from "@modelcontextprotocol/server";
 import { describe, expect, it } from "vitest";
 import type { JobBackend } from "./backend.js";
-import { explain } from "./explain.js";
+import { explain } from "@mandat/contract";
 import { spawnVerifyProcess } from "./jobs.js";
 import { createMandatServer } from "./server.js";
 

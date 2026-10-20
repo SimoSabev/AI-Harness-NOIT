@@ -1,4 +1,4 @@
-import { frameUntrusted } from "@mandat/contract";
+import { frameUntrusted } from "./verify.js";
 
 // Демо промпт т. 7.2 mandat_explain: deterministic, signature class → sentence; test IDs only inside a frame (T3-5).
 type Lang = "bg" | "en";

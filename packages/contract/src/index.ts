@@ -9,3 +9,4 @@ export * from "./gate.js";
 export * from "./npm-allowlist.js";
 export * from "./policy.js";
 export * from "./verify.js";
+export * from "./explain.js";

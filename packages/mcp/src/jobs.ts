@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import path from "node:path";
 import { ulid } from "@mandat/contract";
 import { workingTreeFiles } from "@mandat/verify";
-import { explain } from "./explain.js";
+import { explain } from "@mandat/contract";
 import type { JobStatus } from "./protocol.js";
 
 // Демо промпт т. 7.2–7.3 (S17, D-234): jobs of mandat-verifyd. The check is the `mandat-verify` PROCESS (Apache-2.0),
