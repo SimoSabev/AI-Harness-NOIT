@@ -18,3 +18,10 @@ grant usage on schema public to anon, authenticated, service_role;
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+-- Realtime (only what the migrations touch): realtime.messages + realtime.topic() read from a setting in tests.
+create schema if not exists realtime;
+create table if not exists realtime.messages (id bigserial primary key, topic text not null, extension text not null default 'broadcast', payload jsonb, private boolean default true);
+alter table realtime.messages enable row level security;
+create or replace function realtime.topic() returns text language sql stable as $$ select nullif(current_setting('realtime.topic', true), '') $$;
+grant usage on schema realtime to authenticated;
+grant select on realtime.messages to authenticated;
