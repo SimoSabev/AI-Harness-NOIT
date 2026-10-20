@@ -14,3 +14,7 @@ export type { VerifyTreesInput, VerifyTreesResult } from "./verify-trees.js";
 export { REF_NAME, mirrorPathFor, readAtBase, resolveTrustedBase } from "./trusted-base.js";
 export type { BaseUntrusted, TrustedBase } from "./trusted-base.js";
 export { tarOf, workingTreeFiles } from "./worktree.js";
+export { EVIDENCE_ORDER, flakyHistory, historyFile, syntheticTaskId, verifyChange } from "./verify-change.js";
+export type { PolicyInput, VerifyChangeInput, VerifyDeps } from "./verify-change.js";
+export { exitFor, formatOutcome, mandatVerify, parseVerifyArgs } from "./cli.js";
+export type { VerifyArgs, VerifyCliDeps, VerifyIo } from "./cli.js";

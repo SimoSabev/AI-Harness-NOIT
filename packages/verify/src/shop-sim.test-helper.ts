@@ -1,0 +1,69 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
+import { parseVitestReport } from "@mandat/contract";
+import { parseTestFile } from "@mandat/core";
+import type { DockerRunner } from "@mandat/sandbox";
+import type { TestProcedureInput, TestProcedureResult } from "./test-procedure.js";
+
+// Fake test runner for the demo shop: derives a vitest JSON report from the tree's files (no Docker).
+// "applies 10% over 50" passes iff the code is fixed and the test expects 1000, or the code is buggy and the test expects 0.
+export const M_TITLE = "applies 10% over 50";
+
+function walk(dir: string, rel = ""): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).flatMap((n) => {
+    const r = rel ? `${rel}/${n}` : n;
+    if (n === "node_modules") return [];
+    return statSync(path.join(dir, n)).isDirectory() ? walk(path.join(dir, n), r) : [r];
+  });
+}
+
+export function simulateReport(treeDir: string): string {
+  const fixed = readFileSync(path.join(treeDir, "src/cart.ts"), "utf8").includes("= 5000;");
+  const testResults = walk(treeDir)
+    .filter((f) => /\.spec\.ts$/.test(f))
+    .sort()
+    .map((f) => {
+      const code = readFileSync(path.join(treeDir, f), "utf8");
+      const assertionResults = parseTestFile(code, f).tests.flatMap((t) => {
+        if (!t.path) return [];
+        const title = t.path.at(-1) as string;
+        const skipped = new RegExp(`(it|test)\\.(skip|todo)\\(\\s*"${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`).test(code);
+        let status = skipped ? "skipped" : "passed";
+        if (!skipped && title === M_TITLE) {
+          const body = code.slice(code.indexOf(`"${M_TITLE}"`));
+          const expects1000 = /toBe\(1000\)/.test(body.slice(0, 200));
+          status = (fixed && expects1000) || (!fixed && !expects1000) ? "passed" : "failed";
+        }
+        return [{ ancestorTitles: t.path.slice(0, -1), fullName: t.path.join(" "), status, title, duration: 1, failureMessages: status === "failed" ? ["x"] : [], meta: {} }];
+      });
+      return { startTime: 1, endTime: 2, status: assertionResults.some((a) => a.status === "failed") ? "failed" : "passed", message: "", name: `/m/work/${f}`, assertionResults };
+    });
+  const all = testResults.flatMap((t) => t.assertionResults);
+  const n = (s: string) => all.filter((a) => a.status === s).length;
+  return JSON.stringify({
+    numTotalTestSuites: testResults.length, numPassedTestSuites: 0, numFailedTestSuites: 0, numPendingTestSuites: 0, numTotalTests: all.length,
+    numPassedTests: n("passed"), numFailedTests: n("failed"), numPendingTests: n("skipped"), numTodoTests: 0, snapshot: {}, startTime: 1,
+    success: n("failed") === 0, testResults,
+  });
+}
+
+export function simRunTests(over?: (i: TestProcedureInput, raw: string) => string): (i: TestProcedureInput) => Promise<TestProcedureResult> {
+  return (i) => {
+    let raw = simulateReport(i.treeDir);
+    if (over) raw = over(i, raw);
+    const report = parseVitestReport(raw, "/m/work");
+    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report });
+  };
+}
+
+/** docker CLI stub: version 29, every image present. */
+export const okDocker: DockerRunner = {
+  run: (args, o) => {
+    if (args[0] === "version") {
+      o.onStdout?.(Buffer.from("29.9.1\n"));
+      o.onStdoutLine?.("29.9.1");
+    }
+    return Promise.resolve({ exitCode: 0, timedOut: false });
+  },
+};
