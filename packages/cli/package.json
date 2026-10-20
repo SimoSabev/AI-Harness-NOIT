@@ -30,6 +30,7 @@
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/export": "workspace:*",
     "@mandat/redaction": "workspace:*",
-    "@mandat/agents": "workspace:*"
+    "@mandat/agents": "workspace:*",
+    "@mandat/bench": "workspace:*"
   }
 }

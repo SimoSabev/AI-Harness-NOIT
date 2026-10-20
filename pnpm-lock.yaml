@@ -230,6 +230,24 @@ importers:
         specifier: workspace:*
         version: link:../../packages/sandbox
 
+  bench:
+    dependencies:
+      '@mandat/agents':
+        specifier: workspace:*
+        version: link:../packages/agents
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../packages/contract
+      '@mandat/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@mandat/sandbox':
+        specifier: workspace:*
+        version: link:../packages/sandbox
+      '@mandat/worker':
+        specifier: workspace:*
+        version: link:../apps/worker
+
   packages/agents:
     dependencies:
       '@mandat/contract':
@@ -247,6 +265,12 @@ importers:
 
   packages/cli:
     dependencies:
+      '@mandat/agents':
+        specifier: workspace:*
+        version: link:../agents
+      '@mandat/bench':
+        specifier: workspace:*
+        version: link:../../bench
       '@mandat/contract':
         specifier: workspace:*
         version: link:../contract

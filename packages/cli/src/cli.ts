@@ -5,6 +5,7 @@ import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
 import { runCommand } from "./commands/run.js";
+import { benchCommand, redteamCommand } from "./commands/bench.js";
 import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
@@ -85,6 +86,28 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--json", "machine output (progress on stderr)")
     .action(async (o: { contract: string; agent: string; keep?: boolean; json?: boolean }) => {
       code = await runCommand(io, { mandatHome: home(), contract: o.contract, agent: o.agent, keep: Boolean(o.keep), json: json(o), ...(depsIn ? { docker: depsIn.docker } : {}) });
+    });
+
+  const list = (v: string | undefined): string[] | undefined => (v === undefined ? undefined : v.split(",").map((s) => s.trim()).filter(Boolean));
+  program
+    .command("bench")
+    .description("run the 8 bench scenarios (9.6)")
+    .option("--only <ids>", "e.g. B1,B5")
+    .option("--json", "machine output")
+    .action(async (o: { only?: string; json?: boolean }) => {
+      const only = list(o.only);
+      if (only && only.some((x) => !/^B[1-8]$/.test(x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
+      code = await benchCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
+    });
+  program
+    .command("redteam")
+    .description("run the E0 red team: R5, R6, R8, R14 (8.7)")
+    .option("--only <ids>", "e.g. R5,R14")
+    .option("--json", "machine output")
+    .action(async (o: { only?: string; json?: boolean }) => {
+      const only = list(o.only);
+      if (only && only.some((x) => !["R5", "R6", "R8", "R14"].includes(x))) throw new MandatError("E_USAGE", `unknown attack in --only: ${o.only}`);
+      code = await redteamCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
 
   program

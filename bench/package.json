@@ -1,0 +1,18 @@
+{
+  "name": "@mandat/bench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bench scenarios B1–B8 and the E0 red team (R5, R6, R8, R14)",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": ["dist"],
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "scripts": { "build": "tsc -b", "test": "vitest run --root .. bench/" },
+  "dependencies": {
+    "@mandat/agents": "workspace:*",
+    "@mandat/contract": "workspace:*",
+    "@mandat/core": "workspace:*",
+    "@mandat/sandbox": "workspace:*",
+    "@mandat/worker": "workspace:*"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "rootDir": ".", "outDir": "dist", "tsBuildInfoFile": "dist/.tsbuildinfo" },
+  "include": ["*.ts", "redteam/*.ts"],
+  "exclude": ["**/*.test.ts", "dist"],
+  "references": [{ "path": "../packages/agents" }, { "path": "../packages/contract" }, { "path": "../packages/core" }, { "path": "../packages/sandbox" }, { "path": "../apps/worker" }]
+}

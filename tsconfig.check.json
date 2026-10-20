@@ -10,6 +10,9 @@
       "@mandat/worker": [
         "./apps/worker/src/index.ts"
       ],
+      "@mandat/bench": [
+        "./bench/index.ts"
+      ],
       "@mandat/*": [
         "./packages/*/src/index.ts"
       ]
@@ -22,7 +25,8 @@
     "scripts/**/*.test.ts",
     "vitest.config.ts",
     "vitest.docker.config.ts",
-    "vitest.shared.ts"
+    "vitest.shared.ts",
+    "bench/**/*.ts"
   ],
   "exclude": [
     "**/node_modules/**",
