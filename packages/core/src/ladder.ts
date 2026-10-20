@@ -74,3 +74,15 @@ export function simulateLadder(o: { p: number; h: number; runs: number; seed: nu
   }
   return { mean: total / o.runs, runs: o.runs, censored };
 }
+
+/** D-207 / S38–S39: external agents have their own key and a cap of 1; MCP (external:mcp-local) has no ladder at all. */
+export function ladderCapFor(agent: string): LadderLevel {
+  return agent.startsWith("external:") ? 1 : 3;
+}
+export function ladderStepFor(agent: string, s: LadderState, e: LadderInput, o?: { h_up?: number; h_down?: number }): LadderStepResult {
+  if (agent === "external:mcp-local") return { next: { ...s }, delta: 0, reason: "none" };
+  const r = ladderStep(s, e, o);
+  const cap = ladderCapFor(agent);
+  if (r.next.level <= cap) return r;
+  return { next: { ...r.next, level: cap, s_up: 0, s_down: 0 }, delta: cap - s.level, reason: r.reason };
+}

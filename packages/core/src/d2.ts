@@ -84,5 +84,7 @@ export function d2(o: D2Input): Detected {
     return { evidence: ev("D2.inventory", "pass", `${before} → ${after}`, { before, after, findings }), security: [] };
   }
   const first = f.find((x) => x.level === status) ?? f[0];
-  return { evidence: ev("D2.inventory", status, `${f.length} finding(s)`, { findings }, { cls: first?.cls ?? "-", id: first?.id ?? "-" }), security: [] };
+  const before = o.baseline.valid ? o.baseline.total : null;
+  const after = o.b.valid ? o.b.total : null;
+  return { evidence: ev("D2.inventory", status, `${f.length} finding(s)`, { findings, before, after }, { cls: first?.cls ?? "-", id: first?.id ?? "-" }), security: [] };
 }
