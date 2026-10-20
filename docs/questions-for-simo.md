@@ -181,3 +181,10 @@
 Ако избереш друго: installation token през http.extraHeader в octokit.ts + тест, ≈ 1 ч.
 Блокира ли: не (fakeGitHub работи офлайн).
 Статус: отворен.
+## Q-024 CC-BY-4.0 за caniuse-lite в UI-то — 20.10.2026 — D-284
+Контекст: `next build` изисква caniuse-lite (CC-BY-4.0, данни); sharp (LGPL) е изключен.
+Въпрос: Приемаш ли поименното prod изключение само за caniuse-lite в групата harness?
+Избрах по подразбиране: да (license-allowlist.json → harness.prodExceptions).
+Ако избереш друго: махам реда; UI-то не може да се build-не с Next → смяна на рамката, ≈ 1–2 дни.
+Блокира ли: не.
+Статус: отворен.

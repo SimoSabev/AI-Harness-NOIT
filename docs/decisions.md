@@ -1240,3 +1240,9 @@ MCP сървърът се пуска през serveStdio (двете ери на
 Защо: т. 7.1 позволява този вариант; по-малко разлики между клиентите.
 Алтернативи: outputSchema (несигурно поведение в по-старите клиенти).
 Източник: демо промпт т. 7.1. Статус: решено.
+
+## D-284 Лицензи на apps/web: caniuse-lite и sharp (20.10.2026)
+Решение: (1) `license-allowlist.json` получава `harness.prodExceptions` — изключение по **име на пакет + точен лиценз** (caniuse-lite, CC-BY-4.0), само в групата harness; ядрото не се разширява (тест в scripts.test.ts). (2) `pnpm-workspace.yaml: ignoredOptionalDependencies: [sharp]` — next тегли sharp/libvips (LGPL-3.0-or-later) като optional; UI-то ползва `images.unoptimized: true`.
+Защо: caniuse-lite е таблица с данни, без която `next build` не тръгва; CC-BY-4.0 иска само атрибуция (в THIRD_PARTY). Глобално разрешаване на CC-BY-4.0 в prod би пропуснало и други пакети незабелязано.
+Алтернативи: Vite вместо Next (промптът изисква Next/Vercel); глобален CC-BY-4.0 (по-широко от нужното).
+Източник: демо промпт т. 8.1, AGENTS.md правило 8; https://pnpm.io/settings#ignoredoptionaldependencies (20.10.2026). Статус: отворено за Симо (Q-024).

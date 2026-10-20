@@ -29,7 +29,7 @@ export function flatten(list) {
 
 /**
  * @param {{ packages: { name: string, group: "core"|"harness"|null, prod: Map<string,string>, workspaceDeps: string[] }[],
- *   dev: Map<string,string>, allowlist: Record<"core"|"harness", { allowed: string[], devOnlyExceptions: { license: string, devOnly: boolean }[] }> }} o
+ *   dev: Map<string,string>, allowlist: Record<"core"|"harness", { allowed: string[], devOnlyExceptions: { license: string, devOnly: boolean }[], prodExceptions?: { package: string, license: string }[] }> }} o
  * @returns {{ ok: boolean, failures: string[], counts: { core: number, harness: number } }}
  */
 export function checkGroups(o) {
@@ -42,6 +42,7 @@ export function checkGroups(o) {
       continue;
     }
     const allowed = new Set(o.allowlist[p.group].allowed);
+    const named = o.allowlist[p.group].prodExceptions ?? [];
     for (const dep of p.workspaceDeps) {
       if (p.group === "core" && groupOf(dep) !== "core") failures.push(`${p.name} (core) depends on ${dep} (${groupOf(dep) ?? "?"})`);
     }
@@ -54,6 +55,8 @@ export function checkGroups(o) {
       } catch {
         ok = false;
       }
+      // D-284: a prod exception names one package and one exact license string; nothing else is widened.
+      if (!ok) ok = named.some((e) => id.slice(0, id.lastIndexOf("@")) === e.package && license === e.license);
       if (!ok) failures.push(`${id}: ${license} (prod of ${p.name}, group ${p.group})`);
     }
   }

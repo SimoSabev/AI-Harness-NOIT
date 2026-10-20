@@ -63,3 +63,11 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | supabase | 2.119.0 | 30.09.2026 | MIT | root (dev) | Supabase CLI (`db:start`, `test:db:supabase`); бинарникът идва като @supabase/cli-linux-x64 от npm |
 | @electric-sql/pglite | 0.5.8 | 26.08.2026 | Apache-2.0 | root (dev) | Postgres в WASM за `pnpm test:db` (D-274) |
 | @electric-sql/pglite-pgtap | 0.0.9 | 26.08.2026 | Apache-2.0 | root (dev) | pgTAP за PGlite |
+| next | 16.3.8 | 30.09.2026 | MIT | web (runtime) | App Router UI на харнеса (E3а; https://registry.npmjs.org/next); `sharp` е изключен (D-284) |
+| react, react-dom | 19.3.0 | 09.09.2026 | MIT | web (runtime) | UI |
+| @supabase/supabase-js | 2.117.2 | 25.09.2026 | MIT | web (runtime) | Auth + Realtime клиент (https://registry.npmjs.org/@supabase/supabase-js) |
+| @supabase/ssr | 0.12.7 | 08.09.2026 | MIT | web (runtime) | сесия в бисквитки за SSR |
+| server-only | 0.0.1 | 03.09.2022 | MIT | web (runtime) | build грешка при импорт на сървърен модул от клиента (И: ключове само на сървъра) |
+| zod, pg | 4.6.7, 8.23.1 | (вж. горе) | MIT | web (runtime) | валидиране; private.approve_changeset |
+| @types/react, @types/react-dom | 19.3.0 | 09.09.2026 | MIT | web (dev) | типове |
+| caniuse-lite (транзитивно) | 1.0.30001816 | — | CC-BY-4.0 | web (runtime, build) | данни на browserslist; поименно изключение D-284 |

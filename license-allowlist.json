@@ -64,6 +64,13 @@
         "reason": "public-domain dedication; pre-approved for dev-only tooling (D-052)",
         "devOnly": true
       }
+    ],
+    "prodExceptions": [
+      {
+        "package": "caniuse-lite",
+        "license": "CC-BY-4.0",
+        "reason": "browser-support data bundled by Next.js build tooling (browserslist); attribution-only, harness only (D-284)"
+      }
     ]
   }
 }

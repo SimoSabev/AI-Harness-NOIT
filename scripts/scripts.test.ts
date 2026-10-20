@@ -10,7 +10,7 @@ import { spdxAllowed } from "./spdx.mjs";
 import { config as vitestConfig } from "../vitest.config.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-type Group = { allowed: string[]; devOnlyExceptions: { license: string; reason: string; devOnly: boolean }[] };
+type Group = { allowed: string[]; devOnlyExceptions: { license: string; reason: string; devOnly: boolean }[]; prodExceptions?: { package: string; license: string; reason: string }[] };
 const allowlist = JSON.parse(readFileSync(path.join(repo, "license-allowlist.json"), "utf8")) as { core: Group; harness: Group };
 const lic = (name: string) => JSON.parse(readFileSync(path.join(repo, "fixtures/licenses", name), "utf8")) as Record<string, { name: string; versions: string[]; license: string }[]>;
 const one = (id: string, license: string) => new Map([[id, license]]);
@@ -62,6 +62,13 @@ describe("check-licenses (D-052, D-077)", () => {
     const crossDep = checkGroups({ packages: [pkg("@mandat/core", "core", empty, ["@mandat/cli"])], dev: empty, allowlist });
     expect(crossDep.failures).toEqual(["@mandat/core (core) depends on @mandat/cli (harness)"]);
     expect(checkGroups({ packages: [pkg("@mandat/x", null, empty)], dev: empty, allowlist }).ok).toBe(false);
+  });
+  it("prodExceptions (D-284): само името + лиценза + групата harness", () => {
+    const cc = (id: string) => one(id, "CC-BY-4.0");
+    expect(checkGroups({ packages: [pkg("@mandat/web", "harness", cc("caniuse-lite@1.0.30001816"))], dev: empty, allowlist }).ok).toBe(true);
+    expect(checkGroups({ packages: [pkg("@mandat/web", "harness", cc("other-data@1.0.0"))], dev: empty, allowlist }).ok).toBe(false);
+    expect(checkGroups({ packages: [pkg("@mandat/core", "core", cc("caniuse-lite@1.0.30001816"))], dev: empty, allowlist }).ok).toBe(false);
+    expect(checkGroups({ packages: [pkg("@mandat/web", "harness", one("caniuse-lite@1.0.30001816", "GPL-3.0-only"))], dev: empty, allowlist }).ok).toBe(false);
   });
   it("записаният изход на pnpm 12.14.0 (--recursive, --prod)", () => {
     const all = flatten(lic("pnpm-12.14.0.json"));
