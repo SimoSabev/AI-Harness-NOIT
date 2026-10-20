@@ -1,0 +1,271 @@
+{
+  "numTotalTestSuites": 4,
+  "numPassedTestSuites": 3,
+  "numFailedTestSuites": 1,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 20,
+  "numPassedTests": 19,
+  "numFailedTests": 1,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1792454400000,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart empty cart has zero subtotal",
+          "status": "passed",
+          "title": "empty cart has zero subtotal",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart subtotal sums price times qty",
+          "status": "passed",
+          "title": "subtotal sums price times qty",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart ignores items with qty 0",
+          "status": "passed",
+          "title": "ignores items with qty 0",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart rejects negative qty",
+          "status": "passed",
+          "title": "rejects negative qty",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart rejects negative price",
+          "status": "passed",
+          "title": "rejects negative price",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart no discount under 50",
+          "status": "passed",
+          "title": "no discount under 50",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart no discount at exactly 50",
+          "status": "passed",
+          "title": "no discount at exactly 50",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart applies 10% over 50",
+          "status": "failed",
+          "title": "applies 10% over 50",
+          "duration": 1,
+          "failureMessages": [
+            "AssertionError: expected +0 to be 1000 // Object.is equality"
+          ],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart rounds discount down to whole cents",
+          "status": "passed",
+          "title": "rounds discount down to whole cents",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart total is subtotal minus discount",
+          "status": "passed",
+          "title": "total is subtotal minus discount",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart large cart total",
+          "status": "passed",
+          "title": "large cart total",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "cart"
+          ],
+          "fullName": "cart discount is never negative",
+          "status": "passed",
+          "title": "discount is never negative",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        }
+      ],
+      "startTime": 1792454400000,
+      "endTime": 1792454400020,
+      "status": "failed",
+      "message": "",
+      "name": "/m/work/tests/cart.spec.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money formats cents as euros",
+          "status": "passed",
+          "title": "formats cents as euros",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money formats zero",
+          "status": "passed",
+          "title": "formats zero",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money formats negative",
+          "status": "passed",
+          "title": "formats negative",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money parses euros string",
+          "status": "passed",
+          "title": "parses euros string",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money parses integer euros",
+          "status": "passed",
+          "title": "parses integer euros",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money rejects invalid string",
+          "status": "passed",
+          "title": "rejects invalid string",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money adds cents",
+          "status": "passed",
+          "title": "adds cents",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        },
+        {
+          "ancestorTitles": [
+            "money"
+          ],
+          "fullName": "money multiplies cents by qty",
+          "status": "passed",
+          "title": "multiplies cents by qty",
+          "duration": 1,
+          "failureMessages": [],
+          "meta": {}
+        }
+      ],
+      "startTime": 1792454400000,
+      "endTime": 1792454400020,
+      "status": "passed",
+      "message": "",
+      "name": "/m/work/tests/money.spec.ts"
+    }
+  ]
+}

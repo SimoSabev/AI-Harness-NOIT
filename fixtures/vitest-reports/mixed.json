@@ -1,0 +1,111 @@
+{
+  "numTotalTestSuites": 4,
+  "numPassedTestSuites": 4,
+  "numFailedTestSuites": 0,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 5,
+  "numPassedTests": 2,
+  "numFailedTests": 0,
+  "numPendingTests": 2,
+  "numTodoTests": 1,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1792500081407,
+  "success": true,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "only"
+          ],
+          "fullName": "only focused",
+          "status": "passed",
+          "title": "focused",
+          "duration": 3.21756000000002,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": [
+            "only"
+          ],
+          "fullName": "only not focused",
+          "status": "skipped",
+          "title": "not focused",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1792500081695,
+      "endTime": 1792500081698.2175,
+      "status": "passed",
+      "message": "",
+      "name": "/m/work/tests/only.spec.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "plain"
+          ],
+          "fullName": "plain passes",
+          "status": "passed",
+          "title": "passes",
+          "duration": 3.577114999999992,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": [
+            "plain"
+          ],
+          "fullName": "plain skipped one",
+          "status": "skipped",
+          "title": "skipped one",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": [
+            "plain"
+          ],
+          "fullName": "plain todo one",
+          "status": "todo",
+          "title": "todo one",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1792500081687,
+      "endTime": 1792500081690.5771,
+      "status": "passed",
+      "message": "",
+      "name": "/m/work/tests/plain.spec.ts"
+    }
+  ]
+}
