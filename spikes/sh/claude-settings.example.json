@@ -1,0 +1,5 @@
+{
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node /ABS/mandat/spikes/sh/stop-hook.mjs" }] }]
+  }
+}
