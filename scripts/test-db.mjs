@@ -50,7 +50,7 @@ export function runDbTestsPsql(url) {
   const out = [];
   execFileSync("psql", [url, "-XAtq", "-c", "create extension if not exists pgtap with schema extensions"], { encoding: "utf8" });
   for (const f of readdirSync(dir("tests")).filter((x) => x.endsWith(".test.sql")).sort()) {
-    let text = "";
+    let text;
     try {
       text = execFileSync("psql", [url, "-XAt", "-v", "ON_ERROR_STOP=0", "-c", "set search_path = public, extensions", "-f", path.join(dir("tests"), f)], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     } catch (e) {
