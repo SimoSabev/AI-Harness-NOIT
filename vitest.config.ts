@@ -25,6 +25,7 @@ export const config = defineConfig({
         "packages/redaction/src/**": strict,
         "packages/core/src/**": strict,
         "packages/export/src/**": strict,
+        "packages/gate-github/src/**": { lines: 90 },
         "packages/verify/src/**": { lines: 90 }, // демо промпт т. 5 „Готово, когато“
         "packages/cli/src/**": loose,
         "packages/sandbox/src/**": loose,

@@ -33,6 +33,7 @@
     "@mandat/agents": "workspace:*",
     "@mandat/bench": "workspace:*",
     "@mandat/verify": "workspace:*",
-    "@mandat/core": "workspace:*"
+    "@mandat/core": "workspace:*",
+    "@mandat/gate-github": "workspace:*"
   }
 }

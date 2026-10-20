@@ -10,7 +10,7 @@ import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
 import { verifyAlias } from "./commands/verify.js";
 import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
-import { demoSeed } from "./commands/demo.js";
+import { demoExternalPr, demoSeed } from "./commands/demo.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -186,9 +186,15 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       if (o.org !== "o_local" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(o.org)) throw new MandatError("E_USAGE", `--org must be o_local or a uuid`);
       code = await anchorCommand(io, { home: home(), org: o.org, json: json(o), ...(o.org !== "o_local" ? { db: depsIn?.db ?? openDb(dbUrl(io.env)) } : {}), ...(depsIn?.tsaFetcher ? { fetcher: depsIn.tsaFetcher } : {}) });
     });
-  program
-    .command("demo")
-    .description("demo data")
+  const demo = program.command("demo").description("demo data and scenes");
+  demo
+    .command("external-pr")
+    .option("--fake", "fakeGitHub + local sandbox (no network)")
+    .option("--json", "machine output")
+    .action(async (o: { fake?: boolean; json?: boolean }) => {
+      code = await demoExternalPr(io, { home: home(), fake: Boolean(o.fake), json: json(o), docker: depsIn?.docker ?? deps().docker });
+    });
+  demo
     .command("seed")
     .option("--minimal", "demo org + owner + repo (E1б)")
     .option("--json", "machine output")

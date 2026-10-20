@@ -20,6 +20,7 @@ export const config = defineConfig({
     outputFile: { json: "test-results/docker.json" },
     projects: [
       project("egress-gate", "packages/egress-gate"),
+      project("gate", "packages/gate-github"),
       project("verify", "packages/verify"),
       project("worker", "apps/worker"),
       project("bench", "bench"),
