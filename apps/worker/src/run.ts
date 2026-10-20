@@ -35,6 +35,8 @@ export interface RunTaskInput {
   docker?: DockerRunner;
   hooks?: RunHooks;
   now?: () => Date;
+  /** mirror name under <home>/mirrors (default "shop"; the online worker uses "demo-shop") */
+  mirror?: string;
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
@@ -156,7 +158,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
     if (i.agent === "claude" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
-    const mirrorPath = path.join(i.home, "mirrors", "shop.git");
+    const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
     const cat = spawnSync("git", ["--git-dir", mirrorPath, "cat-file", "-e", `${contract.base_commit}^{commit}`], { env: { PATH: process.env.PATH ?? "", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", HOME: os.tmpdir() } }); // T3-7: sha (GitSha in the contract)
     if (cat.status !== 0) return fail("E_BASE_NOT_FOUND", `base_commit ${contract.base_commit} not in the mirror`);

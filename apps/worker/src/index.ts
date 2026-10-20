@@ -15,3 +15,5 @@ export { PgOutbox, enqueueOutbox } from "./online/pg-outbox.js";
 export { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./online/seed.js";
 export { startWebhookServer, webhookHandler } from "./online/webhook.js";
 export type { WebhookDeps } from "./online/webhook.js";
+export { contractForTask, finishOutcome, processTask, realtimeBroadcaster, runDaemonOnce } from "./online/daemon.js";
+export type { DaemonDeps } from "./online/daemon.js";

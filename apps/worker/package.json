@@ -25,6 +25,7 @@
     "@mandat/core": "workspace:*",
     "@mandat/egress-gate": "workspace:*",
     "@mandat/export": "workspace:*",
+    "@mandat/gate-github": "workspace:*",
     "@mandat/ledger": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/redaction": "workspace:*",

@@ -226,6 +226,9 @@ importers:
       '@mandat/export':
         specifier: workspace:*
         version: link:../../packages/export
+      '@mandat/gate-github':
+        specifier: workspace:*
+        version: link:../../packages/gate-github
       '@mandat/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger
