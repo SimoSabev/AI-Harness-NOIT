@@ -5,9 +5,19 @@
   "description": "The orchestrator of `mandat run`",
   "license": "GPL-3.0-or-later",
   "type": "module",
-  "files": ["dist"],
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "scripts": { "build": "tsc -b", "test": "vitest run --root ../.. apps/worker/" },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. apps/worker/"
+  },
   "dependencies": {
     "@mandat/agents": "workspace:*",
     "@mandat/channels": "workspace:*",
@@ -19,5 +29,8 @@
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/redaction": "workspace:*",
     "@mandat/sandbox": "workspace:*"
+  },
+  "devDependencies": {
+    "yaml": "2.9.1"
   }
 }

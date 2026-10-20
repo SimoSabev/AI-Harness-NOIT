@@ -229,6 +229,10 @@ importers:
       '@mandat/sandbox':
         specifier: workspace:*
         version: link:../../packages/sandbox
+    devDependencies:
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   bench:
     dependencies:

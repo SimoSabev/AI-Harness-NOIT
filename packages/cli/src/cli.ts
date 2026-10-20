@@ -115,8 +115,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("build the deterministic demo repository mirror")
     .command("build")
     .option("--force", "recreate the mirror if its base_commit differs")
-    .action((o: { force?: boolean }) => {
-      code = fixturesBuild(io, { mandatHome: home(), force: Boolean(o.force) });
+    .option("--name <name>", "shop (E0, default) or demo-shop")
+    .action((o: { force?: boolean; name?: string }) => {
+      code = fixturesBuild(io, { mandatHome: home(), force: Boolean(o.force), ...(o.name ? { name: o.name } : {}) });
     });
 
   const proxy = program.command("proxy").description("the LLM proxy (the only holder of ANTHROPIC_API_KEY)");

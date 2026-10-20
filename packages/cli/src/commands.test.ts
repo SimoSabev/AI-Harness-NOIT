@@ -105,6 +105,10 @@ describe("run / bench / redteam / fixtures", () => {
     expect(a.stdout).toMatch(/^base_commit [0-9a-f]{40}\n$/);
     expect((await cli(["--home", h, "fixtures", "build"], deps(docker([])))).stdout).toContain("(unchanged)");
     expect((await cli(["--home", h, "fixtures", "build", "--force"], deps(docker([])))).code).toBe(0);
+    const demo = await cli(["--home", h, "fixtures", "build", "--name", "demo-shop"], deps(docker([])));
+    expect(demo.stdout).toMatch(/^base_commit [0-9a-f]{40}\nmirror .*demo-shop\.git\n$/);
+    expect(demo.stdout.slice(12, 52)).not.toBe(a.stdout.slice(12, 52));
+    expect((await cli(["--home", h, "fixtures", "build", "--name", "nope"], deps(docker([])))).code).toBe(2);
     const io = { stdout: () => undefined, stderr: () => undefined, env: {}, cwd: "/x" };
     expect(formatVerdict(io, { verdict: null, exit: 3, runDir: null, ledger: null, agentExit: null, error: { code: "E_DOCKER", message: "m" } })).toBe("ERROR E_DOCKER: m\n");
   });
