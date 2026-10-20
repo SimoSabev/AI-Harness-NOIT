@@ -8,7 +8,7 @@ describe("supabase/tests (pgTAP on PGlite)", () => {
   });
   it("всички файлове са зелени", async () => {
     const r = await runDbTests();
-    expect(r.map((x) => x.file)).toEqual(["harness_ui.test.sql", "ledger_append.test.sql", "outbox_approvals.test.sql", "rls_matrix.test.sql", "web_rls.test.sql"]);
+    expect(r.map((x) => x.file)).toEqual(["harness.test.sql", "harness_ui.test.sql", "ledger_append.test.sql", "outbox_approvals.test.sql", "rls_matrix.test.sql", "web_rls.test.sql"].sort());
     for (const f of r) expect({ file: f.file, ok: f.ok, failed: f.failed, error: f.error }).toEqual({ file: f.file, ok: true, failed: [], error: null });
   }, 120_000);
 });
