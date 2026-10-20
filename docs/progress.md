@@ -11,12 +11,12 @@
 | E3б авто-харнес | phase/e3b-autoharness | ГОТОВО (docs/reports/E3b.md) | `git log -1 phase/e3b-autoharness` | 20.10.2026 | Q-026 (не блокира) |
 | E3в канали | phase/e3c-channels | ГОТОВО (live чака Симо) (docs/reports/E3c.md) | `git log -1 phase/e3c-channels` | 20.10.2026 | OPENAI_API_KEY, модел, цена, S-CX (docs/setup/keys.md); Q-027, Q-028 |
 | E3г PWA | phase/e3d-pwa | ГОТОВО (docs/reports/E3d.md) | `git log -1 phase/e3d-pwa` | 20.10.2026 | VAPID ключове, телефон (docs/setup/push.md); Q-029 |
-| E4 демо | phase/e4-demo | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E4 демо | phase/e4-demo | ГОТОВО (live чака Симо) (docs/reports/E4.md) | `git log -1 phase/e4-demo` | 20.10.2026 | ключове, GitHub App-ове, VAPID, VPS, жив транскрипт (docs/reports/FINAL.md) |
 
 Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
 ## Текуща задача
-E4 (т. 9): клон phase/e4-demo; docs/tasks/e4.md; демото.
+Няма: всички фази са готови (docs/reports/FINAL.md). Следва работа на Симо по списъка във FINAL.md.
 
 ## Часове: план/реално по фаза
 | Фаза | План [О] | Реално |
@@ -29,5 +29,6 @@ E4 (т. 9): клон phase/e4-demo; docs/tasks/e4.md; демото.
 | E3б | 20–27 | ≈ 3 |
 | E3в | 23–29 | ≈ 4 |
 | E3г | 9–12 | ≈ 2 |
+| E4 | 26–36 | ≈ 5 |
 
 ## Разход API: $0

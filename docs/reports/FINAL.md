@@ -20,7 +20,7 @@
 | Демото | demo/, docs/demo/rehearsal.md | run.mjs 3 сцени, scene3-variants (9 реда) в Docker, UI видео + скрийншоти |
 
 ## Числа (последно пускане)
-Вж. docs/reports/E4.md (unit, docker, e2e, test-counts).
+unit 475/475 · docker 39/39 · e2e 12/12 + демо UI 3/3 · live SKIPPED 5 · `pnpm check` exit 0 (lines 89.69%) · bench --fail-gate exit 1. Подробно: docs/reports/E4.md.
 
 ## Важни решения и тълкувания (за преглед от Симо)
 D-284 (CC-BY-4.0 за caniuse-lite), D-285 (четене под RLS, писане през service_role, локален демо вход), D-286, D-287,
