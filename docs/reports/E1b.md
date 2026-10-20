@@ -1,26 +1,27 @@
 # Доклад E1б — 20.10.2026, 17:10 UTC
 
 ## Статус: ГОТОВО (live чака Симо)
-Всичко без човек е зелено. `supabase start` е блокиран от лимита на Docker Hub в облачната сесия (docs/blockers/supabase-start.md);
-обходът (PGlite + Postgres 17 в Docker) покрива миграциите, pgTAP и паралелните писачи. RFC 3161 live → SKIPPED (TSA хостовете
+Всичко без човек е зелено. `supabase start` мина на втория опит (лимитът на Docker Hub; docs/blockers/supabase-start.md); pgTAP минава и на истинската
+локална Supabase, и в PGlite. Сверката откри и поправи дупка: Supabase дава ALL на authenticated за нови таблици. RFC 3161 live → SKIPPED (TSA хостовете
 са блокирани тук).
 
 ## Готово, когато
 | Команда | Реален изход | |
 | --- | --- | --- |
-| `pnpm db:start && pnpm db:reset` | `Error response from daemon: error from registry: Data limit exceeded` (2 опита + 2 обходни регистъра) | ✗ → обход |
+| `pnpm db:start && pnpm db:reset` | 1-ви опит: 429 от Docker Hub; 2-ри: минава след повторните опити на CLI → „Applying migration …“ ×3; `db:reset` → „Finished supabase db reset“ | ✓ |
+| `pnpm test:db:supabase` | `ok ledger_append 12/12 · ok outbox_approvals 9/9 · ok rls_matrix 17/17 · db tests ok (3 files, supabase)` (pgTAP през psql; образът pg_prove не се тегли) | ✓ |
 | `pnpm test:db` (обход, D-274) | `ok ledger_append.test.sql: 12/12` · `ok outbox_approvals.test.sql: 9/9` · `ok rls_matrix.test.sql: 17/17` · `db tests ok (3 files, pglite)` | ✓ |
 | Postgres 17 (docker) | двама паралелни писачи → seq 1..40 без дупки, веригата цяла; 2 drain-а → всеки ефект точно веднъж; `demo seed --minimal` идемпотентен | ✓ |
 | `pnpm check` | build, lint, typecheck, unit 294/294, test:counts, licenses (core 18, harness 269), no-dotenv — exit 0; покритие lines: contract 100, core 99.7, ledger 95.8, verify 92.0 | ✓ |
 | `pnpm mandat verify --repo <tmp копие на demo-shop, клон fix/discount, изтрит тест> --remote file://…/demo-shop.git --external --type bugfix` | `VERDICT: FAILED  reasons: D2:missing_test:tests/cart.spec.ts > cart > applies 10% over 50, D4:out_of_contract:tests/**` · `level: 1 (external cap, caller cap, no ruleset, no CI signal)` · `base: bc7b7b430e6d (trusted file://…/demo-shop.git main)` · exit 20 | ✓ |
-| `node scripts/check-test-counts.mjs` | `unit: 294 passed` · `docker: …` (виж Тестове) · `НЕПОКРИТИ: packages/ledger/src/anchor.live.test.ts > … (D-276)` · `skipped: 1 (изброени)` | ✓ |
+| `node scripts/check-test-counts.mjs` | `unit: 294 passed` · `docker: 24 passed, 0 failed, 0 skipped` · `НЕПОКРИТИ: packages/ledger/src/anchor.live.test.ts > … (D-276)` · `skipped: 1 (изброени)` | ✓ |
 | `pnpm mandat verify-log --org <demo org uuid>` | срещу Postgres 17: `OK: chain intact (seq 1..40, last sha256:…)` (db.docker.test.ts) | ✓ |
 | `pnpm mandat ladder sim --p 0.95 --h 5` | `mean 86.4 tasks to level 1 (spec ≈ 87; -0.7%)` — в рамките на 20% | ✓ |
 | `pnpm mandat bench` | `RESULT 8/8 · false VERIFIED 0 · false FAILED 0 · 3m36s` | ✓ |
 | `pnpm mandat bench --fail-gate` | `fail-gate: verifier fault detected (D1:report_invalid:missing) · verdict FAILED`, exit 1 | ✓ |
 
 ## Тестове
-unit 294/294 (property: ladder, effective-level) · pgTAP 38/38 (PGlite) · docker: виж долу · live: 1 SKIPPED (MANDAT_LIVE_TSA) — не е минал.
+unit 294/294 (property: ladder, effective-level) · pgTAP 38/38 (PGlite) и 38/38 (истинска локална Supabase, `pnpm test:db:supabase`) · docker 24/24 · live: 1 SKIPPED (MANDAT_LIVE_TSA) — не е минал.
 Нови: ladder 10, effective-level/frame/codeSpan 6, policy 7, d2-weakened 7, d2-weakened-assertions 4, d2-weakened-fp 6, base-pinning 4,
 verify-cli 14 (вкл. k1-base-policy, verify-no-write, retry-same-tree, unsupported-runner), test-procedure 3, git-safety 4, outbox 3,
 lease 5, ledger online 3, anchor 2, cli (verify alias, ladder sim, verify-log --org, demo seed, anchor) 6, test-db 2, demo-shop 2.
