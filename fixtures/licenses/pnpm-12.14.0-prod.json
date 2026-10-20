@@ -1,0 +1,126 @@
+{
+  "ISC": [
+    {
+      "name": "@isaacs/fs-minipass",
+      "versions": [
+        "4.0.1"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/@isaacs+fs-minipass@4.0.1/node_modules/@isaacs/fs-minipass"
+      ],
+      "license": "ISC",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/npm/fs-minipass#readme",
+      "description": "fs read and write streams based on minipass"
+    }
+  ],
+  "Apache-2.0": [
+    {
+      "name": "canonicalize",
+      "versions": [
+        "5.1.0"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/canonicalize@5.1.0/node_modules/canonicalize"
+      ],
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/erdtman/canonicalize#readme",
+      "description": "JSON canonicalize function"
+    }
+  ],
+  "BlueOak-1.0.0": [
+    {
+      "name": "chownr",
+      "versions": [
+        "3.0.0"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/chownr@3.0.0/node_modules/chownr"
+      ],
+      "license": "BlueOak-1.0.0",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/isaacs/chownr#readme",
+      "description": "like `chown -R`"
+    },
+    {
+      "name": "minipass",
+      "versions": [
+        "7.1.3"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/minipass@7.1.3/node_modules/minipass"
+      ],
+      "license": "BlueOak-1.0.0",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/isaacs/minipass#readme",
+      "description": "minimal implementation of a PassThrough stream"
+    },
+    {
+      "name": "tar",
+      "versions": [
+        "7.5.22"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/tar@7.5.22/node_modules/tar"
+      ],
+      "license": "BlueOak-1.0.0",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/isaacs/node-tar#readme",
+      "description": "tar for node"
+    },
+    {
+      "name": "yallist",
+      "versions": [
+        "5.0.0"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/yallist@5.0.0/node_modules/yallist"
+      ],
+      "license": "BlueOak-1.0.0",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/isaacs/yallist#readme",
+      "description": "Yet Another Linked List"
+    }
+  ],
+  "MIT": [
+    {
+      "name": "commander",
+      "versions": [
+        "15.0.0"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/commander@15.0.0/node_modules/commander"
+      ],
+      "license": "MIT",
+      "author": "TJ Holowaychuk",
+      "homepage": "https://github.com/tj/commander.js#readme",
+      "description": "the complete solution for node.js command-line programs"
+    },
+    {
+      "name": "minizlib",
+      "versions": [
+        "3.1.0"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/minizlib@3.1.0/node_modules/minizlib"
+      ],
+      "license": "MIT",
+      "author": "Isaac Z. Schlueter",
+      "homepage": "https://github.com/isaacs/minizlib#readme",
+      "description": "A small fast zlib stream built on [minipass](http://npm.im/minipass) and Node.js's zlib binding."
+    },
+    {
+      "name": "zod",
+      "versions": [
+        "4.6.7"
+      ],
+      "paths": [
+        "<repo>/node_modules/.pnpm/zod@4.6.7/node_modules/zod"
+      ],
+      "license": "MIT",
+      "author": "Colin McDonnell",
+      "homepage": "https://zod.dev",
+      "description": "TypeScript-first schema declaration and validation library with static type inference"
+    }
+  ]
+}
