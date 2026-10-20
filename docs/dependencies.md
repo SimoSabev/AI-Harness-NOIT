@@ -72,3 +72,5 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | @types/react, @types/react-dom | 19.3.0 | 09.09.2026 | MIT | web (dev) | типове |
 | caniuse-lite (транзитивно) | 1.0.30001816 | — | CC-BY-4.0 | web (runtime, build) | данни на browserslist; поименно изключение D-284 |
 | yaml (onboard) | 2.9.1 | (вж. contract) | ISC | onboard (runtime) | четене на .github/workflows и предложението (същата версия като в contract) |
+| @openai/codex (образ mandat-sandbox) | 0.160.1 | 05.10.2026 | Apache-2.0 | sandbox image | Codex CLI като отделен процес; integrity на двата tarball-а в docker/sandbox/Dockerfile (D-288) |
+| @electric-sql/pglite (worker) | 0.5.8 | 26.08.2026 | Apache-2.0 | worker (runtime) | офлайн база за `mandat demo spill --fake` (вече в root devDependencies) |

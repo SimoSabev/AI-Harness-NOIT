@@ -1,0 +1,15 @@
+# E3в — Канали, резерва към друг доставчик, адаптер Codex (docs/spec/НОИТ_Мандат_v4_демо_промпт_кодер.md т. 8.3)
+- [x] selectChannel: филтри (health, cooldown, бюджет < est × 1,5), score 0,5·Q + 0,3·(1 − C) + 0,2·H, least-used — select-channel.test.ts
+- [x] onLimit: retry-after ≤ 5 мин → чакане ×3; cooldown до resets_at / 60 s ×2 ≤ 1 ч; spill към api_key; HELD; едно преливане — limit-chain.test.ts
+- [x] validateChain / manualSwitchAllowed — fallback-validation.test.ts
+- [x] миграция 0007: метаданни на каналите, routing_rules (repo, task_type, mode, fallback), tasks.channel_id/channel_reason/retry_reason/spills
+- [x] daemon: избор в CONTRACTED; верига при лимит; преливане = нов опит (attempt + 1, нов агент, нов токен), ledger channel_limit/channel_spill; ниво 0 → branch_only
+- [x] D-288: празна промяна → HELD empty_change (без стълба)
+- [x] Codex: argv (codex-argv), parse (codex-parse, fixtures/codex-jsonl), адаптер; @openai/codex 0.160.1 в образа (integrity)
+- [x] fake-codex:honest-fix / delete-test; fake:limit-429
+- [x] прокси: POST /v1/responses, claim p, токен на друг канал → 401, Upgrade → 403, usage от response.completed, цени от env; 429 → limit
+- [x] gate: /v1/responses маршрут, Upgrade → 403; stub-upstream: openai режим + --429
+- [x] `mandat proxy start` подава OPENAI_API_KEY само по име; sandbox: OPENAI_API_KEY + CODEX_HOME за Codex
+- [x] web: /channels (само метаданни), POST /api/tasks/:id/switch-channel — channels-no-secrets.test.ts
+- [x] spill.docker.test.ts; `pnpm mandat demo spill --fake`
+- [x] S-CX: SKIPPED „липсва OPENAI_API_KEY“ (docs/spikes/S-CX.md); docs/setup/keys.md, docs/security.md
