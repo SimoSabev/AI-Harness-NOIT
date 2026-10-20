@@ -162,6 +162,8 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     const t = (await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0];
     expect(t).toMatchObject({ state: "BLOCKED", wait_reason: "failed" });
     expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
+    // т. 8.4: ПРОВАЛ → web push through the outbox (sent only by the worker)
+    expect((await s.db.query<{ payload: unknown }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload)).toEqual([{ task_id: "t_web_1", kind: "failed" }]);
   });
   it("contractForTask: allowed_paths/may_change_tests/risk_cap от политиката; непознат тип → грешка", async () => {
     const { parseMandatYml } = await import("@mandat/contract");

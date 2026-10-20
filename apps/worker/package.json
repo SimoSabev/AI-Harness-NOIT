@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./push": {
+      "types": "./dist/online/push.d.ts",
+      "default": "./dist/online/push.js"
     }
   },
   "scripts": {
@@ -34,10 +38,12 @@
     "@mandat/sandbox": "workspace:*",
     "@mandat/verify": "workspace:*",
     "@octokit/webhooks": "14.2.0",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
+    "@types/web-push": "3.6.4",
     "yaml": "2.9.1"
   }
 }

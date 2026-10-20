@@ -17,6 +17,7 @@ import { runTask } from "../run.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
 import { loadChannels, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { inTransaction } from "./db.js";
+import { enqueueOutbox } from "./pg-outbox.js";
 import type { Db } from "./db.js";
 
 // Демо промпт т. 5.8 + 8.1 (D-275, D-280): the online worker. One task at a time per process; every state change +
@@ -275,6 +276,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     return csId;
   });
   const after = (await d.db.query<{ state: string; wait_reason: string | null }>("select state, wait_reason from public.tasks where id = $1", [t.id])).rows[0];
+  // т. 8.4: a notification when something waits for a human or failed (the merge notification is in finishOutcome)
+  const notify = v.result === "FAILED" ? "failed" : after?.state === "HELD" || (after?.state === "GATED" && needsHuman) ? "waiting" : null;
+  if (notify) await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:${notify}`, payload: { task_id: t.id, kind: notify } });
   await bc(after?.state ?? "?", seq, { result: v.result, level: lvl.level, wait_reason: after?.wait_reason ?? null, usd, minutes });
   log(`[daemon] ${t.id}: ${v.result} · level ${lvl.level} · ${action.kind}`);
   // Delivery through the gate (fakeGitHub offline; Writer App online)
@@ -286,6 +290,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     const m = await autoMerge(d.gh, { repo: d.ghRepo, base: "main", number: delivered.number, head_sha: delivered.head_sha, base_sha: (await d.gh.getPull(d.ghRepo, delivered.number)).base_sha, tree_sha_expected: "", task_id: t.id, level: lvl.level, verdictSeq: out.ledger?.to ?? null, redact: (s) => s });
     if (m.kind === "merged") {
       await finishOutcome(d, t, ladder, "success", changesetId, delivered.number, m.merge_commit_sha);
+      if (lvl.level >= 2) await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:merged`, payload: { task_id: t.id, kind: "merged" } });
       return { state: "CLOSED", verdict: v };
     }
     seq = await inTransaction(d.db, (tx) => setState(tx, t, m.kind === "mixed" ? "VERIFY_1" : "HELD", { wait_reason: m.kind === "held" ? m.wait_reason : "head_moved" }));
