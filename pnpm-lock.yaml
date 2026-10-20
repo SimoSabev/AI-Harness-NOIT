@@ -235,6 +235,9 @@ importers:
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../redaction
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   packages/redaction: {}
 
