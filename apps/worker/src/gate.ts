@@ -16,6 +16,8 @@ export interface GateCtx {
   gateImage: string;
   user: string;
   extraCa: string | undefined;
+  /** default http://mandat-llm-proxy:8787 (D-048: docker tests point it at a test proxy). */
+  llmProxyUrl?: string;
   sleep?: (ms: number) => Promise<void>;
   policyTimeoutMs?: number;
 }
@@ -94,6 +96,7 @@ export async function startRunGate(ctx: GateCtx, initial: { phase: GatePolicy["p
     { kind: "bind", source: npmCache, target: "/var/cache/mandat-npm", readonly: false },
   ];
   const publicEnv: Record<string, string> = {};
+  if (ctx.llmProxyUrl !== undefined) publicEnv.MANDAT_LLM_PROXY_URL = ctx.llmProxyUrl;
   if (ctx.extraCa !== undefined) {
     mounts.push({ kind: "bind", source: ctx.extraCa, target: "/etc/mandat-ca.pem", readonly: true });
     publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";

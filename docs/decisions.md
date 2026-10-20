@@ -910,3 +910,27 @@ D-001…D-138 са преписани от т. 4.2 на промпта v4 (20.10
 фалшиви. D-095 позволява сглобяване по време на изпълнение. Сега и gitleaks без allowlist намира 0 в fixtures/.
 Алтернативи: „allow secret“ в GitHub за всеки ключ (ръчно, на Симо); allowlist само в gitleaks (не помага за GitHub).
 Източник: отговорът на GitHub при push, 20.10.2026.
+
+## D-150 Допълнителен CA за TLS-прихващащи мрежи (20.10.2026)
+Решение: Ако на хоста е зададена `MANDAT_EXTRA_CA_CERTS=<път до PEM>`: `images build` го подава като BuildKit secret (`--secret id=extra_ca`, никога в слой на образа), а gate и proxy контейнерите го получават ro на `/etc/mandat-ca.pem` с `NODE_EXTRA_CA_CERTS`. Пясъчникът никога не го получава (той говори само чист HTTP към gate-а). buildRunArgs позволява този ro файл САМО за role "gate" (RunSpec.caFile); buildProxyRunArgs — чрез ProxyRunOptions.caFile. Без променливата няма никаква промяна.
+Защо: облачната среда на сесията прихваща изходящия TLS със собствен CA; без него npm/pnpm/gate не стигат до registry.npmjs.org.
+Алтернативи: `--network host` при build (по-широко), CA в образа (изтича в слой).
+Източник: /root/.ccr/README.md на средата, 20.10.2026.
+
+## D-151 SANDBOX_APT=0 и Node версии на R14 пробите (20.10.2026)
+Решение: Dockerfile-ът на пясъчника има `ARG SANDBOX_APT=1`; `MANDAT_SANDBOX_APT=0` при `images build` пропуска apt (curl, bind9-dnsutils, ca-certificates). r14-netprobe ползва точните curl/dig команди от т. 8.7, ако ги има; иначе всяка проба има Node еквивалент със същата семантика на exit/http_code/dns_status, а `cmd` става "node:<командата>". Тагът на образа не отразява build arg-а (образът е само локален).
+Защо: в облачната среда deb.debian.org е блокиран от мрежовата политика (CONNECT 403; DNS не резолвира). На машината на Симо подразбирането е спецификацията.
+Алтернативи: статични curl/dig от GitHub (непроверен произход).
+Източник: пробата в тази сесия, 20.10.2026.
+
+## D-152 --sysctl disable_ipv6 само ако ядрото има IPv6 (20.10.2026)
+Решение: RunSpec.ipv6Sysctl (по подразбиране true). Worker-ът и doctor пускат веднъж `docker run --rm --network none <sandbox> test -e /proc/sys/net/ipv6/conf/all/disable_ipv6` (probeIpv6, кеш на процес); при липса sysctl-ът се маха от SANDBOX_HARDENING за този run.
+Защо: на ядро без IPv6 runc отказва контейнера („open sysctl net.ipv6.conf.all.disable_ipv6 … no such file“). Без IPv6 в ядрото няма какво да се изключи; p4 (IPv6) остава блокирана (проверено: 8/8).
+Алтернативи: да се изисква IPv6 на хоста.
+Източник: грешката на runc в тази сесия, 20.10.2026.
+
+## D-153 Резултат от S3 (20.10.2026)
+Решение: DNS_MODE = "gate" (resolv.conf, монтиран ro, сочи gate-а; dns_block се логва). Gate без --cap-add (ip_unprivileged_port_start = 0). Пясъчникът с --log-driver=none печата stdout при attach. Нов volume наследява собствеността на /m. tmpfs с exec работи. Подробности: docs/spikes/S3.md.
+Защо: пробите минаха.
+Алтернативи: резервът от D-037 не е нужен.
+Източник: docs/spikes/S3.md.
