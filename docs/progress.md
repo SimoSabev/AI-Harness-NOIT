@@ -3,8 +3,8 @@
 | Фаза | Клон | Статус | Последен комит | Дата | Чака Симо |
 | --- | --- | --- | --- | --- | --- |
 | E0 (E0.1–E0.3б) | claude/new-session-42gq0n | ГОТОВО (live чака Симо) | виж клона | 20.10.2026 | proxy start с ключ: S0, S1, S2, `run --agent claude` (docs/reports/E0.3b.md) |
-| E1а лиценз и граници | phase/e1a-licenses | ГОТОВО | `git log -1 phase/e1a-licenses` | 20.10.2026 | избор apache/dual (Q-017); docs/spec файловете (Q-018) |
-| E1б ядро онлайн | phase/e1b-core-online | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E1а лиценз и граници | phase/e1a-licenses | ГОТОВО (docs/reports/E1a.md) | `git log -1 phase/e1a-licenses` | 20.10.2026 | избор apache/dual (Q-017); docs/spec файловете (Q-018) |
+| E1б ядро онлайн | phase/e1b-core-online | В ХОД | — | 20.10.2026 | Supabase облак (не блокира) |
 | E1в врата GitHub | phase/e1c-github-gate | НЕ Е ЗАПОЧНАТА | — | — | — |
 | E2 MCP сървър | phase/e2-mcp | НЕ Е ЗАПОЧНАТА | — | — | — |
 | E3а inbox | phase/e3a-inbox | НЕ Е ЗАПОЧНАТА | — | — | — |
