@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Live } from "../components/live";
+import { PushControl } from "../components/push";
 import { Shell } from "../components/shell";
 import { TaskCard } from "../components/task-card";
 import { pageTitle, summaryLine } from "../lib/inbox";
@@ -22,6 +23,7 @@ export default async function InboxPage() {
     <Shell current="inbox" waiting={ib.items.length}>
       <h1>Чака теб</h1>
       <p className="summary">{summaryLine(ib.summary)}</p>
+      <PushControl vapidPublicKey={process.env.VAPID_PUBLIC_KEY ?? null} />
       {ib.items.length === 0 ? (
         <p>Нищо не чака теб. Присъдите и вратата работят сами.</p>
       ) : (

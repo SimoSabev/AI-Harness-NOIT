@@ -120,5 +120,11 @@ form.login { display: grid; gap: 10px; max-width: 360px; }
 form.login label { display: grid; gap: 4px; font-weight: 600; }
 form.login input { min-height: 44px; font: inherit; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-@media (max-width: 700px) { .board { grid-template-columns: repeat(7, 85vw); } }
+.board-tabs { display: none; }
+@media (max-width: 700px) {
+  .board { grid-template-columns: repeat(7, 88vw); scroll-snap-type: x mandatory; }
+  .board > section { scroll-snap-align: start; }
+  .board-tabs { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 8px; }
+  .board-tabs a { flex: none; min-height: 44px; display: inline-flex; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; background: var(--surface); }
+}
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }

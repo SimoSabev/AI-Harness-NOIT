@@ -26,6 +26,12 @@ export default async function globalSetup(): Promise<void> {
   await c.query(readFileSync(path.join(repo, "supabase/shim/supabase-shim.sql"), "utf8"));
   for (const f of readdirSync(path.join(repo, "supabase/migrations")).filter((x) => x.endsWith(".sql")).sort()) await c.query(readFileSync(path.join(repo, "supabase/migrations", f), "utf8"));
   await seedDemo({ query: async (text: string, params?: unknown[]) => ({ rows: (await c.query(text, params)).rows }) }, { remoteUrl: "file:///tmp/demo-shop.git", password: () => PASSWORD, totpSecret: () => TOTP });
+  // E3г: a separate HELD card for the mobile test (the inbox test approves the seed's bugfix card)
+  await c.query(`insert into public.tasks (id, org_id, repo_id, type, agent, text, state, wait_reason, usd, minutes, effective_level, last_result)
+    select 't_seed_mobile', org_id, repo_id, type, agent, 'Мобилна карта: поправи закръглянето', 'HELD', 'approval', usd, minutes, effective_level, last_result from public.tasks where id = 't_seed_bugfix'`);
+  await c.query(`insert into public.changesets (org_id, task_id, base_sha, tree_sha, diff_hash, integrity, effective_level, requires_second_factor, approval_needed, head_sha, risk_class)
+    select org_id, 't_seed_mobile', base_sha, tree_sha, diff_hash, integrity, effective_level, false, true, repeat('6', 40), risk_class from public.changesets where task_id = 't_seed_bugfix'`);
+  await c.query(`insert into public.changeset_diffs (changeset_id, org_id, diff) select id, org_id, 'diff --git a/src/cart.ts b/src/cart.ts' from public.changesets where task_id = 't_seed_mobile'`);
   // E3б: the repo to onboard = demo-shop without .mandat.yml, as a local git remote (fakeGitHub on the Writer side)
   const src = mkdtempSync(path.join(os.tmpdir(), "mandat-e2e-shop-"));
   cpSync(path.join(repo, "fixtures/demo-shop"), src, { recursive: true, filter: (p) => !p.includes("node_modules") });

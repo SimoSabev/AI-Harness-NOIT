@@ -29,6 +29,12 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
       <h1>Дъска</h1>
       <BoardHint />
       {column && <p><Link href="/board">Всички колони</Link></p>}
+      {/* т. 8.4: on a narrow screen the columns are tabs (links + scroll-snap); on desktop this nav is hidden */}
+      <nav className="board-tabs" aria-label="Колони">
+        {b.columns.map((col) => (
+          <a key={col.n} href={`#col-${col.n}`}>{col.title} ({col.items.length})</a>
+        ))}
+      </nav>
       <div className="board">
         {b.columns.map((col) => (
           <section className="column" key={col.n} aria-labelledby={`col-${col.n}`}>

@@ -4,12 +4,12 @@ import { EMAIL, TOTP, login, totpNow } from "./fixtures";
 // Демо промпт т. 8.1: login → inbox (3 карти + обобщение) → карта → одобри (tap и TOTP).
 test.describe.configure({ mode: "serial" });
 
-test("inbox на seed-а: 3 карти, обобщение, брояч в title", async ({ page }) => {
+test("inbox на seed-а (+ мобилната карта): 4 карти, обобщение, брояч в title", async ({ page }) => {
   await login(page, EMAIL.viewer);
   await expect(page.getByRole("heading", { name: "Чака теб", level: 1 })).toBeVisible();
-  await expect(page.locator(".summary")).toHaveText("1 ПРОВЕРЕНО и слети сами · 1 ПРОВАЛ · 3 чакат теб");
-  await expect(page.locator("main .cards > li")).toHaveCount(3);
-  await expect(page).toHaveTitle("3 чакат · Мандат");
+  await expect(page.locator(".summary")).toHaveText("1 ПРОВЕРЕНО и слети сами · 1 ПРОВАЛ · 4 чакат теб");
+  await expect(page.locator("main .cards > li")).toHaveCount(4);
+  await expect(page).toHaveTitle("4 чакат · Мандат");
   await expect(page.locator(".card").first().locator(".verdict")).toContainText("ПРОВЕРЕНО");
   await expect(page.getByText("Тестът ‹test_id›").or(page.getByText("съществува на base и липсва"))).toBeVisible();
   await expect(page.getByText("A 20/20 · B 19/20 (20 → 19)")).toBeVisible();
@@ -31,7 +31,7 @@ test("approver: карта → одобри (едно докосване + по�
   await expect(card.getByText("Потвърди одобрението на тази промяна.")).toBeVisible();
   await card.getByRole("button", { name: "Одобри" }).last().click();
   await expect(page.locator("article", { hasText: "Поправи закръглянето на ДДС" })).toHaveCount(0);
-  await expect(page).toHaveTitle("2 чакат · Мандат");
+  await expect(page).toHaveTitle("3 чакат · Мандат");
 });
 
 test("approver: ниво 1 → сливане иска нов TOTP код; грешен код → съобщение; верен → одобрено", async ({ page }) => {

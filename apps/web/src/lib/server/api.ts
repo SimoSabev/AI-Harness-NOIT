@@ -3,6 +3,7 @@ import type { Result, SecondFactor } from "./actions";
 import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
 import type { RateLimiter } from "./guard";
 import { SwitchBody, listChannels, switchChannel } from "./channels";
+import { SubscribeBody, subscribePush } from "./push";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { board, inbox, membership, taskDetail } from "./queries";
 import type { Db } from "./sql";
@@ -140,4 +141,12 @@ export async function postSwitchChannel(req: Request, d: ApiDeps, taskId: string
   const b = SwitchBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await switchChannel(d.db, { uid: p.uid, taskId, body: b.data }), d);
+}
+
+export async function postPushSubscribe(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = SubscribeBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await subscribePush(d.db, { uid: p.uid, org: p.org, body: b.data }), d);
 }
