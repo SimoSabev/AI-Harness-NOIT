@@ -24,6 +24,11 @@
   "dependencies": {
     "@mandat/contract": "workspace:*",
     "@mandat/ledger": "workspace:*",
-    "commander": "15.0.0"
+    "commander": "15.0.0",
+    "@mandat/sandbox": "workspace:*",
+    "@mandat/worker": "workspace:*",
+    "@mandat/llm-proxy": "workspace:*",
+    "@mandat/export": "workspace:*",
+    "@mandat/redaction": "workspace:*"
   }
 }

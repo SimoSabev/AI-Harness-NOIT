@@ -153,6 +153,13 @@ describe("buildRunArgs", () => {
     expect(code(() => buildRunArgs({ ...gateSpec, capAdd: ["SYS_ADMIN" as "NET_BIND_SERVICE"] }, ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
   });
 
+  it("ipv6Sysctl false маха само --sysctl (D-152)", () => {
+    const a = buildRunArgs({ ...agentSpec, ipv6Sysctl: false }, ctx);
+    expect(a).not.toContain("--sysctl");
+    expect(a).toContain("--cap-drop=ALL");
+    expect(buildRunArgs(agentSpec, ctx)).toContain("--sysctl");
+  });
+
   it("SANDBOX_HARDENING е шаблонът", () => {
     expect(SANDBOX_HARDENING).toContain("--log-driver=none");
     expect(sandboxHardening(RUN, "test")).toContain("mandat.role=test");

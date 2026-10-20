@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "dist", "tsBuildInfoFile": "dist/.tsbuildinfo" },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"],
+  "references": [
+    { "path": "../../packages/agents" }, { "path": "../../packages/channels" }, { "path": "../../packages/contract" },
+    { "path": "../../packages/core" }, { "path": "../../packages/egress-gate" }, { "path": "../../packages/export" },
+    { "path": "../../packages/ledger" }, { "path": "../../packages/llm-proxy" }, { "path": "../../packages/redaction" },
+    { "path": "../../packages/sandbox" }
+  ]
+}

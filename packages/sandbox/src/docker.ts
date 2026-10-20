@@ -46,7 +46,7 @@ export function realDockerRunner(): DockerRunner {
           child.kill("SIGKILL");
         }, o.timeoutMs);
         let buf = "";
-        child.stdout.on("data", (c: Buffer) => {
+        child.stdout?.on("data", (c: Buffer) => {
           o.onStdout?.(c);
           if (o.onStdoutLine) {
             buf += c.toString("utf8");
@@ -57,7 +57,7 @@ export function realDockerRunner(): DockerRunner {
             }
           }
         });
-        child.stderr.on("data", (c: Buffer) => o.onStderr?.(c));
+        child.stderr?.on("data", (c: Buffer) => o.onStderr?.(c));
         child.on("error", (e) => {
           clearTimeout(timer);
           // Never include spawnargs in the error (D-043).
@@ -113,4 +113,13 @@ export function compareVersions(a: string, b: string): number {
     if (d !== 0) return d;
   }
   return 0;
+}
+
+let ipv6Cache: boolean | undefined;
+/** D-152: does the Docker host kernel have IPv6? (If not, the disable_ipv6 sysctl cannot be applied.) */
+export async function probeIpv6(r: DockerRunner, image: string): Promise<boolean> {
+  if (ipv6Cache !== undefined) return ipv6Cache;
+  const res = await dockerText(r, ["run", "--rm", "--network", "none", "--cap-drop=ALL", "--read-only", image, "test", "-e", "/proc/sys/net/ipv6/conf/all/disable_ipv6"], 60_000);
+  ipv6Cache = res.exitCode === 0;
+  return ipv6Cache;
 }

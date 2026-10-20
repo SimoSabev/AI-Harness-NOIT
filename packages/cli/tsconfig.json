@@ -17,6 +17,21 @@
     },
     {
       "path": "../ledger"
+    },
+    {
+      "path": "../sandbox"
+    },
+    {
+      "path": "../llm-proxy"
+    },
+    {
+      "path": "../export"
+    },
+    {
+      "path": "../redaction"
+    },
+    {
+      "path": "../../apps/worker"
     }
   ]
 }

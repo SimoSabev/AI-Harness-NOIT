@@ -28,6 +28,8 @@ export interface RunSpec {
   capAdd?: "NET_BIND_SERVICE"[];
   /** D-150: optional ro CA bundle for gate containers in TLS-intercepting environments. */
   caFile?: string;
+  /** D-152: false only when the Docker host kernel has no IPv6 (then there is nothing to disable). Default true. */
+  ipv6Sysctl?: boolean;
 }
 
 export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY"] as const;
@@ -76,9 +78,14 @@ const GATE_HARDENING: readonly string[] = (() => {
   return out;
 })();
 
-export function sandboxHardening(runId: string, role: RunRole): string[] {
+export function sandboxHardening(runId: string, role: RunRole, o: { ipv6Sysctl?: boolean } = {}): string[] {
   const tpl = role === "gate" ? GATE_HARDENING : SANDBOX_HARDENING;
-  return tpl.map((f) => f.replace("<run_id>", runId).replace("<role>", role));
+  const out = tpl.map((f) => f.replace("<run_id>", runId).replace("<role>", role));
+  if (o.ipv6Sysctl === false) {
+    const i = out.indexOf("--sysctl");
+    if (i >= 0) out.splice(i, 2);
+  }
+  return out;
 }
 
 const forbid = (msg: string, details?: Record<string, unknown>): never => {
@@ -87,7 +94,7 @@ const forbid = (msg: string, details?: Record<string, unknown>): never => {
 
 const SPEC_KEYS = new Set([
   "role", "runId", "image", "network", "user", "mounts", "envNames", "publicEnv",
-  "workdir", "name", "interactive", "init", "detach", "capAdd", "caFile",
+  "workdir", "name", "interactive", "init", "detach", "capAdd", "caFile", "ipv6Sysctl",
 ]);
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SECRET_LOOKING = /mdt_|sk-ant-/;
@@ -166,7 +173,7 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(spec.name)) forbid("invalid container name");
     args.push("--name", spec.name);
   }
-  args.push(...sandboxHardening(spec.runId, spec.role));
+  args.push(...sandboxHardening(spec.runId, spec.role, spec.ipv6Sysctl === undefined ? {} : { ipv6Sysctl: spec.ipv6Sysctl }));
   for (const c of spec.capAdd ?? []) args.push(`--cap-add=${c}`);
   args.push("--user", spec.user, "--network", spec.network);
   for (const m of spec.mounts) {

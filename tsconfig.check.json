@@ -7,6 +7,9 @@
     "declarationMap": false,
     "rootDir": ".",
     "paths": {
+      "@mandat/worker": [
+        "./apps/worker/src/index.ts"
+      ],
       "@mandat/*": [
         "./packages/*/src/index.ts"
       ]

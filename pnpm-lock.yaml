@@ -197,6 +197,39 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.4(@types/node@24.19.2))
 
+  apps/worker:
+    dependencies:
+      '@mandat/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
+      '@mandat/channels':
+        specifier: workspace:*
+        version: link:../../packages/channels
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
+      '@mandat/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@mandat/egress-gate':
+        specifier: workspace:*
+        version: link:../../packages/egress-gate
+      '@mandat/export':
+        specifier: workspace:*
+        version: link:../../packages/export
+      '@mandat/ledger':
+        specifier: workspace:*
+        version: link:../../packages/ledger
+      '@mandat/llm-proxy':
+        specifier: workspace:*
+        version: link:../../packages/llm-proxy
+      '@mandat/redaction':
+        specifier: workspace:*
+        version: link:../../packages/redaction
+      '@mandat/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
+
   packages/agents:
     dependencies:
       '@mandat/contract':
@@ -217,9 +250,24 @@ importers:
       '@mandat/contract':
         specifier: workspace:*
         version: link:../contract
+      '@mandat/export':
+        specifier: workspace:*
+        version: link:../export
       '@mandat/ledger':
         specifier: workspace:*
         version: link:../ledger
+      '@mandat/llm-proxy':
+        specifier: workspace:*
+        version: link:../llm-proxy
+      '@mandat/redaction':
+        specifier: workspace:*
+        version: link:../redaction
+      '@mandat/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
+      '@mandat/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
       commander:
         specifier: 15.0.0
         version: 15.0.0
