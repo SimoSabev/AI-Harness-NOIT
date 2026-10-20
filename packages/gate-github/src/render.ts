@@ -45,7 +45,8 @@ export function renderCheck(v: Verdict, o: { effectiveLevel: number; levelReason
 
 /** One line for logs/CLI: "Мандат verdict: failure — FAILED · D7.ci pass · D2.inventory fail (20 → 19)". */
 export function checkLine(v: Verdict): string {
-  const show = v.evidence.filter((e) => e.detector === "D7.ci" || e.status === "fail" || e.status === "unknown");
+  // CI first: the scene is „CI зелено → Мандат FAILED“ (т. 6 „Готово, когато“)
+  const show = [...v.evidence.filter((e) => e.detector === "D7.ci"), ...v.evidence.filter((e) => e.detector !== "D7.ci" && (e.status === "fail" || e.status === "unknown"))];
   const parts = show.map((e) => {
     const d = e.data as { before?: number; after?: number };
     const counts = e.detector === "D2.inventory" && typeof d.before === "number" && typeof d.after === "number" ? ` (${d.before} → ${d.after})` : "";

@@ -42,7 +42,7 @@ describe("check-render (т. 6.2, D-209)", () => {
     expect(renderCheck(v, { effectiveLevel: 0, mode: "full", ledgerSeq: 1, appUrl: "https://app.invalid/", taskId: "t_a" }).details_url).toBe("https://app.invalid/tasks/t_a");
   });
   it("checkLine за `mandat demo external-pr --fake`", () => {
-    const v = verdict("FAILED", [ev("D7.ci", "pass"), ev("D2.inventory", "fail", "D2:missing_test:m", { before: 20, after: 19 }), ev("D1.base_tests", "pass")], ["D2:missing_test:m"]);
+    const v = verdict("FAILED", [ev("D1.base_tests", "pass"), ev("D2.inventory", "fail", "D2:missing_test:m", { before: 20, after: 19 }), ev("D7.ci", "pass")], ["D2:missing_test:m"]);
     expect(checkLine(v)).toBe("Мандат verdict: failure — FAILED · D7.ci pass · D2.inventory fail (20 → 19)");
   });
 });
