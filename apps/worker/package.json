@@ -29,9 +29,11 @@
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/redaction": "workspace:*",
     "@mandat/sandbox": "workspace:*",
-    "@mandat/verify": "workspace:*"
+    "@mandat/verify": "workspace:*",
+    "pg": "8.23.1"
   },
   "devDependencies": {
+    "@types/pg": "8.23.1",
     "yaml": "2.9.1"
   }
 }
