@@ -1,7 +1,8 @@
 export { matchPolicy } from "./policy.js";
 export type { GateDecision } from "./policy.js";
-export { npmAllowlistFromLockfile } from "./npm-allowlist.js";
-export type { NpmAllowlistResult } from "./npm-allowlist.js";
+// D-155: the lockfile allowlist lives in @mandat/contract (pure; also used by core D10).
+export { npmAllowlistFromLockfile } from "@mandat/contract";
+export type { NpmAllowlistResult } from "@mandat/contract";
 export { buildDnsResponse, decideDns, parseDnsQuery } from "./dns.js";
 export type { DnsAnswer, DnsQuestion } from "./dns.js";
 export { startGate } from "./server.js";

@@ -1,4 +1,4 @@
-import type { GateRoute } from "@mandat/contract";
+import type { GateRoute } from "./gate.js";
 
 export type NpmAllowlistResult =
   | { ok: true; routes: GateRoute[]; packages: number }
