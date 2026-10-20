@@ -39,6 +39,32 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
 
 ENV DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1
 
+# E3в (демо промпт т. 2.4, 8.3; D-288): @openai/codex 0.160.1 (Apache-2.0) as a separate process, like claude. Both
+# tarballs are pinned by integrity; the platform tarball (npm alias @openai/codex-linux-<arch>) is unpacked where
+# bin/codex.js looks for it, so no install script and no registry lookup by name happens.
+ARG CODEX_VERSION=0.160.1
+ARG CODEX_INTEGRITY=sha512-f1yrJhwgimKQI1kYQlxdPJcFwkNZxZrbz7Hf89EAcnLqkQ7TiESzr2FgSZn13Ga5RuHjlVUfurzwq10wk9zw2g==
+ARG CODEX_NATIVE_INTEGRITY_amd64=sha512-sIDhqV+bsZKKVaVFVY5iB+pAzyOz2XRm3H1KXCsSJwGj5p98qnrT0Fweo1Hfe7WnyTp8mfBNdbVzUeO+mHYugA==
+ARG CODEX_NATIVE_INTEGRITY_arm64=sha512-JLyjBlmjPvwTaicHemw+y5xQSz3Uja2r7F/xkvS8gFufTA2g132Ak+0fo35xnJ/k2uc9fTtjm0LrsEGI78L6Ng==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) ARCH=x64; NATIVE="$CODEX_NATIVE_INTEGRITY_amd64" ;; \
+      arm64) ARCH=arm64; NATIVE="$CODEX_NATIVE_INTEGRITY_arm64" ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    mkdir /tmp/cx && cd /tmp/cx; \
+    npm pack --silent "@openai/codex@${CODEX_VERSION}" "@openai/codex@${CODEX_VERSION}-linux-${ARCH}"; \
+    check() { got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "$1")"; \
+              [ "$got" = "$2" ] || { echo "integrity mismatch for $1: $got" >&2; exit 1; }; }; \
+    check "openai-codex-${CODEX_VERSION}.tgz" "$CODEX_INTEGRITY"; \
+    check "openai-codex-${CODEX_VERSION}-linux-${ARCH}.tgz" "$NATIVE"; \
+    npm install -g --offline --omit=optional --ignore-scripts --no-audit --no-fund "./openai-codex-${CODEX_VERSION}.tgz"; \
+    G="$(npm root -g)/@openai/codex/node_modules/@openai/codex-linux-${ARCH}"; mkdir -p "$G"; \
+    tar -xzf "openai-codex-${CODEX_VERSION}-linux-${ARCH}.tgz" --strip-components=1 -C "$G"; \
+    cd / && rm -rf /tmp/cx /root/.npm; \
+    codex --version | grep -F "${CODEX_VERSION}"
+
 COPY packages/agents/fakes/ /opt/mandat/fakes/
 RUN chmod 0555 /opt/mandat/fakes && chmod 0444 /opt/mandat/fakes/* \
  && mkdir -p /m/work /m/out /m/in /home/agent \

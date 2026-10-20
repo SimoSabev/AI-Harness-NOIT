@@ -19,7 +19,7 @@ export interface SandboxRun {
   /** run network name or "none"; with a run network the tree's resolv.conf/hosts are mounted (D-011, D-081). */
   network: string;
   tree?: Tree;
-  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string> };
+  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" };
   user?: "1000:1000" | "0:0";
   cmd: string[];
   name?: string;
@@ -39,7 +39,7 @@ export function runSandbox(ctx: SandboxCtx, o: SandboxRun): Promise<DockerRunRes
     mounts.push({ kind: "bind", source: p.resolv, target: "/etc/resolv.conf", readonly: true });
     mounts.push({ kind: "bind", source: p.hosts, target: "/etc/hosts", readonly: true });
   }
-  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {});
+  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(o.env.tokenName ? { tokenName: o.env.tokenName } : {}) });
   const secrets = o.env.secrets ?? {};
   const args = buildRunArgs(
     {

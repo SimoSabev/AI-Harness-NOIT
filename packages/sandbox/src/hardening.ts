@@ -32,7 +32,7 @@ export interface RunSpec {
   ipv6Sysctl?: boolean;
 }
 
-export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY"] as const;
+export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "OPENAI_API_KEY"] as const;
 const SECRETS: ReadonlySet<string> = new Set(SECRET_ENV_NAMES);
 
 /** 8.2 template: every sandbox container (seed/install/agent/export/test) gets exactly these flags. */
@@ -242,7 +242,7 @@ const BASE_PUBLIC = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/home/agent",
 /** 8.2: exact env sets per phase. names = secrets only (→ RunSpec.envNames); publicValues → RunSpec.publicEnv. */
 export function envForPhase(
   phase: "install" | "agent" | "test",
-  o: { tokenName?: "ANTHROPIC_API_KEY"; testsEnv?: Record<string, string> } = {},
+  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY"; testsEnv?: Record<string, string> } = {},
 ): { names: string[]; publicValues: Record<string, string> } {
   if (phase === "install") {
     return {
@@ -256,6 +256,13 @@ export function envForPhase(
         npm_config_audit: "false",
         npm_config_fund: "false",
       },
+    };
+  }
+  if (phase === "agent" && o.tokenName === "OPENAI_API_KEY") {
+    // E3в: Codex. The token is the per-task mdt_ (И1); the base URL is in argv (-c model_providers.mandat.base_url).
+    return {
+      names: ["OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY"],
+      publicValues: { ...BASE_PUBLIC, CODEX_HOME: "/m/codex-home", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent") {

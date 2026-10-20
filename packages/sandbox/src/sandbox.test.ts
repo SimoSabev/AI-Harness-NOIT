@@ -213,6 +213,12 @@ describe("env", () => {
     const t = envForPhase("test", { testsEnv: { CI: "true", FOO: "1" } });
     expect(t.publicValues).toMatchObject({ MANDAT_REPORT: "/m/out/report.json", FOO: "1" });
     expect(code(() => envForPhase("test", { testsEnv: { ANTHROPIC_API_KEY: "x" } }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    // E3в: Codex gets OPENAI_API_KEY (the mdt_ token) and CODEX_HOME; no Anthropic variables
+    const cx = envForPhase("agent", { tokenName: "OPENAI_API_KEY" });
+    expect(cx.names).toEqual(["OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY"]);
+    expect(cx.publicValues.CODEX_HOME).toBe("/m/codex-home");
+    expect(Object.keys(cx.publicValues).some((k) => k.startsWith("ANTHROPIC_"))).toBe(false);
+    expect(code(() => envForPhase("test", { testsEnv: { OPENAI_API_KEY: "x" } }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
   });
 });
 
