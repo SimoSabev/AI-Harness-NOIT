@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@mandat/contract": "workspace:*",
-    "@mandat/redaction": "workspace:*"
+    "@mandat/redaction": "workspace:*",
+    "zod": "4.6.7"
   }
 }
