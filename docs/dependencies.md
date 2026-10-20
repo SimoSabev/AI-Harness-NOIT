@@ -71,3 +71,4 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | zod, pg | 4.6.7, 8.23.1 | (вж. горе) | MIT | web (runtime) | валидиране; private.approve_changeset |
 | @types/react, @types/react-dom | 19.3.0 | 09.09.2026 | MIT | web (dev) | типове |
 | caniuse-lite (транзитивно) | 1.0.30001816 | — | CC-BY-4.0 | web (runtime, build) | данни на browserslist; поименно изключение D-284 |
+| yaml (onboard) | 2.9.1 | (вж. contract) | ISC | onboard (runtime) | четене на .github/workflows и предложението (същата версия като в contract) |
