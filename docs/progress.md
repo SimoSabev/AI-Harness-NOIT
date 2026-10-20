@@ -8,7 +8,7 @@
 | E1в врата GitHub | phase/e1c-github-gate | ГОТОВО (live чака Симо) (docs/reports/E1c.md) | `git log -1 phase/e1c-github-gate` | 20.10.2026 | GitHub App-ове, демо репо, live L1–L3 (docs/setup/github-apps.md, live-tests.md) |
 | E2 MCP сървър | phase/e2-mcp | ГОТОВО (live чака Симо) (docs/reports/E2.md) | `git log -1 phase/e2-mcp` | 20.10.2026 | потребител `mandat` + verifyd (docs/setup/verifyd.md); вход в Claude Code/Codex (docs/setup/external-agents.md) |
 | E3а inbox | phase/e3a-inbox | ГОТОВО (docs/reports/E3a.md) | `git log -1 phase/e3a-inbox` | 20.10.2026 | Vercel (docs/setup/vercel.md); Q-024, Q-025 |
-| E3б авто-харнес | phase/e3b-autoharness | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E3б авто-харнес | phase/e3b-autoharness | ГОТОВО (docs/reports/E3b.md) | `git log -1 phase/e3b-autoharness` | 20.10.2026 | Q-026 (не блокира) |
 | E3в канали | phase/e3c-channels | НЕ Е ЗАПОЧНАТА | — | — | — |
 | E3г PWA | phase/e3d-pwa | НЕ Е ЗАПОЧНАТА | — | — | — |
 | E4 демо | phase/e4-demo | НЕ Е ЗАПОЧНАТА | — | — | — |
@@ -16,7 +16,7 @@
 Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
 ## Текуща задача
-E3б (т. 8.2): клон phase/e3b-autoharness; docs/tasks/e3b.md; авто-харнес Ф5 минимум.
+E3в (т. 8.3): клон phase/e3c-channels; docs/tasks/e3c.md; канали, преливане, адаптер Codex.
 
 ## Часове: план/реално по фаза
 | Фаза | План [О] | Реално |
@@ -26,5 +26,6 @@ E3б (т. 8.2): клон phase/e3b-autoharness; docs/tasks/e3b.md; авто-ха
 | E1в | 25–34 | ≈ 3 |
 | E2 | 17–23 | ≈ 2,5 |
 | E3а | 34–44 | ≈ 4 |
+| E3б | 20–27 | ≈ 3 |
 
 ## Разход API: $0

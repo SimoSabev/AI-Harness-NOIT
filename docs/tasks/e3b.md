@@ -1,0 +1,14 @@
+# E3б — Авто-харнес Ф5 минимум (docs/spec/НОИТ_Мандат_v4_демо_промпт_кодер.md т. 8.2)
+- [x] packages/onboard (GPL): scanRepo (lockfile, scripts, рамка, workflows + права, Docker, монорепо, опасни папки, имена на тайни, инструкции, folder_tree 2)
+- [x] command allowlist (npx/pnpm/npm/yarn/bun/node, node_modules/.bin; забранени curl, wget, sh -c, |, ;, &&, $(, >) — command-allowlist.test.ts
+- [x] невидими Unicode (Cf/Cc, bidi, Tags) + curl|wget|sh -c|base64 -d — invisible-unicode (invisible.test.ts)
+- [x] propose: .mandat.yml (zod) + field_sources; risk_cap 1 при червен CI или 0 теста; annotate `# source:`
+- [x] 6 fixtures (npm/pnpm × vitest/jest × turbo) → snapshot
+- [x] AGENTS.md ≤ 60 реда + футър; CLAUDE.md = @AGENTS.md; managed block байт по байт; без права/hooks/MCP — agents-md.test.ts
+- [x] миграция 0006 + private.approve_harness (owner + TOTP ≤ 2 мин, блок при невидими знаци) — harness.test.sql 7/7
+- [x] worker: harness_scan (чист клонинг, hooks off) → предложение + ledger config_change/proposed; harness_pr → чернова на PR (CAS), checks harness/approval success, verdict skipped
+- [x] web: /harness (поле | източник, YAML), Свържи, Одобри + TOTP — harness-approve.test.ts, e2e harness.spec.ts
+- [x] `mandat init --repo` → .mandat.yml.proposed с колона source — init.test.ts
+- [x] drift: твърди → BLOCKED harness_stale; меки → маркер — daemon.test.ts
+- [x] fake:touch-config → UNKNOWN (Docker) + d3-generated-hash.test.ts
+- [x] Готово, когато: init → proposed със source · UI Свържи → Одобри + TOTP → PR чернова с AGENTS.md и футъра · touch-config → UNKNOWN
