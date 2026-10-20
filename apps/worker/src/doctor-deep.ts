@@ -8,8 +8,7 @@ import type { R14Probe } from "@mandat/core";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { DNS_MODE, dockerText, ensureUpstreamNetwork, names, probeIpv6 } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { readGateLog, startRunGate } from "./gate.js";
-import { runSandbox, safeReadVolume } from "./sandbox-exec.js";
+import { readGateLog, runSandbox, safeReadVolume, startRunGate } from "@mandat/verify";
 
 export interface DoctorDeepResult {
   blocked: number;

@@ -8,11 +8,11 @@ import type { Channel } from "@mandat/channels";
 import { verifyLedger } from "@mandat/ledger";
 import type { DockerRunner } from "@mandat/sandbox";
 import { buildShopFixture } from "./fixtures.js";
-import { startRunGate } from "./gate.js";
-import type { RunGate } from "./gate.js";
+import { startRunGate } from "@mandat/verify";
+import type { RunGate } from "@mandat/verify";
 import { runTask } from "./run.js";
 import type { RunInternals, RunTaskInput } from "./run.js";
-import type { TestProcedureInput, TestProcedureResult } from "./phases/test.js";
+import type { TestProcedureInput, TestProcedureResult } from "@mandat/verify";
 import { FakeDocker, fixtureReport, repoRoot, shopCopy } from "./fake-docker.test-helper.js";
 
 const M = "tests/cart.spec.ts > cart > applies 10% over 50";

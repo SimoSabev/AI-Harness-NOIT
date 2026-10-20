@@ -1,0 +1,34 @@
+{
+  "name": "@mandat/verify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "verifyChange and mandat-verify: the single verification contract (Apache-2.0)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "bin": {
+    "mandat-verify": "dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/verify/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/core": "workspace:*",
+    "@mandat/export": "workspace:*",
+    "@mandat/ledger": "workspace:*",
+    "@mandat/redaction": "workspace:*",
+    "@mandat/sandbox": "workspace:*"
+  }
+}

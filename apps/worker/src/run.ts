@@ -19,15 +19,8 @@ import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
 import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { readGateLog, startRunGate } from "./gate.js";
-import type { RunGate } from "./gate.js";
-import { hostConfig, infraUserFor } from "./host.js";
-import { acquireRunLock } from "./lock.js";
-import { runTestProcedure } from "./phases/test.js";
-import type { TestProcedureResult } from "./phases/test.js";
-import { RunWriter } from "./run-dir.js";
-import { runSandbox, safeReadVolume } from "./sandbox-exec.js";
-import { buildVerifyTree, snapshot } from "./trees.js";
+import { RunWriter, acquireRunLock, buildVerifyTree, hostConfig, infraUserFor, readGateLog, runSandbox, runTestProcedure, safeReadVolume, snapshot, startRunGate } from "@mandat/verify";
+import type { RunGate, TestProcedureResult } from "@mandat/verify";
 
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;

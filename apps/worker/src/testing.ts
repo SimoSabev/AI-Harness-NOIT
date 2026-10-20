@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { ulid } from "@mandat/contract";
 import { dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { hostConfig, infraUserFor } from "./host.js";
+import { hostConfig, infraUserFor } from "@mandat/verify";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 

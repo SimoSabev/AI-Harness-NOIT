@@ -31,7 +31,7 @@ describe("license groups", () => {
   it("всеки workspace пакет е в точно една група", () => {
     expect(CORE_PACKAGES.filter((n) => HARNESS_PACKAGES.includes(n))).toEqual([]);
     expect(pkgs.filter((p) => groupOf(p.name) === null).map((p) => p.name)).toEqual([]);
-    expect(core.map((p) => p.name).sort()).toEqual(["@mandat/contract", "@mandat/core", "@mandat/export", "@mandat/ledger", "@mandat/redaction", "@mandat/sandbox"]);
+    expect(core.map((p) => p.name).sort()).toEqual(["@mandat/contract", "@mandat/core", "@mandat/export", "@mandat/ledger", "@mandat/redaction", "@mandat/sandbox", "@mandat/verify"]);
   });
 
   it("mandatImports разпознава import, export from и import()", () => {

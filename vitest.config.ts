@@ -25,6 +25,7 @@ export const config = defineConfig({
         "packages/redaction/src/**": strict,
         "packages/core/src/**": strict,
         "packages/export/src/**": strict,
+        "packages/verify/src/**": loose,
         "packages/cli/src/**": loose,
         "packages/sandbox/src/**": loose,
         "packages/egress-gate/src/**": loose,

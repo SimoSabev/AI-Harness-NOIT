@@ -28,7 +28,8 @@
     "@mandat/ledger": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/redaction": "workspace:*",
-    "@mandat/sandbox": "workspace:*"
+    "@mandat/sandbox": "workspace:*",
+    "@mandat/verify": "workspace:*"
   },
   "devDependencies": {
     "yaml": "2.9.1"

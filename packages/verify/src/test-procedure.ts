@@ -5,9 +5,9 @@ import type { ParsedReport } from "@mandat/contract";
 import { packTree } from "@mandat/export";
 import { dockerText, names } from "@mandat/sandbox";
 import type { DockerRunner, Tree } from "@mandat/sandbox";
-import { startRunGate } from "../gate.js";
-import type { RunGate } from "../gate.js";
-import { runSandbox, safeReadVolume } from "../sandbox-exec.js";
+import { startRunGate } from "./gate.js";
+import type { RunGate } from "./gate.js";
+import { runSandbox, safeReadVolume } from "./sandbox-exec.js";
 
 export interface TestProcedureInput {
   docker: DockerRunner;
