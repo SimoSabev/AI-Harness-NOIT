@@ -30,4 +30,15 @@ describe("mandat init (т. 8.2)", () => {
     expect(JSON.parse(j.stdout)).toMatchObject({ risk_cap: 3, needs_human: [], blocked: [] });
     expect((await cli(["init", "--repo", path.join(d, "nope")])).code).toBe(2);
   });
+  it("demo export-repo (т. 9.1): git хранилище без remote; непразна папка → 2", async () => {
+    const out = path.join(mkdtempSync(path.join(os.tmpdir(), "mandat-exp-")), "shop");
+    const r = await cli(["--home", mkdtempSync(path.join(os.tmpdir(), "mandat-exp-home-")), "demo", "export-repo", "--out", out]);
+    expect(r.code).toBe(0);
+    expect(existsSync(path.join(out, ".github/workflows/ci.yml"))).toBe(true);
+    expect(existsSync(path.join(out, ".mandat.yml"))).toBe(true);
+    const { execFileSync } = await import("node:child_process");
+    expect(execFileSync("git", ["remote"], { cwd: out, encoding: "utf8" }).trim()).toBe("");
+    expect(execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: out, encoding: "utf8" }).trim()).toBe("main");
+    expect((await cli(["demo", "export-repo", "--out", out])).code).toBe(2);
+  });
 });

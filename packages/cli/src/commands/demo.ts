@@ -1,10 +1,11 @@
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 import type { SqlClient } from "@mandat/ledger";
 import { buildFixture, demoSpillFake, seedDemo, seedMinimal, seedScene1, spillLine } from "@mandat/worker";
 import os from "node:os";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync } from "node:fs";
 import { OBSERVER_APP_ID, WRITER_APP_ID, checkLine, deleteM, demoRepoWithPull, editFile, externalPrVerdict, fakeGitHub } from "@mandat/gate-github";
 import { dockerText, ensureUpstreamNetwork, imageTags, probeIpv6 } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
@@ -124,4 +125,18 @@ export async function demoSpill(io: Io, o: { home: string; fake: boolean; json: 
     io.stdout("демо: лимитът е симулиран (stub-upstream --429)\n");
   }
   return s.result === "VERIFIED" ? 0 : 1;
+}
+
+/** т. 9.1: `mandat demo export-repo --out <dir>` — a ready git repository for GITHUB_DEMO_REPO (Simo pushes it himself). */
+export function demoExportRepo(io: Io, o: { home: string; out: string; json: boolean }): number {
+  const out = path.resolve(o.out);
+  if (existsSync(out) && readdirSync(out).length > 0) throw new MandatError("E_USAGE", `--out is not empty: ${o.out}`);
+  const fx = buildFixture({ repoRoot, mandatHome: o.home, force: false, name: "demo-shop" });
+  const env = { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: o.home, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+  execFileSync("git", ["clone", "-q", "--no-hardlinks", "--", fx.mirror, out], { env });
+  // no remote of ours stays behind: Simo adds his own (AGENTS.md rule 3: the coder never pushes or adds remotes)
+  execFileSync("git", ["remote", "remove", "origin"], { cwd: out, env });
+  if (o.json) printJson(io, { out, base_commit: fx.sha, exit: 0 });
+  else io.stdout(`${out} · main @ ${fx.sha.slice(0, 12)}\nСимо: git -C ${out} remote add origin git@github.com:<GITHUB_DEMO_REPO>.git && git -C ${out} push -u origin main\n`);
+  return 0;
 }
