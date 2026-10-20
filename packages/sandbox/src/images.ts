@@ -60,6 +60,8 @@ export async function imageTags(repoRoot: string): Promise<{ sandbox: string; ga
     path.join(repoRoot, "docker", "sandbox", "Dockerfile"),
     ...root,
     ...walk(path.join(repoRoot, "packages", "agents", "fakes")),
+    // E4: the replay recordings and patches are copied into the image (not the *.webm videos)
+    ...walk(path.join(repoRoot, "demo", "recordings")).filter((f) => /\.(jsonl|patch)$/.test(f)),
   ].filter((f) => existsSync(f)));
   return {
     sandbox: `mandat-sandbox:cc${CLAUDE_CODE_VERSION}-${sandbox}`,

@@ -66,7 +66,9 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     codex --version | grep -F "${CODEX_VERSION}"
 
 COPY packages/agents/fakes/ /opt/mandat/fakes/
-RUN chmod 0555 /opt/mandat/fakes && chmod 0444 /opt/mandat/fakes/* \
+# E4 (т. 9.0): recorded transcripts + fixed patches for the deterministic replay agents
+COPY demo/recordings/*.jsonl demo/recordings/*.patch /opt/mandat/replay/
+RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* \
  && mkdir -p /m/work /m/out /m/in /home/agent \
  && chown 1000:1000 /m /m/work /m/out && chown root:root /m/in && chmod 0755 /m/in
 
