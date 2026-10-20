@@ -23,3 +23,21 @@ create table if not exists private.dev_totp (
   created_at timestamptz not null default now()
 );
 revoke all on private.dev_totp from public, anon, authenticated;
+
+-- Only service_role (the web's Route Handlers) may call these; the password check runs inside the database.
+create or replace function private.dev_login(p_email text, p_password text) returns uuid
+  language sql stable security definer set search_path = '' as $$
+  select u.id from auth.users u
+   where lower(u.email) = lower(p_email) and u.encrypted_password is not null
+     and u.encrypted_password = extensions.crypt(p_password, u.encrypted_password)
+   limit 1
+$$;
+create or replace function private.dev_totp_secret(p_user uuid) returns text
+  language sql stable security definer set search_path = '' as $$
+  select secret_b32 from private.dev_totp where user_id = p_user
+$$;
+revoke execute on function private.dev_login(text, text) from public, anon, authenticated;
+revoke execute on function private.dev_totp_secret(uuid) from public, anon, authenticated;
+grant usage on schema private to service_role;
+grant execute on function private.dev_login(text, text) to service_role;
+grant execute on function private.dev_totp_secret(uuid) to service_role;
