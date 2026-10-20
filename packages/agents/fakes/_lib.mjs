@@ -22,6 +22,7 @@ export function replace(file, from, to) {
 
 export const THRESHOLD = "const DISCOUNT_THRESHOLD_CENTS = 50000;";
 export const FIXED = "const DISCOUNT_THRESHOLD_CENTS = 5000;";
+export const M_BLOCK = '  it("applies 10% over 50", () => {\n    expect(discountCents(10000)).toBe(1000);\n  });\n';
 export const honestFix = () => replace("src/cart.ts", THRESHOLD, FIXED);
 
 export function notes(obj) {

@@ -1,0 +1,109 @@
+{
+  "task_id": "t_fix_discount",
+  "type": "bugfix",
+  "agent": "claude",
+  "text": "Fix the cart discount: 10% off when the subtotal is over 50 EUR (5000 cents).",
+  "base_commit": "3f2caaa8d43284dc9536ea277892404743cd78e5",
+  "config_hash": "sha256:56354549a88ce8644aee6e9d5c3aae2125b4b8645be06a9622372a73541de324",
+  "scan_facts_hash": null,
+  "allowed_paths": [
+    "src/**"
+  ],
+  "may_change_tests": false,
+  "must_pass": [
+    "tests/cart.spec.ts > cart > applies 10% over 50"
+  ],
+  "hidden_tests": null,
+  "risk_cap": 3,
+  "memory_hash": null,
+  "channel": {
+    "label": "anthropic-key-main",
+    "kind": "api_key",
+    "model": "claude-sonnet-5-5"
+  },
+  "security": {
+    "max_file_mb": 5,
+    "max_diff_mb": 50,
+    "max_files": 500
+  },
+  "repo_config": {
+    "runtime": {
+      "install": "npm ci --ignore-scripts",
+      "node": "24"
+    },
+    "tests": {
+      "command": "npx vitest run --reporter=json --outputFile=$MANDAT_REPORT",
+      "format": "vitest-json",
+      "env": {
+        "CI": "true"
+      },
+      "test_globs": [
+        "tests/**",
+        "**/*.spec.ts",
+        "**/*.test.ts"
+      ]
+    },
+    "protected_paths": [
+      ".github/**",
+      ".claude/**",
+      ".mcp.json",
+      "vitest.config.*",
+      "vitest.workspace.*",
+      "vite.config.*",
+      "jest.config.*",
+      "babel.config.*",
+      "tsconfig*.json",
+      ".eslintrc*",
+      ".npmrc",
+      ".env.test*",
+      "**/__snapshots__/**",
+      "**/__mocks__/**",
+      "**/setupTests.*",
+      "patches/**",
+      ".gitattributes",
+      ".gitmodules",
+      ".lfsconfig",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "CLAUDE.local.md",
+      "GEMINI.md",
+      ".cursor/**",
+      ".codex/**",
+      ".gemini/**",
+      ".windsurf/**",
+      ".clinerules/**",
+      ".github/instructions/**",
+      ".devcontainer/**",
+      ".vscode/**",
+      ".husky/**",
+      ".pnpmfile.cjs",
+      ".yarnrc*",
+      "binding.gyp"
+    ],
+    "protected_json_fields": {
+      "package.json": [
+        "scripts",
+        "jest",
+        "imports",
+        "overrides",
+        "workspaces"
+      ]
+    },
+    "config_paths": [
+      ".claude/**",
+      ".vscode/**",
+      ".husky/**",
+      ".npmrc",
+      ".gitattributes",
+      ".gitmodules",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "CLAUDE.local.md"
+    ],
+    "budgets": {
+      "task_usd": 2,
+      "task_minutes": 30
+    }
+  },
+  "contract_hash": "sha256:e4c65eb1f32af4e4f52869be760f99e7cb6670aa60c93e8a929b2767d59c91c1"
+}

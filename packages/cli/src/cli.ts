@@ -3,6 +3,7 @@ import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog } from "./commands/verify-log.js";
 import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
+import { fixturesBuild } from "./commands/fixtures.js";
 import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
@@ -72,6 +73,15 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--force", "docker build --no-cache even if the tag exists")
     .action(async (o: { force?: boolean }) => {
       code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env) });
+    });
+
+  program
+    .command("fixtures")
+    .description("build the deterministic demo repository mirror")
+    .command("build")
+    .option("--force", "recreate the mirror if its base_commit differs")
+    .action((o: { force?: boolean }) => {
+      code = fixturesBuild(io, { mandatHome: home(), force: Boolean(o.force) });
     });
 
   const proxy = program.command("proxy").description("the LLM proxy (the only holder of ANTHROPIC_API_KEY)");
