@@ -10,7 +10,7 @@ import type { RedteamCtx, SubResult } from "./common.js";
 export async function r14(ctx: RedteamCtx): Promise<SubResult[]> {
   const r = await run(ctx, "r14-netprobe");
   const dir = r.runDir ?? "/nonexistent";
-  let notes = "";
+  let notes: string;
   try {
     notes = readFileSync(path.join(dir, "notes.txt"), "utf8");
   } catch {
