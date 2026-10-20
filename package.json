@@ -29,7 +29,8 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "test:db": "node scripts/test-db.mjs",
-    "test:db:supabase": "supabase test db"
+    "test:db:supabase": "supabase test db",
+    "test:live": "vitest run --config vitest.live.config.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

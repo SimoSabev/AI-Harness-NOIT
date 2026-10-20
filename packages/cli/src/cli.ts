@@ -9,6 +9,7 @@ import { benchCommand, failGateCommand, redteamCommand } from "./commands/bench.
 import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
 import { verifyAlias } from "./commands/verify.js";
 import { ladderSim } from "./commands/ladder.js";
+import { anchorCommand } from "./commands/anchor.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -174,6 +175,15 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--json", "machine output")
     .action((o: { p: string; h?: string; runs?: string; seed?: string; json?: boolean }) => {
       code = ladderSim(io, { ...o, json: json(o) });
+    });
+  program
+    .command("anchor")
+    .description("RFC 3161 timestamp of the last ledger hash (TSA_URLS)")
+    .option("--org <org>", "o_local or an org uuid (Postgres)", "o_local")
+    .option("--json", "machine output")
+    .action(async (o: { org: string; json?: boolean }) => {
+      if (o.org !== "o_local" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(o.org)) throw new MandatError("E_USAGE", `--org must be o_local or a uuid`);
+      code = await anchorCommand(io, { home: home(), org: o.org, json: json(o), ...(o.org !== "o_local" ? { db: depsIn?.db ?? openDb(dbUrl(io.env)) } : {}), ...(depsIn?.tsaFetcher ? { fetcher: depsIn.tsaFetcher } : {}) });
     });
   program.command("verify").description("alias of mandat-verify (Apache-2.0), run as a separate process");
 

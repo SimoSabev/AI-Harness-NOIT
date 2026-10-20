@@ -42,6 +42,13 @@ describe("check-test-counts (т. 0.3 е)", () => {
     expect(r.partial).toBe(true);
     expect(r.lines).toContain("ЧАСТИЧНО: има skip в ядрото (contract/core/ledger/verify/mcp/gate-github)");
   });
+  it("live skip в ядрото → изброен, но не ЧАСТИЧНО; липсващ live отчет → SKIPPED", () => {
+    const src = "// D-276: env\nit.skipIf(true)(\"l\", () => {});\n";
+    const r = analyze({ reports: { unit: report("a.test.ts", [pass]), live: report("packages/ledger/src/a.live.test.ts", [{ title: "l", ancestorTitles: [], status: "skipped", location: { line: 2 } }]) }, readSource: () => src, configs: cfg, ci: true });
+    expect(r).toMatchObject({ ok: true, partial: false });
+    expect(r.lines).toContain("НЕПОКРИТИ: packages/ledger/src/a.live.test.ts > l (D-276)");
+    expect(analyze({ reports: { unit: report("a.test.ts", [pass]), live: null }, readSource: () => "", configs: cfg, ci: true }).ok).toBe(true);
+  });
   it("failed, липсващ unit отчет, docker при CI, passWithNoTests → fail", () => {
     const failed = analyze({ reports: { unit: report("a.test.ts", [{ ...pass, status: "failed" }]) }, readSource: () => "", configs: cfg, ci: false });
     expect(failed.ok).toBe(false);

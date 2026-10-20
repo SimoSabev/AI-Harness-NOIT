@@ -8,8 +8,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const REPORTS = Object.freeze({ unit: "test-results/unit.json", docker: "test-results/docker.json" });
-export const CONFIGS = Object.freeze(["vitest.config.ts", "vitest.docker.config.ts"]);
+export const REPORTS = Object.freeze({ unit: "test-results/unit.json", docker: "test-results/docker.json", live: "test-results/live.json" });
+export const CONFIGS = Object.freeze(["vitest.config.ts", "vitest.docker.config.ts", "vitest.live.config.ts"]);
 const CORE_DIRS = ["packages/contract/", "packages/core/", "packages/ledger/", "packages/verify/", "packages/mcp/", "packages/gate-github/"];
 const DECISION = /\/\/\s*(D-2\d\d):/;
 const NOT_RUN = new Set(["skipped", "pending", "todo", "disabled"]);
@@ -56,7 +56,7 @@ export function analyze(o) {
   }
   for (const [kind, report] of Object.entries(o.reports)) {
     if (report === null) {
-      if (kind === "unit" || o.ci) {
+      if (kind === "unit" || (kind === "docker" && o.ci)) {
         out.push(`ГРЕШКА: ${kind}: няма отчет (${REPORTS[kind] ?? kind})`);
         ok = false;
       } else {
@@ -80,7 +80,8 @@ export function analyze(o) {
           const d = decisionFor(lines, t);
           out.push(`НЕПОКРИТИ: ${rel} > ${t.fullName} (${d ?? "БЕЗ D-2xx"})`);
           if (!d) ok = false;
-          if (CORE_DIRS.some((c) => rel.startsWith(c))) partial = true;
+          // D-276: a live test without its env is "чака Симо" (ГОТОВО (live чака Симо)), not ЧАСТИЧНО
+          if (kind !== "live" && CORE_DIRS.some((c) => rel.startsWith(c))) partial = true;
           if (kind === "docker" && o.ci) ok = false;
         }
       }

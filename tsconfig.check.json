@@ -25,6 +25,7 @@
     "scripts/**/*.test.ts",
     "vitest.config.ts",
     "vitest.docker.config.ts",
+    "vitest.live.config.ts",
     "vitest.shared.ts",
     "bench/**/*.ts"
   ],

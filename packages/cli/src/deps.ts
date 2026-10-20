@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { realDockerRunner } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import type { SqlClient } from "@mandat/ledger";
+import type { Fetcher, SqlClient } from "@mandat/ledger";
 
 /** Everything the CLI touches outside the process; tests replace it (fake runner, fake healthz). */
 export interface CliDeps {
@@ -13,6 +13,8 @@ export interface CliDeps {
   nodeVersion: string;
   /** tests: a fake ledger database for `verify-log --org <uuid>` */
   db?: SqlClient & { end?: () => Promise<void> };
+  /** tests: a local TSA instead of the network */
+  tsaFetcher?: Fetcher;
 }
 
 export function realDeps(): CliDeps {

@@ -8,7 +8,7 @@ export const config = defineConfig({
   resolve: { alias: workspaceAliases() },
   test: {
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "bench/**/*.test.ts", "scripts/**/*.test.ts"],
-    exclude: [...EXCLUDE, "**/*.docker.test.ts"],
+    exclude: [...EXCLUDE, "**/*.docker.test.ts", "**/*.live.test.ts"],
     testTimeout: 20_000,
     passWithNoTests: false,
     reporters: ["default", "json"],
@@ -25,7 +25,7 @@ export const config = defineConfig({
         "packages/redaction/src/**": strict,
         "packages/core/src/**": strict,
         "packages/export/src/**": strict,
-        "packages/verify/src/**": loose,
+        "packages/verify/src/**": { lines: 90 }, // демо промпт т. 5 „Готово, когато“
         "packages/cli/src/**": loose,
         "packages/sandbox/src/**": loose,
         "packages/egress-gate/src/**": loose,
