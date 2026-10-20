@@ -1,10 +1,10 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
-import { dbUrl, openDb, realtimeBroadcaster, runDaemonOnce } from "@mandat/worker";
+import { broadcasterFromEnv, dbUrl, openDb, runDaemonOnce } from "@mandat/worker";
 import type { Io } from "../output.js";
 
 // Демо промпт т. 5.8 / 8.1 (D-275): `mandat worker` = MANDAT_MODE=worker. Offline: fakeGitHub in memory; online: the
-// Writer App from env (GITHUB_WRITER_*). Realtime broadcast only when SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY are set.
+// Writer App from env (GITHUB_WRITER_*). Realtime broadcast only when the worker finds SUPABASE_URL + the service key (broadcasterFromEnv).
 export async function workerCommand(io: Io, o: { home: string; once: boolean; pollMs?: number; signal?: AbortSignal }): Promise<number> {
   const env = io.env;
   const db = openDb(dbUrl(env));
@@ -13,7 +13,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
     env.GITHUB_WRITER_APP_ID && env.GITHUB_WRITER_PRIVATE_KEY && env.GITHUB_WRITER_INSTALLATION_ID
       ? octokitGitHub({ appId: env.GITHUB_WRITER_APP_ID, privateKey: env.GITHUB_WRITER_PRIVATE_KEY, installationId: Number(env.GITHUB_WRITER_INSTALLATION_ID) })
       : fakeGitHub({ repos: { [repo]: {} } });
-  const broadcast = env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? realtimeBroadcaster({ url: env.SUPABASE_URL, serviceKey: env.SUPABASE_SERVICE_ROLE_KEY }) : undefined;
+  const broadcast = broadcasterFromEnv(env);
   io.stderr(`mandat worker: ${gh === undefined ? "?" : env.GITHUB_WRITER_APP_ID ? "GitHub App" : "fakeGitHub (offline)"} · realtime ${broadcast ? "on" : "off (polling)"}\n`);
   try {
     for (;;) {

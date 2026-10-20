@@ -147,6 +147,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       [t.org_id, t.id, t.attempt, v.base_sha, v.tree_sha, v.diff_hash, v.integrity, lvl.level, requires2fa, needsHuman, parsed.policy.task_types[t.type]?.risk_class ?? null],
     );
     const csId = cs.rows[0]?.id as string;
+    // E3а: the diff for the card (approver+ by RLS); only the non-redacted patch, which exists only without a secret hit
+    if (diffPatch.length > 0 && diffPatch.length <= 1048576) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff) values ($1::uuid, $2::uuid, $3)", [csId, t.org_id, diffPatch.toString("utf8")]);
     const vr = await tx.query<{ id: string }>(
       "insert into public.verdicts (org_id, task_id, changeset_id, run_id, attempt, mode, agent, result, reasons, base_sha, tree_sha, config_hash, verdict_hash) values ($1::uuid, $2, $3::uuid, $4, $5, 'full', $6, $7, $8::jsonb, $9, $10, $11, $12) returning id::text as id",
       [t.org_id, t.id, csId, v.run_id, t.attempt, t.agent, v.result, JSON.stringify(v.reasons), v.base_sha, v.tree_sha, contract.config_hash, hashJcs(v)],
@@ -210,6 +212,13 @@ export function realtimeBroadcaster(o: { url: string; serviceKey: string }): (to
     const r = await fetch(`${o.url.replace(/\/+$/, "")}/realtime/v1/api/broadcast`, { method: "POST", headers: { "content-type": "application/json", apikey: o.serviceKey, authorization: `Bearer ${o.serviceKey}` }, body, signal: AbortSignal.timeout(5000) });
     if (r.status >= 300) throw new Error(`broadcast ${r.status}`);
   };
+}
+
+/** Демо промпт т. 8 „Общо за E3“: SUPABASE_SERVICE_ROLE_KEY is read only in apps/worker (and verify, web admin.ts). */
+export function broadcasterFromEnv(env: Record<string, string | undefined>): ((topic: string, event: string, payload: Record<string, unknown>) => Promise<void>) | undefined {
+  const url = env.SUPABASE_URL;
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && key ? realtimeBroadcaster({ url, serviceKey: key }) : undefined;
 }
 
 /** The loop: take the oldest CREATED task (row lock, SKIP LOCKED), process it; repeat. */

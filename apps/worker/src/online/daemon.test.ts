@@ -57,6 +57,7 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     const cs = (await s.db.query<{ head_sha: string; approval_needed: boolean }>("select head_sha, approval_needed from public.changesets")).rows[0];
     expect(cs?.approval_needed).toBe(true);
     expect(cs?.head_sha).toMatch(/^[0-9a-f]{40}$/);
+    expect((await s.db.query<{ diff: string }>("select diff from public.changeset_diffs")).rows[0]?.diff).toContain("src/cart.ts");
     expect(s.gh.state.calls.some((c) => c.startsWith("createRef") && c.includes("mandat/t_web_1-a1"))).toBe(true);
     const rows = await readLedgerOnline(s.db, DEMO_ORG_ID);
     expect(rows.map((r) => r.kind)).toEqual(["demo_reset", "task_created", "verdict", "gated"]);
