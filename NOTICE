@@ -1,0 +1,15 @@
+Mandat
+Copyright (C) 2026 The Mandat authors
+
+This program is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version. See LICENSE.
+
+This product includes software licensed under the Apache License, Version 2.0:
+  - canonicalize (https://github.com/erdtman/canonicalize) — runtime dependency of @mandat/contract
+  - TypeScript (https://github.com/microsoft/TypeScript) — development dependency only
+Full list of third-party packages and licenses: THIRD_PARTY_LICENSES.md (generated).
+
+Claude Code (@anthropic-ai/claude-code) is proprietary software of Anthropic, PBC. It is not part of
+this distribution: it is installed only into a locally built Docker image and runs as a separate,
+unmodified process. Images containing it are never published.
