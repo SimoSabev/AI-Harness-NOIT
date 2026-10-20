@@ -15,6 +15,7 @@
   "dependencies": {
     "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
+    "@mandat/onboard": "workspace:*",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",
     "next": "16.3.8",

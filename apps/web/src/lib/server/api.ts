@@ -2,6 +2,7 @@ import { ApproveBody, CreateTaskBody, FailureLabelBody, approve, createTask, lab
 import type { Result, SecondFactor } from "./actions";
 import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
 import type { RateLimiter } from "./guard";
+import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { board, inbox, membership, taskDetail } from "./queries";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
@@ -108,4 +109,20 @@ export async function postFailureLabel(req: Request, d: ApiDeps, verdictId: stri
   const b = FailureLabelBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await labelFailure(d.db, { uid: p.uid, verdictId, body: b.data }), d);
+}
+
+export async function postHarnessConnect(req: Request, d: ApiDeps, repoId: string): Promise<Response> {
+  if (!UUID.test(repoId)) return json(404, { error: "unknown_repo" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await connectRepo(d.db, { uid: p.uid, repoId }), d);
+}
+
+export async function postHarnessApprove(req: Request, d: ApiDeps, repoId: string): Promise<Response> {
+  if (!UUID.test(repoId)) return json(404, { error: "unknown_repo" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = HarnessApproveBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await approveHarness(d.db, { uid: p.uid, repoId, body: b.data, secondFactor: d.secondFactor }), d);
 }
