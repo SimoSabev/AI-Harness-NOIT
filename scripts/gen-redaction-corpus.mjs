@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Generates fixtures/redaction/corpus.json deterministically (seeded PRNG). None of these keys is real (D-095, D-125).
-// The file is allowlisted for gitleaks (.gitleaks.toml); tests never contain key literals.
+// Each key is stored as fragments ("parts") that tests join at runtime, so no file in the repository contains a
+// complete key-shaped literal (GitHub push protection and gitleaks would flag them; D-095, D-149).
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,7 +22,19 @@ const gen = (n, alphabet = ALNUM) => Array.from({ length: n }, () => alphabet[Ma
 const b64url = (s) => Buffer.from(s).toString("base64url");
 
 const keys = [];
-const add = (kind, value) => keys.push({ kind, value });
+/** Split so that no fragment matches a provider pattern on its own: prefix | body (| JWT segments). */
+function split(kind, value) {
+  if (kind === "jwt") return value.split(/(?=\.)/);
+  if (kind === "entropy") return [value.slice(0, 20), value.slice(20)];
+  const m = /^(sk-ant-[a-z0-9]+-|sk-[A-Za-z0-9]+-|gh[pousr]_|sb_secret_|AKIA|xox[baprs]-|mdt_)/.exec(value);
+  if (!m) throw new Error(`no prefix for ${kind}`);
+  return [m[1], value.slice(m[1].length)];
+}
+const add = (kind, value) => {
+  const parts = split(kind, value);
+  if (parts.join("") !== value) throw new Error("split lost data");
+  keys.push({ kind, parts });
+};
 for (const v of ["api03", "api03", "api03", "oat01", "oat01", "admin01", "admin01", "api03"]) add("anthropic", ["sk", "ant", v, gen(40, B64URL)].join("-"));
 for (let i = 0; i < 6; i++) add("openai", ["sk", i % 2 ? "proj" : gen(4)].join("-") + "-" + gen(40, B64URL));
 for (const p of ["ghp", "gho", "ghu", "ghs", "ghr", "ghp", "ghs", "ghp"]) add("github", `${p}_${gen(36)}`);

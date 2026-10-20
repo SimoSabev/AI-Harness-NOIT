@@ -6,10 +6,12 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { createRedactor, shannonEntropy, writeRedacted } from "./index.js";
 
-type Corpus = { keys: { kind: string; value: string }[]; false_positives: string[] };
-const corpus = JSON.parse(
+// Keys are stored as fragments and assembled here (D-095, D-149): no complete key literal in the repository.
+type RawCorpus = { keys: { kind: string; parts: string[] }[]; false_positives: string[] };
+const raw = JSON.parse(
   readFileSync(new URL("../../../fixtures/redaction/corpus.json", import.meta.url), "utf8"),
-) as Corpus;
+) as RawCorpus;
+const corpus = { keys: raw.keys.map((k) => ({ kind: k.kind, value: k.parts.join("") })), false_positives: raw.false_positives };
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const base62 = (n: number): string => Array.from(randomBytes(n), (b) => BASE62[b % 62]).join("");
 const r = createRedactor({ exactSecrets: [] });
@@ -22,6 +24,13 @@ describe("redaction corpus", () => {
     expect(missed).toEqual([]);
     const touched = corpus.false_positives.filter((s) => r.redactText(s).text !== s);
     expect(touched).toEqual([]);
+  });
+
+  it("нито един фрагмент сам по себе си не е ключ (D-149)", () => {
+    for (const k of raw.keys) {
+      expect(k.parts.length).toBeGreaterThan(1);
+      for (const part of k.parts) expect(r.redactText(part).text).not.toBe(`[REDACTED:${k.kind}]`);
+    }
   });
 
   it("всеки вид дава своя етикет", () => {
