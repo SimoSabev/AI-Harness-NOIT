@@ -67,6 +67,6 @@ export async function resolveTrustedBase(o: { repo: string; remote: string | nul
 /** К-1: a file at the trusted base, read from the mirror; null when it does not exist. */
 export async function readAtBase(o: { mirror: string; baseSha: string; file: string; tmpHome: string }): Promise<Buffer | null> {
   if (!/^[0-9a-f]{40}$/.test(o.baseSha)) return null;
-  const r = await cleanGit({ tmpHome: o.tmpHome }).run(["cat-file", "blob", `${o.baseSha}:${o.file}`], { cwd: o.mirror });
+  const r = await cleanGit({ tmpHome: o.tmpHome }).run(["cat-file", "blob", `${o.baseSha}:${o.file}`], { cwd: o.mirror }); // T3-7: sha (checked above)
   return r.code === 0 ? r.stdout : null;
 }
