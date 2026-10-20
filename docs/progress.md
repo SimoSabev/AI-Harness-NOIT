@@ -9,14 +9,14 @@
 | E2 MCP сървър | phase/e2-mcp | ГОТОВО (live чака Симо) (docs/reports/E2.md) | `git log -1 phase/e2-mcp` | 20.10.2026 | потребител `mandat` + verifyd (docs/setup/verifyd.md); вход в Claude Code/Codex (docs/setup/external-agents.md) |
 | E3а inbox | phase/e3a-inbox | ГОТОВО (docs/reports/E3a.md) | `git log -1 phase/e3a-inbox` | 20.10.2026 | Vercel (docs/setup/vercel.md); Q-024, Q-025 |
 | E3б авто-харнес | phase/e3b-autoharness | ГОТОВО (docs/reports/E3b.md) | `git log -1 phase/e3b-autoharness` | 20.10.2026 | Q-026 (не блокира) |
-| E3в канали | phase/e3c-channels | НЕ Е ЗАПОЧНАТА | — | — | — |
+| E3в канали | phase/e3c-channels | ГОТОВО (live чака Симо) (docs/reports/E3c.md) | `git log -1 phase/e3c-channels` | 20.10.2026 | OPENAI_API_KEY, модел, цена, S-CX (docs/setup/keys.md); Q-027, Q-028 |
 | E3г PWA | phase/e3d-pwa | НЕ Е ЗАПОЧНАТА | — | — | — |
 | E4 демо | phase/e4-demo | НЕ Е ЗАПОЧНАТА | — | — | — |
 
 Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
 ## Текуща задача
-E3в (т. 8.3): клон phase/e3c-channels; docs/tasks/e3c.md; канали, преливане, адаптер Codex.
+E3г (т. 8.4): клон phase/e3d-pwa; docs/tasks/e3d.md; PWA и web push.
 
 ## Часове: план/реално по фаза
 | Фаза | План [О] | Реално |
@@ -27,5 +27,6 @@ E3в (т. 8.3): клон phase/e3c-channels; docs/tasks/e3c.md; канали, п
 | E2 | 17–23 | ≈ 2,5 |
 | E3а | 34–44 | ≈ 4 |
 | E3б | 20–27 | ≈ 3 |
+| E3в | 23–29 | ≈ 4 |
 
 ## Разход API: $0
