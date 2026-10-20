@@ -1,7 +1,8 @@
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 import type { SqlClient } from "@mandat/ledger";
-import { buildFixture, seedMinimal } from "@mandat/worker";
+import { buildFixture, seedDemo, seedMinimal, seedScene1 } from "@mandat/worker";
 import os from "node:os";
 import { mkdtempSync } from "node:fs";
 import { OBSERVER_APP_ID, WRITER_APP_ID, checkLine, deleteM, demoRepoWithPull, editFile, externalPrVerdict, fakeGitHub } from "@mandat/gate-github";
@@ -12,14 +13,31 @@ import { printJson } from "../output.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 
-/** т. 5.1: `mandat demo seed --minimal` (demo org + owner + repo shop on the demo-shop mirror). */
-export async function demoSeed(io: Io, o: { home: string; minimal: boolean; json: boolean; db: SqlClient & { end?: () => Promise<void> } }): Promise<number> {
-  if (!o.minimal) throw new MandatError("E_USAGE", "only --minimal exists in E1б (the full seed is E3а)");
+/**
+ * т. 5.1 / т. 8 „Общо за E3“: `mandat demo seed [--minimal] [--scene 1]`. The full seed prints the generated passwords
+ * and TOTP URIs ONCE to this terminal (stdout); they are never written to the repo, the ledger or a log.
+ */
+export async function demoSeed(io: Io, o: { home: string; minimal: boolean; scene?: string; json: boolean; db: SqlClient & { end?: () => Promise<void> } }): Promise<number> {
+  if (o.scene !== undefined && o.scene !== "1") throw new MandatError("E_USAGE", "--scene: only 1 (scene 2 uses the codex key seeded at level 0)");
   const fx = buildFixture({ repoRoot, mandatHome: o.home, force: false, name: "demo-shop" });
   try {
-    const r = await seedMinimal(o.db, { remoteUrl: `file://${path.resolve(fx.mirror)}` });
-    if (o.json) printJson(io, { ...r, base_commit: fx.sha, exit: 0 });
-    else io.stdout(`demo org ${r.org}${r.created ? "" : " (already seeded)"} · owner ${r.owner} · repo mandat-demo/shop @ ${fx.sha.slice(0, 12)}\n`);
+    const remoteUrl = `file://${path.resolve(fx.mirror)}`;
+    if (o.minimal) {
+      const r = await seedMinimal(o.db, { remoteUrl });
+      if (o.json) printJson(io, { ...r, base_commit: fx.sha, exit: 0 });
+      else io.stdout(`demo org ${r.org}${r.created ? "" : " (already seeded)"} · owner ${r.owner} · repo mandat-demo/shop @ ${fx.sha.slice(0, 12)}\n`);
+      return 0;
+    }
+    const r = await seedDemo(o.db, { remoteUrl, totpSecret: newBase32Secret });
+    if (o.scene === "1") await seedScene1(o.db);
+    const accounts = r.secrets.map((x) => ({ email: x.email, role: x.role, password: x.password, totp: x.totpSecret ? `otpauth://totp/Mandat:${encodeURIComponent(x.email)}?secret=${x.totpSecret}&issuer=Mandat&algorithm=SHA1&digits=6&period=30` : null }));
+    if (o.json) printJson(io, { org: r.org, created: r.created, scene: o.scene ?? null, accounts, base_commit: fx.sha, exit: 0 });
+    else {
+      io.stdout(`demo org mandat-demo (${r.org})${r.created ? "" : " (already seeded: passwords are not shown again)"} · repo mandat-demo/shop @ ${fx.sha.slice(0, 12)}\n`);
+      if (o.scene === "1") io.stdout("scene 1: (shop, bugfix, claude) → ниво 1, s_up 4.95 (демо: seed близо до прага + прозорец 0 мин)\n");
+      for (const a of accounts) io.stdout(`  ${a.role.padEnd(8)} ${a.email}  парола: ${a.password}${a.totp ? `\n           TOTP: ${a.totp}` : ""}\n`);
+      if (accounts.length > 0) io.stdout("Паролите се показват само сега. Запиши ги в мениджър на пароли.\n");
+    }
     return 0;
   } catch (e) {
     io.stderr(`demo seed: ${(e as Error).message.split("\n")[0] ?? ""}\n`);
@@ -27,6 +45,24 @@ export async function demoSeed(io: Io, o: { home: string; minimal: boolean; json
   } finally {
     await o.db.end?.();
   }
+}
+
+/** RFC 4648 base32 of 20 random bytes (the TOTP secret of the dev login, D-285). */
+function newBase32Secret(): string {
+  const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const b = randomBytes(20);
+  let bits = 0;
+  let v = 0;
+  let out = "";
+  for (const x of b) {
+    v = (v << 8) | x;
+    bits += 8;
+    while (bits >= 5) {
+      out += A[(v >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  return out;
 }
 
 /**

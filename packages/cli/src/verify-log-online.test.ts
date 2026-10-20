@@ -44,9 +44,9 @@ describe("verify-log --org <uuid> (т. 5.4)", () => {
 });
 
 describe("demo seed (т. 5.1)", () => {
-  it("без --minimal → 2; недостъпна база → 3; с fake база → 0", async () => {
+  it("--scene 2 → 2; недостъпна база → 3; с fake база → 0", async () => {
     const home = (await import("node:fs")).mkdtempSync((await import("node:path")).join((await import("node:os")).tmpdir(), "mandat-seed-"));
-    expect((await cli(["--home", home, "demo", "seed"], db([]))).code).toBe(2);
+    expect((await cli(["--home", home, "demo", "seed", "--scene", "2"], db([]))).code).toBe(2);
     expect((await cli(["--home", home, "demo", "seed", "--minimal"], db(new Error("ECONNREFUSED")))).code).toBe(3);
     const fake: SqlClient = {
       query: <T>(text: string) => {
@@ -58,5 +58,25 @@ describe("demo seed (т. 5.1)", () => {
     const r = await cli(["--home", home, "demo", "seed", "--minimal", "--json"], fake);
     expect(r.code).toBe(0);
     expect(JSON.parse(r.stdout)).toMatchObject({ created: true, exit: 0 });
+  });
+  it("пълен seed (т. 8): 4 акаунта с пароли и TOTP веднъж; повторно → без пароли; --scene 1", async () => {
+    const { pgliteDb } = await import("../../../apps/worker/src/online/pglite-db.test-helper.js");
+    const home = (await import("node:fs")).mkdtempSync((await import("node:path")).join((await import("node:os")).tmpdir(), "mandat-seed-"));
+    const pg = await pgliteDb();
+    const keep = { query: pg.query };
+    try {
+      const r = await cli(["--home", home, "demo", "seed", "--json"], keep);
+      expect(r.code).toBe(0);
+      const out = JSON.parse(r.stdout) as { created: boolean; accounts: { email: string; password: string; totp: string | null }[] };
+      expect(out.created).toBe(true);
+      expect(out.accounts).toHaveLength(4);
+      expect(out.accounts[1]?.totp).toMatch(/^otpauth:\/\/totp\/Mandat:approver%40demo\.mandat\.invalid\?secret=[A-Z2-7]{32}&/);
+      const again = await cli(["--home", home, "demo", "seed", "--scene", "1"], keep);
+      expect(again.stdout).toContain("passwords are not shown again");
+      expect(again.stdout).toContain("scene 1");
+      expect(again.stdout).not.toContain(out.accounts[0]?.password ?? "?");
+    } finally {
+      await pg.end();
+    }
   });
 });

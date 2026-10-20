@@ -205,9 +205,10 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
   demo
     .command("seed")
     .option("--minimal", "demo org + owner + repo (E1б)")
+    .option("--scene <n>", "scene 1: (shop, bugfix, claude) near the threshold (т. 9.2)")
     .option("--json", "machine output")
-    .action(async (o: { minimal?: boolean; json?: boolean }) => {
-      code = await demoSeed(io, { home: home(), minimal: Boolean(o.minimal), json: json(o), db: depsIn?.db ?? openDb(dbUrl(io.env)) });
+    .action(async (o: { minimal?: boolean; scene?: string; json?: boolean }) => {
+      code = await demoSeed(io, { home: home(), minimal: Boolean(o.minimal), ...(o.scene !== undefined ? { scene: o.scene } : {}), json: json(o), db: depsIn?.db ?? openDb(dbUrl(io.env)) });
     });
   program.command("verify").description("alias of mandat-verify (Apache-2.0), run as a separate process");
 
