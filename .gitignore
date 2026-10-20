@@ -10,3 +10,4 @@ coverage/
 .turbo/
 test-results/
 .next/
+.mandat.yml.proposed

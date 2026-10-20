@@ -34,6 +34,7 @@
     "@mandat/bench": "workspace:*",
     "@mandat/verify": "workspace:*",
     "@mandat/core": "workspace:*",
-    "@mandat/gate-github": "workspace:*"
+    "@mandat/gate-github": "workspace:*",
+    "@mandat/onboard": "workspace:*"
   }
 }

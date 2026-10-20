@@ -47,6 +47,9 @@
     },
     {
       "path": "../gate-github"
+    },
+    {
+      "path": "../onboard"
     }
   ]
 }

@@ -8,6 +8,7 @@ import { runCommand } from "./commands/run.js";
 import { benchCommand, failGateCommand, redteamCommand } from "./commands/bench.js";
 import { proxyStart, proxyStatus, proxyStop } from "./commands/proxy.js";
 import { verifyAlias } from "./commands/verify.js";
+import { initCommand } from "./commands/init.js";
 import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
 import { demoExternalPr, demoSeed } from "./commands/demo.js";
@@ -165,6 +166,14 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = await proxyStatus(io, deps(), { json: json(o), port: hostConfig(io.env).proxyAdminPort });
     });
 
+  program
+    .command("init")
+    .description("propose .mandat.yml for a local repo (scanner without AI; never approves): writes .mandat.yml.proposed")
+    .requiredOption("--repo <dir>", "repository directory")
+    .option("--json", "machine output")
+    .action((o: { repo: string; json?: boolean }) => {
+      code = initCommand(io, { repo: o.repo, json: json(o) });
+    });
   program
     .command("ladder")
     .description("trust ladder tools")
