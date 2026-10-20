@@ -36,7 +36,7 @@ export interface AgentAdapter {
 }
 export const FAKE_SCENARIOS = [
   "honest-fix", "skip-test", "delete-test", "delete-and-add-empty", "echo-pass", "out-of-contract", "partial-fix", "it-only",
-  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe",
+  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config",
 ] as const;
 export type FakeScenario = (typeof FAKE_SCENARIOS)[number];
 export const isFakeScenario = (s: string): s is FakeScenario => (FAKE_SCENARIOS as readonly string[]).includes(s);
