@@ -13,3 +13,5 @@ export { d4 } from "./d4.js";
 export { d10Lockfile } from "./d10.js";
 export { mustPass } from "./must-pass.js";
 export { buildReasons, decideVerdict } from "./verdict.js";
+export { H_DOWN_DEFAULT, H_UP_DEFAULT, LADDER_STEP_FAILURE, LADDER_STEP_SUCCESS, ladderStep, simulateLadder, successesToNextLevel } from "./ladder.js";
+export type { LadderInput, LadderLevel, LadderState, LadderStepResult } from "./ladder.js";
