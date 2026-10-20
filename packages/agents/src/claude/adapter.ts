@@ -15,6 +15,7 @@ export function claudeAdapter(o: { model: string; cliVersion: "2.1.302" }): Agen
         memory: { enabled: false },
         steering: { enabled: false },
       });
+      if (!("ANTHROPIC_API_KEY" in channel)) throw new Error("claude needs an anthropic channel");
       return { argv, env: { ANTHROPIC_API_KEY: channel.ANTHROPIC_API_KEY, [canary.name]: canary.value }, stdin: "closed" };
     },
     parseLine: parseStreamLine,

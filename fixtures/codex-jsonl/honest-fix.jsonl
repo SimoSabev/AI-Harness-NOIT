@@ -1,0 +1,7 @@
+{"type":"thread.started","thread_id":"0199fake-0000-7000-8000-000000000001"}
+{"type":"turn.started"}
+{"type":"item.started","item":{"id":"item_0","type":"command_execution","command":"npx vitest run","status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_0","type":"command_execution","command":"npx vitest run","exit_code":1,"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_1","type":"file_change","changes":[{"path":"src/cart.ts","kind":"update"}],"status":"completed"}}
+{"type":"item.completed","item":{"id":"item_2","type":"agent_message","text":"Fixed the discount threshold in src/cart.ts."}}
+{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":800,"cache_write_input_tokens":100,"output_tokens":90,"reasoning_output_tokens":40}}

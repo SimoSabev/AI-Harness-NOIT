@@ -4,3 +4,8 @@ export type { ClaudeArgvOptions } from "./claude/argv.js";
 export { parseStreamLine } from "./claude/stream.js";
 export { claudeAdapter } from "./claude/adapter.js";
 export { fakeAdapter } from "./fake/adapter.js";
+export { CODEX_HOME, buildCodexArgv } from "./codex/argv.js";
+export type { CodexArgvOptions } from "./codex/argv.js";
+export { codexClaimedDone, parseCodexLine } from "./codex/stream.js";
+export { codexAdapter } from "./codex/adapter.js";
+export { fakeCodexAdapter } from "./fake/adapter.js";

@@ -8,10 +8,16 @@ export interface AgentRunContext {
   workdir: "/m/work";
   notesPath: "/m/out/notes.txt";
 }
-export interface SandboxChannelEnv {
+export interface AnthropicChannelEnv {
   ANTHROPIC_BASE_URL: "http://egress-gate";
   ANTHROPIC_API_KEY: string; // mdt_…
 }
+/** E3в: Codex talks to the Responses API through the gate; OPENAI_API_KEY is the per-task mdt_ token (И1). */
+export interface OpenAiChannelEnv {
+  OPENAI_API_KEY: string; // mdt_…
+}
+export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv;
+export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : c.ANTHROPIC_API_KEY);
 /** env holds ONLY the secret values (they go to the docker CLI env, D-043); public env comes from envForPhase. */
 export interface AgentLaunchSpec {
   argv: string[];
@@ -26,7 +32,7 @@ export type AgentEvent =
   | { type: "api_retry"; attempt: number; errorStatus: number | null; error: string }
   | { type: "permission_denied"; tool: string }
   | { type: "user_echo"; text: string }
-  | { type: "result"; subtype: string; isError: boolean; totalCostUsd: number | null; numTurns: number | null }
+  | { type: "result"; subtype: string; isError: boolean; totalCostUsd: number | null; numTurns: number | null; usage?: { input_tokens: number; cached_input_tokens: number; cache_write_input_tokens: number; output_tokens: number; reasoning_output_tokens: number } }
   | { type: "unparsed"; raw: string };
 export interface AgentAdapter {
   readonly id: string;
@@ -36,7 +42,11 @@ export interface AgentAdapter {
 }
 export const FAKE_SCENARIOS = [
   "honest-fix", "skip-test", "delete-test", "delete-and-add-empty", "echo-pass", "out-of-contract", "partial-fix", "it-only",
-  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config",
+  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429",
 ] as const;
 export type FakeScenario = (typeof FAKE_SCENARIOS)[number];
+/** E3в: fake Codex scenarios (JSONL in the Codex format), `fake-codex:<scenario>`. */
+export const FAKE_CODEX_SCENARIOS = ["honest-fix", "delete-test"] as const;
+export type FakeCodexScenario = (typeof FAKE_CODEX_SCENARIOS)[number];
+export const isFakeCodexScenario = (s: string): s is FakeCodexScenario => (FAKE_CODEX_SCENARIOS as readonly string[]).includes(s);
 export const isFakeScenario = (s: string): s is FakeScenario => (FAKE_SCENARIOS as readonly string[]).includes(s);
