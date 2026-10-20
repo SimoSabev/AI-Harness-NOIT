@@ -1198,3 +1198,27 @@ MCP сървърът се пуска през serveStdio (двете ери на
 Защо: т. 0.5 / D-228 — SKIPPED никога не е минал, но не е и провал на кода.
 Алтернативи: —
 Източник: демо промпт т. 0.3 (е), 0.5. Статус: решено.
+
+## D-277 `security.external_agents` в `.mandat.yml` (20.10.2026)
+Решение: незадължителен масив от GitHub user id (≤ 100) в блока security; чете се само от default клона (доверения връх в огледалото), никога от PR. Автор с id в списъка се проверява автоматично (S13).
+Защо: т. 6.4 го споменава като `policy.security.external_agents`, без схема.
+Алтернативи: login вместо id (login се преименува и преизползва, S38).
+Източник: демо промпт т. 6.4. Статус: решено.
+
+## D-278 Ефектите към GitHub от outbox (20.10.2026)
+Решение: githubEffectHandlers: check_run/approval_check → createOrUpdateCheckRun (идемпотентно по external_id + name + head_sha); ready_for_review → markReadyForReview; merge → mergePull със sha; 405 при повторно сливане се приема (вече слято или блокирано — състоянието се препрочита от вратата), 409 и останалите → грешка и повторен опит по outbox. Сливането в autoMerge е синхронно (иска отговора за 409/405 → MIXED/HELD); outbox пази само след-ефектите.
+Защо: T3-2; повторен drain след срив не дублира ефект (outbox-github.test.ts).
+Алтернативи: —
+Източник: демо промпт т. 3.4, 6.3. Статус: решено.
+
+## D-279 fetchPullHead в Octokit адаптера (20.10.2026)
+Решение: `git fetch --no-tags --end-of-options https://github.com/<repo>.git +refs/pull/<n>/head:refs/mandat/pr/<n>` в огледалото на Мандат, без токен. За частно хранилище трябва installation token в http.extraHeader — не е направено (демо хранилището е публично).
+Защо: S14 — head само от base репото; без токен в URL/лог.
+Алтернативи: токен в URL (изтича в логове).
+Източник: демо промпт т. 6.4. Статус: отворено за Симо (Q-023).
+
+## D-280 Свързването на вратата в daemon-а е с него в E3а (20.10.2026)
+Решение: в E1в са функциите (deliver, autoMerge, humanApproved, externalPrVerdict, intake, webhook приемник, outbox handlers) и тестовете им с fakeGitHub; цикълът „webhook/polling → опашка → externalPrVerdict → outbox“ и „VERDICT → GATED → deliver“ се пуска от daemon-а на worker-а (D-275) в E3а.
+Защо: един daemon, не два.
+Алтернативи: —
+Източник: демо промпт т. 5.8, 6.4, 6.5. Статус: отворено за Симо.
