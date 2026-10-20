@@ -49,3 +49,10 @@
 Digest-и, сверени в E0.1 (D-146, D-145):
 - node:24.22.0-bookworm-slim → sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 (OCI индекс)
 - ghcr.io/gitleaks/gitleaks:v8.30.1 → sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f (OCI индекс)
+
+## Нови в E1б (демо промпт; D-202: последната версия ≥ 14 дни преди 20.10.2026, точна; проверено в registry 20.10.2026)
+| Пакет | Версия | Публикуван | Лиценз | Къде | Защо |
+| --- | --- | --- | --- | --- | --- |
+| yaml | 2.9.1 | 11.09.2026 | ISC | contract (runtime), worker (dev) | `.mandat.yml` v2 (https://registry.npmjs.org/yaml) |
+| typescript | 6.0.3 | (E0) | Apache-2.0 | core (runtime) | AST на тестовите файлове за D2:weakened_assertions и report_mismatch (https://registry.npmjs.org/typescript) |
+| tar | 7.5.22 | (E0) | BlueOak-1.0.0 | verify (runtime) | tar на дървото на агента за mandat-verify |

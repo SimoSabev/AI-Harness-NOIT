@@ -1126,3 +1126,51 @@ MCP сървърът се пуска през serveStdio (двете ери на
 Защо: т. 0.6 („работиш по този текст и E0; пишеш „чака Симо: docs/spec“ в progress“).
 Алтернативи: —
 Източник: демо промпт т. 0.6. Статус: отворено за Симо.
+
+## D-265 `.mandat.yml` v2: съдържанието на блоковете (20.10.2026)
+Решение: схемата в packages/contract/src/policy.ts (version 2; runtime{node, package_manager, install}; tests{framework, command, env, test_globs}; ci{provider, workflow, required_checks}|null; task_types{<type>: allowed_paths, may_change_tests, risk_class}; risk_classes{low|medium|high: level_cap, requires_second_factor}; protected_paths; protected_json_fields; config_paths; budgets{task_usd, task_minutes, org_usd_day?}; models{allowed, default}; harness{required_detectors, max_level}; security{max_file_mb, max_diff_mb, max_files}), `.strict()` навсякъде. Парсер `yaml` 2.9.1: core schema, без custom тагове, без merge keys, без aliases (maxAliasCount 0), уникални ключове; всяко предупреждение е грешка. Пълният пример от спец. т. 5.2 липсва (D-264).
+Защо: т. 5.6 дава имената на блоковете, не съдържанието им.
+Алтернативи: —
+Източник: демо промпт т. 5.6. Статус: отворено за Симо (сверка със спец. т. 5.2 след Q-018).
+
+## D-266 Миграциите: колоните са минимумът на кодера; loadPolicyFromBase е във verify (20.10.2026)
+Решение: supabase/migrations/2026102000000{1,2,3}_*.sql — таблиците от т. 5.2 с колоните, които кодът на демото ползва; `private` схема за всички SECURITY DEFINER функции (search_path = '', REVOKE от public/anon/authenticated); RLS + FORCE RLS на всички таблици; членство и роли от public.members (Custom Access Token Hook не е направен — [НП], ролите се четат от таблицата в private.authorize). Четенето на политиката от огледалото (git) е в packages/verify (readAtBase), не в contract: contract остава без I/O.
+Защо: спец. т. 11 липсва (D-264); contract е чист.
+Алтернативи: JWT claims от hook-а (по-бързо, но иска конфигурация, която не мога да проверя).
+Източник: демо промпт т. 5.2, 5.3, 5.6. Статус: отворено за Симо.
+
+## D-267 private.ledger_append(org, kind, task_id, payload_jcs, payload_hash) (20.10.2026)
+Решение: подписът има и task_id (E0 формулата го хешира). `hash` от т. 5.4 = sha256 на payload_jcs („sha256:<hex>“); функцията го пресмята с pgcrypto и отказва при разлика; seq, ts (ISO UTC с ms) и prev_hash ги определя тя под pg_advisory_xact_lock по org; entry hash = sha256(JCS({kind, org_id, payload_hash, prev_hash, seq, task_id, ts})) — същото като E0. Таблицата е само за добавяне: REVOKE INSERT/UPDATE/DELETE/TRUNCATE + тригер. `verify-log --org` сверява и JCS(payload) == payload_jcs (ledger/src/online.ts).
+Защо: TS не знае seq/prev_hash преди заключването.
+Алтернативи: TS чете последния ред и праща целия hash (race между двама писачи).
+Източник: демо промпт т. 5.4. Статус: решено.
+
+## D-268 D2: ред на report_mismatch; поведение на weakened_assertions (20.10.2026)
+Решение: report_mismatch е последен в реда на D-103 (не е зададен в т. 5.7) и е unknown. weakened_assertions по AST (typescript 6.0.3): брой expect/assert* в тялото + в локални helper функции (едно ниво); слети expect в един toEqual/toStrictEqual/toMatchObject с обект/масив с ≥ (разлика + 1) елемента → unknown (записано в d2-weakened-fp.test.ts); `.each` и тестове в цикли/forEach не се сравняват; преименуван тест → само missing_test. passed → passed с по-слаб assertion (toBe(45) → toBe(50)) не се хваща — известна граница.
+Защо: т. 5.7 оставя тези детайли на кодера ([О]).
+Алтернативи: babel parser (нова зависимост).
+Източник: демо промпт т. 5.7, D-233. Статус: решено.
+
+## D-269 Присъда без договор (външна/CLI/MCP) (20.10.2026)
+Решение: task_id = `t_ext_<първите 12 hex на diff_hash>`; contract_hash = hashJcs({req, config_hash}); при недоверен base base_sha/tree_sha = 40 нули (схемата иска SHA). Ключ на агента за CLI = `external:mcp-local` (AgentKey няма „cli“), level_cap 1, без стълба (ladder = без ограничение в effectiveLevel, ladder_level 0 в изхода). Без --type: risk cap 1, D4 n/a („no task type“), may_change_tests false (F15). MUST_PASS и CANARY n/a. Политика, която изисква D5/D6/D8 → FAILED INFRA:detector_missing; pnpm/jest → UNKNOWN INFRA:unsupported_runner. `.mandat.yml` е винаги в protected_paths и config_paths (К-1).
+Защо: VerifyOutcome иска Verdict със задължителни полета.
+Алтернативи: отделна схема за външни присъди (втори тип присъда — против т. 3.1).
+Източник: демо промпт т. 3.3, 5.7, D-206. Статус: отворено за Симо (част от Q-003).
+
+## D-270 mandat-verify: дом и история (20.10.2026)
+Решение: --home, иначе MANDAT_HOME, иначе ~/.mandat. Огледалата: $home/mirrors/<sha256(url)[0:16]>.git; доверения base се пази като refs/heads/mandat/base (за cleanClone на E0) и refs/mandat/trusted/<D>; HEAD на агента — refs/mandat/agent/head. Историята за S27 е $home/verify/history.jsonl (ключ base_sha, tree_sha, config_hash); в онлайн режим — таблицата verdicts (индекс verdicts_key).
+Защо: т. 5.7 (2), S27.
+Алтернативи: —
+Източник: демо промпт т. 5.7, 3.4. Статус: решено.
+
+## D-271 `mandat run` ползва verifyTrees, не целия verifyChange (20.10.2026)
+Решение: проверката (baseline кеш, H/A/B, D10, D3, D4, D1, D2 с A/AST/declared, MUST_PASS) е една функция `verifyTrees` в packages/verify, която ползват и `mandat run`, и verifyChange. `mandat run` (E0, договор от файл) запазва своя износ/CANARY/INTEGRITY. Онлайн worker-ът (E1в, с GitHub) ще вика verifyChange.
+Защо: E0 тестовете и bench остават непроменени; няма втори път за детекторите.
+Алтернативи: пълен преход на runTask към verifyChange сега (рисков рефакторинг без нова функционалност).
+Източник: демо промпт т. 3.1. Статус: отворено за Симо (т. 3.1 иска една функция за всичко).
+
+## D-272 Unit тестовете на mandat-verify симулират vitest (20.10.2026)
+Решение: shop-sim.test-helper.ts строи vitest JSON отчет от файловете на дървото (статичен парс + правило за „applies 10% over 50“); истинският път с Docker е verify-cli.docker.test.ts.
+Защо: unit тестовете без Docker покриват доверения base, К-1, F12, F15, S27 и no-write.
+Алтернативи: —
+Източник: решение на кодера. Статус: решено.
