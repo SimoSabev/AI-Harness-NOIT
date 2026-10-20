@@ -23,7 +23,7 @@ const freePort = () => new Promise<number>((resolve) => {
   });
 });
 
-export async function demoSpillFake(o: { repoRoot: string; home: string; docker: DockerRunner; images: { proxy: string }; user: string; ipv6Sysctl: boolean; limitSeconds?: number }): Promise<SpillSummary> {
+export async function demoSpillFake(o: { repoRoot: string; home: string; docker: DockerRunner; images: { proxy: string }; user: string; ipv6Sysctl: boolean; limitSeconds?: number; replay?: string; env?: Record<string, string | undefined> }): Promise<SpillSummary> {
   const id = randomBytes(4).toString("hex");
   const stub = `mandat-test-stub-${id}` as const;
   const proxy = `mandat-llm-proxy-test-${id}` as const;
@@ -45,12 +45,12 @@ export async function demoSpillFake(o: { repoRoot: string; home: string; docker:
     await seedChannels(db);
     await db.query("update public.repos set ruleset_strict = true where id = $1", [DEMO_REPO_ID]);
     const task = `t_spill_${randomBytes(3).toString("hex")}`;
-    await db.query("insert into public.tasks (id, org_id, repo_id, type, agent, text) values ($1, $2, $3, 'bugfix', 'fake:limit-429', 'Fix the discount threshold')", [task, DEMO_ORG_ID, DEMO_REPO_ID]);
+    await db.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, replay) values ($1, $2, $3, 'bugfix', 'fake:limit-429', 'Fix the discount threshold', $4)", [task, DEMO_ORG_ID, DEMO_REPO_ID, o.replay ?? null]);
     const gh = fakeGitHub({ repos: { "mandat-demo/shop": {} } });
     const lines: string[] = [];
     await runDaemonOnce({
       db, home: o.home, gh, ghRepo: "mandat-demo/shop", docker: o.docker, log: (l) => lines.push(l),
-      runInternals: { env: { ...process.env, MANDAT_PROXY_ADMIN_PORT: String(port) }, llmProxyUrl: `http://${proxy}:8787`, infraUser: o.user, ipv6Sysctl: o.ipv6Sysctl },
+      runInternals: { env: { ...(o.env ?? process.env), MANDAT_PROXY_ADMIN_PORT: String(port) }, llmProxyUrl: `http://${proxy}:8787`, infraUser: o.user, ipv6Sysctl: o.ipv6Sysctl },
     });
     const t = (await db.query<{ attempt: number; agent: string; last_result: string | null; effective_level: number | null; label: string }>(
       "select t.attempt, t.agent, t.last_result, t.effective_level, c.label from public.tasks t left join public.model_channels c on c.id = t.channel_id where t.id = $1",

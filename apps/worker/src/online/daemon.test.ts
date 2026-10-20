@@ -59,6 +59,7 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(cs?.head_sha).toMatch(/^[0-9a-f]{40}$/);
     expect((await s.db.query<{ diff: string }>("select diff from public.changeset_diffs")).rows[0]?.diff).toContain("src/cart.ts");
     expect(s.gh.state.calls.some((c) => c.startsWith("createRef") && c.includes("mandat/t_web_1-a1"))).toBe(true);
+    expect((await s.db.query<{ kind: string; ref: string }>("select kind, ref from public.deliveries")).rows).toEqual([{ kind: "branch_only", ref: "mandat/t_web_1-a1" }]);
     const rows = await readLedgerOnline(s.db, DEMO_ORG_ID);
     expect(rows.map((r) => r.kind)).toEqual(["demo_reset", "task_created", "verdict", "gated"]);
     expect(verifyOnlineRows(rows, DEMO_ORG_ID).ok).toBe(true);

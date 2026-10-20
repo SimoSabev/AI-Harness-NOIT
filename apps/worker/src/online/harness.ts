@@ -11,6 +11,7 @@ import { drainOutbox } from "./outbox.js";
 import type { EffectHandler } from "./outbox.js";
 import { PgOutbox } from "./pg-outbox.js";
 import { webPushHandler } from "./push.js";
+import { approvalHandlers } from "./effects.js";
 
 // Демо промпт т. 8.2 Поток 1 (стъпки 1–4, 6, 9; стъпка 5 LLM е забранена): connect → scan a clean clone (hooks off)
 // → proposal + field_sources + ledger config_change/proposed; after the owner's TOTP approval (web, private.approve_harness)
@@ -109,7 +110,7 @@ export function harnessHandlers(d: HarnessDeps): { harness_scan: EffectHandler; 
 export async function drainHarnessOutbox(d: HarnessDeps & { env?: Record<string, string | undefined>; log?: (l: string) => void }): Promise<{ done: number; failed: number; skipped: number }> {
   const c = await d.db.connect();
   try {
-    return await drainOutbox(new PgOutbox(c), { ...harnessHandlers(d), web_push: webPushHandler({ db: d.db, ...(d.env ? { env: d.env } : {}), ...(d.log ? { log: d.log } : {}) }) });
+    return await drainOutbox(new PgOutbox(c), { ...harnessHandlers(d), ...approvalHandlers(d), web_push: webPushHandler({ db: d.db, ...(d.env ? { env: d.env } : {}), ...(d.log ? { log: d.log } : {}) }) });
   } finally {
     c.release();
   }

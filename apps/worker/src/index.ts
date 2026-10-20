@@ -23,3 +23,4 @@ export { loadChannels, providerOfAgent, ruleFor, spillAgent } from "./online/cha
 export { demoSpillFake, spillLine } from "./online/demo-spill.js";
 export type { SpillSummary } from "./online/demo-spill.js";
 export { offlineDb } from "./online/offline-db.js";
+export { approvalHandlers, humanMerged } from "./online/effects.js";

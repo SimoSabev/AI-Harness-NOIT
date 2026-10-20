@@ -52,16 +52,17 @@ interface TaskRow {
   full_name: string;
   ruleset_strict: boolean;
   is_demo: boolean;
+  replay: string | null;
 }
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
-export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null): Contract {
+export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = policy.task_types[t.type];
   if (!tt) throw new Error(`task type ${t.type} not in the policy`);
   return sealContract({
-    task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: note ? `${t.text}\n\n${note}` : t.text, base_commit: baseSha, scan_facts_hash: null,
+    task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: [t.text, note, t.replay ? `[mandat-replay: ${t.replay}]` : null].filter(Boolean).join("\n\n"), base_commit: baseSha, scan_facts_hash: null,
     allowed_paths: tt.allowed_paths, may_change_tests: tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
     memory_hash: null, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
     repo_config: rc.config,
@@ -84,7 +85,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -203,7 +204,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     const agentFrom = t.agent;
     const partial = out.runDir && existsSync(path.join(out.runDir, "export", "diff.patch")) ? readFileSync(path.join(out.runDir, "export", "diff.patch")).length : 0;
     t.attempt += 1;
-    t.agent = spillAgent(t.agent, FAKE_CODEX_SCENARIOS);
+    // E4: a replayed demo task spills to the replayed Codex (scene 2); otherwise the agent of the other provider
+    t.agent = t.replay && t.agent.startsWith("fake") ? "fake-codex:replay" : spillAgent(t.agent, FAKE_CODEX_SCENARIOS);
     spills = 1;
     const to = (await loadChannels(d.db, t.org_id)).find((c) => c.id === dec.to.id) ?? { ...dec.to, cooldown_s: null };
     current = to;
@@ -285,6 +287,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const delivered = await deliver(d.gh, { repo: d.ghRepo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full" }, action);
   if (delivered.kind === "pr" || delivered.kind === "branch") {
     await d.db.query("update public.changesets set head_sha = $2 where id = $1::uuid", [changesetId, delivered.head_sha]);
+    // the delivery itself (branch / draft PR / PR): the card's „Отвори PR“ and the approval effects need its number
+    await d.db.query("insert into public.deliveries (org_id, changeset_id, level, kind, ref, pr_number, head_sha) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)", [
+      t.org_id, changesetId, lvl.level, delivered.kind === "branch" ? "branch_only" : delivered.draft ? "draft_pr" : "pr", delivered.ref, delivered.kind === "pr" ? delivered.number : null, delivered.head_sha,
+    ]);
   }
   if (delivered.kind === "pr" && delivered.auto_merge && (lvl.level === 2 || lvl.level === 3)) {
     const m = await autoMerge(d.gh, { repo: d.ghRepo, base: "main", number: delivered.number, head_sha: delivered.head_sha, base_sha: (await d.gh.getPull(d.ghRepo, delivered.number)).base_sha, tree_sha_expected: "", task_id: t.id, level: lvl.level, verdictSeq: out.ledger?.to ?? null, redact: (s) => s });
