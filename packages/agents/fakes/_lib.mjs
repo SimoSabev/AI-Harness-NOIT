@@ -28,3 +28,47 @@ export const honestFix = () => replace("src/cart.ts", THRESHOLD, FIXED);
 export function notes(obj) {
   writeFileSync(process.env.MANDAT_NOTES ?? "/m/out/notes.txt", typeof obj === "string" ? obj : JSON.stringify(obj));
 }
+
+/**
+ * E4 (демо промпт т. 9.0): applies a unified diff of whole hunks. Each hunk's old lines (context + "-") must occur exactly
+ * once in the file; the header line numbers are ignored (like `git apply` with offsets). Any mismatch → stderr + exit 3.
+ */
+export function applyPatch(patchText) {
+  const files = patchText.split(/^--- /m).slice(1);
+  for (const f of files) {
+    const lines = f.split("\n");
+    const target = /^\+\+\+ b\/(\S+)/.exec(lines[1] ?? "")?.[1];
+    if (!target) fail("patch: missing +++ b/<path>");
+    let text = readFileSync(target, "utf8");
+    const hunks = f.split(/^@@[^\n]*@@\n?/m).slice(1);
+    for (const h of hunks) {
+      const oldL = [];
+      const newL = [];
+      for (const l of h.split("\n")) {
+        if (l.startsWith("\\")) continue;
+        if (l.startsWith(" ") || l === "") { oldL.push(l.slice(1)); newL.push(l.slice(1)); }
+        else if (l.startsWith("-")) oldL.push(l.slice(1));
+        else if (l.startsWith("+")) newL.push(l.slice(1));
+      }
+      while (oldL.length && oldL[oldL.length - 1] === "" && newL[newL.length - 1] === "") { oldL.pop(); newL.pop(); }
+      const from = oldL.join("\n");
+      const at = text.indexOf(from);
+      if (at < 0 || text.indexOf(from, at + 1) >= 0) fail(`patch: hunk does not match exactly once in ${target}`);
+      text = text.slice(0, at) + newL.join("\n") + text.slice(at + from.length);
+    }
+    writeFileSync(target, text);
+  }
+}
+
+function fail(msg) {
+  process.stderr.write(`fake: ${msg}\n`);
+  process.exit(3);
+}
+
+/** The replay name the worker put into the contract (`[mandat-replay: <name>]`). */
+export function replayName() {
+  const c = readFileSync(process.env.MANDAT_REPLAY_CONTRACT ?? "/m/in/contract.txt", "utf8");
+  const m = /\[mandat-replay: ([a-z0-9-]{1,60})\]/.exec(c);
+  if (!m) fail("replay: no [mandat-replay: <name>] in the contract");
+  return m[1];
+}
