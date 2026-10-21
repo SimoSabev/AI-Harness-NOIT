@@ -13,11 +13,14 @@
 | E3г PWA | phase/e3d-pwa | ГОТОВО (docs/reports/E3d.md) | `git log -1 phase/e3d-pwa` | 20.10.2026 | VAPID ключове, телефон (docs/setup/push.md); Q-029 |
 | E4 демо | phase/e4-demo | ГОТОВО (live чака Симо) (docs/reports/E4.md) | `git log -1 phase/e4-demo` | 20.10.2026 | ключове, GitHub App-ове, VAPID, VPS, жив транскрипт (docs/reports/FINAL.md) |
 | E5 минимален харнес | phase/e5-minimal | ГОТОВО (docs/reports/E5.md) | `git log -1 phase/e5-minimal` | 21.10.2026 | проба у Симо: `pnpm local` |
+| E6 слабостите (D-296–D-303) | claude/new-session-42gq0n | ГОТОВО (docs/reports/E6.md) | `git log -1` | 21.10.2026 | вход в абонамент на живо; `pnpm desktop` у Симо |
 
 Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
 ## Текуща задача
-E5 (D-292): минималният харнес работи с `pnpm local`. Следва: проба у Симо; после истински Claude Code (сцена 3 на живо).
+E6 (D-296–D-303): Хамут (харнесът) + Мандат (съдията); правила, дъска, канали и стълба в UI; 2 задачи наведнъж; промяната по
+файл; мутационна проверка D11; pnpm/yarn/jest; проверка преди `pnpm local`; `pnpm desktop`. Следва: проба у Симо
+(`pnpm local` или `pnpm desktop`, `pnpm mandat login`); monorepo/workspaces; yarn berry.
 
 ## Часове: план/реално по фаза
 | Фаза | План [О] | Реално |
