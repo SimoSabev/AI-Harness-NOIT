@@ -11,6 +11,8 @@ export interface RunUsage {
   budget: number | null;
   /** E3в: the last upstream 429 of this run (Ф3 П6) */
   limit: Limit | null;
+  /** D-293: the provider answered 401/403 — the key was rejected */
+  authFailed: boolean;
 }
 export interface Limit { retry_after_s: number | null; resets_at: string | null; at: string }
 export interface TaskUsage {
@@ -22,6 +24,7 @@ export interface TaskUsage {
   requests: number;
   budgetStop: boolean;
   limit: Limit | null;
+  authFailed: boolean;
 }
 export interface RequestLine {
   kind: "request";
@@ -46,7 +49,7 @@ export interface RevokeLine {
   run_id: string;
 }
 
-const empty = (): RunUsage => ({ usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budget: null, limit: null });
+const empty = (): RunUsage => ({ usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budget: null, limit: null, authFailed: false });
 
 /** D-116: usage.jsonl is the durable state; it is replayed on start so restarts keep spent and revoked. */
 export class ProxyState {
@@ -88,6 +91,7 @@ export class ProxyState {
     u.cacheReadTokens += j.cache_read;
     u.cacheWriteTokens += j.cache_write;
     u.requests += 1;
+    if (j.status === 401 || j.status === 403) u.authFailed = true;
     if (j.status === 429) u.limit = { retry_after_s: j.limit?.retry_after_s ?? null, resets_at: j.limit?.resets_at ?? null, at: j.ts };
   }
 
@@ -112,6 +116,7 @@ export class ProxyState {
       requests: u.requests,
       budgetStop: u.budget !== null && u.usd >= u.budget,
       limit: u.limit,
+      authFailed: u.authFailed,
     };
   }
 
