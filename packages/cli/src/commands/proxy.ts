@@ -27,11 +27,12 @@ async function waitHealthz(deps: CliDeps, port: number, ms: number): Promise<boo
 }
 
 /** 6.13 / D-099. ANTHROPIC_API_KEY is read ONLY here, from this command's env, and only passed by name (D-043). */
-export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string; host: HostConfig; json: boolean }): Promise<number> {
+// D-293: `force` recreates a healthy proxy (new keys from the UI of `mandat local`).
+export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string; host: HostConfig; json: boolean; force?: boolean }): Promise<number> {
   const port = o.host.proxyAdminPort;
   const tags = await imageTags(repoRoot);
   const cur = await containerImage(deps);
-  if (cur.running && cur.image === tags.proxy && (await deps.healthz(port)).ok) {
+  if (!o.force && cur.running && cur.image === tags.proxy && (await deps.healthz(port)).ok) {
     if (o.json) printJson(io, { state: "running", healthz: "ok", port });
     else io.stdout("already running\n");
     return 0;
@@ -56,6 +57,8 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   // E3в: OpenAI only when given for this command; prices and upstreams are not secrets (S33, docs/setup/keys.md)
   for (const k of ["MANDAT_PROXY_OPENAI_PRICES", "MANDAT_UPSTREAM_ANTHROPIC", "MANDAT_UPSTREAM_OPENAI"] as const) if (io.env[k]) publicEnv[k] = io.env[k] as string;
   const openai = io.env.OPENAI_API_KEY;
+  // D-293: which providers have a key — names only, never values (read back by proxyProviders)
+  publicEnv.MANDAT_PROXY_PROVIDERS = openai ? "anthropic,openai" : "anthropic";
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
     name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port,
@@ -75,6 +78,21 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   if (o.json) printJson(io, { state: "running", healthz: "ok", port });
   else io.stdout(`${recreate ? "recreated" : "started"}, healthz ok (127.0.0.1:${port})\n`);
   return 0;
+}
+
+/**
+ * D-293: the providers the running proxy has a key for, from its public env MANDAT_PROXY_PROVIDERS. The Go template
+ * prints only that one variable, so no key value ever leaves `docker inspect`. null = the proxy is not running.
+ */
+export async function proxyProviders(deps: CliDeps): Promise<string[] | null> {
+  // a proxy from an older image (before an update) counts as stopped: the UI asks for the key again → recreated
+  const cur = await containerImage(deps);
+  if (!cur.running || cur.image !== (await imageTags(repoRoot)).proxy) return null;
+  const r = await dockerText(deps.docker, ["inspect", "-f", '{{if .State.Running}}{{range .Config.Env}}{{if eq (index (split . "=") 0) "MANDAT_PROXY_PROVIDERS"}}{{println .}}{{end}}{{end}}{{end}}', NAME]);
+  if (r.exitCode !== 0) return null;
+  const line = r.stdout.split("\n").find((l) => l.startsWith("MANDAT_PROXY_PROVIDERS="));
+  if (!line) return r.stdout.trim() === "" ? null : [];
+  return line.slice("MANDAT_PROXY_PROVIDERS=".length).split(",").filter((x) => x === "anthropic" || x === "openai");
 }
 
 export async function proxyStop(io: Io, deps: CliDeps, o: { json: boolean; port: number }): Promise<number> {

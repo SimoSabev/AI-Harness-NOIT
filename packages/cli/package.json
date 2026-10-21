@@ -22,19 +22,20 @@
     "test": "vitest run --root ../.. packages/cli/"
   },
   "dependencies": {
-    "@mandat/contract": "workspace:*",
-    "@mandat/ledger": "workspace:*",
-    "commander": "15.0.0",
-    "@mandat/sandbox": "workspace:*",
-    "@mandat/worker": "workspace:*",
-    "@mandat/llm-proxy": "workspace:*",
-    "@mandat/export": "workspace:*",
-    "@mandat/redaction": "workspace:*",
     "@mandat/agents": "workspace:*",
     "@mandat/bench": "workspace:*",
-    "@mandat/verify": "workspace:*",
+    "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
+    "@mandat/export": "workspace:*",
     "@mandat/gate-github": "workspace:*",
-    "@mandat/onboard": "workspace:*"
+    "@mandat/ledger": "workspace:*",
+    "@mandat/llm-proxy": "workspace:*",
+    "@mandat/onboard": "workspace:*",
+    "@mandat/redaction": "workspace:*",
+    "@mandat/sandbox": "workspace:*",
+    "@mandat/verify": "workspace:*",
+    "@mandat/worker": "workspace:*",
+    "commander": "15.0.0",
+    "zod": "4.6.7"
   }
 }

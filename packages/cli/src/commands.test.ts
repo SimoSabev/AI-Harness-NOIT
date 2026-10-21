@@ -91,6 +91,31 @@ describe("proxy start", () => {
   });
 });
 
+describe("proxy keys from the UI (D-293)", () => {
+  it("force → пресъздава и при работещо прокси; MANDAT_PROXY_PROVIDERS е публичен; proxyProviders чете само него", async () => {
+    const { proxyProviders, proxyStart } = await import("./commands/proxy.js");
+    const { imageTags } = await import("@mandat/sandbox");
+    const { repoRoot } = await import("./paths.js");
+    const tag = (await imageTags(repoRoot)).proxy;
+    const key = ["sk", "ant", "api03", "z".repeat(40)].join("-");
+    const oai = ["sk", "proj", "w".repeat(30)].join("-");
+    const calls: { args: string[]; env: Record<string, string> }[] = [];
+    const running = docker([(a) => (a[0] === "inspect" && a.includes("{{.State.Running}} {{.Config.Image}}") ? { out: `true ${tag}\n` } : undefined), (a) => (a[0] === "info" ? { out: "[]" } : undefined)], calls);
+    const io = { stdout: () => undefined, stderr: () => undefined, env: { ANTHROPIC_API_KEY: key, OPENAI_API_KEY: oai }, cwd: process.cwd() };
+    const { hostConfig } = await import("@mandat/worker");
+    expect(await proxyStart(io, deps(running), { mandatHome: home(), host: hostConfig({}), json: true, force: true })).toBe(0);
+    expect(calls.some((c) => c.args[0] === "rm" && c.args.includes("mandat-llm-proxy"))).toBe(true);
+    const run = calls.find((c) => c.args[0] === "run");
+    expect(run?.args).toContain("MANDAT_PROXY_PROVIDERS=anthropic,openai");
+    expect(run?.args.join(" ")).not.toContain(key);
+    const inspectProviders = docker([(a) => (a[0] === "inspect" && a.some((x) => x.includes("MANDAT_PROXY_PROVIDERS")) ? { out: "MANDAT_PROXY_PROVIDERS=anthropic,openai\n" } : a[0] === "inspect" ? { out: `true ${tag}\n` } : undefined)]);
+    expect(await proxyProviders(deps(inspectProviders))).toEqual(["anthropic", "openai"]);
+    const stale = docker([(a) => (a[0] === "inspect" && a.some((x) => x.includes("MANDAT_PROXY_PROVIDERS")) ? { out: "MANDAT_PROXY_PROVIDERS=anthropic\n" } : a[0] === "inspect" ? { out: "true mandat-llm-proxy:old\n" } : undefined)]);
+    expect(await proxyProviders(deps(stale))).toBe(null);
+    expect(await proxyProviders(deps(docker([(a) => (a[0] === "inspect" ? { exit: 1 } : undefined)])))).toBe(null);
+  });
+});
+
 describe("run / bench / redteam / fixtures", () => {
   it("непознат агент → 2; preflight грешка → 3 и JSON ред", async () => {
     const d = deps(docker([(a) => (a[0] === "version" ? { out: "24.0.0\n" } : undefined)]));

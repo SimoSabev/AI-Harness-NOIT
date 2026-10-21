@@ -3,9 +3,13 @@ import { randomBytes } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { imageTags } from "@mandat/sandbox";
-import { buildFixture, openDb, seedLocal } from "@mandat/worker";
+import { buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
+import { realDeps } from "../deps.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
+import { startControl } from "./local-control.js";
+import type { Keys } from "./local-control.js";
+import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
 import { workerCommand } from "./worker.js";
 
 // D-292: `pnpm local` — everything on this machine with one command: Postgres in Docker (shim + migrations, no
@@ -75,9 +79,10 @@ async function migrate(io: Io, db: ReturnType<typeof openDb>): Promise<void> {
 
 async function ensureImages(io: Io): Promise<boolean> {
   const t = await imageTags(repoRoot);
-  if ([t.sandbox, t.gate].every((x) => docker(["image", "inspect", x]).status === 0)) return true;
+  if ([t.sandbox, t.gate, t.proxy].every((x) => docker(["image", "inspect", x]).status === 0)) return true;
   io.stderr("образи: липсват, правя ги (първия път е бавно, 5–15 мин)…\n");
-  const r = spawnSync(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), "images", "build"], { stdio: "inherit", env: process.env });
+  const env = Object.fromEntries(Object.entries(io.env).filter(([k]) => k !== "ANTHROPIC_API_KEY" && k !== "OPENAI_API_KEY"));
+  const r = spawnSync(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), "images", "build"], { stdio: "inherit", env });
   return r.status === 0;
 }
 
@@ -100,7 +105,23 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   }
   if (!(await ensureImages(io))) return 3;
 
-  const env = { ...process.env, MANDAT_DB_URL: url, MANDAT_DEMO_DEV_AUTH: "1", NEXT_TELEMETRY_DISABLED: "1" };
+  // D-293: keys go to the proxy only (from the UI through the control endpoint, or once from this command's env);
+  // the web server and the worker never get them in their env.
+  const deps = realDeps();
+  const host = hostConfig(io.env);
+  const clean = Object.fromEntries(Object.entries(io.env).filter(([k]) => k !== "ANTHROPIC_API_KEY" && k !== "OPENAI_API_KEY"));
+  const startProxy = async (k: Keys) => (await proxyStart({ ...io, stdout: () => undefined, env: { ...clean, ANTHROPIC_API_KEY: k.anthropic, ...(k.openai ? { OPENAI_API_KEY: k.openai } : {}) } }, deps, { mandatHome: o.home, host, json: true, force: true })) === 0;
+  const fromEnv = io.env.ANTHROPIC_API_KEY;
+  if (fromEnv) {
+    io.stderr("прокси: пускам с ключа от env…\n");
+    await startProxy({ anthropic: fromEnv, ...(io.env.OPENAI_API_KEY ? { openai: io.env.OPENAI_API_KEY } : {}) });
+  }
+  const control = await startControl({
+    start: startProxy,
+    stop: async () => void (await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort })),
+    providers: () => proxyProviders(deps),
+  });
+  const env = { ...clean, MANDAT_DB_URL: url, MANDAT_DEMO_DEV_AUTH: "1", NEXT_TELEMETRY_DISABLED: "1", MANDAT_LOCAL_CONTROL_URL: control.url, MANDAT_LOCAL_CONTROL_TOKEN: control.token };
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
   const web = spawn("pnpm", ["--filter", "@mandat/web", "start"], { cwd: repoRoot, env, stdio: ["ignore", "ignore", "inherit"] });
   const stop = new AbortController();
@@ -118,15 +139,16 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
       `  Имейл:   ${email}`,
       `  Парола:  ${password}   (нова при всяко пускане)`,
       "",
-      "  Демо агентите работят без ключ. За Claude Code: в друг терминал",
-      "  ANTHROPIC_API_KEY=… pnpm mandat proxy start",
+      "  Демо агентите работят без ключ. За Claude Code и Codex: Ключове в менюто",
+      "  (ключът отива само в проксито; не се записва никъде)",
       "  Спиране: Ctrl+C (базата остава; изтриване: docker rm -f mandat-local-db && docker volume rm mandat-local-db)",
       "",
     ].join("\n") + "\n",
   );
   try {
-    return await workerCommand({ ...io, env: { ...io.env, MANDAT_DB_URL: url } }, { home: o.home, once: false, signal: stop.signal });
+    return await workerCommand({ ...io, env: { ...clean, MANDAT_DB_URL: url } }, { home: o.home, once: false, signal: stop.signal });
   } finally {
     web.kill("SIGTERM");
+    await control.close();
   }
 }
