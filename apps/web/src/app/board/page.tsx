@@ -5,6 +5,7 @@ import { Live } from "../../components/live";
 import { Shell } from "../../components/shell";
 import type { ColumnNo } from "../../lib/board";
 import { pageTitle } from "../../lib/inbox";
+import { statusOf } from "../../lib/status";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
 import { board } from "../../lib/server/queries";
@@ -23,7 +24,10 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
   const q = await searchParams;
   const column = q.column && /^[1-7]$/.test(q.column) ? (Number(q.column) as ColumnNo) : undefined;
   const before = q.before && /^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(q.before) ? q.before : undefined;
-  const b = await board(db(), c.uid, c.org, { ...(column ? { column } : {}), ...(before ? { before } : {}) });
+  const raw = await board(db(), c.uid, c.org, { ...(column ? { column } : {}), ...(before ? { before } : {}) });
+  // a human-approved change waits in GATED for its delivery; on the board it is already past the decision (col 6), as on its card
+  const approved = raw.columns.flatMap((col) => col.items).filter((t) => statusOf(t).key === "approved");
+  const b = { ...raw, columns: raw.columns.map((col) => ({ ...col, items: col.n === 6 ? [...approved.filter((t) => t.col !== 6), ...col.items] : col.items.filter((t) => t.col === 6 || statusOf(t).key !== "approved") })) };
   const running = b.columns.some((col) => (col.n === 2 || col.n === 3) && col.items.length > 0);
   return (
     <Shell current="board" waiting={c.waiting} wide>
