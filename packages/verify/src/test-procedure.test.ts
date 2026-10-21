@@ -68,4 +68,30 @@ describe("runTestProcedure (фалшив docker)", () => {
     const t = await runTestProcedure({ ...input(docker([{ match: (a) => a.join(" ").includes("npx vitest run"), timedOut: true, exit: 137 }], []), tree()), startGate: g });
     expect(t).toMatchObject({ ok: true, exit: null, timedOut: true });
   });
+  it("D-300: мутантите вървят на същия volume след тестовете: запис → тестове (старият отчет се трие) → връщане; seed пада → null", async () => {
+    const calls: string[][] = [];
+    const stops: string[] = [];
+    const d = docker([{ match: (a) => a.join(" ").includes("head -c"), out: report }], calls);
+    const mutants = [{ path: "src/cart.ts", mutated: Buffer.from("m1"), original: Buffer.from("o1") }, { path: "src/x.ts", mutated: Buffer.from("m2"), original: Buffer.from("o2") }];
+    const r = await runTestProcedure({ ...input(d, tree()), startGate: () => Promise.resolve(gate(stops)), mutants, mutantTimeoutMs: 500 });
+    expect(r.ok && r.mutants?.length).toBe(2);
+    if (r.ok) expect(r.mutants?.every((m) => m?.report.valid)).toBe(true);
+    const mutantRuns = calls.filter((a) => a.join(" ").includes("rm -f /m/out/report.json; npx vitest run"));
+    expect(mutantRuns).toHaveLength(2);
+    for (const a of mutantRuns) expect(a.join(" ")).toContain("--network none");
+    // seed of the 1st mutant fails → null for every mutant, no test run
+    let seeds = 0;
+    const bad: DockerRunner = { run: (args, o) => { const st = o.stdin; if (st !== "closed") st.resume(); const isSeed = args.includes("-x"); if (isSeed) seeds++; return Promise.resolve({ exitCode: isSeed && seeds > 1 ? 1 : 0, timedOut: false }); } };
+    const r2 = await runTestProcedure({ ...input(bad, tree()), startGate: () => Promise.resolve(gate(stops)), mutants: mutants.slice(0, 1) });
+    expect(r2.ok && r2.mutants).toEqual([null]);
+  });
+  it("D-301: pnpm без pnpm-lock.yaml → E_INSTALL_TREE; с lockfile → pnpm install през gate", async () => {
+    expect(await runTestProcedure({ ...input(docker([], []), tree(), { packageManager: "pnpm" }) })).toEqual({ ok: false, code: "E_INSTALL_TREE" });
+    const d = tree(undefined);
+    writeFileSync(path.join(d, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\nimporters:\n  .: {}\npackages: {}\n");
+    const calls: string[][] = [];
+    const r = await runTestProcedure({ ...input(docker([{ match: (a) => a.join(" ").includes("head -c"), out: report }], calls), d, { packageManager: "pnpm" }), startGate: () => Promise.resolve(gate([])) });
+    expect(r.ok).toBe(true);
+    expect(calls.some((a) => a.includes("pnpm") && a.includes("--frozen-lockfile"))).toBe(true);
+  });
 });

@@ -5,7 +5,7 @@ export const CORE_PACKAGES = Object.freeze([
 ]);
 export const HARNESS_PACKAGES = Object.freeze([
   "@mandat/egress-gate", "@mandat/llm-proxy", "@mandat/channels", "@mandat/agents", "@mandat/cli", "@mandat/onboard",
-  "@mandat/worker", "@mandat/web", "@mandat/bench", "spikes", "mandat",
+  "@mandat/worker", "@mandat/web", "@mandat/bench", "@mandat/desktop", "spikes", "mandat",
 ]);
 /** @param {string} name @returns {"core"|"harness"|null} */
 export function groupOf(name) {

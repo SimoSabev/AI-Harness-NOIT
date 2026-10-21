@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { LOCKFILE, installCommand, lockAllowlist, parseVitestReport } from "@mandat/contract";
 import type { PackageManager, ParsedReport } from "@mandat/contract";
 import { packTree } from "@mandat/export";
@@ -77,7 +78,10 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
       try {
         mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
         writeFileSync(path.join(dir, rel), content);
-        const r = await runSandbox(ctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(dir), timeoutMs: 60_000 });
+        // the whole (one-file) tar is read before the scratch dir goes away, whatever the container does with stdin
+        const chunks: Buffer[] = [];
+        for await (const c of packTree(dir)) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c as string));
+        const r = await runSandbox(ctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: Readable.from([Buffer.concat(chunks)]), timeoutMs: 60_000 });
         return r.exitCode === 0;
       } finally {
         rmSync(dir, { recursive: true, force: true });
