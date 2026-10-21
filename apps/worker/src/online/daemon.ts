@@ -235,8 +235,18 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     await bc("BLOCKED", seq, { wait_reason: `infra:${out.error?.code ?? "error"}` });
     return { state: "BLOCKED", verdict: null };
   }
+  const emptyChange = v.evidence.some((e) => e.detector === "EXPORT" && /^0 file\(s\) changed/.test(e.summary));
+  if (keyRejected({ authFailed: out.authFailed === true, result: v.result, emptyChange })) {
+    seq = await inTransaction(d.db, async (tx) => {
+      const s2 = await setState(tx, t, "HELD", { wait_reason: "key_rejected", minutes });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "key_rejected", run_id: v.run_id } });
+      return s2;
+    });
+    await bc("HELD", seq, { wait_reason: "key_rejected" });
+    return { state: "HELD", verdict: v };
+  }
   // D-288 (EXPORT:empty_change, т. 5.7): an empty change is never VERIFIED online — no delivery, no ladder credit.
-  if (v.result === "VERIFIED" && v.evidence.some((e) => e.detector === "EXPORT" && /^0 file\(s\) changed/.test(e.summary))) {
+  if (v.result === "VERIFIED" && emptyChange) {
     seq = await inTransaction(d.db, async (tx) => {
       const s2 = await setState(tx, t, "HELD", { wait_reason: "empty_change", minutes });
       await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "empty_change", run_id: v.run_id } });
@@ -341,6 +351,11 @@ export function broadcasterFromEnv(env: Record<string, string | undefined>): ((t
   const url = env.SUPABASE_URL;
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   return url && key ? realtimeBroadcaster({ url, serviceKey: key }) : undefined;
+}
+
+/** D-293: the provider rejected the key (proxy saw 401/403) and no real change was verified → say that. */
+export function keyRejected(o: { authFailed: boolean; result: string; emptyChange: boolean }): boolean {
+  return o.authFailed && !(o.result === "VERIFIED" && !o.emptyChange);
 }
 
 /** The loop: take the oldest CREATED task (row lock, SKIP LOCKED), process it; repeat. */

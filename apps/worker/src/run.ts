@@ -66,11 +66,13 @@ export interface RunTaskOutput {
   error?: { code: ErrorCode; message: string };
   /** E3в: the last upstream 429 of the attempt (from the proxy), for the limit chain */
   limit?: TaskUsage["limit"];
+  /** D-293: the provider rejected the key (upstream 401/403 seen by the proxy) */
+  authFailed?: boolean;
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const base62 = (n: number): string => Array.from(randomBytes(n), (b) => BASE62[b % 62]).join("");
-const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null };
+const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
 const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
 
 class InfraError extends Error {
@@ -540,6 +542,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       verdict: red, exit, runDir, agentExit,
       ledger: w.ledgerFrom !== null && w.ledgerTo !== null ? { from: w.ledgerFrom, to: w.ledgerTo } : null,
       ...(usage.limit ? { limit: usage.limit } : {}),
+      ...(usage.authFailed ? { authFailed: true } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

@@ -46,6 +46,7 @@ describe("seedLocal (D-292: pnpm local)", () => {
       expect((await db.query<{ name: string }>("select name from public.task_types order by name")).rows.map((r) => r.name)).toEqual(["bugfix", "css", "docs", "feature"]);
       expect((await db.query<{ n: number }>("select count(*)::int as n from public.tasks")).rows[0]?.n).toBe(0);
       expect((await db.query<{ n: number }>("select count(*)::int as n from private.dev_totp")).rows[0]?.n).toBe(0);
+      expect((await db.query<{ provider: string }>("select provider from public.model_channels order by provider")).rows.map((r) => r.provider)).toEqual(["anthropic", "openai"]);
       const b = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "second-pw-test" });
       expect(b.created).toBe(false);
       expect((await login("first-pw-test")).rows.length).toBe(0);

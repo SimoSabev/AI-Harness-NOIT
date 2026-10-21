@@ -22,7 +22,7 @@ export async function seedMinimal(db: SqlClient, o: { remoteUrl: string; ownerEm
 export const LOCAL_EMAIL = "ti@mandat.local";
 
 /**
- * D-292 (`pnpm local`): one owner with a password, the 4 task types, no cards, no TOTP, the ladder empty (level 0).
+ * D-292 (`pnpm local`): one owner with a password, the 4 task types, the 2 channels, no cards, no TOTP, ladder level 0.
  * Called on every start: a fresh password each time (printed once to the terminal, stored only as a bcrypt hash).
  */
 export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password: string }): Promise<{ org: string; email: string; created: boolean }> {
@@ -32,6 +32,7 @@ export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password:
   for (const [name, risk] of [["bugfix", "low"], ["feature", "medium"], ["css", "low"], ["docs", "low"]] as const) {
     await db.query("insert into public.task_types (org_id, repo_id, name, risk_class) values ($1, $2, $3, $4) on conflict do nothing", [DEMO_ORG_ID, DEMO_REPO_ID, name, risk]);
   }
+  await seedChannels(db); // D-293: claude → the Anthropic key, codex → the OpenAI key of the proxy
   return { org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: m.created };
 }
 
