@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { hashJcs, parseVitestReport } from "@mandat/contract";
+import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
 import { addedLines, anyMatch, applySite, d1, d10Lockfile, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
@@ -78,7 +78,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const runTests = i.runTests ?? runTestProcedure;
   const testsInput = (tree: "base" | "a" | "b", treeDir: string) => ({
     docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, tree, treeDir, testsCommand: rc.tests.command,
-    testsEnv: rc.tests.env, images: i.images, timeoutMs: 600_000, infraUser: i.infraUser, ipv6Sysctl: i.ipv6Sysctl, ...(i.extraCa ? { extraCa: i.extraCa } : {}),
+    testsEnv: rc.tests.env, images: i.images, timeoutMs: 600_000, packageManager: packageManagerOf(rc), infraUser: i.infraUser, ipv6Sysctl: i.ipv6Sysctl, ...(i.extraCa ? { extraCa: i.extraCa } : {}),
     ...(i.startGate ? { startGate: i.startGate } : {}),
   });
   // 1) baseline (cache D-018, D-097)
@@ -112,7 +112,8 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const D3 = d3({ files: i.files, base: baseSnap, head: headSnap, rc });
   for (const h of D3.security) i.onSecurity?.(h);
   const D4 = d4({ files: i.files, allowedPaths: i.allowedPaths, coveredByD3: d3CoveredPaths(i.files, rc, baseSnap, headSnap) });
-  const D10 = d10Lockfile({ baseLock: readLockfile(i.baseDir), headLock: readLockfile(head.dir) });
+  const pm = packageManagerOf(rc);
+  const D10 = d10Lockfile({ baseLock: readLockfile(i.baseDir, pm), headLock: readLockfile(head.dir, pm), pm });
   evidence.push(D10.evidence, D3.evidence, D4.evidence);
   if (D10.evidence.status === "fail") {
     evidence.push(na("D1.base_tests", "lockfile rejected"), na("D2.inventory", "lockfile rejected"), na("MUST_PASS", "lockfile rejected"));

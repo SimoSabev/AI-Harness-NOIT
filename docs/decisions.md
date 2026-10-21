@@ -1398,3 +1398,19 @@ NOTICE). `pnpm mandat accounts` / `logout --name`. (2) Задача: агент 
 Защо: Симо, 21.10.2026 избра „мутационна проверка“ за слабостта „семантична грешка при зелени тестове“. Цена: до 3 допълнителни
 пускания на тестовете (без install), таймаут 3 мин всяко. Граница: хваща непроверени редове, не грешна логика, която тестовете
 проверяват погрешно; репо без тестове остава D2:zero_tests.
+
+## D-301 pnpm, yarn v1 и jest в пясъчника и в авто-харнеса (21.10.2026)
+Решение: (1) RepoConfig.runtime.install е една от трите команди (npm ci / pnpm install --frozen-lockfile / yarn install
+--frozen-lockfile, все с --ignore-scripts); `packageManagerOf` дава мениджъра; tests.format = vitest-json | jest-json (jest --json
+има същата форма). repoConfigFromPolicy пуска npm/pnpm/yarn × vitest/jest на node 24; mocha, node --test, bun → unsupported_runner.
+(2) Gate allowlist по lockfile (packages/contract/src/lockfiles.ts): pnpm-lock v9 (`name@version` + `resolution.integrity`
+sha512; tarball/git/directory → отказ; повече от един importer = workspace → отказ), yarn v1 (`resolved` от registry.yarnpkg.com
+или registry.npmjs.org → `/npm/<път>`, sha512 integrity; berry (`__metadata:`) → отказ). Същите правила в D10.
+(3) Инсталиране: pnpm с флагове `--registry=http://egress-gate/npm/ --store-dir=/home/agent/.pnpm-store
+--package-import-method=copy --config.manage-package-manager-versions=false` (pnpm 12 не взе регистъра от NPM_CONFIG_REGISTRY:
+5788 DNS опита към registry.npmjs.org в gate лога — проверено); yarn v1: yarn.lock се насочва към gate-а само за install
+и се връща байт по байт (не разчитаме yarn да смени хоста [НП]). (4) Образът mandat-sandbox има pnpm 12.14.0 и yarn 1.22.22,
+закрепени по integrity; yarn-ът на базовия образ се маха. (5) Скенерът вече не иска човек за pnpm/yarn/jest; иска за monorepo.
+Проверено в истинския пясъчник (runners.docker.test.ts): pnpm+jest и yarn+vitest — честна поправка VERIFIED (+ D11 pass),
+изтрит тест FAILED D2:missing_test. Граница: workspaces/monorepo, yarn berry, bun, mocha — следващ ход.
+Защо: Симо, 21.10.2026 — „авто-харнесът разбира само npm и vitest“ задължително да се оправи.

@@ -148,12 +148,12 @@ describe("k1-base-policy (К-1)", () => {
     expect(r.code).toBe(10);
     expect(r.out).toContain("POLICY:missing:.mandat.yml");
   });
-  it("политика с pnpm/jest → UNKNOWN INFRA:unsupported_runner; изисква D5 → FAILED INFRA:detector_missing:D5", async () => {
-    const f = demo((d) => writeFileSync(path.join(d, ".mandat.yml"), readFileSync(path.join(d, ".mandat.yml"), "utf8").replace("framework: vitest", "framework: jest")));
+  it("политика с mocha → UNKNOWN INFRA:unsupported_runner (D-301: jest, pnpm, yarn вече вървят); изисква D5 → FAILED INFRA:detector_missing:D5", async () => {
+    const f = demo((d) => writeFileSync(path.join(d, ".mandat.yml"), readFileSync(path.join(d, ".mandat.yml"), "utf8").replace("framework: vitest", "framework: mocha")));
     edit(f.repo, "src/cart.ts", fixCode);
     const r = await verify(f, ["--external"]);
     expect(r.code).toBe(10);
-    expect(r.out).toContain("INFRA:unsupported_runner:npm/jest");
+    expect(r.out).toContain("INFRA:unsupported_runner:npm/mocha");
     const g = demo((d) => writeFileSync(path.join(d, ".mandat.yml"), readFileSync(path.join(d, ".mandat.yml"), "utf8").replace("required_detectors: [D1, D2, D3, D4, D10]", "required_detectors: [D1, D2, D5]")));
     edit(g.repo, "src/cart.ts", fixCode);
     const q = await verify(g, ["--external"]);

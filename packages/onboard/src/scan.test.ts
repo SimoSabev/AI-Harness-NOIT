@@ -16,9 +16,13 @@ describe("скенер без AI: 6 fixtures (т. 8.2)", () => {
       expect({ yaml: p.yaml, field_sources: p.field_sources, needs_human: p.needs_human, risk_cap: p.risk_cap, warnings: p.warnings }).toMatchSnapshot();
     });
   }
-  it("npm-vitest е изпълним в пясъчника; jest/pnpm → needs_human (runner)", () => {
+  it("D-301: npm-vitest и pnpm-jest са изпълними в пясъчника; bun → needs_human (runner)", () => {
     expect(propose(scanRepo(memView(FIXTURES["npm-vitest"] as Record<string, string>))).needs_human).toEqual([]);
-    expect(propose(scanRepo(memView(FIXTURES["pnpm-jest"] as Record<string, string>))).needs_human.join(" ")).toContain("runner pnpm/jest");
+    expect(propose(scanRepo(memView(FIXTURES["pnpm-jest"] as Record<string, string>))).needs_human.join(" ")).not.toContain("runner");
+    const bun = { ...(FIXTURES["npm-vitest"] as Record<string, string>) };
+    delete bun["package-lock.json"];
+    bun["bun.lock"] = "{}";
+    expect(propose(scanRepo(memView(bun))).needs_human.join(" ")).toContain("bun is not supported");
   });
 });
 

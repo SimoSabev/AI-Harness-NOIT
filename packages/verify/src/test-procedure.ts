@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { npmAllowlistFromLockfile, parseVitestReport } from "@mandat/contract";
-import type { ParsedReport } from "@mandat/contract";
+import { LOCKFILE, installCommand, lockAllowlist, parseVitestReport } from "@mandat/contract";
+import type { PackageManager, ParsedReport } from "@mandat/contract";
 import { packTree } from "@mandat/export";
 import { dockerText, names } from "@mandat/sandbox";
 import type { DockerRunner, Tree } from "@mandat/sandbox";
@@ -28,6 +28,8 @@ export interface TestProcedureInput {
   startGate?: typeof startRunGate;
   /** D-300: after the tests, each mutant (one changed file) runs the same tests on the same installed volume, then is undone */
   mutants?: { path: string; mutated: Buffer; original: Buffer }[];
+  /** D-301: npm (default), pnpm or yarn v1 — the lockfile and the install command */
+  packageManager?: PackageManager;
   mutantTimeoutMs?: number;
 }
 export interface MutantResult { exit: number | null; timedOut: boolean; report: ParsedReport }
@@ -43,14 +45,9 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
   const vol = names.vol(i.runId, tree);
   const ctx = { docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, image: i.images.sandbox, ipv6Sysctl: i.ipv6Sysctl ?? true };
   const installCode = i.tree === "base" ? "E_INSTALL_BASE" : "E_INSTALL_TREE";
-  const lockFile = path.join(i.treeDir, "package-lock.json");
-  let lock: unknown;
-  try {
-    lock = existsSync(lockFile) ? JSON.parse(readFileSync(lockFile, "utf8")) : null;
-  } catch {
-    lock = null;
-  }
-  const allow = npmAllowlistFromLockfile(lock);
+  const pm = i.packageManager ?? "npm";
+  const lockFile = path.join(i.treeDir, LOCKFILE[pm]);
+  const allow = lockAllowlist(pm, existsSync(lockFile) ? readFileSync(lockFile, "utf8") : null);
   if (!allow.ok) return { ok: false, code: i.tree === "base" ? "E_LOCKFILE_BASE" : "E_INSTALL_TREE" };
   let gate: RunGate | undefined;
   try {
@@ -65,7 +62,7 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
     } catch (e) {
       return { ok: false, code: (e as { code?: string }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START" };
     }
-    const inst = await runSandbox(ctx, { role: "install", volume: vol, network: gate.net, tree, env: { phase: "install" }, cmd: ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], timeoutMs: 300_000 });
+    const inst = await runSandbox(ctx, { role: "install", volume: vol, network: gate.net, tree, env: { phase: "install" }, cmd: installCommand(pm), timeoutMs: 300_000 });
     await gate.stop();
     gate = undefined;
     if (inst.exitCode !== 0 || inst.timedOut) return { ok: false, code: installCode };

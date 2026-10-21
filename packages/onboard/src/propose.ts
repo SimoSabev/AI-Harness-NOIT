@@ -98,7 +98,8 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const parsed = parseMandatYml(yaml);
   if (!parsed.ok) throw new Error(`proposal does not validate: ${parsed.error}`);
   const rc = repoConfigFromPolicy(parsed.policy);
-  if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm + vitest + node 24 only (E0)`);
+  if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm, pnpm (lockfile v9) or yarn v1 with vitest or jest on node 24 (D-301)`);
+  if (scan.monorepo.tool) needs.push(`monorepo (${scan.monorepo.tool}): the sandbox installs one package, workspaces are not supported yet (D-301)`);
   return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings };
 }
 

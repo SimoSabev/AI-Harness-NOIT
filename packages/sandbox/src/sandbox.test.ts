@@ -205,7 +205,7 @@ describe("env", () => {
 
   it("env по фаза (8.2)", () => {
     expect(Object.keys(envForPhase("install").publicValues).sort()).toEqual(
-      ["CI", "HOME", "LANG", "NPM_CONFIG_REGISTRY", "PATH", "npm_config_audit", "npm_config_cache", "npm_config_fund", "npm_config_replace_registry_host", "npm_config_update_notifier"].sort(),
+      ["CI", "HOME", "LANG", "NPM_CONFIG_REGISTRY", "PATH", "YARN_CACHE_FOLDER", "YARN_DISABLE_SELF_UPDATE_CHECK", "YARN_REGISTRY", "npm_config_audit", "npm_config_cache", "npm_config_fund", "npm_config_manage_package_manager_versions", "npm_config_package_import_method", "npm_config_replace_registry_host", "npm_config_store_dir", "npm_config_update_notifier"].sort(),
     );
     const a = envForPhase("agent");
     expect(a.names).toEqual(["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY"]);

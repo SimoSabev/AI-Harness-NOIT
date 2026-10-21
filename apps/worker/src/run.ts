@@ -5,7 +5,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, npmAllowlistFromLockfile,
+  MandatError, Verdict, contractForAgent, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf,
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent } from "@mandat/contract";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
@@ -249,19 +249,14 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const gctx = (tree: "agent" | "base" | "a" | "b") => ({ docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, gateImage: images.gate, user, extraCa: host.extraCa, ...(x.llmProxyUrl !== undefined ? { llmProxyUrl: x.llmProxyUrl } : {}) });
     let baseDir = "";
 
+    const pm = packageManagerOf(contract.repo_config); // D-301
     try {
       // ---------- PROVISION (7.4)
       await timed("provision", async () => {
         const clone = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "base" });
         baseDir = clone.dir;
-        let lock: unknown;
-        try {
-          const b = readLockfile(baseDir);
-          lock = b ? JSON.parse(b.toString("utf8")) : null;
-        } catch {
-          lock = null;
-        }
-        const allow = npmAllowlistFromLockfile(lock);
+        const b = readLockfile(baseDir, pm);
+        const allow = lockAllowlist(pm, b ? b.toString("utf8") : null);
         if (!allow.ok) infra("E_LOCKFILE_BASE", `base lockfile rejected: ${allow.reason}`);
         if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
         const seed = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(baseDir), timeoutMs: 120_000 });
@@ -281,9 +276,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- INSTALL (7.5)
       await timed("install", async () => {
-        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"], timeoutMs: 300_000 });
-        if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `npm ci exit ${r.exitCode}`);
-        out(`[install]   npm ci --ignore-scripts via gate`);
+        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm), timeoutMs: 300_000 });
+        if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `${pm} install exit ${r.exitCode}`);
+        out(`[install]   ${contract.repo_config.runtime.install} via gate`);
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- AGENT (7.6)

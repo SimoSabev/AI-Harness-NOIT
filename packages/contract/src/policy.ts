@@ -116,15 +116,20 @@ export function parseMandatYml(text: string): ParsedPolicy {
 }
 
 /** Bridge to the E0 detectors: the E0 RepoConfig supports only npm + vitest (F18). */
+/** The one install command per package manager (lockfile frozen, no install scripts). */
+export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts" } as const;
+
 export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoConfig } | { ok: false; reason: "unsupported_runner"; detail: string } {
   const pm = p.runtime.package_manager;
   const fw = p.tests.framework;
-  if (pm !== "npm" || fw !== "vitest" || p.runtime.install !== "npm ci --ignore-scripts" || p.runtime.node !== "24") {
+  // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report)
+  const install = INSTALL_CMD[pm];
+  if ((fw !== "vitest" && fw !== "jest") || p.runtime.install !== install || p.runtime.node !== "24") {
     return { ok: false, reason: "unsupported_runner", detail: `${pm}/${fw}` };
   }
   const config = RepoConfig.parse({
-    runtime: { install: "npm ci --ignore-scripts", node: "24" },
-    tests: { command: p.tests.command, format: "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs },
+    runtime: { install, node: "24" },
+    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs },
     protected_paths: p.protected_paths,
     protected_json_fields: p.protected_json_fields,
     config_paths: p.config_paths,

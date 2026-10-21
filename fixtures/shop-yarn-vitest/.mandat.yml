@@ -1,0 +1,68 @@
+# D-301: yarn v1 + vitest variant of the demo shop (real lockfile, real install in the sandbox).
+version: 2
+runtime:
+  node: "24"
+  package_manager: yarn
+  install: yarn install --frozen-lockfile --ignore-scripts
+tests:
+  framework: vitest
+  command: npx vitest run --reporter=json --outputFile=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs: ["tests/**", "**/*.spec.ts", "**/*.test.ts"]
+task_types:
+  bugfix:
+    allowed_paths: ["src/**"]
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths: ["src/**", "tests/**"]
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths: ["README.md", "docs/**"]
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - ".github/**"
+  - ".mandat.yml"
+  - ".claude/**"
+  - ".mcp.json"
+  - "vitest.config.*"
+  - "vite.config.*"
+  - "tsconfig*.json"
+  - ".npmrc"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".codex/**"
+  - "**/__snapshots__/**"
+protected_json_fields:
+  package.json: [scripts, overrides, workspaces, imports]
+config_paths:
+  - ".mandat.yml"
+  - ".claude/**"
+  - ".npmrc"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".codex/**"
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed: [claude, codex]
+  default: claude
+harness:
+  required_detectors: [D1, D2, D3, D4, D10]
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500

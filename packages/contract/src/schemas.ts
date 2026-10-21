@@ -36,10 +36,11 @@ export const SecurityLimits = z.object({
 });
 export type SecurityLimits = z.infer<typeof SecurityLimits>;
 export const RepoConfig = z.object({
-  runtime: z.object({ install: z.literal("npm ci --ignore-scripts"), node: z.literal("24") }),
+  // D-301: the install command names the package manager (packageManagerOf); its lockfile decides the gate allowlist
+  runtime: z.object({ install: z.enum(["npm ci --ignore-scripts", "pnpm install --frozen-lockfile --ignore-scripts", "yarn install --frozen-lockfile --ignore-scripts"]), node: z.literal("24") }),
   tests: z.object({
     command: z.string().min(1).max(500), // run with /bin/sh -c in the test sandbox
-    format: z.literal("vitest-json"),
+    format: z.enum(["vitest-json", "jest-json"]), // D-301: jest --json has the same shape (testResults[].assertionResults[])
     env: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(200)),
     test_globs: z.array(Glob).min(1),
   }),
@@ -49,6 +50,9 @@ export const RepoConfig = z.object({
   budgets: z.object({ task_usd: z.number().positive().max(20), task_minutes: z.number().int().min(1).max(120) }),
 });
 export type RepoConfig = z.infer<typeof RepoConfig>;
+export function packageManagerOf(rc: Pick<RepoConfig, "runtime">): "npm" | "pnpm" | "yarn" {
+  return rc.runtime.install.startsWith("pnpm ") ? "pnpm" : rc.runtime.install.startsWith("yarn ") ? "yarn" : "npm";
+}
 export const Contract = z
   .object({
     task_id: TaskId,

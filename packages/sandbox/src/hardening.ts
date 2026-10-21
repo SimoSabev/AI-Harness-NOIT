@@ -288,6 +288,14 @@ export function envForPhase(
         npm_config_update_notifier: "false",
         npm_config_audit: "false",
         npm_config_fund: "false",
+        // D-301: pnpm reads npm_config_*; its store lives in the tmpfs home (never in the tree), files are copied
+        npm_config_store_dir: "/home/agent/.pnpm-store",
+        npm_config_package_import_method: "copy",
+        npm_config_manage_package_manager_versions: "false",
+        // yarn v1: same registry (the gate), cache in the tmpfs home, no self-update check
+        YARN_REGISTRY: "http://egress-gate/npm/",
+        YARN_CACHE_FOLDER: "/home/agent/.yarn-cache",
+        YARN_DISABLE_SELF_UPDATE_CHECK: "true",
       },
     };
   }

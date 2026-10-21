@@ -14,9 +14,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest → .mandat.yml
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
   },
-  "needs_human": [
-    "runner npm/jest: the sandbox runs npm + vitest + node 24 only (E0)",
-  ],
+  "needs_human": [],
   "risk_cap": 3,
   "warnings": [],
   "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
@@ -129,7 +127,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest-turbo → .mand
     "tests.test_globs": "package.json#scripts.test",
   },
   "needs_human": [
-    "runner npm/jest: the sandbox runs npm + vitest + node 24 only (E0)",
+    "monorepo (turbo): the sandbox installs one package, workspaces are not supported yet (D-301)",
   ],
   "risk_cap": 3,
   "warnings": [],
@@ -359,9 +357,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-jest → .mandat.ym
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
   },
-  "needs_human": [
-    "runner pnpm/jest: the sandbox runs npm + vitest + node 24 only (E0)",
-  ],
+  "needs_human": [],
   "risk_cap": 3,
   "warnings": [],
   "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
@@ -473,9 +469,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest → .mandat.
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
   },
-  "needs_human": [
-    "runner pnpm/vitest: the sandbox runs npm + vitest + node 24 only (E0)",
-  ],
+  "needs_human": [],
   "risk_cap": 3,
   "warnings": [],
   "yaml": "# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.
@@ -589,7 +583,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest-turbo → .m
     "tests.test_globs": "package.json#scripts.test",
   },
   "needs_human": [
-    "runner pnpm/vitest: the sandbox runs npm + vitest + node 24 only (E0)",
+    "monorepo (turbo): the sandbox installs one package, workspaces are not supported yet (D-301)",
   ],
   "risk_cap": 3,
   "warnings": [],

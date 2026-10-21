@@ -65,6 +65,25 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     cd / && rm -rf /tmp/cx /root/.npm; \
     codex --version | grep -F "${CODEX_VERSION}"
 
+# D-301: pnpm and yarn v1 for repos that use them; pinned by integrity like the agents (no TOFU), no install scripts.
+# The base image's own yarn (unpinned here) is removed first, so `yarn` is exactly the checked tarball.
+ARG PNPM_VERSION=12.14.0
+ARG PNPM_INTEGRITY=sha512-wYum2HmT09Fky16JSPMrLAbuhUSH4GzY2GeBNC+z5btGNDZwNHEehoArqpw3vqkGzhkprQjXCITJfYAd8TOJpg==
+ARG YARN_VERSION=1.22.22
+ARG YARN_INTEGRITY=sha512-prL3kGtyG7o9Z9Sv8IPfBNrWTDmXB4Qbes8A9rEzt6wkJV8mUvoirjU0Mp3GGAU06Y0XQyA3/2/RQFVuK7MTfg==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    mkdir /tmp/pm && cd /tmp/pm; \
+    npm pack --silent "pnpm@${PNPM_VERSION}" "yarn@${YARN_VERSION}"; \
+    check() { got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "$1")"; \
+              [ "$got" = "$2" ] || { echo "integrity mismatch for $1: $got" >&2; exit 1; }; }; \
+    check "pnpm-${PNPM_VERSION}.tgz" "$PNPM_INTEGRITY"; \
+    check "yarn-${YARN_VERSION}.tgz" "$YARN_INTEGRITY"; \
+    rm -rf /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v*; \
+    npm install -g --offline --ignore-scripts --no-audit --no-fund "./pnpm-${PNPM_VERSION}.tgz" "./yarn-${YARN_VERSION}.tgz"; \
+    cd / && rm -rf /tmp/pm /root/.npm; \
+    pnpm --version | grep -F "${PNPM_VERSION}"; yarn --version | grep -F "${YARN_VERSION}"
+
 COPY packages/agents/fakes/ /opt/mandat/fakes/
 # E4 (т. 9.0): recorded transcripts + fixed patches for the deterministic replay agents
 COPY demo/recordings/*.jsonl demo/recordings/*.patch /opt/mandat/replay/

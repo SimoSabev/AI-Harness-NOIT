@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseMandatYml, repoConfigFromPolicy } from "./policy.js";
+import { packageManagerOf } from "./schemas.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const demo = readFileSync(path.join(repo, "fixtures/demo-shop/.mandat.yml"), "utf8");
@@ -50,10 +51,17 @@ describe("repoConfigFromPolicy (F18, unsupported-runner)", () => {
     expect(r.ok && r.config.runtime).toEqual({ install: "npm ci --ignore-scripts", node: "24" });
     expect(r.ok && r.config.tests.format).toBe("vitest-json");
   });
-  it("jest / pnpm → unsupported_runner", () => {
-    const jest = ok(demo.replace("framework: vitest", "framework: jest"));
-    expect(repoConfigFromPolicy(jest.policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "npm/jest" });
+  it("D-301: jest → jest-json; pnpm и yarn с тяхната install команда", () => {
+    const jest = repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: jest")).policy);
+    expect(jest.ok && jest.config.tests.format).toBe("jest-json");
+    const pnpm = repoConfigFromPolicy(ok(demo.replace("package_manager: npm", "package_manager: pnpm").replace("install: npm ci --ignore-scripts", "install: pnpm install --frozen-lockfile --ignore-scripts")).policy);
+    expect(pnpm.ok && pnpm.config.runtime.install).toBe("pnpm install --frozen-lockfile --ignore-scripts");
+    const yarn = repoConfigFromPolicy(ok(demo.replace("package_manager: npm", "package_manager: yarn").replace("install: npm ci --ignore-scripts", "install: yarn install --frozen-lockfile --ignore-scripts")).policy);
+    expect(yarn.ok && packageManagerOf(yarn.config)).toBe("yarn");
+  });
+  it("друга install команда, mocha → unsupported_runner", () => {
     const pnpm = ok(demo.replace("package_manager: npm", "package_manager: pnpm").replace("install: npm ci --ignore-scripts", "install: pnpm install --frozen-lockfile"));
     expect(repoConfigFromPolicy(pnpm.policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "pnpm/vitest" });
+    expect(repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: mocha")).policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "npm/mocha" });
   });
 });
