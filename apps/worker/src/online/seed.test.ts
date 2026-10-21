@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readLedgerOnline, verifyOnlineRows } from "@mandat/ledger";
 import { pgliteDb } from "./pglite-db.test-helper.js";
-import { DEMO_ORG_ID, DEMO_USERS, seedDemo, seedScene1 } from "./seed.js";
+import { DEMO_ORG_ID, DEMO_USERS, LOCAL_EMAIL, seedDemo, seedLocal, seedScene1 } from "./seed.js";
 
 describe("mandat demo seed (т. 8 „Общо за E3“)", () => {
   it("4 акаунта, стълбата на claude, 3 карти в inbox, дневникът е валиден; повторно → без нови тайни", async () => {
@@ -28,6 +28,29 @@ describe("mandat demo seed (т. 8 „Общо за E3“)", () => {
       expect(b.rows[0]).toEqual({ level: 1, s_up: 4.95 });
       const codex = await db.query<{ level: number }>("select level from public.ladder_state where task_type = 'bugfix' and agent = 'codex'");
       expect(codex.rows[0]?.level).toBe(0);
+    } finally {
+      await db.end();
+    }
+  });
+});
+
+describe("seedLocal (D-292: pnpm local)", () => {
+  it("един собственик с парола, 4 типа задачи, без карти и без TOTP; повторно → само нова парола", async () => {
+    const db = await pgliteDb();
+    try {
+      const a = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "first-pw-test" });
+      expect(a).toEqual({ org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: true });
+      const login = (pw: string) => db.query<{ id: string }>("select id from auth.users where email = $1 and encrypted_password = extensions.crypt($2, encrypted_password)", [LOCAL_EMAIL, pw]);
+      expect((await login("first-pw-test")).rows.length).toBe(1);
+      expect((await db.query<{ role: string }>("select role from public.members where org_id = $1", [DEMO_ORG_ID])).rows).toEqual([{ role: "owner" }]);
+      expect((await db.query<{ name: string }>("select name from public.task_types order by name")).rows.map((r) => r.name)).toEqual(["bugfix", "css", "docs", "feature"]);
+      expect((await db.query<{ n: number }>("select count(*)::int as n from public.tasks")).rows[0]?.n).toBe(0);
+      expect((await db.query<{ n: number }>("select count(*)::int as n from private.dev_totp")).rows[0]?.n).toBe(0);
+      const b = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "second-pw-test" });
+      expect(b.created).toBe(false);
+      expect((await login("first-pw-test")).rows.length).toBe(0);
+      expect((await login("second-pw-test")).rows.length).toBe(1);
+      expect(verifyOnlineRows(await readLedgerOnline(db, DEMO_ORG_ID), DEMO_ORG_ID).ok).toBe(true);
     } finally {
       await db.end();
     }

@@ -19,6 +19,22 @@ export async function seedMinimal(db: SqlClient, o: { remoteUrl: string; ownerEm
   return { org: DEMO_ORG_ID, owner: DEMO_OWNER_ID, repo: DEMO_REPO_ID, created: true };
 }
 
+export const LOCAL_EMAIL = "ti@mandat.local";
+
+/**
+ * D-292 (`pnpm local`): one owner with a password, the 4 task types, no cards, no TOTP, the ladder empty (level 0).
+ * Called on every start: a fresh password each time (printed once to the terminal, stored only as a bcrypt hash).
+ */
+export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password: string }): Promise<{ org: string; email: string; created: boolean }> {
+  const m = await seedMinimal(db, { remoteUrl: o.remoteUrl, ownerEmail: LOCAL_EMAIL });
+  await db.query("update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')), email_confirmed_at = coalesce(email_confirmed_at, now()) where id = $1", [DEMO_OWNER_ID, o.password]);
+  await db.query("update public.repos set remote_url = $2 where id = $1", [DEMO_REPO_ID, o.remoteUrl]);
+  for (const [name, risk] of [["bugfix", "low"], ["feature", "medium"], ["css", "low"], ["docs", "low"]] as const) {
+    await db.query("insert into public.task_types (org_id, repo_id, name, risk_class) values ($1, $2, $3, $4) on conflict do nothing", [DEMO_ORG_ID, DEMO_REPO_ID, name, risk]);
+  }
+  return { org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: m.created };
+}
+
 // Демо промпт т. 8 „Общо за E3“: org mandat-demo with 4 accounts, the ladder of agent claude (css=3 pinned, docs=2,
 // feature=1, bugfix=0, simulated history), 3 inbox cards + a merged and a running task. Passwords and TOTP secrets are
 // generated here and returned ONCE to the caller (the CLI prints them; never stored in the repo or the log).
