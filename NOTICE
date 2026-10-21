@@ -13,3 +13,7 @@ Full list of third-party packages and licenses: THIRD_PARTY_LICENSES.md (generat
 Claude Code (@anthropic-ai/claude-code) is proprietary software of Anthropic, PBC. It is not part of
 this distribution: it is installed only into a locally built Docker image and runs as a separate,
 unmodified process. Images containing it are never published.
+
+packages/cli/src/commands/accounts.ts (subscriptionLabel) is adapted from T3 Code
+(https://github.com/pingdotgg/t3code, apps/server/src/provider/ClaudeProvider.ts),
+Copyright (c) 2026 T3 Tools Inc., licensed under the MIT License.

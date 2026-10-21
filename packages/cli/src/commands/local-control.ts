@@ -14,6 +14,8 @@ export interface ControlDeps {
   start(k: Keys): Promise<boolean>;
   stop(): Promise<void>;
   providers(): Promise<string[] | null>;
+  /** D-295: the subscription accounts (from `claude auth status`; no token) */
+  accounts(): Promise<{ name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }[]>;
 }
 
 const MAX_BODY = 4096;
@@ -48,6 +50,10 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
     };
     const got = Buffer.from(String(req.headers.authorization ?? ""));
     if (got.length !== want.length || !timingSafeEqual(got, want)) return send(401, { error: "unauthorized" });
+    if (req.url === "/accounts" && req.method === "GET") {
+      void d.accounts().then((accounts) => send(200, { accounts }), () => send(500, { error: "internal" }));
+      return;
+    }
     if (req.url !== "/keys") return send(404, { error: "not_found" });
     void (async () => {
       try {

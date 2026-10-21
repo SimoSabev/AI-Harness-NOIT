@@ -14,6 +14,7 @@ import { anchorCommand } from "./commands/anchor.js";
 import { demoExportRepo, demoExternalPr, demoSeed, demoSpill } from "./commands/demo.js";
 import { workerCommand } from "./commands/worker.js";
 import { localCommand } from "./commands/local.js";
+import { accountsCommand, loginCommand, logoutCommand } from "./commands/accounts.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -203,6 +204,28 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--once", "process at most one task and exit")
     .action(async (o: { once?: boolean }) => {
       code = await workerCommand(io, { home: home(), once: Boolean(o.once) });
+    });
+  // D-295: subscription accounts (one profile volume per account)
+  program
+    .command("login")
+    .description("sign in to a Claude subscription account (Anthropic's own flow, in your terminal)")
+    .option("--name <name>", "a short name for this account (a-z, 0-9, -)", "default")
+    .action(async (o: { name: string }) => {
+      code = await loginCommand(io, deps(), { name: o.name });
+    });
+  program
+    .command("accounts")
+    .description("the signed-in subscription accounts")
+    .option("--json", "machine output")
+    .action(async (o: { json?: boolean }) => {
+      code = await accountsCommand(io, deps(), { json: json(o) });
+    });
+  program
+    .command("logout")
+    .description("sign out of a subscription account and remove its profile")
+    .requiredOption("--name <name>", "the account name")
+    .action(async (o: { name: string }) => {
+      code = await logoutCommand(io, deps(), { name: o.name });
     });
   program
     .command("local")

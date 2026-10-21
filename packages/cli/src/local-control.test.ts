@@ -18,8 +18,10 @@ describe("mandat local control (D-293)", () => {
         providers = null;
       },
       providers: async () => providers,
+      accounts: async () => [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }],
     });
     try {
+      expect(await (await fetch(`${c.url}/accounts`, { headers: { authorization: `Bearer ${c.token}` } })).json()).toEqual({ accounts: [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }] });
       expect(c.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       const call = (method: string, body?: unknown, token = c.token) =>
         fetch(`${c.url}/keys`, { method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
@@ -40,7 +42,7 @@ describe("mandat local control (D-293)", () => {
     }
   });
   it("a failed proxy start → 502 proxy_start_failed", async () => {
-    const c = await startControl({ start: async () => false, stop: async () => undefined, providers: async () => null });
+    const c = await startControl({ start: async () => false, stop: async () => undefined, providers: async () => null, accounts: async () => [] });
     try {
       const r = await fetch(`${c.url}/keys`, { method: "POST", headers: { authorization: `Bearer ${c.token}` }, body: JSON.stringify({ anthropic: "a".repeat(40) }) });
       expect([r.status, await r.json()]).toEqual([502, { error: "proxy_start_failed" }]);
