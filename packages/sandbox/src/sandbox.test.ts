@@ -12,6 +12,9 @@ import {
   dockerSpawnEnv,
   ensureUpstreamNetwork,
   envForPhase,
+  PROFILE_DIR,
+  profileVolume,
+  buildProfileArgs,
   imageTags,
   infraUser,
   runIdTime,
@@ -300,5 +303,52 @@ describe("imageTags (D-053)", () => {
     w("packages/contract/src/index.ts", "changed");
     const c = await imageTags(root);
     expect(c.proxy).not.toBe(b.proxy);
+  });
+});
+
+describe("subscription profiles (D-295)", () => {
+  it("profileVolume: provider + a short slug; anything else is refused", () => {
+    expect(profileVolume("claude", "work")).toBe("mandat-profile-claude-work");
+    expect(profileVolume("claude", "default")).toBe("mandat-profile-claude-default");
+    for (const bad of ["", "Work", "a b", "../x", "x".repeat(33)]) expect(() => profileVolume("claude", bad)).toThrow(MandatError);
+  });
+  it("agent env with a profile: no API key name, CLAUDE_CONFIG_DIR on the profile, HTTPS_PROXY = the gate", () => {
+    const e = envForPhase("agent", { tokenName: "profile" });
+    expect(e.names).toEqual(["AWS_SECRET_ACCESS_KEY"]);
+    expect(e.publicValues).toMatchObject({ CLAUDE_CONFIG_DIR: PROFILE_DIR, HTTPS_PROXY: "http://egress-gate:80", CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1" });
+    expect(e.publicValues.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+  it("a profile volume: only role agent, only at PROFILE_DIR", () => {
+    const vol = profileVolume("claude", "work");
+    const spec = (role: "agent" | "test" | "export", target = PROFILE_DIR) => ({
+      role, runId: "r_x", image: "img", network: "none", user: "1000:1000" as const, envNames: [], publicEnv: {},
+      mounts: [{ kind: "volume" as const, source: vol, target, readonly: false }],
+    });
+    expect(buildRunArgs(spec("agent"), ctx)).toEqual(expect.arrayContaining(["-v", `${vol}:${PROFILE_DIR}`]));
+    expect(() => buildRunArgs(spec("test"), ctx)).toThrow(/profile/);
+    expect(() => buildRunArgs(spec("export"), ctx)).toThrow(/profile/);
+    expect(() => buildRunArgs(spec("agent", "/m/work/x"), ctx)).toThrow(/profile/);
+  });
+});
+
+describe("profile helper containers (D-295)", () => {
+  const vol = profileVolume("claude", "work");
+  it("login: -it, mandat-upstream, uid 1000, cap-drop ALL, no-new-privileges, the unmodified claude auth login", () => {
+    const a = buildProfileArgs("login", { image: "img", volume: vol });
+    expect(a.slice(0, 3)).toEqual(["run", "--rm", "-it"]);
+    expect(a).toEqual(expect.arrayContaining(["--network", "mandat-upstream", "--user", "1000:1000", "--cap-drop=ALL", "--security-opt=no-new-privileges", "-v", `${vol}:${PROFILE_DIR}`, "-e", `CLAUDE_CONFIG_DIR=${PROFILE_DIR}`]));
+    expect(a.slice(a.indexOf("img"))).toEqual(["img", "auth", "login", "--claudeai"]);
+    expect(a.join(" ")).not.toMatch(/privileged|docker\.sock|--cap-add|-p /);
+  });
+  it("status: --network none, read-only volume, json; logout: none network; init: root only for chown, no network", () => {
+    const s = buildProfileArgs("status", { image: "img", volume: vol });
+    expect(s).toEqual(expect.arrayContaining(["--network", "none", "-v", `${vol}:${PROFILE_DIR}:ro`]));
+    expect(s.slice(s.indexOf("img"))).toEqual(["img", "auth", "status", "--json"]);
+    const o = buildProfileArgs("logout", { image: "img", volume: vol });
+    expect(o.slice(o.indexOf("img"))).toEqual(["img", "auth", "logout"]);
+    const i = buildProfileArgs("init", { image: "img", volume: vol });
+    expect(i).toEqual(expect.arrayContaining(["--network", "none", "--user", "0:0"]));
+    expect(i.slice(i.indexOf("img"))).toEqual(["img", "-c", `chown 1000:1000 ${PROFILE_DIR}`]);
+    expect(() => buildProfileArgs("status", { image: "img", volume: "mandat-run-x" })).toThrow(MandatError);
   });
 });

@@ -179,6 +179,9 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
   for (const m of spec.mounts) {
     if (m.kind === "volume") {
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(m.source)) forbid("invalid volume name", { source: m.source });
+      if ((m.source.startsWith(PROFILE_PREFIX) || m.target === PROFILE_DIR) && !(spec.role === "agent" && m.source.startsWith(PROFILE_PREFIX) && m.target === PROFILE_DIR)) {
+        forbid("a subscription profile volume is only for the agent, at PROFILE_DIR (D-295)", { source: m.source, target: m.target });
+      }
     } else {
       checkBind(m, spec.role, ctx, spec.caFile);
     }
@@ -190,6 +193,24 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
   if (spec.workdir !== undefined) args.push("-w", spec.workdir);
   args.push(spec.image);
   return args;
+}
+
+/**
+ * D-295: the helper containers of a subscription profile, run by `mandat login|accounts|logout` (not by a task).
+ * login is interactive (the user's own terminal) and runs the unmodified `claude auth login` — the provider's flow;
+ * status reads the volume read-only without network; init is the one root step (chown of the fresh volume).
+ */
+export function buildProfileArgs(kind: "init" | "login" | "status" | "logout", o: { image: string; volume: string }): string[] {
+  if (!o.volume.startsWith(PROFILE_PREFIX) || !/^[a-z0-9-]+$/.test(o.volume)) forbid("not a profile volume", { volume: o.volume });
+  if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
+  const base = ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m", "--pids-limit=256", "--memory=1g", "--label", "mandat.profile=1"];
+  const env = ["-e", "HOME=/tmp", "-e", `CLAUDE_CONFIG_DIR=${PROFILE_DIR}`, "-e", "DISABLE_AUTOUPDATER=1"];
+  if (kind === "init") {
+    return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${PROFILE_DIR}`];
+  }
+  if (kind === "status") return ["run", "--rm", "--network", "none", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}:ro`, "--entrypoint", "claude", o.image, "auth", "status", "--json"];
+  if (kind === "logout") return ["run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "logout"];
+  return ["run", "--rm", "-it", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "login", "--claudeai"];
 }
 
 export interface ProxyRunOptions {
@@ -239,10 +260,22 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
 
 const BASE_PUBLIC = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/home/agent", LANG: "C.UTF-8", CI: "true" };
 
+/**
+ * D-295: subscription profiles (several accounts). The user signs in to the unmodified CLI through the provider's own
+ * flow (`mandat login`); each login lives in its own named volume, which only the agent container mounts at PROFILE_DIR.
+ * The harness never reads it; the agent reaches the provider only through the gate's CONNECT tunnel (TLS end to end).
+ */
+export const PROFILE_DIR = "/home/agent/.claude-profile";
+const PROFILE_PREFIX = "mandat-profile-";
+export function profileVolume(provider: "claude", name: string): string {
+  if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(name)) throw new MandatError("E_USAGE", "profile name: a-z, 0-9, '-', up to 32");
+  return `${PROFILE_PREFIX}${provider}-${name}`;
+}
+
 /** 8.2: exact env sets per phase. names = secrets only (→ RunSpec.envNames); publicValues → RunSpec.publicEnv. */
 export function envForPhase(
   phase: "install" | "agent" | "test",
-  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY"; testsEnv?: Record<string, string> } = {},
+  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "profile"; testsEnv?: Record<string, string> } = {},
 ): { names: string[]; publicValues: Record<string, string> } {
   if (phase === "install") {
     return {
@@ -263,6 +296,24 @@ export function envForPhase(
     return {
       names: ["OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY"],
       publicValues: { ...BASE_PUBLIC, CODEX_HOME: "/m/codex-home", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+    };
+  }
+  if (phase === "agent" && o.tokenName === "profile") {
+    // D-295: the CLI uses its own subscription login from the profile; the only way out is the gate's tunnel.
+    return {
+      names: ["AWS_SECRET_ACCESS_KEY"],
+      publicValues: {
+        ...BASE_PUBLIC,
+        CLAUDE_CONFIG_DIR: PROFILE_DIR,
+        HTTPS_PROXY: "http://egress-gate:80",
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-haiku-5-5",
+        CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+        DISABLE_AUTOUPDATER: "1",
+        DISABLE_UPDATES: "1",
+        npm_config_update_notifier: "false",
+        npm_config_offline: "true",
+        MANDAT_NOTES: "/m/out/notes.txt",
+      },
     };
   }
   if (phase === "agent") {
