@@ -16,8 +16,12 @@ export interface AnthropicChannelEnv {
 export interface OpenAiChannelEnv {
   OPENAI_API_KEY: string; // mdt_…
 }
-export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv;
-export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : c.ANTHROPIC_API_KEY);
+/** D-295: a subscription profile — the CLI uses its own login (profile volume); no token at all. */
+export interface ProfileChannelEnv {
+  PROFILE: true;
+}
+export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv | ProfileChannelEnv;
+export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : "PROFILE" in c ? "" : c.ANTHROPIC_API_KEY);
 /** env holds ONLY the secret values (they go to the docker CLI env, D-043); public env comes from envForPhase. */
 export interface AgentLaunchSpec {
   argv: string[];

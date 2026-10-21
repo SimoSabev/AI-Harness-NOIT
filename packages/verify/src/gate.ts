@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { GateLogLine, MandatError } from "@mandat/contract";
-import type { GatePolicy, GateRoute } from "@mandat/contract";
+import type { GatePolicy, GateRoute, GateTunnel } from "@mandat/contract";
 import { buildRunArgs, dockerText, names } from "@mandat/sandbox";
 import type { DockerRunner, MountSpec, Tree } from "@mandat/sandbox";
 import { writeAtomic } from "./fsx.js";
@@ -56,14 +56,15 @@ export interface RunGate {
   net: string;
   name: string;
   paths: ReturnType<typeof gatePaths>;
-  setPolicy(phase: GatePolicy["phase"], routes: GateRoute[]): Promise<void>;
+  /** D-295: `tunnels` only for a subscription profile channel (exact host:port CONNECT in the agent phase) */
+  setPolicy(phase: GatePolicy["phase"], routes: GateRoute[], tunnels?: GateTunnel[]): Promise<void>;
   stop(): Promise<void>;
 }
 
 /** Writes the policy atomically and waits for the gate's policy_loaded line (D-044; timeout → E_GATE_POLICY). */
-async function setPolicyAndWait(ctx: GateCtx, paths: ReturnType<typeof gatePaths>, phase: GatePolicy["phase"], routes: GateRoute[]): Promise<void> {
+async function setPolicyAndWait(ctx: GateCtx, paths: ReturnType<typeof gatePaths>, phase: GatePolicy["phase"], routes: GateRoute[], tunnels?: GateTunnel[]): Promise<void> {
   const before = readGateLog(paths.log).filter((l) => l.kind === "policy_loaded").length;
-  const policy: GatePolicy = { version: 1, run_id: ctx.runId, phase, routes };
+  const policy: GatePolicy = { version: 1, run_id: ctx.runId, phase, routes, ...(tunnels && tunnels.length > 0 ? { tunnels } : {}) };
   writeAtomic(path.join(paths.policyDir, "policy.json"), JSON.stringify(policy));
   const sleep = ctx.sleep ?? defaultSleep;
   const deadline = ctx.policyTimeoutMs ?? 5000;
@@ -122,7 +123,7 @@ export async function startRunGate(ctx: GateCtx, initial: { phase: GatePolicy["p
   await setPolicyAndWait(ctx, paths, initial.phase, initial.routes);
   return {
     ip, net, name, paths,
-    setPolicy: (phase, routes) => setPolicyAndWait(ctx, paths, phase, routes),
+    setPolicy: (phase, routes, tunnels) => setPolicyAndWait(ctx, paths, phase, routes, tunnels),
     async stop() {
       await dockerText(d, ["rm", "-f", name], 60_000);
       await dockerText(d, ["network", "rm", net], 60_000);

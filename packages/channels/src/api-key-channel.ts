@@ -5,6 +5,7 @@ import type { ChannelRef, GateRoute } from "@mandat/contract";
 import { adminBearer, mintTaskToken } from "@mandat/llm-proxy";
 import type { TaskUsage } from "@mandat/llm-proxy";
 import type { Channel } from "./channel.js";
+import { profileChannel } from "./profile-channel.js";
 
 export const API_KEY_ROUTES: readonly GateRoute[] = [
   { id: "llm-messages", method: "POST", match: { kind: "exact", path: "/v1/messages" }, upstream: "llm_proxy" },
@@ -66,6 +67,9 @@ export function apiKeyChannel(o: {
 
 /** E0: only api_key; cli_profile and local → E_CHANNEL_UNSUPPORTED. */
 export function channelFor(ref: ChannelRef, o: { proxyAdminUrl: string; secretPath: string }): Channel {
+  // D-295: claude-profile-<name> → the subscription login in the profile volume of that name
+  const prof = ref.kind === "cli_profile" ? /^claude-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
+  if (prof?.[1]) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[1] });
   if (ref.kind !== "api_key") throw new MandatError("E_CHANNEL_UNSUPPORTED", `channel kind ${ref.kind} is not supported in E0`);
   // E3в: anthropic-key-* with the E0 model; openai-key-* (Codex, Responses API; model and price from Simo [НП])
   if (/^anthropic-key-(main|demo)$/.test(ref.label) && ref.model === "claude-sonnet-5-5") return apiKeyChannel({ label: ref.label, model: ref.model, ...o });

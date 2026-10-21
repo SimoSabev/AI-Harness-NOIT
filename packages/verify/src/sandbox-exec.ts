@@ -1,4 +1,4 @@
-import { buildRunArgs, envForPhase } from "@mandat/sandbox";
+import { PROFILE_DIR, buildRunArgs, envForPhase } from "@mandat/sandbox";
 import type { DockerRunResult, DockerRunner, MountSpec, RunRole, Tree } from "@mandat/sandbox";
 import { gatePaths } from "./gate.js";
 
@@ -20,6 +20,8 @@ export interface SandboxRun {
   network: string;
   tree?: Tree;
   env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" };
+  /** D-295: the subscription profile volume of the agent (buildRunArgs refuses it for any other role) */
+  profile?: string;
   user?: "1000:1000" | "0:0";
   cmd: string[];
   name?: string;
@@ -39,7 +41,9 @@ export function runSandbox(ctx: SandboxCtx, o: SandboxRun): Promise<DockerRunRes
     mounts.push({ kind: "bind", source: p.resolv, target: "/etc/resolv.conf", readonly: true });
     mounts.push({ kind: "bind", source: p.hosts, target: "/etc/hosts", readonly: true });
   }
-  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(o.env.tokenName ? { tokenName: o.env.tokenName } : {}) });
+  if (o.profile !== undefined) mounts.push({ kind: "volume", source: o.profile, target: PROFILE_DIR, readonly: false });
+  const tokenName = o.profile !== undefined && o.env.phase === "agent" ? ("profile" as const) : o.env.tokenName;
+  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(tokenName ? { tokenName } : {}) });
   const secrets = o.env.secrets ?? {};
   const args = buildRunArgs(
     {

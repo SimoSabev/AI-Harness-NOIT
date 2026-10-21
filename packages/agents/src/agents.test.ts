@@ -85,3 +85,13 @@ describe("stream парсер", () => {
     expect(events.filter((e) => e.type === "result")).toHaveLength(1);
   });
 });
+
+describe("claude with a subscription profile (D-295)", () => {
+  it("PROFILE channel → no token in env, only the canary; the argv is the same", () => {
+    const a = claudeAdapter({ model: "claude-sonnet-5-5", cliVersion: "2.1.302" });
+    const ctx = { runId: "r_x", taskId: "t_x", prompt: "p", model: "claude-sonnet-5-5", budgetUsd: 0.5, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
+    const prof = a.launch(ctx, { PROFILE: true }, { name: "AWS_SECRET_ACCESS_KEY", value: "c" });
+    expect(prof.env).toEqual({ AWS_SECRET_ACCESS_KEY: "c" });
+    expect(prof.argv).toEqual(a.launch(ctx, { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: "mdt_x" }, { name: "AWS_SECRET_ACCESS_KEY", value: "c" }).argv);
+  });
+});
