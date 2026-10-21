@@ -13,8 +13,12 @@ export const GateRouteSchema = z
 export type GateRoute = z.infer<typeof GateRouteSchema>;
 
 export const GatePhase = z.enum(["install", "agent", "closed"]);
+// D-294: the only CONNECT the gate ever opens — an exact host:port (the Claude subscription channel talks TLS end to end
+// with Anthropic; the gate never sees the credential).
+export const GateTunnelSchema = z.object({ host: z.string().regex(/^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/), port: z.number().int().min(1).max(65535) }).strict();
+export type GateTunnel = z.infer<typeof GateTunnelSchema>;
 export const GatePolicySchema = z
-  .object({ version: z.literal(1), run_id: RunId, phase: GatePhase, routes: z.array(GateRouteSchema) })
+  .object({ version: z.literal(1), run_id: RunId, phase: GatePhase, routes: z.array(GateRouteSchema), tunnels: z.array(GateTunnelSchema).max(8).optional() })
   .strict();
 export type GatePolicy = z.infer<typeof GatePolicySchema>;
 
@@ -22,7 +26,7 @@ export const GateLogLine = z
   .object({
     ts: z.string().datetime(),
     run_id: RunId,
-    kind: z.enum(["allow", "proxy_block", "dns_block", "policy_loaded"]),
+    kind: z.enum(["allow", "proxy_block", "dns_block", "policy_loaded", "tunnel"]),
     method: z.string().optional(),
     path: z.string().max(200).optional(),
     qname: z.string().max(253).optional(),

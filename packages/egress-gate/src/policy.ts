@@ -8,6 +8,16 @@ export type GateDecision =
  * D-100 order: CONNECT → connect; phase closed → phase_closed; strip the query; EXACT (method, path) → allow;
  * "..", "//", "%2e", "%2f" (any case) → bad_path; prefix → allow; otherwise no_route. No normalization.
  */
+/** D-294: CONNECT only to an exact host:port of `tunnels`, only while the agent runs. */
+export function matchTunnel(p: GatePolicy, authority: string): { allow: true; host: string; port: number } | { allow: false } {
+  if (p.phase !== "agent") return { allow: false };
+  const m = /^([A-Za-z0-9.-]+):(\d{1,5})$/.exec(authority);
+  if (!m) return { allow: false };
+  const host = (m[1] ?? "").toLowerCase();
+  const port = Number(m[2]);
+  return (p.tunnels ?? []).some((t) => t.host === host && t.port === port) ? { allow: true, host, port } : { allow: false };
+}
+
 export function matchPolicy(p: GatePolicy, method: string, rawPath: string): GateDecision {
   if (method.toUpperCase() === "CONNECT") return { allow: false, reason: "connect" };
   if (p.phase === "closed") return { allow: false, reason: "phase_closed" };

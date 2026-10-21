@@ -1,3 +1,4 @@
+import net from "node:net";
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
@@ -10,7 +11,7 @@ import { GateLogLine, GatePolicySchema } from "@mandat/contract";
 import type { GatePolicy } from "@mandat/contract";
 import { createRedactor } from "@mandat/redaction";
 import { buildDnsResponse, decideDns, parseDnsQuery } from "./dns.js";
-import { matchPolicy } from "./policy.js";
+import { matchPolicy, matchTunnel } from "./policy.js";
 
 const HOP_BY_HOP = new Set([
   "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "proxy-connection",
@@ -187,9 +188,26 @@ export async function startGate(o: GateOptions): Promise<{ close(): Promise<void
     }
     serveNpm(req, res, method, p);
   });
-  server.on("connect", (req: http.IncomingMessage, socket: Duplex) => {
-    log({ kind: "proxy_block", method: "CONNECT", path: req.url ?? "", status: 403 });
-    socket.end("HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\n\r\n");
+  server.on("connect", (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
+    const t = policy ? matchTunnel(policy, req.url ?? "") : ({ allow: false } as const);
+    if (!t.allow) {
+      log({ kind: "proxy_block", method: "CONNECT", path: (req.url ?? "").slice(0, 200), status: 403 });
+      socket.end("HTTP/1.1 403 Forbidden\r\ncontent-length: 0\r\n\r\n");
+      return;
+    }
+    // D-294: a byte pipe to the allowed host; TLS is end to end, the gate logs only host:port (never the content).
+    const up = net.connect({ host: t.host, port: t.port }, () => {
+      log({ kind: "tunnel", method: "CONNECT", path: `${t.host}:${t.port}`, status: 200 });
+      socket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      if (head.length > 0) up.write(head);
+      up.pipe(socket);
+      socket.pipe(up);
+    });
+    up.on("error", () => {
+      log({ kind: "proxy_block", method: "CONNECT", path: `${t.host}:${t.port}`, status: 502 });
+      socket.end("HTTP/1.1 502 Bad Gateway\r\ncontent-length: 0\r\n\r\n");
+    });
+    socket.on("error", () => up.destroy());
   });
   // E3в: no websocket (Codex's built-in provider prefers websockets; ours is plain HTTPS through the proxy)
   server.on("upgrade", (req: http.IncomingMessage, socket: Duplex) => {

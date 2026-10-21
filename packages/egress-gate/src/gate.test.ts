@@ -7,7 +7,7 @@ import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { GateRouteSchema, ulid } from "@mandat/contract";
 import type { GatePolicy, GateRoute } from "@mandat/contract";
-import { buildDnsResponse, decideDns, matchPolicy, npmAllowlistFromLockfile, parseDnsQuery, startGate } from "./index.js";
+import { buildDnsResponse, decideDns, matchPolicy, matchTunnel, npmAllowlistFromLockfile, parseDnsQuery, startGate } from "./index.js";
 
 const RUN = "r_" + ulid();
 const LLM: GateRoute[] = [
@@ -36,6 +36,21 @@ describe("matchPolicy (6.8, D-100)", () => {
     const prefix = pol("install", [{ id: "p", method: "GET", match: { kind: "prefix", path: "/npm/" }, upstream: "npm_registry" }]);
     expect(matchPolicy(prefix, "GET", "/npm/../v1/messages")).toEqual({ allow: false, reason: "bad_path" });
     expect(matchPolicy(prefix, "GET", "/npm/left-pad").allow).toBe(true);
+  });
+});
+
+describe("matchTunnel (D-294)", () => {
+  it("only exact host:port from tunnels, only in the agent phase; no tunnels → never", () => {
+    const p: GatePolicy = { ...pol("agent", []), tunnels: [{ host: "api.anthropic.com", port: 443 }] };
+    expect(matchTunnel(p, "api.anthropic.com:443")).toEqual({ allow: true, host: "api.anthropic.com", port: 443 });
+    expect(matchTunnel(p, "API.Anthropic.com:443")).toEqual({ allow: true, host: "api.anthropic.com", port: 443 });
+    expect(matchTunnel(p, "api.anthropic.com:80").allow).toBe(false);
+    expect(matchTunnel(p, "evil.api.anthropic.com:443").allow).toBe(false);
+    expect(matchTunnel(p, "api.anthropic.com.evil.com:443").allow).toBe(false);
+    expect(matchTunnel(p, "api.anthropic.com").allow).toBe(false);
+    expect(matchTunnel({ ...p, phase: "install" }, "api.anthropic.com:443").allow).toBe(false);
+    expect(matchTunnel({ ...p, phase: "closed" }, "api.anthropic.com:443").allow).toBe(false);
+    expect(matchTunnel(pol("agent", []), "api.anthropic.com:443").allow).toBe(false);
   });
 });
 
@@ -254,6 +269,33 @@ describe("gate server", () => {
     const blocks = lines().filter((l) => l.kind === "proxy_block");
     expect(blocks.map((b) => b.method)).toEqual(expect.arrayContaining(["PUT", "CONNECT"]));
     expect(lines().some((l) => l.kind === "proxy_block" && l.path === "/api/hello")).toBe(false);
+  });
+
+  it("D-294: CONNECT към разрешен тунел → 200 и байтовете минават; друг хост → 403; лог без съдържание", async () => {
+    const echo = net.createServer((c) => c.on("data", (d) => c.write(d)));
+    await new Promise<void>((r) => echo.listen(0, "127.0.0.1", () => r()));
+    closers.push(() => new Promise((r) => echo.close(() => r())));
+    const port = (echo.address() as net.AddressInfo).port;
+    const { g, lines } = await gate({ ...pol("agent", []), tunnels: [{ host: "127.0.0.1", port }] });
+    await waitFor(() => lines().some((l) => l.kind === "policy_loaded"));
+    const ask = (authority: string, payload: string) =>
+      new Promise<string>((resolve) => {
+        const s = net.connect(g.httpPort, "127.0.0.1", () => s.write(`CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n\r\n`));
+        let b = "";
+        s.on("data", (c) => {
+          b += c.toString();
+          if (b.includes("\r\n\r\n") && !b.includes(payload) && b.startsWith("HTTP/1.1 200")) s.write(payload);
+          if (b.includes(payload)) s.end();
+        });
+        s.on("close", () => resolve(b));
+      });
+    const ok = await ask(`127.0.0.1:${port}`, "secret-bytes-xyz");
+    expect(ok).toMatch(/^HTTP\/1\.1 200/);
+    expect(ok).toContain("secret-bytes-xyz");
+    expect(await ask("example.com:443", "z")).toMatch(/^HTTP\/1\.1 403/);
+    await waitFor(() => lines().some((l) => l.kind === "tunnel"));
+    expect(lines().find((l) => l.kind === "tunnel")).toMatchObject({ method: "CONNECT", path: `127.0.0.1:${port}`, status: 200 });
+    expect(JSON.stringify(lines())).not.toContain("secret-bytes-xyz");
   });
 
   it("E3в: Upgrade (websocket) към /v1/responses → 403, логва се, upstream не вижда нищо", async () => {
