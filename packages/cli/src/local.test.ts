@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_DB, dbRunArgs, localDbUrl, pendingMigrations, totpLines } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, localDbUrl, localPreflight, pendingMigrations, retryWithoutApt, totpLines } from "./commands/local.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -25,5 +25,29 @@ describe("totpLines (D-297)", () => {
     const l = totpLines("ti@mandat.local", "ABCDEFGHIJKLMNOP");
     expect(l.join("\n")).toContain("Ключ:    ABCDEFGHIJKLMNOP");
     expect(l.join("\n")).toContain("otpauth://totp/Hamut:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Hamut&algorithm=SHA1&digits=6&period=30");
+  });
+});
+
+describe("localPreflight (D-302)", () => {
+  const good = { docker: "29.1.0", cpus: 4, node: "24.22.0", freeGb: 40, imagesPresent: false, webPortFree: true };
+  it("всичко наред → ok, по един ред на проверка", () => {
+    const r = localPreflight(good);
+    expect(r.ok).toBe(true);
+    expect(r.lines.map((l) => l.startsWith("✓"))).toEqual([true, true, true, true, true]);
+  });
+  it("Docker не работи / стар; малко място за образите; зает порт → ясни причини и какво да направиш", () => {
+    expect(localPreflight({ ...good, docker: null }).lines[0]).toContain("Пусни Docker Desktop");
+    expect(localPreflight({ ...good, docker: "24.0.7" }).ok).toBe(false);
+    const disk = localPreflight({ ...good, freeGb: 6 });
+    expect(disk.ok).toBe(false);
+    expect(disk.lines.join("\n")).toContain("нужни са ≥ 10 GB");
+    expect(localPreflight({ ...good, freeGb: 6, imagesPresent: true }).ok).toBe(true);
+    expect(localPreflight({ ...good, webPortFree: false }).lines.join("\n")).toContain("порт 3000 е зает");
+    expect(localPreflight({ ...good, node: "22.11.0" }).ok).toBe(false);
+    expect(localPreflight({ ...good, cpus: 1 }).ok).toBe(false);
+  });
+  it("aptFailed: повторът без apt само ако не е изключен вече", () => {
+    expect(retryWithoutApt({})).toBe(true);
+    expect(retryWithoutApt({ MANDAT_SANDBOX_APT: "0" })).toBe(false);
   });
 });

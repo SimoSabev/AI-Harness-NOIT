@@ -1,8 +1,9 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statfsSync } from "node:fs";
+import { createServer } from "node:net";
 import path from "node:path";
-import { imageTags } from "@mandat/sandbox";
+import { compareVersions, imageTags } from "@mandat/sandbox";
 import { buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
 import { realDeps } from "../deps.js";
 import type { Io } from "../output.js";
@@ -40,6 +41,51 @@ export function totpLines(email: string, secret: string): string[] {
     `  Адрес:   otpauth://totp/Hamut:${encodeURIComponent(email)}?secret=${secret}&issuer=Hamut&algorithm=SHA1&digits=6&period=30`,
     "  Трябва за одобрение на правилата на репото и на задачи с повече свобода.",
   ];
+}
+
+/** D-302: what `pnpm local` needs, checked before anything is created; each line says what is wrong and what to do. */
+export interface PreflightFacts { docker: string | null; cpus: number; node: string; freeGb: number; imagesPresent: boolean; webPortFree: boolean }
+export function localPreflight(f: PreflightFacts): { ok: boolean; lines: string[] } {
+  const out: { ok: boolean; text: string }[] = [];
+  const add = (ok: boolean, text: string) => out.push({ ok, text });
+  if (f.docker === null) add(false, "Docker не отговаря. Пусни Docker Desktop (или dockerd) и опитай пак.");
+  else add(compareVersions(f.docker, "25.0.5") >= 0, compareVersions(f.docker, "25.0.5") >= 0 ? `Docker ${f.docker}` : `Docker ${f.docker} е стар: нужен е ≥ 25.0.5`);
+  add(f.cpus >= 2, f.cpus >= 2 ? `${f.cpus} CPU за Docker` : `Docker вижда ${f.cpus} CPU; нужни са ≥ 2 (Docker Desktop: Settings → Resources)`);
+  const major = Number(f.node.split(".")[0]);
+  add(major === 24, major === 24 ? `Node ${f.node}` : `Node ${f.node}: нужен е Node 24 (nvm install 24)`);
+  const need = f.imagesPresent ? 2 : 10;
+  add(f.freeGb >= need, f.freeGb >= need ? `${f.freeGb} GB свободно място` : `${f.freeGb} GB свободно място; нужни са ≥ ${need} GB${f.imagesPresent ? "" : " за образите"} (docker system prune освобождава)`);
+  add(f.webPortFree, f.webPortFree ? `порт ${WEB_PORT} е свободен` : `порт ${WEB_PORT} е зает: спри другото приложение (lsof -i :${WEB_PORT})`);
+  return { ok: out.every((x) => x.ok), lines: out.map((x) => `${x.ok ? "✓" : "✗"} ${x.text}`) };
+}
+
+/** The sandbox image needs the Debian mirrors only for the R14 probe tools; without them the build retries once with SANDBOX_APT=0 (D-151). */
+export function retryWithoutApt(env: Record<string, string | undefined>): boolean {
+  return env.MANDAT_SANDBOX_APT !== "0";
+}
+
+function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const s = createServer();
+    s.once("error", () => resolve(false));
+    s.listen(port, "127.0.0.1", () => s.close(() => resolve(true)));
+  });
+}
+
+async function gatherFacts(): Promise<PreflightFacts> {
+  const v = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], { encoding: "utf8" });
+  const up = v.status === 0;
+  const cpus = up ? Number(spawnSync("docker", ["info", "--format", "{{.NCPU}}"], { encoding: "utf8" }).stdout.trim()) || 0 : 0;
+  const t = await imageTags(repoRoot);
+  const imagesPresent = up && [t.sandbox, t.gate, t.proxy].every((x) => spawnSync("docker", ["image", "inspect", x]).status === 0);
+  let freeGb = 0;
+  try {
+    const st = statfsSync(repoRoot);
+    freeGb = Math.floor((st.bavail * st.bsize) / 1024 ** 3);
+  } catch {
+    freeGb = 0;
+  }
+  return { docker: up ? v.stdout.trim() : null, cpus, node: process.versions.node, freeGb, imagesPresent, webPortFree: await portFree(WEB_PORT) };
 }
 
 const docker = (args: string[]) => spawnSync("docker", args, { encoding: "utf8" });
@@ -94,11 +140,22 @@ async function ensureImages(io: Io): Promise<boolean> {
   if ([t.sandbox, t.gate, t.proxy].every((x) => docker(["image", "inspect", x]).status === 0)) return true;
   io.stderr("образи: липсват, правя ги (първия път е бавно, 5–15 мин)…\n");
   const env = Object.fromEntries(Object.entries(io.env).filter(([k]) => k !== "ANTHROPIC_API_KEY" && k !== "OPENAI_API_KEY"));
-  const r = spawnSync(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), "images", "build"], { stdio: "inherit", env });
-  return r.status === 0;
+  const build = (e: Record<string, string | undefined>) => spawnSync(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), "images", "build"], { stdio: "inherit", env: e }).status === 0;
+  if (build(env)) return true;
+  if (retryWithoutApt(env)) {
+    io.stderr("образи: строежът падна; пробвам пак без Debian огледалата (MANDAT_SANDBOX_APT=0)…\n");
+    if (build({ ...env, MANDAT_SANDBOX_APT: "0" })) return true;
+  }
+  io.stderr("образи: не станаха. Зад фирмен прокси: MANDAT_EXTRA_CA_CERTS=/път/до/ca.pem pnpm local\n");
+  return false;
 }
 
 export async function localCommand(io: Io, o: { home: string; dbPort: number; signal?: AbortSignal }): Promise<number> {
+  io.stderr("[1/4] проверка на компютъра\n");
+  const pre = localPreflight(await gatherFacts());
+  for (const l of pre.lines) io.stderr(`      ${l}\n`);
+  if (!pre.ok) return 3;
+  io.stderr("[2/4] база и демо репо\n");
   if (!ensureDb(io, o.dbPort)) return 3;
   const url = localDbUrl(o.dbPort);
   const db = await connect(url);
@@ -118,7 +175,9 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   } finally {
     await db.end();
   }
+  io.stderr("[3/4] образи на пясъчника\n");
   if (!(await ensureImages(io))) return 3;
+  io.stderr("[4/4] прокси, уеб интерфейс и worker\n");
 
   // D-293: keys go to the proxy only (from the UI through the control endpoint, or once from this command's env);
   // the web server and the worker never get them in their env.
