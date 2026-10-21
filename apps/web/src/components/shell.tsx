@@ -16,8 +16,8 @@ export function Shell({ current, waiting, wide = false, children }: { current: "
       <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className={`mx-auto flex h-14 ${wide ? "max-w-7xl" : "max-w-4xl"} items-center gap-4 px-4`}>
           <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-            <span aria-hidden="true" className="inline-flex size-6 items-center justify-center rounded-md bg-zinc-900 text-xs text-white dark:bg-white dark:text-zinc-900">Х</span>
-            {HARNESS}
+            <span aria-hidden="true" className="inline-flex size-6 items-center justify-center rounded-md bg-zinc-900 dark:bg-white" />
+            {HARNESS || <span className="sr-only">Начало</span>}
           </Link>
           {waiting !== null && (
             <nav aria-label="Основна" className="flex flex-1 items-center gap-1">

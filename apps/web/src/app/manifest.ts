@@ -4,8 +4,8 @@ import { HARNESS } from "../lib/brand";
 // Демо промпт т. 8.4 [Ф, Next.js metadata/manifest.mdx]: installable PWA; the phone = inbox + card + diff (Ф4).
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: HARNESS,
-    short_name: HARNESS,
+    name: HARNESS || "Задачи за AI агенти",
+    short_name: HARNESS || "Задачи",
     description: "Задачи на AI агенти с присъда от системи, до които агентът няма достъп.",
     start_url: "/",
     display: "standalone",

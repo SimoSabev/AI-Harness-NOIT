@@ -38,7 +38,7 @@ export function totpLines(email: string, secret: string): string[] {
   return [
     "  Двуфакторен код (само сега): добави в приложение за кодове (Google Authenticator, 1Password…)",
     `  Ключ:    ${secret}`,
-    `  Адрес:   otpauth://totp/Hamut:${encodeURIComponent(email)}?secret=${secret}&issuer=Hamut&algorithm=SHA1&digits=6&period=30`,
+    `  Адрес:   otpauth://totp/Mandat:${encodeURIComponent(email)}?secret=${secret}&issuer=Mandat&algorithm=SHA1&digits=6&period=30`,
     "  Трябва за одобрение на правилата на репото и на задачи с повече свобода.",
   ];
 }
@@ -210,7 +210,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   io.stdout(
     [
       "",
-      "  Хамут работи локално (съдия: Мандат)",
+      "  Харнесът работи локално (съдия: Мандат)",
       `  Отвори:  http://localhost:${WEB_PORT}`,
       `  Имейл:   ${email}`,
       `  Парола:  ${password}   (нова при всяко пускане)`,

@@ -3,14 +3,14 @@ import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner
 
 const BANNER = [
   "",
-  "  Хамут работи локално (съдия: Мандат)",
+  "  Харнесът работи локално (съдия: Мандат)",
   "  Отвори:  http://localhost:3000",
   "  Имейл:   ti@mandat.local",
   "  Парола:  Ab3_x-9   (нова при всяко пускане)",
   "",
   "  Двуфакторен код (само сега): добави в приложение за кодове (Google Authenticator, 1Password…)",
   "  Ключ:    ABCDEFGHIJKLMNOP",
-  "  Адрес:   otpauth://totp/Hamut:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Hamut&algorithm=SHA1&digits=6&period=30",
+  "  Адрес:   otpauth://totp/Mandat:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Mandat&algorithm=SHA1&digits=6&period=30",
   "",
 ].join("\n");
 
@@ -18,7 +18,7 @@ describe("desktop banner (D-303)", () => {
   it("адрес, имейл, парола и TOTP от банера на pnpm local; непълен банер → null", () => {
     expect(parseBanner(BANNER)).toEqual({
       url: "http://localhost:3000", email: "ti@mandat.local", password: "Ab3_x-9",
-      totp: { secret: "ABCDEFGHIJKLMNOP", uri: "otpauth://totp/Hamut:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Hamut&algorithm=SHA1&digits=6&period=30" },
+      totp: { secret: "ABCDEFGHIJKLMNOP", uri: "otpauth://totp/Mandat:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Mandat&algorithm=SHA1&digits=6&period=30" },
     });
     expect(parseBanner(BANNER.replace(/ {2}Ключ:.*\n/, "").replace(/ {2}Адрес:.*\n/, ""))?.totp).toBeNull();
     expect(parseBanner("  Отвори:  http://localhost:3000\n")).toBeNull();

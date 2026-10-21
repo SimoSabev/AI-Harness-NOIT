@@ -23,8 +23,8 @@ describe("inbox summary (т. 8.1)", () => {
   });
 
   it("<title> с брояча", () => {
-    expect(pageTitle(3)).toBe("3 чакат · Хамут");
-    expect(pageTitle(1)).toBe("1 чака · Хамут");
-    expect(pageTitle(0)).toBe("Хамут");
+    expect(pageTitle(3)).toBe("3 чакат");
+    expect(pageTitle(1)).toBe("1 чака");
+    expect(pageTitle(0)).toBe("Задачи");
   });
 });

@@ -9,7 +9,7 @@ test("viewer: списъкът — „Чака теб“ с 4 задачи, бр
   await expect(page.getByRole("heading", { name: "Задачи", level: 1 })).toBeVisible();
   const waiting = page.locator("section", { has: page.getByRole("heading", { name: /Чака теб/ }) });
   await expect(waiting.locator("li")).toHaveCount(4);
-  await expect(page).toHaveTitle("4 чакат · Хамут");
+  await expect(page).toHaveTitle("4 чакат");
   await expect(waiting.getByText("съществува на base и липсва").first()).toBeVisible();
 });
 

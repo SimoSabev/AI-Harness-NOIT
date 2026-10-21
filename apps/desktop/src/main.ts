@@ -6,13 +6,13 @@ import { BrowserWindow, Menu, Tray, app, dialog, nativeImage } from "electron";
 import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
 
-// D-303: the desktop window of Хамут. It runs `pnpm local` (the same harness, the same sandbox), shows its steps,
+// D-303: the desktop window of the harness (no name yet, D-296). It runs `pnpm local` (the same harness, the same sandbox), shows its steps,
 // signs in with the password it printed (never written anywhere) and keeps the app in the tray. Built only locally.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const icon = nativeImage.createFromPath(path.join(repoRoot, "apps/web/public/icon-192.png"));
 const SECURE = { contextIsolation: true, nodeIntegration: false, sandbox: true } as const;
 const LOADING = `data:text/html;charset=utf-8,${encodeURIComponent(
-  '<!doctype html><meta charset="utf-8"><title>Хамут</title><body style="font:15px system-ui;margin:0;display:grid;place-items:center;height:100vh;background:#fafafa;color:#18181b"><div><b>Хамут се пуска…</b><p id="s" style="color:#52525b">проверка на компютъра</p></div>',
+  '<!doctype html><meta charset="utf-8"><title>Харнес</title><body style="font:15px system-ui;margin:0;display:grid;place-items:center;height:100vh;background:#fafafa;color:#18181b"><div><b>Харнесът се пуска…</b><p id="s" style="color:#52525b">проверка на компютъра</p></div>',
 )}`;
 
 let child: ChildProcess | null = null;
@@ -70,7 +70,7 @@ async function open(b: Banner): Promise<void> {
 }
 
 function start(): void {
-  win = new BrowserWindow({ width: 1200, height: 820, title: "Хамут", icon, webPreferences: SECURE });
+  win = new BrowserWindow({ width: 1200, height: 820, title: "", icon, webPreferences: SECURE });
   win.on("close", (e) => {
     if (child) {
       e.preventDefault();
@@ -86,7 +86,7 @@ function start(): void {
     banner = parseBanner(out);
     if (banner) {
       out = "";
-      void open(banner).catch((e: unknown) => dialog.showErrorBox("Хамут", `Интерфейсът не тръгна: ${e instanceof Error ? e.message : String(e)}`));
+      void open(banner).catch((e: unknown) => dialog.showErrorBox("Харнес", `Интерфейсът не тръгна: ${e instanceof Error ? e.message : String(e)}`));
     }
   });
   let errTail = "";
@@ -100,11 +100,11 @@ function start(): void {
   });
   child.on("exit", (code) => {
     child = null;
-    if (!banner) dialog.showErrorBox("Хамут не тръгна", errTail.split("\n").filter((l) => /✗|грешка|не отговаря|не станаха|Error/i.test(l)).join("\n") || `pnpm local излезе с ${code ?? "?"}`);
+    if (!banner) dialog.showErrorBox("Харнесът не тръгна", errTail.split("\n").filter((l) => /✗|грешка|не отговаря|не станаха|Error/i.test(l)).join("\n") || `pnpm local излезе с ${code ?? "?"}`);
     app.quit();
   });
   tray = new Tray(icon.resize({ width: 18, height: 18 }));
-  tray.setToolTip("Хамут");
+  tray.setToolTip("Харнес");
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Отвори", click: show },
     { type: "separator" },

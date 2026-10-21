@@ -25,7 +25,7 @@ export default async function HarnessPage() {
     <Shell current="harness" waiting={c.waiting}>
       <h1 className="text-2xl font-semibold tracking-tight">Правила на репото</h1>
       <p className="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
-        Хамут сам чете репото (без AI) и предлага правилата: как се инсталира, как се пускат тестовете, кои файлове агентът не пипа.
+        Харнесът сам чете репото (без AI) и предлага правилата: как се инсталира, как се пускат тестовете, кои файлове агентът не пипа.
         Всяко поле казва откъде е взето. Нищо не се одобрява само; агент, който пипне правилата, получава НЕЯСНО.
       </p>
       {v.repos.length === 0 && <p className={`${card} mt-6 p-5 text-sm`}>Няма свързано хранилище. Пусни харнеса с <code className="font-mono">pnpm local</code>.</p>}

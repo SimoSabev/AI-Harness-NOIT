@@ -24,7 +24,7 @@ describe("totpLines (D-297)", () => {
   it("ключът и otpauth адресът за приложение за кодове", () => {
     const l = totpLines("ti@mandat.local", "ABCDEFGHIJKLMNOP");
     expect(l.join("\n")).toContain("Ключ:    ABCDEFGHIJKLMNOP");
-    expect(l.join("\n")).toContain("otpauth://totp/Hamut:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Hamut&algorithm=SHA1&digits=6&period=30");
+    expect(l.join("\n")).toContain("otpauth://totp/Mandat:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Mandat&algorithm=SHA1&digits=6&period=30");
   });
 });
 

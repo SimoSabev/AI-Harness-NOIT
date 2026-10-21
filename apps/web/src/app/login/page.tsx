@@ -16,7 +16,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <span aria-hidden="true" className="inline-flex size-10 items-center justify-center rounded-xl bg-zinc-900 text-lg font-semibold text-white dark:bg-white dark:text-zinc-900">М</span>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight">Вход в {HARNESS}</h1>
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight">{HARNESS ? `Вход в ${HARNESS}` : "Вход"}</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">AI агенти, които не могат да излъжат за тестовете.</p>
         </div>
         {mode === "none" ? (
