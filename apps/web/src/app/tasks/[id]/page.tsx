@@ -9,7 +9,8 @@ import { agentLabel } from "../../../lib/agents";
 import { pageTitle } from "../../../lib/inbox";
 import { ago, checkLabel, groupOf, statusOf } from "../../../lib/status";
 import type { StatusKey } from "../../../lib/status";
-import { reasonText } from "../../../lib/verdict-view";
+import { ladderHint } from "../../../lib/ladder-hint";
+import { reasonText, testsOf } from "../../../lib/verdict-view";
 import { db } from "../../../lib/server/db";
 import { canAct, pageCtx } from "../../../lib/server/page";
 import { taskDetail } from "../../../lib/server/queries";
@@ -22,6 +23,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 }
 
 const STEPS = ["Агентът работи", "Мандат проверява", "Решение"] as const;
+const LADDER_INPUT: Record<string, string> = { success: "успех (ПРОВЕРЕНО, слято, без отмяна)", failure: "провал", hard_fail: "твърд провал", neutral: "без промяна" };
 function stepOf(k: StatusKey): number {
   if (k === "queued" || k === "running") return 0;
   if (k === "checking") return 1;
@@ -87,6 +89,41 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           <TaskActions taskId={t.id} status={s.key} canAct={canAct(c.role)} changesetId={t.changeset_id} headSha={t.head_sha} twoFactor={t.requires_second_factor} />
         </div>
       </div>
+
+      {(t.a_total !== null || t.inv_before !== null || d.ladder || t.ledger_seq !== null) && (
+        <section aria-labelledby="trust-h" className="mt-8">
+          <h2 id="trust-h" className="mb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">Защо да вярваш на резултата</h2>
+          <dl className={`${card} grid gap-px overflow-hidden bg-zinc-200 sm:grid-cols-3 dark:bg-zinc-800`}>
+            <div className="bg-white p-4 dark:bg-zinc-900">
+              <dt className="text-xs text-zinc-500 dark:text-zinc-400">Тестове преди → след</dt>
+              <dd className="mt-1 font-mono text-sm">{t.a_total !== null || t.inv_before !== null ? testsOf(t) : "няма данни"}</dd>
+            </div>
+            <div className="bg-white p-4 dark:bg-zinc-900">
+              <dt className="text-xs text-zinc-500 dark:text-zinc-400">Стълба на доверие ({agentLabel(t.agent)}, {t.type})</dt>
+              <dd className="mt-1 text-sm">{d.ladder ? ladderHint(d.ladder) : "ниво 0 (няма история)"}</dd>
+              <dd className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">0 клон · 1 PR чернова · 2 PR · 3 слива сам</dd>
+            </div>
+            <div className="bg-white p-4 dark:bg-zinc-900">
+              <dt className="text-xs text-zinc-500 dark:text-zinc-400">Дневник</dt>
+              <dd className="mt-1 text-sm">{t.ledger_seq !== null ? `запис #${t.ledger_seq}, свързан с хеш` : "още няма запис"}</dd>
+            </div>
+          </dl>
+          {d.ladderEvents.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Как се мести стълбата ({d.ladderEvents.length})</summary>
+              <ol className={`${card} mt-2 divide-y divide-zinc-200 text-sm dark:divide-zinc-800`}>
+                {d.ladderEvents.map((e, k) => (
+                  <li key={k} className="flex gap-4 px-4 py-2">
+                    <span className="w-36 shrink-0 font-mono text-xs text-zinc-500 dark:text-zinc-400">{e.created_at}</span>
+                    <span className="flex-1">{LADDER_INPUT[e.input] ?? e.input}</span>
+                    <span className="font-mono text-xs">{e.level_before === e.level_after ? `ниво ${e.level_after}` : `ниво ${e.level_before} → ${e.level_after}`}</span>
+                  </li>
+                ))}
+              </ol>
+            </details>
+          )}
+        </section>
+      )}
 
       {checks.length > 0 && (
         <section aria-labelledby="checks-h" className="mt-8">

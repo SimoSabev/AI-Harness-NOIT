@@ -3,6 +3,8 @@ import { pageName } from "../../lib/brand";
 import { KeysForm } from "../../components/keys-form";
 import { Shell } from "../../components/shell";
 import { StatusBadge, card } from "../../components/ui";
+import { listChannels } from "../../lib/server/channels";
+import { db } from "../../lib/server/db";
 import { controlKeys } from "../../lib/server/keys";
 import { pageCtx } from "../../lib/server/page";
 
@@ -10,11 +12,20 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: pageName("Акаунти") };
 
 // D-293: where the API keys of the real agents go — the proxy only. The agent gets a one-task token, never the key.
+const HEALTH: Record<string, { label: string; tone: "green" | "amber" | "red" | "gray" }> = {
+  ok: { label: "Работи", tone: "green" },
+  degraded: { label: "Влошен", tone: "amber" },
+  limited: { label: "Лимит", tone: "red" },
+  down: { label: "Недостъпен", tone: "red" },
+};
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Sofia" });
+
 export default async function KeysPage() {
   const c = await pageCtx();
   const ctl = controlKeys(process.env);
   const s = (await ctl?.status()) ?? { proxy: "unavailable" as const, providers: [] };
   const accounts = (await ctl?.accounts()) ?? [];
+  const channels = await listChannels(db(), c.uid, c.org);
   const row = (label: string, on: boolean) => (
     <li className="flex items-center justify-between px-4 py-3">
       <span className="text-sm font-medium">{label}</span>
@@ -61,6 +72,31 @@ export default async function KeysPage() {
         <p className={`${card} mt-6 p-5 text-sm`}>Ключове се задават, когато харнесът е пуснат с <code className="font-mono">pnpm local</code>.</p>
       ) : (
         <KeysForm providers={s.providers} canSet={c.role === "owner"} />
+      )}
+      {channels.length > 0 && (
+        <section aria-labelledby="ch-h" className="mt-10">
+          <h2 id="ch-h" className="mb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">Канали и лимити</h2>
+          <p className="max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
+            Ако агентът удари лимита (429), задачата прелива към следващия канал (напр. Claude → Codex). Новият агент започва от ниво 0 на стълбата.
+          </p>
+          <ul className={`${card} mt-3 divide-y divide-zinc-200 dark:divide-zinc-800`}>
+            {channels.map((ch) => {
+              const h = HEALTH[ch.health] ?? { label: ch.health, tone: "gray" as const };
+              return (
+                <li key={ch.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{ch.label}{ch.enabled ? "" : " (изключен)"}</span>
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                      {ch.provider} · <span className="font-mono">{ch.model}</span> · днес ${ch.spent_today_usd.toFixed(2)}{ch.budget_usd_day !== null ? ` от $${ch.budget_usd_day.toFixed(2)}` : ""}
+                      {ch.limit_resets_at ? ` · лимитът се нулира в ${hhmm(ch.limit_resets_at)}` : ch.cooldown_until ? ` · пауза до ${hhmm(ch.cooldown_until)}` : ""}
+                    </span>
+                  </span>
+                  <StatusBadge tone={h.tone} label={h.label} />
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
     </Shell>
   );
