@@ -13,6 +13,7 @@ import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
 import { demoExportRepo, demoExternalPr, demoSeed, demoSpill } from "./commands/demo.js";
 import { workerCommand } from "./commands/worker.js";
+import { tuiCommand } from "./commands/tui.js";
 import { localCommand } from "./commands/local.js";
 import { accountsCommand, loginCommand, logoutCommand } from "./commands/accounts.js";
 import { realDeps } from "./deps.js";
@@ -235,6 +236,17 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       const dbPort = Number(o.dbPort);
       if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
       code = await localCommand(io, { home: home(), dbPort });
+    });
+  // D-306: the start page in the terminal
+  program
+    .command("tui")
+    .description("the dashboard in the terminal: flow, swarm, one pane per project (read-only; q quits)")
+    .option("--db-port <port>", "the local Postgres port on 127.0.0.1", "54329")
+    .option("--once", "print one frame and exit (no colour)")
+    .action(async (o: { dbPort: string; once?: boolean }) => {
+      const dbPort = Number(o.dbPort);
+      if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
+      code = await tuiCommand(io, { dbPort, once: Boolean(o.once) });
     });
   const demo = program.command("demo").description("demo data and scenes");
   demo
