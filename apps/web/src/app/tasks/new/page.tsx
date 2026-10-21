@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageName } from "../../../lib/brand";
 import Link from "next/link";
 import { NewTaskForm } from "../../../components/new-task-form";
 import { Shell } from "../../../components/shell";
@@ -9,7 +10,7 @@ import { canAct, pageCtx } from "../../../lib/server/page";
 import { firstRepo } from "../../../lib/server/queries";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Нова задача · Мандат" };
+export const metadata: Metadata = { title: pageName("Нова задача") };
 
 export default async function NewTaskPage() {
   const c = await pageCtx();

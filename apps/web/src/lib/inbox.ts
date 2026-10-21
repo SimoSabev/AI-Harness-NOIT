@@ -1,3 +1,5 @@
+import { HARNESS } from "./brand";
+
 // Демо промпт т. 8.1: the summary on top of the inbox for the last 24 h, and the counter in <title>.
 export type SummaryRow = { result: string | null; delivered: string | null; approved_by_human: boolean; decided_at: string | null; waiting: boolean };
 export type Summary = { autoMerged: number; failed: number; waiting: number };
@@ -19,5 +21,5 @@ export function summaryLine(s: Summary): string {
 }
 
 export function pageTitle(waiting: number): string {
-  return waiting > 0 ? `${waiting} ${waits(waiting)} · Мандат` : "Мандат";
+  return waiting > 0 ? `${waiting} ${waits(waiting)} · ${HARNESS}` : HARNESS;
 }

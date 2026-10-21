@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageName } from "../../lib/brand";
 import { KeysForm } from "../../components/keys-form";
 import { Shell } from "../../components/shell";
 import { StatusBadge, card } from "../../components/ui";
@@ -6,7 +7,7 @@ import { controlKeys } from "../../lib/server/keys";
 import { pageCtx } from "../../lib/server/page";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Акаунти · Мандат" };
+export const metadata: Metadata = { title: pageName("Акаунти") };
 
 // D-293: where the API keys of the real agents go — the proxy only. The agent gets a one-task token, never the key.
 export default async function KeysPage() {

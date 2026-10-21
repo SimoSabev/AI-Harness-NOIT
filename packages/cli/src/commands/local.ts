@@ -136,7 +136,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   io.stdout(
     [
       "",
-      "  Мандат работи локално",
+      "  Хамут работи локално (съдия: Мандат)",
       `  Отвори:  http://localhost:${WEB_PORT}`,
       `  Имейл:   ${email}`,
       `  Парола:  ${password}   (нова при всяко пускане)`,
