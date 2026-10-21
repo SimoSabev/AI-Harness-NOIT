@@ -2,7 +2,7 @@ import Link from "next/link";
 import { btn } from "./ui";
 
 // D-292: one top bar — the tasks, the one primary action (new task), sign out.
-export function Shell({ current, waiting, children }: { current: "tasks" | "new" | "task" | "login"; waiting: number | null; children: React.ReactNode }) {
+export function Shell({ current, waiting, children }: { current: "tasks" | "new" | "task" | "login" | "keys"; waiting: number | null; children: React.ReactNode }) {
   return (
     <>
       <a className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2" href="#main">Към съдържанието</a>
@@ -18,6 +18,7 @@ export function Shell({ current, waiting, children }: { current: "tasks" | "new"
                 Задачи
                 {waiting > 0 && <span className="ml-2 rounded-full bg-zinc-900 px-1.5 text-xs text-white dark:bg-white dark:text-zinc-900" aria-label={`${waiting} чакат теб`}>{waiting}</span>}
               </Link>
+              <Link href="/keys" aria-current={current === "keys" ? "page" : undefined} className={`${btn.ghost} aria-[current=page]:text-zinc-900 dark:aria-[current=page]:text-white`}>Ключове</Link>
               <div className="ml-auto flex items-center gap-2">
                 <Link href="/tasks/new" className={btn.primary}>+ Нова задача</Link>
                 <form action="/api/auth/logout" method="post">

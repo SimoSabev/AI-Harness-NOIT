@@ -1,5 +1,5 @@
 // D-292: what the person sees — one status word + one sentence per task, never the internal state names.
-export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "stopped" | "approved" | "closed";
+export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "key" | "stopped" | "approved" | "closed";
 export type Tone = "gray" | "blue" | "green" | "red" | "amber";
 export interface Status { key: StatusKey; label: string; tone: Tone; headline: string }
 
@@ -11,6 +11,7 @@ const S: Record<StatusKey, Omit<Status, "key">> = {
   failed: { label: "Провал", tone: "red", headline: "Мандат отхвърли промяната. Причината е отдолу." },
   unknown: { label: "Неясно", tone: "amber", headline: "Мандат не може да потвърди, че промяната работи." },
   empty: { label: "Без промяна", tone: "amber", headline: "Агентът не промени нито един файл." },
+  key: { label: "Ключът е отхвърлен", tone: "red", headline: "Доставчикът отказа API ключа. Провери го в „Ключове“ и пусни задачата отново." },
   stopped: { label: "Спряна", tone: "gray", headline: "Задачата е спряна ръчно." },
   approved: { label: "Одобрена", tone: "green", headline: "Проверена от Мандат и одобрена от човек. Промяната е готова за сливане." },
   closed: { label: "Приключена", tone: "gray", headline: "Задачата е приключена." },
@@ -31,6 +32,7 @@ function keyOf(t: { state: string; last_result: string | null; wait_reason: stri
   if (t.state === "BLOCKED" && t.wait_reason === "stopped") return "stopped";
   if (t.last_result === "FAILED" || t.state === "BLOCKED") return "failed";
   if (t.approved_by_human && t.last_result === "VERIFIED") return "approved";
+  if (t.state === "HELD" && t.wait_reason === "key_rejected") return "key";
   if (t.state === "HELD" && t.wait_reason === "empty_change") return "empty";
   if (t.last_result === "UNKNOWN" && (t.state === "HELD" || t.state === "GATED")) return "unknown";
   if (t.state === "HELD" || (t.state === "GATED" && t.approval_needed)) return "review";
@@ -42,7 +44,7 @@ function keyOf(t: { state: string; last_result: string | null; wait_reason: stri
 export type Group = "waiting" | "active" | "done";
 export const GROUP_TITLE: Record<Group, string> = { waiting: "Чака теб", active: "В работа", done: "Готово" };
 export function groupOf(k: StatusKey): Group {
-  if (k === "review" || k === "failed" || k === "unknown" || k === "empty") return "waiting";
+  if (k === "review" || k === "failed" || k === "unknown" || k === "empty" || k === "key") return "waiting";
   if (k === "queued" || k === "running" || k === "checking") return "active";
   return "done";
 }

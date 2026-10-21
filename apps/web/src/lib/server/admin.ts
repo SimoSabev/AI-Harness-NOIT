@@ -3,6 +3,7 @@ import { RateLimiter } from "./guard";
 import type { ApiDeps } from "./api";
 import { authMode, currentUser, supabaseServer } from "./auth";
 import { db } from "./db";
+import { controlKeys } from "./keys";
 import { devSecondFactor } from "./session";
 
 // Демо промпт т. 8 „Общо за E3“: the ONLY web module that reads SUPABASE_SERVICE_ROLE_KEY; imported only by
@@ -23,6 +24,7 @@ const createLimiter = new RateLimiter(10, 60_000);
 export function routeDeps(): ApiDeps {
   const d = db();
   const b = broadcaster();
+  const keys = controlKeys(process.env);
   const supabaseFactor: ApiDeps["secondFactor"] = async ({ code, factorId }) => {
     if (!factorId) return null;
     const sb = await supabaseServer();
@@ -36,6 +38,7 @@ export function routeDeps(): ApiDeps {
     user: () => currentUser(),
     secondFactor: authMode() === "dev" ? devSecondFactor(d) : supabaseFactor,
     ...(b ? { broadcast: b } : {}),
+    ...(keys ? { keys } : {}),
     createLimiter,
   };
 }

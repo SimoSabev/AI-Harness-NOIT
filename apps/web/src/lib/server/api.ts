@@ -5,6 +5,8 @@ import type { RateLimiter } from "./guard";
 import { SwitchBody, listChannels, switchChannel } from "./channels";
 import { SubscribeBody, subscribePush } from "./push";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
+import { KeysBody } from "./keys";
+import type { KeysClient } from "./keys";
 import { board, inbox, membership, taskDetail } from "./queries";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
@@ -18,6 +20,8 @@ export interface ApiDeps {
   secondFactor: SecondFactor;
   broadcast?: (topic: string, event: string, payload: Record<string, unknown>) => Promise<void>;
   createLimiter: RateLimiter;
+  /** D-293: the control endpoint of `mandat local` (absent elsewhere) */
+  keys?: KeysClient;
 }
 
 const json = (status: number, body: unknown) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -149,4 +153,32 @@ export async function postPushSubscribe(req: Request, d: ApiDeps): Promise<Respo
   const b = SubscribeBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await subscribePush(d.db, { uid: p.uid, org: p.org, body: b.data }), d);
+}
+
+// D-293: API keys → the proxy (owner only). The key is in this request's memory only; the answer is the status.
+export async function getKeys(req: Request, d: ApiDeps): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  return json(200, d.keys ? await d.keys.status() : { proxy: "unavailable", providers: [] });
+}
+
+export async function postKeys(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const m = await membership(d.db, p.uid);
+  if (m?.role !== "owner") return json(403, { error: "not_an_owner" });
+  if (!d.keys) return json(503, { error: "keys_unavailable" });
+  const b = KeysBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_keys" });
+  const s = await d.keys.set({ anthropic: b.data.anthropic, ...(b.data.openai ? { openai: b.data.openai } : {}) });
+  return s ? json(200, s) : json(502, { error: "proxy_start_failed" });
+}
+
+export async function deleteKeys(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const m = await membership(d.db, p.uid);
+  if (m?.role !== "owner") return json(403, { error: "not_an_owner" });
+  if (!d.keys) return json(503, { error: "keys_unavailable" });
+  return json(200, await d.keys.clear());
 }

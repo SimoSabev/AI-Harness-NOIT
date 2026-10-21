@@ -17,13 +17,15 @@ describe("status (D-292)", () => {
     expect(statusOf(t({ state: "DELIVERED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED" })).key).toBe("closed");
     expect(statusOf(t({ state: "GATED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
-    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "stopped", "approved", "closed"] as const) expect(statusOf(t(stateFor(s))).headline.length).toBeGreaterThan(10);
+    expect(statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "key_rejected" }))).toMatchObject({ key: "key", label: "Ключът е отхвърлен", tone: "red" });
+    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed"] as const) expect(statusOf(t(stateFor(s))).headline.length).toBeGreaterThan(10);
   });
   it("groups: Чака теб / В работа / Готово", () => {
     expect(groupOf("review")).toBe("waiting");
     expect(groupOf("failed")).toBe("waiting");
     expect(groupOf("unknown")).toBe("waiting");
     expect(groupOf("empty")).toBe("waiting");
+    expect(groupOf("key")).toBe("waiting");
     expect(groupOf("queued")).toBe("active");
     expect(groupOf("checking")).toBe("active");
     expect(groupOf("approved")).toBe("done");
@@ -38,7 +40,7 @@ function stateFor(k: string): Partial<Parameters<typeof statusOf>[0]> {
   const m: Record<string, Partial<Parameters<typeof statusOf>[0]>> = {
     queued: { state: "CREATED" }, running: { state: "RUNNING" }, checking: { state: "VERDICT" },
     review: { state: "HELD", last_result: "VERIFIED", wait_reason: "approval", approval_needed: true }, failed: { state: "BLOCKED", last_result: "FAILED" },
-    unknown: { state: "HELD", last_result: "UNKNOWN" }, empty: { state: "HELD", last_result: "VERIFIED", wait_reason: "empty_change" },
+    unknown: { state: "HELD", last_result: "UNKNOWN" }, key: { state: "HELD", wait_reason: "key_rejected" }, empty: { state: "HELD", last_result: "VERIFIED", wait_reason: "empty_change" },
     stopped: { state: "BLOCKED", wait_reason: "stopped" }, approved: { state: "DELIVERED", last_result: "VERIFIED", approved_by_human: true }, closed: { state: "CLOSED" },
   };
   return m[k] ?? {};

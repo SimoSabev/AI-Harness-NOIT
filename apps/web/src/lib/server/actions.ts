@@ -84,9 +84,9 @@ export async function approve(db: Db, o: { uid: string; changesetId: string; bod
   }
 }
 
-async function taskOrg(db: Db, id: string): Promise<{ org_id: string; state: string; last_result: string | null; attempt: number; attempts_max: number } | null> {
+async function taskOrg(db: Db, id: string): Promise<{ org_id: string; state: string; wait_reason: string | null; last_result: string | null; attempt: number; attempts_max: number } | null> {
   if (!/^t_[a-z0-9_]{1,40}$/.test(id)) return null;
-  return (await asService(db, (sql) => sql.query<{ org_id: string; state: string; last_result: string | null; attempt: number; attempts_max: number }>("select org_id::text as org_id, state, last_result, attempt, attempts_max from public.tasks where id = $1", [id]))).rows[0] ?? null;
+  return (await asService(db, (sql) => sql.query<{ org_id: string; state: string; wait_reason: string | null; last_result: string | null; attempt: number; attempts_max: number }>("select org_id::text as org_id, state, wait_reason, last_result, attempt, attempts_max from public.tasks where id = $1", [id]))).rows[0] ?? null;
 }
 
 export async function stopTask(db: Db, o: { uid: string; taskId: string }): Promise<Result> {
@@ -105,7 +105,8 @@ export async function retryTask(db: Db, o: { uid: string; taskId: string }): Pro
   const t = await taskOrg(db, o.taskId);
   if (!t) return err(404, "unknown_task");
   if (!(await canAct(db, o.uid, t.org_id))) return err(403, "not_an_approver");
-  const retryable = t.state === "BLOCKED" || (t.state === "HELD" && t.last_result === "UNKNOWN");
+  // D-293: also after a rejected key / no change / no channel (fix the key, then run again)
+  const retryable = t.state === "BLOCKED" || (t.state === "HELD" && (t.last_result === "UNKNOWN" || ["key_rejected", "empty_change", "no_channel"].includes(t.wait_reason ?? "")));
   if (!retryable) return err(409, "not_retryable");
   if (t.attempt >= t.attempts_max) return err(409, "no_attempts_left");
   await asService(db, async (sql) => {

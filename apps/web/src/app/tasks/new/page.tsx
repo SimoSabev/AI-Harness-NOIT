@@ -4,6 +4,7 @@ import { NewTaskForm } from "../../../components/new-task-form";
 import { Shell } from "../../../components/shell";
 import { card } from "../../../components/ui";
 import { db } from "../../../lib/server/db";
+import { controlKeys } from "../../../lib/server/keys";
 import { canAct, pageCtx } from "../../../lib/server/page";
 import { firstRepo } from "../../../lib/server/queries";
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Нова задача · Манда�
 export default async function NewTaskPage() {
   const c = await pageCtx();
   const repo = await firstRepo(db(), c.uid, c.org);
+  const k = (await controlKeys(process.env)?.status())?.providers ?? [];
   return (
     <Shell current="new" waiting={c.waiting}>
       <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">← Задачи</Link>
@@ -22,7 +24,7 @@ export default async function NewTaskPage() {
       ) : !repo ? (
         <p className={`${card} mt-6 p-5 text-sm`}>Няма свързано хранилище. Пусни Мандат с <code className="font-mono">pnpm local</code>.</p>
       ) : (
-        <NewTaskForm repo={repo} />
+        <NewTaskForm repo={repo} ready={{ anthropic: k.includes("anthropic"), openai: k.includes("openai") }} />
       )}
     </Shell>
   );
