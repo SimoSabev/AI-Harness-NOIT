@@ -45,8 +45,8 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
   return (
     <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-6">
       <div className={`${card} space-y-5 p-5`}>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Хранилище: <span className="font-mono text-zinc-900 dark:text-zinc-100">{repo}</span>
+        <p className="text-sm text-mute">
+          Хранилище: <span className="font-mono text-ink">{repo}</span>
         </p>
         <label className="block">
           <span className="text-sm font-medium">Какво да направи агентът</span>
@@ -67,24 +67,24 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
         <p className="text-sm font-medium">Агент</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {ordered.map((a) => (
-            <label key={a.id} className="flex cursor-pointer gap-3 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 rounded-lg border border-zinc-200 p-3 transition hover:bg-zinc-50 has-[:checked]:border-zinc-900 has-[:checked]:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50 dark:has-[:checked]:border-zinc-100 dark:has-[:checked]:bg-zinc-800/50">
-              <input type="radio" name="agent" value={a.id} checked={agent === a.id} onChange={() => setAgent(a.id)} disabled={!hasKey(a.id)} className="mt-1 accent-zinc-900 dark:accent-white" />
+            <label key={a.id} className="flex cursor-pointer gap-3 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 rounded-lg border border-line p-3 transition hover:bg-raised has-[:checked]:border-accent-text has-[:checked]:bg-accent-soft">
+              <input type="radio" name="agent" value={a.id} checked={agent === a.id} onChange={() => setAgent(a.id)} disabled={!hasKey(a.id)} className="mt-1 accent-[var(--accent)]" />
               <span>
                 <span className="block text-sm font-medium">
                   {a.label}
                   {a.needsKey && (hasKey(a.id)
-                    ? <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-normal text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">ключът е зададен</span>
-                    : <a href="/keys" className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-normal text-zinc-700 underline dark:bg-zinc-800 dark:text-zinc-300">задай ключ</a>)}
-                  {a.id.startsWith("claude@") && <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-normal text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">абонамент</span>}
+                    ? <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-normal text-ok">ключът е зададен</span>
+                    : <a href="/keys" className="ml-2 rounded bg-raised px-1.5 py-0.5 text-xs font-normal text-ink underline">задай ключ</a>)}
+                  {a.id.startsWith("claude@") && <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-normal text-ok">абонамент</span>}
                 </span>
-                <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">{a.hint}</span>
+                <span className="mt-0.5 block text-xs text-mute">{a.hint}</span>
               </span>
             </label>
           ))}
         </div>
       </fieldset>
 
-      {error && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">{error}</p>}
+      {error && <p role="alert" className="rounded-lg bg-bad-soft px-4 py-3 text-sm text-bad">{error}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" className={btn.ghost} onClick={() => router.push("/")}>Отказ</button>
         <button type="submit" className={btn.primary} disabled={busy || text.trim() === ""}>{busy ? "Създавам…" : "Пусни агента"}</button>

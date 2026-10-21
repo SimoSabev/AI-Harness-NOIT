@@ -35,9 +35,9 @@ export function HarnessActions({ repoId, proposalId, hasProposal }: { repoId: st
   return (
     <div className="space-y-4">
       {proposalId && (
-        <form className="space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800" onSubmit={(e) => (e.preventDefault(), void call(`/api/repos/${repoId}/harness/approve`, { proposal_id: proposalId, generate, code }, "Одобрено. Правилата важат за следващите задачи."))}>
+        <form className="space-y-3 rounded-lg border border-line p-4" onSubmit={(e) => (e.preventDefault(), void call(`/api/repos/${repoId}/harness/approve`, { proposal_id: proposalId, generate, code }, "Одобрено. Правилата важат за следващите задачи."))}>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={generate} onChange={(e) => setGenerate(e.target.checked)} className="accent-zinc-900 dark:accent-white" />
+            <input type="checkbox" checked={generate} onChange={(e) => setGenerate(e.target.checked)} className="accent-[var(--accent)]" />
             Генерирай и AGENTS.md и CLAUDE.md (инструкциите за агента) по шаблон
           </label>
           <label className="block text-sm">
@@ -50,7 +50,7 @@ export function HarnessActions({ repoId, proposalId, hasProposal }: { repoId: st
       <button className={btn.secondary} type="button" disabled={busy} onClick={() => void call(`/api/repos/${repoId}/harness/connect`, {}, "Сканирам репото… Обнови след няколко секунди.")}>
         {hasProposal ? "Сканирай пак" : "Сканирай репото"}
       </button>
-      {msg && <p className={`text-sm ${msg.error ? "text-red-700 dark:text-red-400" : "text-zinc-600 dark:text-zinc-400"}`} role={msg.error ? "alert" : "status"}>{msg.text}</p>}
+      {msg && <p className={`text-sm ${msg.error ? "text-bad" : "text-mute"}`} role={msg.error ? "alert" : "status"}>{msg.text}</p>}
     </div>
   );
 }

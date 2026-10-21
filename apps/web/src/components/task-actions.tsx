@@ -47,7 +47,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
         </div>
       )}
       {confirm && (
-        <form className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950" onSubmit={(e) => (e.preventDefault(), void decide(confirm))}>
+        <form className="rounded-lg border border-line bg-raised p-4" onSubmit={(e) => (e.preventDefault(), void decide(confirm))}>
           <p className="text-sm font-medium">{confirm === "approved" ? "Одобряваш тази промяна?" : "Отхвърляш тази промяна?"}</p>
           {confirm === "approved" && p.twoFactor && (
             <label className="mt-3 block max-w-xs">
@@ -61,7 +61,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
           </div>
         </form>
       )}
-      {error && <p className="text-sm text-red-700 dark:text-red-400" role="alert">{error}</p>}
+      {error && <p className="text-sm text-bad" role="alert">{error}</p>}
     </div>
   );
 }

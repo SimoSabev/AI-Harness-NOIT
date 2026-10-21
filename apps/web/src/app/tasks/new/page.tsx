@@ -20,8 +20,8 @@ export default async function NewTaskPage() {
   const accounts = ((await ctl?.accounts()) ?? []).filter((a) => a.loggedIn);
   return (
     <Shell current="new" waiting={c.waiting}>
-      <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">← Задачи</Link>
-      <h1 className="mt-3 text-2xl font-semibold tracking-tight">Нова задача</h1>
+      <Link href="/" className="text-sm text-mute hover:text-ink">← Задачи</Link>
+      <h1 className="font-display mt-3 text-2xl font-semibold tracking-tight">Нова задача</h1>
       {!canAct(c.role) ? (
         <p className={`${card} mt-6 p-5 text-sm`}>Само собственик или одобряващ може да дава задачи.</p>
       ) : !repo ? (

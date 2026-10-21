@@ -108,3 +108,8 @@ export async function taskDetail(db: Db, uid: string, org: string, role: Role, i
 export async function firstRepo(db: Db, uid: string, org: string): Promise<string | null> {
   return asUser(db, uid, async (sql) => (await sql.query<{ full_name: string }>("select full_name from public.repos where org_id = $1::uuid order by created_at limit 1", [org])).rows[0]?.full_name ?? null);
 }
+
+/** D-305: the org's repositories, for the projects on the start page and in the side bar. */
+export async function repos(db: Db, uid: string, org: string): Promise<{ id: string; full_name: string }[]> {
+  return asUser(db, uid, async (sql) => (await sql.query<{ id: string; full_name: string }>("select id::text as id, full_name from public.repos where org_id = $1::uuid order by full_name", [org])).rows);
+}

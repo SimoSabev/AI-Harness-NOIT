@@ -11,13 +11,13 @@ export function TaskRow({ t }: { t: Row }) {
   const why = s.key === "failed" && t.reasons[0] ? reasonText(t.reasons[0]) : null;
   return (
     <li>
-      <Link href={`/tasks/${t.id}`} className="group flex items-start gap-4 px-4 py-3.5 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+      <Link href={`/tasks/${t.id}`} className="group flex items-start gap-4 px-4 py-3.5 transition hover:bg-raised">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-zinc-900 group-hover:underline dark:text-zinc-100">{t.text}</p>
-          <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+          <p className="truncate font-medium text-ink group-hover:underline">{t.text}</p>
+          <p className="mt-0.5 text-sm text-mute">
             {agentLabel(t.agent)} · {ago(t.updated_at)}
           </p>
-          {why && <p className="mt-1 line-clamp-2 text-sm text-red-700 dark:text-red-400">{why}</p>}
+          {why && <p className="mt-1 line-clamp-2 text-sm text-bad">{why}</p>}
         </div>
         <StatusBadge tone={s.tone} label={s.label} />
       </Link>

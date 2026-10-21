@@ -33,20 +33,20 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
     <Shell current="board" waiting={c.waiting} wide>
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Дъска</h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Всяка задача по пътя си: агент → проверка от Мандат → твоето решение → резултат.</p>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Дъска</h1>
+          <p className="mt-1 text-sm text-mute">Всяка задача по пътя си: агент → проверка от Мандат → твоето решение → резултат.</p>
         </div>
         {column && <Link href="/board" className="text-sm underline">Всички колони</Link>}
       </div>
       <div className="mt-6 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 lg:grid lg:grid-cols-7 lg:overflow-visible">
         {b.columns.map((col) => (
-          <section key={col.n} aria-labelledby={`col-${col.n}`} className="w-[85vw] shrink-0 snap-start rounded-xl bg-zinc-100 p-2 sm:w-72 lg:w-auto dark:bg-zinc-900/60">
+          <section key={col.n} aria-labelledby={`col-${col.n}`} className="w-[85vw] shrink-0 snap-start rounded-xl bg-raised p-2 sm:w-72 lg:w-auto">
             <h2 id={`col-${col.n}`} className="flex items-center justify-between px-1 pb-2 text-sm font-medium">
               {col.title}
-              <span className="rounded-full bg-white px-2 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{col.items.length}{col.next ? "+" : ""}</span>
+              <span className="rounded-full bg-panel px-2 text-xs text-mute">{col.items.length}{col.next ? "+" : ""}</span>
             </h2>
             {col.items.length === 0 ? (
-              <p className="px-1 py-3 text-xs text-zinc-600 dark:text-zinc-400">Празно</p>
+              <p className="px-1 py-3 text-xs text-mute">Празно</p>
             ) : (
               <ul className="space-y-2">
                 {col.items.map((t) => (

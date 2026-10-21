@@ -12,12 +12,12 @@ export function BoardCard({ t }: { t: TaskRow }) {
   const tests = t.a_total !== null || t.inv_before !== null ? testsOf(t) : null;
   const ladder = t.ladder_level !== null && t.ladder_s_up !== null ? ladderHint({ level: t.ladder_level, s_up: t.ladder_s_up, pinned: t.ladder_pinned === true }) : null;
   return (
-    <Link href={`/tasks/${t.id}`} className="block rounded-lg border border-zinc-200 bg-white p-3 shadow-sm transition hover:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-600">
+    <Link href={`/tasks/${t.id}`} className="block rounded-lg border border-line bg-panel p-3 transition hover:border-line-strong">
       <StatusBadge tone={s.tone} label={s.label} />
       <p className="mt-2 line-clamp-3 text-sm font-medium">{t.text}</p>
-      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{agentLabel(t.agent)}</p>
-      {tests && <p className="mt-1 font-mono text-xs text-zinc-600 dark:text-zinc-400">{tests}</p>}
-      {ladder && <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{ladder}</p>}
+      <p className="mt-1 text-xs text-mute">{agentLabel(t.agent)}</p>
+      {tests && <p className="mt-1 font-mono text-xs text-mute">{tests}</p>}
+      {ladder && <p className="mt-1 text-xs text-mute">{ladder}</p>}
     </Link>
   );
 }

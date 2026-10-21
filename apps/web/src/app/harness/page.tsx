@@ -23,8 +23,8 @@ export default async function HarnessPage() {
   const v = await harnessView(db(), c.uid, c.org);
   return (
     <Shell current="harness" waiting={c.waiting}>
-      <h1 className="text-2xl font-semibold tracking-tight">Правила на репото</h1>
-      <p className="mt-1 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
+      <h1 className="font-display text-2xl font-semibold tracking-tight">Правила на репото</h1>
+      <p className="mt-1 max-w-2xl text-sm text-mute">
         Харнесът сам чете репото (без AI) и предлага правилата: как се инсталира, как се пускат тестовете, кои файлове агентът не пипа.
         Всяко поле казва откъде е взето. Нищо не се одобрява само; агент, който пипне правилата, получава НЕЯСНО.
       </p>
@@ -40,18 +40,18 @@ export default async function HarnessPage() {
               {st && <StatusBadge tone={st.tone} label={st.label} />}
               {r.harness_stale && <StatusBadge tone="red" label="Правилата в репото са сменени" />}
             </div>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-mute">
               Версия на правилата: {r.config_version}
               {r.config_hash && <span className="font-mono"> · {r.config_hash.slice(7, 15)}</span>}
               {p?.risk_cap !== null && p?.risk_cap !== undefined && <> · най-високо ниво на свобода: {p.risk_cap}</>}
               {p?.pr_number !== null && p?.pr_number !== undefined && <> · PR чернова #{p.pr_number}</>}
             </p>
-            {r.harness_stale && <p className="mt-2 text-sm text-red-700 dark:text-red-400">Файлът .mandat.yml в репото не съвпада с одобрения. Задачите спират, докато не одобриш нови правила.</p>}
+            {r.harness_stale && <p className="mt-2 text-sm text-bad">Файлът .mandat.yml в репото не съвпада с одобрения. Задачите спират, докато не одобриш нови правила.</p>}
             {p ? (
               <>
-                {p.blocked.map((b) => <p key={b} role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300">Блокирано: {b}</p>)}
+                {p.blocked.map((b) => <p key={b} role="alert" className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">Блокирано: {b}</p>)}
                 {(p.needs_human.length > 0 || confirm.length > 0) && (
-                  <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  <div className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
                     <p className="font-medium">Провери преди да одобриш:</p>
                     <ul className="mt-1 list-disc pl-5">
                       {p.needs_human.map((n) => <li key={n}>{n}</li>)}
@@ -59,22 +59,22 @@ export default async function HarnessPage() {
                     </ul>
                   </div>
                 )}
-                {p.warnings.map((w) => <p key={w} className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">! {w}</p>)}
+                {p.warnings.map((w) => <p key={w} className="mt-2 text-sm text-mute">! {w}</p>)}
                 <table className="mt-4 w-full text-left text-sm">
                   <caption className="sr-only">Поле и откъде е взето</caption>
-                  <thead className="text-xs text-zinc-500 dark:text-zinc-400"><tr><th scope="col" className="py-1.5 font-medium">Поле</th><th scope="col" className="py-1.5 font-medium">Откъде</th></tr></thead>
-                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <thead className="text-xs text-mute"><tr><th scope="col" className="py-1.5 font-medium">Поле</th><th scope="col" className="py-1.5 font-medium">Откъде</th></tr></thead>
+                  <tbody className="divide-y divide-line">
                     {Object.entries(p.field_sources).sort().map(([k, s]) => (
                       <tr key={k}>
-                        <td className="py-2 pr-4">{fieldLabel(k)} <span className="ml-1 font-mono text-xs text-zinc-500 dark:text-zinc-400">{k}</span></td>
-                        <td className={`py-2 ${s === "human" ? "text-amber-800 dark:text-amber-300" : "text-zinc-600 dark:text-zinc-400"}`}>{sourceLabel(s)}</td>
+                        <td className="py-2 pr-4">{fieldLabel(k)} <span className="ml-1 font-mono text-xs text-mute">{k}</span></td>
+                        <td className={`py-2 ${s === "human" ? "text-warn" : "text-mute"}`}>{sourceLabel(s)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
                 <details className="mt-4">
-                  <summary className="cursor-pointer text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Виж .mandat.yml</summary>
-                  <pre className="mt-2 overflow-x-auto rounded-lg bg-zinc-100 p-3 font-mono text-xs leading-5 dark:bg-zinc-950">{p.yaml}</pre>
+                  <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">Виж .mandat.yml</summary>
+                  <pre className="mt-2 overflow-x-auto rounded-lg bg-raised p-3 font-mono text-xs leading-5">{p.yaml}</pre>
                 </details>
               </>
             ) : (
@@ -85,7 +85,7 @@ export default async function HarnessPage() {
                 <HarnessActions repoId={r.id} proposalId={p?.status === "proposed" && p.blocked.length === 0 ? p.id : null} hasProposal={p !== null} />
               </div>
             ) : (
-              <p className="mt-5 text-sm text-zinc-500 dark:text-zinc-400">Само собственик сканира и одобрява правилата.</p>
+              <p className="mt-5 text-sm text-mute">Само собственик сканира и одобрява правилата.</p>
             )}
           </section>
         );
