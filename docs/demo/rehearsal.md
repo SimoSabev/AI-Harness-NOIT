@@ -1,7 +1,7 @@
 # Репетиция на демото (демо промпт т. 9.9)
 
 Общо ≤ 9–10 мин: сцена 1 ≤ 4 мин, сцена 2 ≤ 2 мин, сцена 3 ≤ 3 мин, преходи ≤ 1 мин. Резерва: replay → офлайн → видео
-(demo/recordings/playwright/**/video.webm, `pnpm --filter @mandat/web demo:record`).
+(запис на екрана от `pnpm local`; старият Playwright запис на UI е махнат с D-292).
 
 ## Преди журито
 - [ ] `pnpm ci:local` (в облачната сесия: `MANDAT_EXTRA_CA_CERTS=… MANDAT_SANDBOX_APT=0` за build на образите)

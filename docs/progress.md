@@ -12,11 +12,12 @@
 | E3в канали | phase/e3c-channels | ГОТОВО (live чака Симо) (docs/reports/E3c.md) | `git log -1 phase/e3c-channels` | 20.10.2026 | OPENAI_API_KEY, модел, цена, S-CX (docs/setup/keys.md); Q-027, Q-028 |
 | E3г PWA | phase/e3d-pwa | ГОТОВО (docs/reports/E3d.md) | `git log -1 phase/e3d-pwa` | 20.10.2026 | VAPID ключове, телефон (docs/setup/push.md); Q-029 |
 | E4 демо | phase/e4-demo | ГОТОВО (live чака Симо) (docs/reports/E4.md) | `git log -1 phase/e4-demo` | 20.10.2026 | ключове, GitHub App-ове, VAPID, VPS, жив транскрипт (docs/reports/FINAL.md) |
+| E5 минимален харнес | phase/e5-minimal | ГОТОВО (docs/reports/E5.md) | `git log -1 phase/e5-minimal` | 21.10.2026 | проба у Симо: `pnpm local` |
 
 Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
 ## Текуща задача
-Няма: всички фази са готови (docs/reports/FINAL.md). Следва работа на Симо по списъка във FINAL.md.
+E5 (D-292): минималният харнес работи с `pnpm local`. Следва: проба у Симо; после истински Claude Code (сцена 3 на живо).
 
 ## Часове: план/реално по фаза
 | Фаза | План [О] | Реално |

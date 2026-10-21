@@ -66,26 +66,36 @@ pnpm mandat proxy stop
 и го монтира само в gate и proxy (D-150). Без достъп до Debian огледалата: `MANDAT_SANDBOX_APT=0 pnpm mandat images build`
 (R14 пробите минават на Node, D-151).
 
-## Демото и уеб интерфейсът (E1б–E4)
+## Бърз старт: Мандат на твоя компютър (D-292)
+Трябват: Node 24.22.0, pnpm 12.14.0, Docker (Docker Desktop или dockerd). Windows: в WSL, клонирано в `~/`.
 ```sh
-# след git pull / clone
-pnpm install --frozen-lockfile && pnpm build
-pnpm mandat images build                          # образите (веднъж; след промяна в пясъчника — пак)
-node demo/run.mjs --offline --preflight           # "preflight: готово"
-node demo/run.mjs --scene 1 --offline --replay    # СЦЕНА 1: OK (харнес → VERIFIED → стълбата расте)
-node demo/run.mjs --scene 2 --offline --replay    # СЦЕНА 2: OK (лимит на Claude → Codex)
-node demo/run.mjs --scene 3 --offline --replay    # СЦЕНА 3: OK (изтрит/отслабен тест → FAILED)
-
-# уеб интерфейсът локално (Supabase CLI + Docker; supabase start прилага supabase/migrations)
-supabase start
-pnpm mandat demo seed                              # печата демо акаунтите, паролите и TOTP (само първия път)
-MANDAT_DEMO_DEV_AUTH=1 pnpm --filter @mandat/web dev   # http://localhost:3000/login
-pnpm mandat worker                                 # в друг терминал: изпълнява задачите (офлайн: fakeGitHub)
+pnpm install --frozen-lockfile
+pnpm local
 ```
-Офлайн демото не ползва мрежа и ключове. Живите варианти (ключове, GitHub App-ове, VAPID): docs/setup/*.md,
-сценарият пред журито: docs/demo/rehearsal.md, финалният доклад: docs/reports/FINAL.md.
-E2e тестовете (`pnpm test:e2e`) търсят браузъра в `MANDAT_CHROMIUM` (по подразбиране /opt/pw-browsers/chromium, облачната
-среда); локално задай `MANDAT_CHROMIUM=<път до Chrome или Chromium>`.
+`pnpm local` прави всичко: билд, база (Postgres в Docker на 127.0.0.1:54329, без Supabase CLI), образите на пясъчника
+(първия път 5–15 мин), уеб интерфейса и worker-а. Накрая печата адреса, имейла и паролата:
+```
+  Мандат работи локално
+  Отвори:  http://localhost:3000
+  Имейл:   ti@mandat.local
+  Парола:  …   (нова при всяко пускане)
+```
+После: **+ Нова задача** → избери агент → **Пусни агента**. Картата се обновява сама: „Агентът работи“ → „Проверява се“ →
+присъда. Демо агентите работят без ключ:
+| Агент | Какво прави | Очаквано |
+| --- | --- | --- |
+| Демо: честна поправка | поправя бъга в `src/cart.ts` | Чака одобрение → Одобри → Одобрена |
+| Демо: трие тест | изтрива падащия тест | Провал: „тестът … липсва след промяната“ |
+| Демо: прескача тест | маркира теста като skip | Провал |
+| Claude Code | истински агент | нужен е ключ: в друг терминал `ANTHROPIC_API_KEY=… pnpm mandat proxy start` |
+
+Спиране: Ctrl+C (данните остават). Изтриване на всичко: `docker rm -f mandat-local-db && docker volume rm mandat-local-db`.
+Корпоративна мрежа с TLS прихващане: `MANDAT_EXTRA_CA_CERTS=<pem> pnpm local`.
+
+![Провал: агентът изтри тест](demo/screenshots/task-failed.png)
+
+Офлайн сцените за журито (без уеб): `node demo/run.mjs --scene 1|2|3 --offline --replay` (docs/demo/rehearsal.md).
+E2e тестовете (`pnpm test:e2e`) търсят браузъра в `MANDAT_CHROMIUM` (по подразбиране /opt/pw-browsers/chromium).
 
 ## Изходни кодове
 | Команда | 0 | 1 | 2 | 3 | 5 | 10 | 20 | 130 |

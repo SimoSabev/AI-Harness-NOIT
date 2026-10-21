@@ -77,3 +77,5 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | web-push | 3.6.7 | 16.01.2024 | MPL-2.0 | worker (runtime) | само генериране на криптираната, VAPID-подписана заявка (generateRequestDetails); изпращането е наше (D-289). Риск: неподдържан пакет (последна версия 01.2024); mpl-notice.test.ts |
 | @types/web-push | 3.6.4 | — | MIT | worker (dev) | типове |
 | (allowlist на push хостове) | — | 20.10.2026 [НП] | — | worker/web | fcm.googleapis.com, updates.push.services.mozilla.com, push.apple.com, notify.windows.com — от т. 8.4; за проверка: https://developer.apple.com/documentation/usernotifications/sending-web-push-notifications-in-web-apps-and-browsers, https://firebase.google.com/docs/cloud-messaging/js/client, https://learn.microsoft.com/windows/apps/design/shell/tiles-and-notifications/windows-push-notification-services--wns--overview (Q-029) |
+| tailwindcss | 4.3.3 | 16.07.2026 | MIT | web (dev, build) | стилове на UI (D-292) |
+| @tailwindcss/postcss | 4.3.3 | 16.07.2026 | MIT | web (dev, build) | PostCSS плъгинът на Tailwind v4; транзитивно lightningcss (MPL-2.0) и @tailwindcss/oxide (MIT), само при build (D-292) |
