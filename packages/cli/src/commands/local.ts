@@ -12,7 +12,7 @@ import type { Keys } from "./local-control.js";
 import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
 import { listAccounts } from "./accounts.js";
 import { newBase32Secret } from "./demo.js";
-import { workerCommand } from "./worker.js";
+import { slotsFrom, workerCommand } from "./worker.js";
 
 // D-292: `pnpm local` — everything on this machine with one command: Postgres in Docker (shim + migrations, no
 // Supabase CLI), the demo repo, a fresh password for the one local account, the images, the web UI and the worker.
@@ -147,6 +147,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   o.signal?.addEventListener("abort", onSig);
   web.on("exit", onSig);
 
+  const slots = slotsFrom(io.env.MANDAT_WORKER_SLOTS, 2);
   io.stdout(
     [
       "",
@@ -156,6 +157,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
       `  Парола:  ${password}   (нова при всяко пускане)`,
       ...(totp ? ["", ...totpLines(email, totp)] : []),
       "",
+      `  Задачи едновременно: ${slots} (MANDAT_WORKER_SLOTS=1..8)`,
       "  Демо агентите работят без ключ. За Claude Code и Codex: Ключове в менюто",
       "  (ключът отива само в проксито; не се записва никъде)",
       "  Спиране: Ctrl+C (базата остава; изтриване: docker rm -f mandat-local-db && docker volume rm mandat-local-db)",
@@ -163,7 +165,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     ].join("\n") + "\n",
   );
   try {
-    return await workerCommand({ ...io, env: { ...clean, MANDAT_DB_URL: url } }, { home: o.home, once: false, signal: stop.signal });
+    return await workerCommand({ ...io, env: { ...clean, MANDAT_DB_URL: url } }, { home: o.home, once: false, signal: stop.signal, slots });
   } finally {
     web.kill("SIGTERM");
     await control.close();
