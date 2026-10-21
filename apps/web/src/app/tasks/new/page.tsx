@@ -14,7 +14,9 @@ export const metadata: Metadata = { title: "Нова задача · Манда�
 export default async function NewTaskPage() {
   const c = await pageCtx();
   const repo = await firstRepo(db(), c.uid, c.org);
-  const k = (await controlKeys(process.env)?.status())?.providers ?? [];
+  const ctl = controlKeys(process.env);
+  const k = (await ctl?.status())?.providers ?? [];
+  const accounts = ((await ctl?.accounts()) ?? []).filter((a) => a.loggedIn);
   return (
     <Shell current="new" waiting={c.waiting}>
       <Link href="/" className="text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">← Задачи</Link>
@@ -22,9 +24,9 @@ export default async function NewTaskPage() {
       {!canAct(c.role) ? (
         <p className={`${card} mt-6 p-5 text-sm`}>Само собственик или одобряващ може да дава задачи.</p>
       ) : !repo ? (
-        <p className={`${card} mt-6 p-5 text-sm`}>Няма свързано хранилище. Пусни Мандат с <code className="font-mono">pnpm local</code>.</p>
+        <p className={`${card} mt-6 p-5 text-sm`}>Няма свързано хранилище. Пусни харнеса с <code className="font-mono">pnpm local</code>.</p>
       ) : (
-        <NewTaskForm repo={repo} ready={{ anthropic: k.includes("anthropic"), openai: k.includes("openai") }} />
+        <NewTaskForm repo={repo} ready={{ anthropic: k.includes("anthropic"), openai: k.includes("openai") }} accounts={accounts} />
       )}
     </Shell>
   );

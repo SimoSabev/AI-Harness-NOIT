@@ -8,7 +8,7 @@ import { btn, card, input } from "./ui";
 const ERR: Record<string, string> = {
   bad_keys: "Ключът не изглежда верен (поне 20 знака, без интервали).",
   proxy_start_failed: "Проксито не тръгна. Виж терминала, където пусна pnpm local.",
-  keys_unavailable: "Ключове се задават само когато Мандат е пуснат с pnpm local.",
+  keys_unavailable: "Ключове се задават само когато харнесът е пуснат с pnpm local.",
   not_an_owner: "Само собственикът задава ключове.",
 };
 

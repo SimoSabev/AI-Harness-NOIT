@@ -18,7 +18,7 @@ export function Shell({ current, waiting, children }: { current: "tasks" | "new"
                 Задачи
                 {waiting > 0 && <span className="ml-2 rounded-full bg-zinc-900 px-1.5 text-xs text-white dark:bg-white dark:text-zinc-900" aria-label={`${waiting} чакат теб`}>{waiting}</span>}
               </Link>
-              <Link href="/keys" aria-current={current === "keys" ? "page" : undefined} className={`${btn.ghost} aria-[current=page]:text-zinc-900 dark:aria-[current=page]:text-white`}>Ключове</Link>
+              <Link href="/keys" aria-current={current === "keys" ? "page" : undefined} className={`${btn.ghost} aria-[current=page]:text-zinc-900 dark:aria-[current=page]:text-white`}>Акаунти</Link>
               <div className="ml-auto flex items-center gap-2">
                 <Link href="/tasks/new" className={btn.primary}>+ Нова задача</Link>
                 <form action="/api/auth/logout" method="post">

@@ -2,7 +2,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AGENTS } from "../lib/agents";
-import type { AgentId } from "../lib/agents";
 import { ERROR_TEXT, postJson } from "../lib/client/api";
 import { btn, card, input } from "./ui";
 
@@ -16,14 +15,18 @@ const TYPES = [
 const EXAMPLE = "Отстъпката от 10% трябва да важи за поръчки над 50 лв. Сега не важи. Поправи го.";
 
 // D-292: the one form of the minimal harness. Demo agents first: they work without any key.
-export function NewTaskForm({ repo, ready }: { repo: string; ready: { anthropic: boolean; openai: boolean } }) {
+export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { anthropic: boolean; openai: boolean }; accounts: { name: string; agent: string; email: string | null; plan: string | null }[] }) {
   const router = useRouter();
   const [text, setText] = useState(EXAMPLE);
   const [type, setType] = useState<(typeof TYPES)[number]["id"]>("bugfix");
-  const [agent, setAgent] = useState<AgentId>("fake:delete-test");
+  // D-295: the first signed-in subscription account is the default agent (like in other harnesses)
+  const [agent, setAgent] = useState<string>(accounts[0]?.agent ?? "fake:delete-test");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ordered = [...AGENTS].sort((a, b) => Number(a.needsKey) - Number(b.needsKey));
+  const ordered: { id: string; label: string; hint: string; needsKey: boolean }[] = [
+    ...accounts.map((a) => ({ id: a.agent, label: `Claude Code · ${a.name}`, hint: `${a.email ?? "абонамент"} · ${a.plan ?? "абонамент"}`, needsKey: false })),
+    ...[...AGENTS].sort((a, b) => Number(a.needsKey) - Number(b.needsKey)),
+  ];
   const hasKey = (id: string) => (id === "claude" ? ready.anthropic : id === "codex" ? ready.openai : true);
 
   const submit = async (e: React.FormEvent) => {
@@ -72,6 +75,7 @@ export function NewTaskForm({ repo, ready }: { repo: string; ready: { anthropic:
                   {a.needsKey && (hasKey(a.id)
                     ? <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-normal text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">ключът е зададен</span>
                     : <a href="/keys" className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-normal text-zinc-700 underline dark:bg-zinc-800 dark:text-zinc-300">задай ключ</a>)}
+                  {a.id.startsWith("claude@") && <span className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-normal text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">абонамент</span>}
                 </span>
                 <span className="mt-0.5 block text-xs text-zinc-500 dark:text-zinc-400">{a.hint}</span>
               </span>

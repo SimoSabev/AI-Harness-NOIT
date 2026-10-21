@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">AI агенти, които не могат да излъжат за тестовете.</p>
         </div>
         {mode === "none" ? (
-          <p className={`${card} p-5 text-sm`}>Входът не е настроен. Пусни Мандат с <code className="font-mono">pnpm local</code>.</p>
+          <p className={`${card} p-5 text-sm`}>Входът не е настроен. Пусни харнеса с <code className="font-mono">pnpm local</code>.</p>
         ) : (
           <form className={`${card} space-y-4 p-6`} action="/api/auth/login" method="post">
             {e && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-300" role="alert">{ERR[e] ?? "Входът не успя."}</p>}

@@ -13,6 +13,11 @@ describe("agents (D-292)", () => {
     for (const agent of AGENT_IDS) expect(CreateTaskBody.safeParse({ type: "bugfix", agent, text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "bugfix", agent: "fake:r8-canary-leak", text: "x" }).success).toBe(false);
   });
+  it("D-295: claude@<account> is accepted; a bad account name is not", () => {
+    expect(CreateTaskBody.safeParse({ type: "bugfix", agent: "claude@work", text: "x" }).success).toBe(true);
+    for (const agent of ["claude@", "claude@Work", "claude@a b", "codex@x"]) expect(CreateTaskBody.safeParse({ type: "bugfix", agent, text: "x" }).success).toBe(false);
+    expect(agentLabel("claude@work")).toBe("Claude Code · work");
+  });
   it("agentLabel: known → label, unknown → the id itself", () => {
     expect(agentLabel("fake:delete-test")).toMatch(/трие тест/);
     expect(agentLabel("fake-codex:replay")).toBe("fake-codex:replay");

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { AGENT_IDS } from "../agents";
+import { ACCOUNT_AGENT, AGENT_IDS } from "../agents";
 import { z } from "zod";
 import { jcs, sha256Tag } from "@mandat/contract";
 import { asService, asUser } from "./sql";
@@ -21,7 +21,7 @@ export type ApproveBody = z.infer<typeof ApproveBody>;
 
 export const CreateTaskBody = z.object({
   type: z.enum(["bugfix", "feature", "css", "docs"]),
-  agent: z.enum(AGENT_IDS),
+  agent: z.union([z.enum(AGENT_IDS), z.string().regex(ACCOUNT_AGENT)]),
   text: z.string().min(1).max(4000),
 }).strict();
 

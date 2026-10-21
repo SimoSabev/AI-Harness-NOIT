@@ -11,7 +11,7 @@ const S: Record<StatusKey, Omit<Status, "key">> = {
   failed: { label: "Провал", tone: "red", headline: "Мандат отхвърли промяната. Причината е отдолу." },
   unknown: { label: "Неясно", tone: "amber", headline: "Мандат не може да потвърди, че промяната работи." },
   empty: { label: "Без промяна", tone: "amber", headline: "Агентът не промени нито един файл." },
-  key: { label: "Ключът е отхвърлен", tone: "red", headline: "Доставчикът отказа API ключа. Провери го в „Ключове“ и пусни задачата отново." },
+  key: { label: "Ключът е отхвърлен", tone: "red", headline: "Доставчикът отказа ключа или входа в акаунта. Провери в „Акаунти“ и пусни задачата отново." },
   stopped: { label: "Спряна", tone: "gray", headline: "Задачата е спряна ръчно." },
   approved: { label: "Одобрена", tone: "green", headline: "Проверена от Мандат и одобрена от човек. Промяната е готова за сливане." },
   closed: { label: "Приключена", tone: "gray", headline: "Задачата е приключена." },

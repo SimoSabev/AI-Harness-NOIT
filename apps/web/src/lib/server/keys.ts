@@ -8,12 +8,18 @@ export const KeysBody = z.object({
 }).strict();
 
 export interface KeysStatus { proxy: "running" | "stopped" | "unavailable"; providers: string[] }
+export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }
 export interface KeysClient {
+  /** D-295: the subscription accounts of `mandat local` */
+  accounts(): Promise<Account[]>;
   status(): Promise<KeysStatus>;
   set(k: { anthropic: string; openai?: string }): Promise<KeysStatus | null>;
   clear(): Promise<KeysStatus>;
 }
 
+const Accounts = z.object({
+  accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable() })).max(50),
+});
 const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai"])) });
 
 export function controlKeys(env: Record<string, string | undefined>): KeysClient | null {
@@ -33,7 +39,13 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     return s.success ? s.data : null;
   };
   const down: KeysStatus = { proxy: "unavailable", providers: [] };
+  const accounts = async (): Promise<Account[]> => {
+    const r = await fetch(`${url}/accounts`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(90_000), cache: "no-store" }).catch(() => null);
+    const a = Accounts.safeParse(r?.ok ? await r.json().catch(() => null) : null);
+    return a.success ? a.data.accounts : [];
+  };
   return {
+    accounts,
     status: async () => (await call("GET").catch(() => null)) ?? down,
     set: (k) => call("POST", k).catch(() => null),
     clear: async () => (await call("DELETE").catch(() => null)) ?? down,

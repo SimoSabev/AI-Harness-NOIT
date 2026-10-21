@@ -15,6 +15,7 @@ const fake: KeysClient = {
   status: async () => ({ proxy: "stopped", providers: [] }),
   set: async (k) => (set.push(k), { proxy: "running", providers: k.openai ? ["anthropic", "openai"] : ["anthropic"] }),
   clear: async () => ({ proxy: "stopped", providers: [] }),
+  accounts: async () => [],
 };
 const deps = (keys: KeysClient | null): ApiDeps => ({ db, user: () => Promise.resolve(who), secondFactor: () => Promise.resolve(null), createLimiter: new RateLimiter(10, 60_000), ...(keys ? { keys } : {}) });
 const csrf = "c".repeat(43);
@@ -56,7 +57,7 @@ describe("controlKeys (D-293)", () => {
     const srv = createServer((q, s) => {
       auth = String(q.headers.authorization);
       s.writeHead(200, { "content-type": "application/json" });
-      s.end(JSON.stringify({ proxy: "running", providers: ["anthropic"] }));
+      s.end(JSON.stringify(q.url === "/accounts" ? { accounts: [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }] } : { proxy: "running", providers: ["anthropic"] }));
     });
     await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
     const port = (srv.address() as { port: number }).port;
@@ -65,6 +66,7 @@ describe("controlKeys (D-293)", () => {
       const c = controlKeys({ MANDAT_LOCAL_CONTROL_URL: `http://127.0.0.1:${port}`, MANDAT_LOCAL_CONTROL_TOKEN: "t".repeat(64) });
       expect(await c?.status()).toEqual({ proxy: "running", providers: ["anthropic"] });
       expect(auth).toBe(`Bearer ${"t".repeat(64)}`);
+      expect(await c?.accounts()).toEqual([{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }]);
     } finally {
       srv.close();
     }

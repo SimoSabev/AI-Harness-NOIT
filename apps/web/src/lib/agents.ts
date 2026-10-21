@@ -13,6 +13,10 @@ export const AGENTS = [
 export type AgentId = (typeof AGENTS)[number]["id"];
 export const AGENT_IDS = AGENTS.map((a) => a.id) as [AgentId, ...AgentId[]];
 
+/** D-295: Claude Code with a subscription account (`pnpm mandat login --name <account>`). */
+export const ACCOUNT_AGENT = /^claude@[a-z0-9][a-z0-9-]{0,31}$/;
+
 export function agentLabel(id: string): string {
+  if (ACCOUNT_AGENT.test(id)) return `Claude Code · ${id.slice("claude@".length)}`;
   return AGENTS.find((a) => a.id === id)?.label ?? id;
 }
