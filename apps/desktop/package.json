@@ -1,0 +1,19 @@
+{
+  "name": "@mandat/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Хамут desktop: an Electron window around `pnpm local` (D-303). Not in the pnpm workspace; installed on demand.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "setup": "node node_modules/electron/install.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "electron": "44.9.0",
+    "typescript": "6.0.3"
+  }
+}

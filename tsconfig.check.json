@@ -33,6 +33,7 @@
     "**/node_modules/**",
     "**/dist/**",
     "fixtures/**",
-    "apps/web/**"
+    "apps/web/**",
+    "apps/desktop/src/main.ts"
   ]
 }

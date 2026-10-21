@@ -34,7 +34,8 @@
     "test:live": "vitest run --config vitest.live.config.ts",
     "test:db:prove": "supabase test db",
     "test:e2e": "pnpm --filter @mandat/web build && pnpm --filter @mandat/web e2e",
-    "test:sentinel": "pnpm --filter @mandat/web test:sentinel"
+    "test:sentinel": "pnpm --filter @mandat/web test:sentinel",
+    "desktop": "pnpm --dir apps/desktop install --frozen-lockfile && pnpm --dir apps/desktop run setup && pnpm --dir apps/desktop run build && pnpm --dir apps/desktop start"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

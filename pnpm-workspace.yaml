@@ -1,6 +1,8 @@
 packages:
   - "packages/*"
   - "apps/*"
+  # D-303: the Electron wrapper installs on demand (`pnpm desktop`), so Electron is not downloaded for everyone
+  - "!apps/desktop"
   - "bench"
   - "spikes"
 # D-036: 3 days (in minutes); applies to transitive dependencies too.
