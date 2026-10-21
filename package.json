@@ -24,6 +24,7 @@
     "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm test:counts && pnpm licenses:check && pnpm no-dotenv",
     "ci:local": "pnpm check && pnpm gitleaks && pnpm mandat images build && pnpm mandat fixtures build && pnpm test:docker && pnpm mandat bench && pnpm mandat redteam",
     "mandat": "node packages/cli/dist/main.js",
+    "local": "pnpm build && node packages/cli/dist/main.js local",
     "test:counts": "node scripts/check-test-counts.mjs",
     "db:start": "supabase start -x studio,imgproxy,edge-runtime,logflare,vector,postgres-meta,mailpit,storage-api,supavisor",
     "db:stop": "supabase stop",

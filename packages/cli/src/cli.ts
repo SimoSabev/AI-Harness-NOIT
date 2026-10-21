@@ -13,6 +13,7 @@ import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
 import { demoExportRepo, demoExternalPr, demoSeed, demoSpill } from "./commands/demo.js";
 import { workerCommand } from "./commands/worker.js";
+import { localCommand } from "./commands/local.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -202,6 +203,15 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--once", "process at most one task and exit")
     .action(async (o: { once?: boolean }) => {
       code = await workerCommand(io, { home: home(), once: Boolean(o.once) });
+    });
+  program
+    .command("local")
+    .description("everything on this machine: Postgres in Docker, the web UI on :3000 and the worker (D-292)")
+    .option("--db-port <port>", "the local Postgres port on 127.0.0.1", "54329")
+    .action(async (o: { dbPort: string }) => {
+      const dbPort = Number(o.dbPort);
+      if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
+      code = await localCommand(io, { home: home(), dbPort });
     });
   const demo = program.command("demo").description("demo data and scenes");
   demo
