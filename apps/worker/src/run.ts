@@ -17,7 +17,7 @@ import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha }
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { RunWriter, VerifyInfraError, acquireRunLock, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
 import type { RunGate, runTestProcedure } from "@mandat/verify";
@@ -72,6 +72,11 @@ export interface RunTaskOutput {
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 const base62 = (n: number): string => Array.from(randomBytes(n), (b) => BASE62[b % 62]).join("");
+/** D-295: the CLI's own words for a missing / expired / rejected subscription login (Claude Code 2.1.302) [НП: exact texts]. */
+export function looksLikeLoginProblem(line: string): boolean {
+  return /not logged in|please run \/login|login expired|oauth token has expired|authentication_error|invalid api key/i.test(line) && !/"type":"assistant"/.test(line);
+}
+
 const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
 const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
 
@@ -171,7 +176,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return fail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build`);
     }
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
-    if ((i.agent === "claude" || i.agent === "codex") && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
+    // D-295: a subscription profile run never touches the proxy
+    if ((i.agent === "claude" || i.agent === "codex") && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
     const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
@@ -285,12 +291,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         const g = gate as RunGate;
         try {
           channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret") });
-          await g.setPolicy("agent", channel.gateRoutes());
+          await g.setPolicy("agent", channel.gateRoutes(), channel.gateTunnels?.());
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
         }
         const ch = channel as Channel;
-        const useProxy = i.agent === "claude" || i.agent === "codex" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret")));
+        const viaProfile = ch.kind === "cli_profile" && ch.profileName !== undefined;
+        const useProxy = !viaProfile && (i.agent === "claude" || i.agent === "codex" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret"))));
         if (useProxy) {
           const cred = await ch.issueTaskCredential({ taskId: contract.task_id, runId, attempt: 1, budgetUsd: contract.repo_config.budgets.task_usd, ttlMin: contract.repo_config.budgets.task_minutes + 5 });
           setToken(cred.token);
@@ -299,10 +306,11 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         }
         const launch = adapter.launch(
           { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" },
-          ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
+          viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
+        let loginProblem = false;
         let lastTool = "";
         let pollWarned = false;
         // Writes are chained so transcript.jsonl and agent-stderr.txt keep the stream order.
@@ -333,10 +341,12 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         try {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
+            ...(viaProfile && ch.profileName ? { profile: profileVolume("claude", ch.profileName) } : {}),
             env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}) },
             cmd: launch.argv,
             timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
             onStdoutLine: (line) => {
+              if (viaProfile && looksLikeLoginProblem(line)) loginProblem = true;
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
@@ -352,6 +362,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             },
             onStderr: (c) => {
               const text = c.toString("utf8");
+              if (viaProfile && looksLikeLoginProblem(text)) loginProblem = true;
               enqueue(() => w.text("agent-stderr.txt", text, { append: true, maxBytes: 1048576 }));
             },
           });
@@ -365,6 +376,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           usage = await ch.usage(runId).catch(() => usage);
           await ch.revokeTaskCredential(runId).catch(() => undefined);
         }
+        if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
         await g.setPolicy("closed", []).catch(() => undefined);
         await g.stop();

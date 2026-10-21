@@ -3,6 +3,11 @@ import type { ChannelState, Rule } from "@mandat/channels";
 import type { SqlClient } from "@mandat/ledger";
 
 // Демо промпт т. 8.3: channels of an org from the database (metadata only; the keys live in the proxy's env).
+/** D-295: "claude@<profile>" — Claude Code with that subscription profile (volume mandat-profile-claude-<profile>). */
+export function profileOfAgent(agent: string): string | null {
+  return /^claude@([a-z0-9][a-z0-9-]{0,31})$/.exec(agent)?.[1] ?? null;
+}
+
 export const providerOfAgent = (agent: string): "anthropic" | "openai" => (agent === "codex" || agent.startsWith("fake-codex:") ? "openai" : "anthropic");
 
 /** The agent of the other provider after a spill (a fake keeps its scenario when the Codex fake has it). */

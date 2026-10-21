@@ -15,7 +15,7 @@ import type { GitHubPort } from "@mandat/gate-github";
 import { readAtBase } from "@mandat/verify";
 import { runTask } from "../run.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
-import { loadChannels, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
+import { loadChannels, profileOfAgent, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { inTransaction } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 import type { Db } from "./db.js";
@@ -132,7 +132,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     if (dr.soft.length > 0) await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'harness_drift', $3)", [t.org_id, t.id, `! меко отклонение от харнеса: ${dr.soft.slice(0, 10).join(", ")}`.slice(0, 500)]);
   }
   // E3в (Ф3 П4): the channel is chosen here, before contract_hash; orgs without channels keep the E0 default.
-  const chans = await loadChannels(d.db, t.org_id);
+  // D-295: claude@<profile> runs on that subscription profile; no channel selection, no proxy
+  const profile = profileOfAgent(t.agent);
+  const chans = profile ? [] : await loadChannels(d.db, t.org_id);
   let current: (typeof chans)[number] | null = null;
   if (chans.length > 0) {
     const rule = await ruleFor(d.db, t.org_id, t.repo_id, t.type);
@@ -154,7 +156,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
     return f;
   };
-  let contract = contractForTask(t, parsed.policy, baseSha, current ? refOf(current) : undefined);
+  const profileRef: ChannelRef | undefined = profile ? { label: `claude-profile-${profile}`, kind: "cli_profile", model: "claude-sonnet-5-5" } : undefined;
+  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined));
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
@@ -166,7 +169,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const t0 = now().getTime();
   const runOnce = () =>
     (d.run ?? runTask)({
-      home: d.home, contractPath: cfile, agent: t.agent as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
+      home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
       ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
     });
   const usageRow = async (o: RunTaskOutput) => {
