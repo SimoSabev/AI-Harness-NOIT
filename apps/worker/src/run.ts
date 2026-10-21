@@ -518,7 +518,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       aliases.push(`infra:${infraCode.replace(/^E_/, "").toLowerCase()}`);
       set(ev("INFRA", "unknown", `infra: ${infraCode}`, {}, { cls: infraCode.replace(/^E_/, ""), id: "-" }));
     }
-    const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "CANARY"] as const;
+    const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
     for (const extra of ["AGENT", "INFRA"] as const) {
       const e = evd.get(extra);

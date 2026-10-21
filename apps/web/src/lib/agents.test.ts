@@ -5,7 +5,7 @@ import { CreateTaskBody } from "./server/actions";
 // D-292: the minimal harness — real agents (key in the proxy) + demo agents (no key) that show each verdict.
 describe("agents (D-292)", () => {
   it("claude/codex need a key; the demo agents are the fake scenarios with a fixed change", () => {
-    expect(AGENT_IDS).toEqual(["claude", "codex", "fake:honest-fix", "fake:delete-test", "fake:skip-test"]);
+    expect(AGENT_IDS).toEqual(["claude", "codex", "fake:honest-fix", "fake:delete-test", "fake:skip-test", "fake:untested-extra"]);
     expect(AGENTS.filter((a) => a.needsKey).map((a) => a.id)).toEqual(["claude", "codex"]);
     for (const a of AGENTS) expect(a.label.length).toBeGreaterThan(0);
   });

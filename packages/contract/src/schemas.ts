@@ -108,6 +108,7 @@ export const DetectorId = z.enum([
   "PLACEHOLDER",
   "D7.ci",
   "POLICY",
+  "D11.mutation", // D-300: mutants of the changed lines must be caught by the tests
 ]);
 export type DetectorId = z.infer<typeof DetectorId>;
 export const Evidence = z

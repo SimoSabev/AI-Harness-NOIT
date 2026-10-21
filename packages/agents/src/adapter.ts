@@ -46,7 +46,7 @@ export interface AgentAdapter {
 }
 export const FAKE_SCENARIOS = [
   "honest-fix", "skip-test", "delete-test", "delete-and-add-empty", "echo-pass", "out-of-contract", "partial-fix", "it-only",
-  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude",
+  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude", "untested-extra",
 ] as const;
 export type FakeScenario = (typeof FAKE_SCENARIOS)[number];
 /** E3в: fake Codex scenarios (JSONL in the Codex format), `fake-codex:<scenario>`. */

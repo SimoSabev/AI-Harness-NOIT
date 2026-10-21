@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseVitestReport } from "@mandat/contract";
 import { parseTestFile } from "@mandat/core";
@@ -53,7 +53,18 @@ export function simRunTests(over?: (i: TestProcedureInput, raw: string) => strin
     let raw = simulateReport(i.treeDir);
     if (over) raw = over(i, raw);
     const report = parseVitestReport(raw, "/m/work");
-    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report });
+    // D-300: each mutant is simulated on the same tree (write, derive the report, restore), like the sandbox does
+    const mutants = i.mutants?.map((m) => {
+      const f = path.join(i.treeDir, m.path);
+      writeFileSync(f, m.mutated);
+      try {
+        const r = parseVitestReport(simulateReport(i.treeDir), "/m/work");
+        return { exit: r.valid && r.success ? 0 : 1, timedOut: false, report: r };
+      } finally {
+        writeFileSync(f, m.original);
+      }
+    });
+    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report, ...(mutants ? { mutants } : {}) });
   };
 }
 

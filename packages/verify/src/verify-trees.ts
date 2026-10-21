@@ -2,7 +2,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { hashJcs, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { anyMatch, d1, d10Lockfile, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, na, weakenedAssertions } from "@mandat/core";
+import { addedLines, anyMatch, applySite, d1, d10Lockfile, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, weakenedAssertions } from "@mandat/core";
+import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
 import type { DockerRunner } from "@mandat/sandbox";
@@ -54,7 +55,12 @@ export interface VerifyTreesInput {
   onSecurity?: (h: CoreSecurityHint) => void;
   onGateLog?: (tree: "base" | "a" | "b", file: string) => void;
   progress?: (line: string) => void;
+  /** D-300: at most this many mutants of the changed source lines (0 = off); default MAX_MUTANTS */
+  maxMutants?: number;
 }
+
+/** D-300: each mutant reruns the tests on the installed tree B (no new install); 3 keeps a task within minutes. */
+export const MAX_MUTANTS = 3;
 
 export interface VerifyTreesResult {
   evidence: Evidence[];
@@ -131,10 +137,21 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   buildVerifyTree({ baseDir: i.baseDir, headDir: head.dir, outDir: aDir, rc, kind: "a" });
   buildVerifyTree({ baseDir: i.baseDir, headDir: head.dir, outDir: bDir, rc, kind: "b" });
   removeTree(head.dir);
+  // D-300: mutation sites on the changed SOURCE lines of tree B (not tests, not protected files)
+  const sources = i.files.filter((f) => (f.status === "A" || f.status === "M") && !f.binary && /\.[cm]?[jt]sx?$/.test(f.path) && !anyMatch(rc.tests.test_globs, f.path) && !anyMatch(rc.protected_paths, f.path));
+  const sites: MutationSite[] = mutationSites({
+    files: sources.flatMap((f) => (existsSync(path.join(bDir, f.path)) ? [{ path: f.path, content: readFileSync(path.join(bDir, f.path), "utf8") }] : [])),
+    added: addedLines(i.diffPatch.toString("utf8")),
+    max: i.maxMutants ?? MAX_MUTANTS,
+  });
+  const mutants = sites.map((st) => {
+    const original = readFileSync(path.join(bDir, st.path));
+    return { path: st.path, original, mutated: Buffer.from(applySite(original.toString("utf8"), st), "utf8") };
+  });
   const A = await runTests(testsInput("a", aDir));
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
   if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
-  const B = await runTests(testsInput("b", bDir));
+  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}) });
   i.onGateLog?.("b", path.join(i.runDir, "gate", "b", "log", "events.jsonl"));
   if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
   const a = A as Extract<TestProcedureResult, { ok: true }>;
@@ -150,7 +167,10 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
         }).evidence,
   );
   evidence.push(i.mustPass.length === 0 && i.external ? na("MUST_PASS", "no contract") : mustPass({ ids: i.mustPass, a: a.report, b: b.report }).evidence);
+  const bClean = !b.timedOut && b.exit === 0 && b.report.valid;
+  evidence.push(sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
   const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
-  i.progress?.(`[verify]    baseline${cachedBaseline ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}`);
+  const mut = evidence.at(-1);
+  i.progress?.(`[verify]    baseline${cachedBaseline ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}${mut && mut.status !== "n/a" ? ` · mutants ${mut.summary}` : ""}`);
   return { evidence, cachedBaseline };
 }

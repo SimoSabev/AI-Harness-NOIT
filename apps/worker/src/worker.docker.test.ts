@@ -70,6 +70,19 @@ describe("worker (docker)", () => {
     expect(verifyLedger(ledger).ok).toBe(true);
     const warn = readLines(path.join(home, "security_events.jsonl")).map((l) => JSON.parse(l) as { run_id: string; severity: string }).filter((e) => e.run_id === v.run_id && e.severity !== "info");
     expect(warn).toEqual([]);
+    // D-300: the real tests catch the mutant of the fixed line (threshold 5000 → 0) in the real sandbox
+    const verdict = JSON.parse(readFileSync(path.join(home, "runs", v.run_id, "verdict.json"), "utf8")) as { evidence: { detector: string; status: string; data: { sites?: number; killed?: number } }[] };
+    const d11 = verdict.evidence.find((e) => e.detector === "D11.mutation");
+    expect(d11?.status).toBe("pass");
+    expect(d11?.data.killed).toBe(d11?.data.sites);
+    expect(d11?.data.sites).toBeGreaterThan(0);
+  });
+
+  it("untested-extra (D-300): поправка + функция без тест → UNKNOWN D11:survived (10)", () => {
+    const r = cli("run", "--contract", path.join(repoRoot, "contracts/fix-discount.json"), "--agent", "fake:untested-extra", "--json");
+    const v = JSON.parse(r.stdout.split("\n").filter(Boolean)[0] ?? "") as { result: string; exit: number; reasons: string[] };
+    expect([v.result, v.exit]).toEqual(["UNKNOWN", 10]);
+    expect(v.reasons.some((x) => /^D11:survived:src\/cart\.ts:\d+$/.test(x))).toBe(true);
   });
 
   it("skip-test → FAILED (20); echo-pass → UNKNOWN (10)", () => {

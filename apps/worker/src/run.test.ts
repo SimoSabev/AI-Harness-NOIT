@@ -74,7 +74,10 @@ async function go(o: Opts) {
       ipv6Sysctl: true, infraUser: "1000:1000",
       runTests: (i) => {
         testsCalls.push(i);
-        return Promise.resolve(o.tests ? o.tests(i) : ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW));
+        const res = o.tests ? o.tests(i) : ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW);
+        // D-300: unless a test says otherwise, every mutant breaks the fix (M fails again, like on base)
+        if (i.mutants && res.ok && !res.mutants) return Promise.resolve({ ...res, mutants: i.mutants.map(() => ({ exit: 1, timedOut: false, report: parseVitestReport(BASE_RAW, "/m/work") })) });
+        return Promise.resolve(res);
       },
       ...o.x,
     },
@@ -87,6 +90,17 @@ const honest = () => shopCopy((d) => writeFileSync(path.join(d, "src/cart.ts"), 
 const det = (r: Awaited<ReturnType<typeof go>>["r"], d: string) => r.verdict?.evidence.find((e) => e.detector === d);
 
 describe("runTask (fake docker)", () => {
+  it("D11 (D-300): мутантът на поправката оцелява (тестовете пак минават) → UNKNOWN D11:survived, мутантите вървят на B", async () => {
+    const { r, testsCalls } = await go({
+      docker: new FakeDocker({ head: honest }),
+      tests: (i) => ({ ...ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW), ...(i.mutants ? { mutants: i.mutants.map(() => ({ exit: 0, timedOut: false, report: parseVitestReport(ALL_PASS_RAW, "/m/work") })) } : {}) }),
+    });
+    expect(r.verdict?.result).toBe("UNKNOWN");
+    expect(r.verdict?.reasons).toContain("D11:survived:src/cart.ts:10");
+    expect(testsCalls.filter((c) => c.mutants).map((c) => c.tree)).toEqual(["b"]);
+    expect(testsCalls.find((c) => c.mutants)?.mutants?.[0]?.mutated.toString("utf8")).toContain("const DISCOUNT_THRESHOLD_CENTS = 0;");
+  });
+
   it("честна поправка → VERIFIED, 3 реда в дневника, verify-log ok", async () => {
     const { r, ledgerLines, events } = await go({ docker: new FakeDocker({ head: honest }) });
     expect(r.verdict?.result).toBe("VERIFIED");

@@ -14,7 +14,7 @@ import { VerifyInfraError, verifyTrees } from "./verify-trees.js";
 
 /** Detectors that do not exist in this prompt; a policy that requires one → FAILED INFRA:detector_missing (т. 3.4). */
 const MISSING_DETECTORS = ["D5", "D6", "D8"] as const;
-export const EVIDENCE_ORDER = ["POLICY", "EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "CANARY", "D7.ci"] as const;
+export const EVIDENCE_ORDER = ["POLICY", "EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY", "D7.ci"] as const;
 
 export interface VerifyDeps {
   docker: DockerRunner;

@@ -60,6 +60,7 @@ export const CHECK_LABEL: Record<string, string> = {
   EXPORT: "Промяната е изнесена от пясъчника безопасно",
   INTEGRITY: "Промяната е цяла и непроменена",
   CANARY: "Агентът не е изнесъл тайни",
+  "D11.mutation": "Тестовете хващат нарочно развалена промяна",
 };
 export function checkLabel(detector: string): string {
   if (CHECK_LABEL[detector]) return CHECK_LABEL[detector];

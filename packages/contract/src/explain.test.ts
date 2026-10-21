@@ -3,7 +3,7 @@ import { explain } from "./explain.js";
 
 describe("explain (т. 7.2; карта Ф4)", () => {
   it("всички класове, двата езика, ID в рамка, непознат клас", () => {
-    const reasons = ["D2:missing_test:a > b", "D2:weakened:a > b", "D2:weakened_assertions:a > b", "D2:skipped:a > b", "D2:only:t.ts", "D2:zero_tests:-", "D2:report_mismatch:-", "D1:regression:a > b", "D1:flaky_history:x", "D3:protected:.github/x", "D3:config:.mandat.yml", "D4:out_of_contract:src/x", "POLICY:base_untrusted:no_remote", "POLICY:missing:.mandat.yml", "EXPORT:empty_change:-", "INFRA:same_uid:-"];
+    const reasons = ["D2:missing_test:a > b", "D2:weakened:a > b", "D2:weakened_assertions:a > b", "D2:skipped:a > b", "D2:only:t.ts", "D2:zero_tests:-", "D2:report_mismatch:-", "D1:regression:a > b", "D1:flaky_history:x", "D3:protected:.github/x", "D3:config:.mandat.yml", "D4:out_of_contract:src/x", "POLICY:base_untrusted:no_remote", "POLICY:missing:.mandat.yml", "EXPORT:empty_change:-", "INFRA:same_uid:-", "D11:survived:src/cart.ts:2", "D11:not_run:-"];
     for (const lang of ["bg", "en"] as const) {
       const t = explain({ result: "FAILED", reasons, lang }).split("\n");
       expect(t).toHaveLength(reasons.length + 1);

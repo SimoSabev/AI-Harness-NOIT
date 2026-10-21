@@ -18,6 +18,8 @@ const T: Record<string, Record<Lang, (id: string) => string>> = {
   "POLICY:base_untrusted": { bg: (id) => `Base-ът не може да бъде закрепен от доверения remote (${id}).`, en: (id) => `The base could not be pinned from the trusted remote (${id}).` },
   "POLICY:missing": { bg: () => "Липсва .mandat.yml на доверения base.", en: () => ".mandat.yml is missing on the trusted base." },
   "EXPORT:empty_change": { bg: () => "Няма промяна спрямо base; празна промяна не е VERIFIED.", en: () => "There is no change against base; an empty change is not VERIFIED." },
+  "D11:survived": { bg: (id) => `Мандат развали нарочно променения ред ${id} и тестовете пак минаха: те не проверяват тази промяна. Добави тест, който я хваща.`, en: (id) => `Mandat broke the changed line ${id} on purpose and the tests still passed: they do not check this change. Add a test that catches it.` },
+  "D11:not_run": { bg: () => "Мутационната проверка не можа да завърши; промяната не е доказана от тестовете.", en: () => "The mutation check could not finish; the tests do not prove the change." },
   "INFRA:same_uid": { bg: () => "Проверката е вървяла със същия потребител като агента: съвет, без изолация.", en: () => "The check ran as the agent's own user: advice only, no isolation." },
 };
 

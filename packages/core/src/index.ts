@@ -22,3 +22,5 @@ export { afterVerify2, decideDelivery } from "./delivery.js";
 export type { DeliveryAction, WaitReason } from "./delivery.js";
 export { d7ci } from "./d7.js";
 export type { CheckRunInfo, CommitStatusInfo } from "./d7.js";
+export { addedLines, applySite, d11Mutation, mutationSites } from "./d11.js";
+export type { MutantRun, MutationSite } from "./d11.js";

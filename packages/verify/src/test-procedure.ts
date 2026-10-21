@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { npmAllowlistFromLockfile, parseVitestReport } from "@mandat/contract";
 import type { ParsedReport } from "@mandat/contract";
@@ -26,9 +26,13 @@ export interface TestProcedureInput {
   extraCa?: string | undefined;
   ipv6Sysctl?: boolean;
   startGate?: typeof startRunGate;
+  /** D-300: after the tests, each mutant (one changed file) runs the same tests on the same installed volume, then is undone */
+  mutants?: { path: string; mutated: Buffer; original: Buffer }[];
+  mutantTimeoutMs?: number;
 }
+export interface MutantResult { exit: number | null; timedOut: boolean; report: ParsedReport }
 export type TestProcedureResult =
-  | { ok: true; exit: number | null; timedOut: boolean; raw: string | null; report: ParsedReport }
+  | { ok: true; exit: number | null; timedOut: boolean; raw: string | null; report: ParsedReport; mutants?: (MutantResult | null)[] }
   | { ok: false; code: "E_LOCKFILE_BASE" | "E_GATE_START" | "E_GATE_POLICY" | "E_INSTALL_BASE" | "E_INSTALL_TREE" };
 
 export const REPORT_LIMIT = 20971521;
@@ -67,7 +71,38 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
     if (inst.exitCode !== 0 || inst.timedOut) return { ok: false, code: installCode };
     const t = await runSandbox(ctx, { role: "test", volume: vol, network: "none", env: { phase: "test", testsEnv: i.testsEnv }, cmd: ["/bin/sh", "-c", i.testsCommand], timeoutMs: i.timeoutMs });
     const raw = (await safeReadVolume(ctx, { volume: vol, file: "/m/out/report.json", limit: REPORT_LIMIT, role: "test" }))?.toString("utf8") ?? null;
-    return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report: parseVitestReport(raw, "/m/work") };
+    const report = parseVitestReport(raw, "/m/work");
+    if (!i.mutants || i.mutants.length === 0) return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report };
+    const mutants: (MutantResult | null)[] = [];
+    const scratch = mkdtempSync(path.join(path.dirname(i.treeDir), "mutant-"));
+    const put = async (rel: string, content: Buffer): Promise<boolean> => {
+      const dir = mkdtempSync(path.join(scratch, "f-"));
+      try {
+        mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+        writeFileSync(path.join(dir, rel), content);
+        const r = await runSandbox(ctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(dir), timeoutMs: 60_000 });
+        return r.exitCode === 0;
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    };
+    try {
+      for (const m of i.mutants) {
+        if (!(await put(m.path, m.mutated))) {
+          mutants.push(null);
+          continue;
+        }
+        // the old report must not stand in for a mutant run that never wrote one
+        const mt = await runSandbox(ctx, { role: "test", volume: vol, network: "none", env: { phase: "test", testsEnv: i.testsEnv }, cmd: ["/bin/sh", "-c", `rm -f /m/out/report.json; ${i.testsCommand}`], timeoutMs: i.mutantTimeoutMs ?? i.timeoutMs });
+        const mraw = (await safeReadVolume(ctx, { volume: vol, file: "/m/out/report.json", limit: REPORT_LIMIT, role: "test" }))?.toString("utf8") ?? null;
+        mutants.push({ exit: mt.timedOut ? null : mt.exitCode, timedOut: mt.timedOut, report: parseVitestReport(mraw, "/m/work") });
+        if (!(await put(m.path, m.original))) break;
+      }
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+    while (mutants.length < i.mutants.length) mutants.push(null);
+    return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report, mutants };
   } finally {
     await gate?.stop();
     await dockerText(i.docker, ["volume", "rm", "-f", vol], 60_000);
