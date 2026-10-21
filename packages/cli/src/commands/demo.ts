@@ -49,7 +49,7 @@ export async function demoSeed(io: Io, o: { home: string; minimal: boolean; scen
 }
 
 /** RFC 4648 base32 of 20 random bytes (the TOTP secret of the dev login, D-285). */
-function newBase32Secret(): string {
+export function newBase32Secret(): string {
   const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
   const b = randomBytes(20);
   let bits = 0;

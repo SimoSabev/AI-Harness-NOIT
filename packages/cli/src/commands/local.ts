@@ -11,6 +11,7 @@ import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
 import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
 import { listAccounts } from "./accounts.js";
+import { newBase32Secret } from "./demo.js";
 import { workerCommand } from "./worker.js";
 
 // D-292: `pnpm local` — everything on this machine with one command: Postgres in Docker (shim + migrations, no
@@ -29,6 +30,16 @@ export function localDbUrl(port: number): string {
 /** The shim (roles, auth.users) goes first, then every migration file not applied yet, in name order. */
 export function pendingMigrations(files: string[], applied: Set<string>): string[] {
   return ["shim", ...[...files].sort()].filter((f) => !applied.has(f));
+}
+
+/** D-297: printed once, when the local account gets its TOTP secret (owner approvals of the harness rules need a fresh code). */
+export function totpLines(email: string, secret: string): string[] {
+  return [
+    "  Двуфакторен код (само сега): добави в приложение за кодове (Google Authenticator, 1Password…)",
+    `  Ключ:    ${secret}`,
+    `  Адрес:   otpauth://totp/Hamut:${encodeURIComponent(email)}?secret=${secret}&issuer=Hamut&algorithm=SHA1&digits=6&period=30`,
+    "  Трябва за одобрение на правилата на репото и на задачи с повече свобода.",
+  ];
 }
 
 const docker = (args: string[]) => spawnSync("docker", args, { encoding: "utf8" });
@@ -97,10 +108,13 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   }
   const password = randomBytes(9).toString("base64url");
   let email: string;
+  let totp: string | null = null;
   try {
     await migrate(io, db);
     const fx = buildFixture({ repoRoot, mandatHome: o.home, force: false, name: "demo-shop" });
-    email = (await seedLocal(db, { remoteUrl: `file://${path.resolve(fx.mirror)}`, password })).email;
+    const seeded = await seedLocal(db, { remoteUrl: `file://${path.resolve(fx.mirror)}`, password, totpSecret: newBase32Secret });
+    email = seeded.email;
+    totp = seeded.totpSecret;
   } finally {
     await db.end();
   }
@@ -140,6 +154,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
       `  Отвори:  http://localhost:${WEB_PORT}`,
       `  Имейл:   ${email}`,
       `  Парола:  ${password}   (нова при всяко пускане)`,
+      ...(totp ? ["", ...totpLines(email, totp)] : []),
       "",
       "  Демо агентите работят без ключ. За Claude Code и Codex: Ключове в менюто",
       "  (ключът отива само в проксито; не се записва никъде)",

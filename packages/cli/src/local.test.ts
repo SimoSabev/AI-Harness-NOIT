@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_DB, dbRunArgs, localDbUrl, pendingMigrations } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, localDbUrl, pendingMigrations, totpLines } from "./commands/local.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -17,5 +17,13 @@ describe("mandat local (D-292)", () => {
     expect(pendingMigrations(["b.sql", "a.sql"], new Set())).toEqual(["shim", "a.sql", "b.sql"]);
     expect(pendingMigrations(["b.sql", "a.sql", "c.sql"], new Set(["shim", "a.sql"]))).toEqual(["b.sql", "c.sql"]);
     expect(pendingMigrations(["a.sql"], new Set(["shim", "a.sql"]))).toEqual([]);
+  });
+});
+
+describe("totpLines (D-297)", () => {
+  it("ключът и otpauth адресът за приложение за кодове", () => {
+    const l = totpLines("ti@mandat.local", "ABCDEFGHIJKLMNOP");
+    expect(l.join("\n")).toContain("Ключ:    ABCDEFGHIJKLMNOP");
+    expect(l.join("\n")).toContain("otpauth://totp/Hamut:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Hamut&algorithm=SHA1&digits=6&period=30");
   });
 });

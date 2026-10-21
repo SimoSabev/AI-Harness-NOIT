@@ -35,20 +35,22 @@ describe("mandat demo seed (т. 8 „Общо за E3“)", () => {
 });
 
 describe("seedLocal (D-292: pnpm local)", () => {
-  it("един собственик с парола, 4 типа задачи, без карти и без TOTP; повторно → само нова парола", async () => {
+  it("един собственик с парола, 4 типа задачи, без карти; TOTP само първия път (D-297); повторно → само нова парола", async () => {
     const db = await pgliteDb();
     try {
-      const a = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "first-pw-test" });
-      expect(a).toEqual({ org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: true });
+      const a = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "first-pw-test", totpSecret: () => "B".repeat(32) });
+      expect(a).toEqual({ org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: true, totpSecret: "B".repeat(32) });
       const login = (pw: string) => db.query<{ id: string }>("select id from auth.users where email = $1 and encrypted_password = extensions.crypt($2, encrypted_password)", [LOCAL_EMAIL, pw]);
       expect((await login("first-pw-test")).rows.length).toBe(1);
       expect((await db.query<{ role: string }>("select role from public.members where org_id = $1", [DEMO_ORG_ID])).rows).toEqual([{ role: "owner" }]);
       expect((await db.query<{ name: string }>("select name from public.task_types order by name")).rows.map((r) => r.name)).toEqual(["bugfix", "css", "docs", "feature"]);
       expect((await db.query<{ n: number }>("select count(*)::int as n from public.tasks")).rows[0]?.n).toBe(0);
-      expect((await db.query<{ n: number }>("select count(*)::int as n from private.dev_totp")).rows[0]?.n).toBe(0);
+      expect((await db.query<{ n: number }>("select count(*)::int as n from private.dev_totp")).rows[0]?.n).toBe(1);
       expect((await db.query<{ provider: string }>("select provider from public.model_channels order by provider")).rows.map((r) => r.provider)).toEqual(["anthropic", "openai"]);
-      const b = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "second-pw-test" });
+      const b = await seedLocal(db, { remoteUrl: "file:///tmp/x", password: "second-pw-test", totpSecret: () => "C".repeat(32) });
       expect(b.created).toBe(false);
+      expect(b.totpSecret).toBeNull();
+      expect((await db.query<{ s: string }>("select secret_b32 as s from private.dev_totp")).rows).toEqual([{ s: "B".repeat(32) }]);
       expect((await login("first-pw-test")).rows.length).toBe(0);
       expect((await login("second-pw-test")).rows.length).toBe(1);
       expect(verifyOnlineRows(await readLedgerOnline(db, DEMO_ORG_ID), DEMO_ORG_ID).ok).toBe(true);

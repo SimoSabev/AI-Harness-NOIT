@@ -25,7 +25,7 @@ export const LOCAL_EMAIL = "ti@mandat.local";
  * D-292 (`pnpm local`): one owner with a password, the 4 task types, the 2 channels, no cards, no TOTP, ladder level 0.
  * Called on every start: a fresh password each time (printed once to the terminal, stored only as a bcrypt hash).
  */
-export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password: string }): Promise<{ org: string; email: string; created: boolean }> {
+export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password: string; totpSecret?: () => string }): Promise<{ org: string; email: string; created: boolean; totpSecret: string | null }> {
   const m = await seedMinimal(db, { remoteUrl: o.remoteUrl, ownerEmail: LOCAL_EMAIL });
   await db.query("update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')), email_confirmed_at = coalesce(email_confirmed_at, now()) where id = $1", [DEMO_OWNER_ID, o.password]);
   await db.query("update public.repos set remote_url = $2 where id = $1", [DEMO_REPO_ID, o.remoteUrl]);
@@ -33,7 +33,16 @@ export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password:
     await db.query("insert into public.task_types (org_id, repo_id, name, risk_class) values ($1, $2, $3, $4) on conflict do nothing", [DEMO_ORG_ID, DEMO_REPO_ID, name, risk]);
   }
   await seedChannels(db); // D-293: claude → the Anthropic key, codex → the OpenAI key of the proxy
-  return { org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: m.created };
+  // D-297: the harness approval needs a fresh TOTP code; the secret is made once and returned once (the CLI prints it)
+  let totpSecret: string | null = null;
+  if (o.totpSecret) {
+    const has = (await db.query("select 1 from private.dev_totp where user_id = $1", [DEMO_OWNER_ID])).rows.length > 0;
+    if (!has) {
+      totpSecret = o.totpSecret();
+      await db.query("insert into private.dev_totp (user_id, secret_b32) values ($1, $2)", [DEMO_OWNER_ID, totpSecret]);
+    }
+  }
+  return { org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: m.created, totpSecret };
 }
 
 // Демо промпт т. 8 „Общо за E3“: org mandat-demo with 4 accounts, the ladder of agent claude (css=3 pinned, docs=2,
