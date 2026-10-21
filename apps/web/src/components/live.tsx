@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 
 // Ф4 / спец. т. 11: private Broadcast `org:<id>:board` (or `task:<id>`); reconnect → GET /api/board?since=;
-// Realtime unavailable > 30 s (or the dev login without Supabase) → polling every 15 s. ONE aria-live="polite" region;
+// Realtime unavailable > 30 s (or the dev login without Supabase) → polling every 15 s (3 s while a task runs, D-292). ONE aria-live="polite" region;
 // "assertive" only for ПРОВАЛ / БЛОКИРАНО (WCAG 4.1.3).
 type Msg = { task_id?: string; state?: string; verdict?: string | null; result?: string | null };
 
-export function Live({ topic, since, realtime }: { topic: string; since: string; realtime: { url: string; anonKey: string } | null }) {
+export function Live({ topic, since, realtime, fast = false }: { topic: string; since: string; realtime: { url: string; anonKey: string } | null; fast?: boolean }) {
   const router = useRouter();
   const [polite, setPolite] = useState("");
   const [assertive, setAssertive] = useState("");
@@ -42,7 +42,7 @@ export function Live({ topic, since, realtime }: { topic: string; since: string;
       }
     };
     const startPolling = () => {
-      if (!poll && !stopped) poll = setInterval(() => void check(), 15_000);
+      if (!poll && !stopped) poll = setInterval(() => void check(), fast ? 3_000 : 15_000);
     };
     if (!realtime) {
       startPolling();
@@ -75,7 +75,7 @@ export function Live({ topic, since, realtime }: { topic: string; since: string;
       if (poll) clearInterval(poll);
       void sb.removeChannel(ch);
     };
-  }, [topic, realtime, router]);
+  }, [topic, realtime, router, fast]);
 
   return (
     <>

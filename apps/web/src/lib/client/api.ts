@@ -19,6 +19,7 @@ export const ERROR_TEXT: Record<string, string> = {
   not_an_approver: "Нямаш права да одобряваш.",
   not_retryable: "Задачата не може да се повтори в това състояние.",
   no_attempts_left: "Опитите са изчерпани.",
+  no_repo_for_type: "Няма хранилище за този вид задача.",
   not_stoppable: "Задачата не може да се спре в това състояние.",
   rate_limited: "Твърде много заявки. Опитай след минута.",
 };

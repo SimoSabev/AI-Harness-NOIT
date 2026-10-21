@@ -103,3 +103,8 @@ export async function taskDetail(db: Db, uid: string, org: string, role: Role, i
     return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label };
   });
 }
+
+/** D-292: the repository new tasks go to (createTask takes the org's first repo with that task type). */
+export async function firstRepo(db: Db, uid: string, org: string): Promise<string | null> {
+  return asUser(db, uid, async (sql) => (await sql.query<{ full_name: string }>("select full_name from public.repos where org_id = $1::uuid order by created_at limit 1", [org])).rows[0]?.full_name ?? null);
+}
