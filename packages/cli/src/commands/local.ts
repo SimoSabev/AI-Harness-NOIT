@@ -78,7 +78,7 @@ async function gatherFacts(): Promise<PreflightFacts> {
   const cpus = up ? Number(spawnSync("docker", ["info", "--format", "{{.NCPU}}"], { encoding: "utf8" }).stdout.trim()) || 0 : 0;
   const t = await imageTags(repoRoot);
   const imagesPresent = up && [t.sandbox, t.gate, t.proxy].every((x) => spawnSync("docker", ["image", "inspect", x]).status === 0);
-  let freeGb = 0;
+  let freeGb: number;
   try {
     const st = statfsSync(repoRoot);
     freeGb = Math.floor((st.bavail * st.bsize) / 1024 ** 3);
