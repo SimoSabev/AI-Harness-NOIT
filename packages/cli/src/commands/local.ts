@@ -108,7 +108,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   }
   const password = randomBytes(9).toString("base64url");
   let email: string;
-  let totp: string | null = null;
+  let totp: string | null;
   try {
     await migrate(io, db);
     const fx = buildFixture({ repoRoot, mandatHome: o.home, force: false, name: "demo-shop" });

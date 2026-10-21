@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DiffView } from "../../../components/diff-view";
 import { Live } from "../../../components/live";
 import { Shell } from "../../../components/shell";
 import { TaskActions } from "../../../components/task-actions";
@@ -9,6 +10,7 @@ import { agentLabel } from "../../../lib/agents";
 import { pageTitle } from "../../../lib/inbox";
 import { ago, checkLabel, groupOf, statusOf } from "../../../lib/status";
 import type { StatusKey } from "../../../lib/status";
+import { splitDiff } from "../../../lib/diff-view";
 import { ladderHint } from "../../../lib/ladder-hint";
 import { reasonText, testsOf } from "../../../lib/verdict-view";
 import { db } from "../../../lib/server/db";
@@ -146,15 +148,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
       {d.diff && c.role !== "viewer" && (
         <section aria-labelledby="diff-h" className="mt-8">
           <h2 id="diff-h" className="mb-2 text-sm font-medium text-zinc-500 dark:text-zinc-400">Промяната на агента</h2>
-          <pre className={`${card} overflow-x-auto p-0 font-mono text-xs leading-5`}>
-            <code className="block py-3">
-              {d.diff.split("\n").filter((l) => !l.startsWith("diff --git") && !l.startsWith("index ")).map((l, k) => (
-                <span key={k} className={`block px-4 ${l.startsWith("+") && !l.startsWith("+++") ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300" : l.startsWith("-") && !l.startsWith("---") ? "bg-red-50 text-red-900 dark:bg-red-950/60 dark:text-red-300" : l.startsWith("@@") ? "text-sky-700 dark:text-sky-400" : "text-zinc-600 dark:text-zinc-400"}`}>
-                  {l || " "}
-                </span>
-              ))}
-            </code>
-          </pre>
+          <DiffView files={splitDiff(d.diff)} />
         </section>
       )}
 
