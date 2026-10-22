@@ -39,6 +39,18 @@ describe("matchPolicy (6.8, D-100)", () => {
   });
 });
 
+describe("npm prefix route and scoped packages (E8e, D-354)", () => {
+  it("a scoped packument (/npm/@scope%2fname) passes an npm prefix route; any other %2f, %2e or .. does not", () => {
+    const p = pol("install", [{ id: "mcp-npm", method: "GET", match: { kind: "prefix", path: "/npm/" }, upstream: "npm_registry" }]);
+    expect(matchPolicy(p, "GET", "/npm/@modelcontextprotocol%2fserver").allow).toBe(true);
+    expect(matchPolicy(p, "GET", "/npm/@modelcontextprotocol%2Fserver").allow).toBe(true);
+    expect(matchPolicy(p, "GET", "/npm/@modelcontextprotocol/server/-/server-2.3.1.tgz").allow).toBe(true);
+    for (const bad of ["/npm/@a%2fb%2fc", "/npm/@a%2f..%2fb", "/npm/x%2fy", "/npm/@a%2f%2e%2e", "/npm/@a%2fb/../../v1/messages"]) expect(matchPolicy(p, "GET", bad)).toEqual({ allow: false, reason: "bad_path" });
+    const llm = pol("install", [{ id: "p", method: "GET", match: { kind: "prefix", path: "/v1/" }, upstream: "llm_proxy" }]);
+    expect(matchPolicy(llm, "GET", "/v1/@a%2fb")).toEqual({ allow: false, reason: "bad_path" });
+  });
+});
+
 describe("matchTunnel (D-294)", () => {
   it("only exact host:port from tunnels, only in the agent phase; no tunnels → never", () => {
     const p: GatePolicy = { ...pol("agent", []), tunnels: [{ host: "api.anthropic.com", port: 443 }] };
