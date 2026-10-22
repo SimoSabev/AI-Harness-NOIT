@@ -288,6 +288,15 @@ describe("daemon steering (E8g, AC-8.5)", () => {
     const c = JSON.parse(readFileSync(r?.contractPath ?? "", "utf8")) as { text: string };
     expect(c.text).toContain("Note from Mandat (night shift): FAILED after 1 attempt(s): `MUST_PASS:not_passed:x`. Describe it better.");
   });
+  it("E9а: after the shift ended (an answered question the next morning) the task runs by day rules", async () => {
+    const s = await setup(0);
+    await insertProfile(s.db, "approved");
+    await nightShift(s.db, { min_level: 2, max_lines: 200, forbid: ["bash:curl *"] });
+    await s.db.query("update public.night_shifts set status = 'done'");
+    await runDaemonOnce(s.deps);
+    expect(s.runs[0]?.subjects ?? []).not.toContain("night");
+    expect(s.runs[0]?.profile?.layers.c.some((r) => r.subject === "night")).toBe(false);
+  });
   it("E9а: at night a level-2 change is not auto-merged when the shift's rule wants level 3 → HELD approval (waiting for a person)", async () => {
     const s = await setup(2);
     await nightShift(s.db, { min_level: 3, max_lines: 200, forbid: [] });
