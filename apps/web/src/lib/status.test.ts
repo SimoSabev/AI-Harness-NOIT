@@ -19,7 +19,7 @@ describe("status (D-292)", () => {
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED" })).key).toBe("closed");
     expect(statusOf(t({ state: "GATED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
     expect(statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "key_rejected" }))).toMatchObject({ key: "key", label: "Key rejected", tone: "red" });
-    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed", "expired", "ask"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
+    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed", "expired", "ask", "base"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
   });
   it("E8g: a HELD task closed by the sweeper says so (gray, done)", () => {
     const st = statusOf(t({ state: "CLOSED", wait_reason: "expired" }));
@@ -29,6 +29,10 @@ describe("status (D-292)", () => {
   it("E8g: a task waiting for a tool permission is its own status (amber, waiting)", () => {
     const st = statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "tool_approval" }));
     expect([st.key, st.tone, groupOf(st.key)]).toEqual(["ask", "amber", "waiting"]);
+  });
+  it("E8f: a change that conflicts with a moved base says so (amber, waiting)", () => {
+    const st = statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "base_moved" }));
+    expect([st.key, st.tone, groupOf(st.key)]).toEqual(["base", "amber", "waiting"]);
   });
   it("groups: Чака теб / В работа / Готово", () => {
     expect(groupOf("review")).toBe("waiting");
@@ -71,6 +75,7 @@ function stateFor(k: string): Partial<Parameters<typeof statusOf>[0]> {
     stopped: { state: "BLOCKED", wait_reason: "stopped" }, approved: { state: "DELIVERED", last_result: "VERIFIED", approved_by_human: true }, closed: { state: "CLOSED" },
     expired: { state: "CLOSED", wait_reason: "expired" },
     ask: { state: "HELD", last_result: "VERIFIED", wait_reason: "tool_approval" },
+    base: { state: "HELD", last_result: "VERIFIED", wait_reason: "base_moved" },
   };
   return m[k] ?? {};
 }

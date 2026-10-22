@@ -34,7 +34,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
     run(`/api/changesets/${p.changesetId}/approve`, { head_sha: p.headSha, decision, client: "web", ...(decision === "approved" && p.twoFactor ? { code } : {}) });
 
   const canDecide = p.status === "review" && p.changesetId !== null && p.headSha !== null;
-  const canRetry = p.status === "failed" || p.status === "unknown" || p.status === "empty" || p.status === "key";
+  const canRetry = p.status === "failed" || p.status === "unknown" || p.status === "empty" || p.status === "key" || p.status === "base";
   const canStop = p.status === "queued" || p.status === "running" || p.status === "checking";
   if (!canDecide && !canRetry && !canStop) return null;
 

@@ -36,7 +36,7 @@ export async function rebaseOnto(o: { mirror: string; base: string; patch: Buffe
       const files = (await git.run(["diff", "--cached", "--name-only", o.base], { cwd: w })).stdout.toString("utf8").split("\n").filter(Boolean);
       const contents: { path: string; data: Buffer | null }[] = [];
       for (const f of files) {
-        const show = await git.run(["show", `:${f}`], { cwd: w });
+        const show = await git.run(["show", "--end-of-options", `:${f}`], { cwd: w });
         contents.push({ path: f, data: show.code === 0 ? show.stdout : null });
       }
       return { kind: "clean", patch, files, contents };

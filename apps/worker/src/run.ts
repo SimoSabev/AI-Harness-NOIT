@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -60,6 +60,8 @@ export interface RunTaskInput {
   grantOnce?: string[];
   /** E8e (D-354): the values of each MCP server's declared secrets (from the key store); only its sidecar gets them */
   mcpSecrets?: Record<string, Record<string, string>>;
+  /** E8f (D-355): a rebase attempt — these files (null = deleted) are written into the work tree instead of running an agent */
+  applyFiles?: { path: string; data: Buffer | null }[];
   /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
   mcpBudgets?: Record<string, number>;
   /** test/CLI seams (not part of the 6.14 contract) */
@@ -367,6 +369,26 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       // ---------- AGENT (7.6)
       await timed("agent", async () => {
         const g = gate as RunGate;
+        if (i.applyFiles) {
+          // E8f (D-355): the rebased change, computed 3-way on the host, takes the place of the agent; then the usual export + verify
+          const bad = i.applyFiles.find((f) => f.path.startsWith("/") || f.path.split("/").some((x) => x === ".." || x === ".git" || x === ""));
+          if (bad) infra("E_USAGE", `rebase: bad path ${bad.path.slice(0, 100)}`);
+          const dir = path.join(tmpRoot, "rebase");
+          for (const f of i.applyFiles.filter((x) => x.data !== null)) {
+            mkdirSync(path.dirname(path.join(dir, f.path)), { recursive: true });
+            writeFileSync(path.join(dir, f.path), f.data as Buffer);
+          }
+          let ok = true;
+          if (existsSync(dir)) ok = (await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(dir), timeoutMs: 120_000 })).exitCode === 0;
+          const gone = i.applyFiles.filter((x) => x.data === null).map((x) => `/m/work/${x.path}`);
+          if (ok && gone.length > 0) ok = (await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["rm", "-f", "--", ...gone], timeoutMs: 60_000 })).exitCode === 0;
+          agentExit = ok ? 0 : 1;
+          await g.setPolicy("closed", []).catch(() => undefined);
+          await g.stop();
+          gate = undefined;
+          out(`[agent]     rebase: ${i.applyFiles.length} file(s) applied onto the new base`);
+          return;
+        }
         try {
           channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret") });
           await g.setPolicy("agent", [...channel.gateRoutes(), ...mcpRoutes], channel.gateTunnels?.());

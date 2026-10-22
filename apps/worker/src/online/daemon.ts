@@ -21,6 +21,9 @@ import { loadChannels, profileOfAgent, providerOfAgent, refOf, ruleFor, spillAge
 import { inTransaction } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
+import { mainHead, rebaseOnto } from "./rebase.js";
+
+const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
 import type { Db } from "./db.js";
 
 // Демо промпт т. 5.8 + 8.1 (D-275, D-280): the online worker. One task at a time per process; every state change +
@@ -60,6 +63,7 @@ interface TaskRow {
   ruleset_strict: boolean;
   is_demo: boolean;
   replay: string | null;
+  retry_reason: string | null;
 }
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
@@ -108,7 +112,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -257,6 +261,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       return r.map((x) => ({ text: x.text, author: "member" }));
     };
     if (steerable) await d.db.query("update public.tasks set steerable = true where id = $1", [t.id]);
+    const rbFile = t.retry_reason === "rebase" ? rebaseFile(d.home, t.id, t.attempt) : null;
+    const applyFiles = rbFile && existsSync(rbFile) ? (JSON.parse(readFileSync(rbFile, "utf8")) as { path: string; data: string | null }[]).map((f) => ({ path: f.path, data: f.data === null ? null : Buffer.from(f.data, "base64") })) : undefined;
     try {
       return await (d.run ?? runTask)({
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
@@ -264,6 +270,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested: () => (conflictWith ? "conflict" : null) },
         ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
+        ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
         ...(Object.keys(mcpBudgets).length > 0 ? { mcpBudgets } : {}),
       });
@@ -423,6 +430,37 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   if (notify) await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:${notify}`, payload: { task_id: t.id, kind: notify } });
   await bc(after?.state ?? "?", seq, { result: v.result, level: lvl.level, wait_reason: after?.wait_reason ?? null, usd, minutes });
   log(`[daemon] ${t.id}: ${v.result} · level ${lvl.level} · ${action.kind}`);
+  // E8f (D-355, AC-4.5): the base moved while the task ran → never deliver onto the old base; rebase 3-way on the host
+  if (v.result !== "FAILED" && diffPatch.length > 0) {
+    const head = await mainHead(mirror);
+    if (/^[0-9a-f]{40}$/.test(head) && head !== v.base_sha) {
+      const rb = await rebaseOnto({ mirror, base: head, patch: diffPatch });
+      if (rb.kind === "clean") {
+        const file = rebaseFile(d.home, t.id, t.attempt + 1);
+        mkdirSync(path.dirname(file), { recursive: true });
+        writeFileSync(file, JSON.stringify(rb.contents.map((c) => ({ path: c.path, data: c.data === null ? null : c.data.toString("base64") }))));
+        seq = await inTransaction(d.db, async (tx) => {
+          await tx.query("update public.tasks set attempt = attempt + 1, retry_reason = 'rebase' where id = $1", [t.id]);
+          const s2 = await setState(tx, t, "CREATED", { wait_reason: null });
+          await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_retry", task_id: t.id, payload: { attempt: t.attempt + 1, reason: "rebase", from: v.base_sha, onto: head, files: rb.files.slice(0, 50) } });
+          return s2;
+        });
+        await bc("CREATED", seq, { wait_reason: null });
+        log(`[daemon] ${t.id}: base moved ${v.base_sha.slice(0, 7)} → ${head.slice(0, 7)} · rebased cleanly, a new attempt verifies it`);
+        return { state: "CREATED", verdict: v };
+      }
+      if (out.runDir) writeFileSync(path.join(out.runDir, "rebase-conflict.diff"), rb.diff);
+      seq = await inTransaction(d.db, async (tx) => {
+        await tx.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'base_moved', $3)", [t.org_id, t.id, rb.files.join(", ").slice(0, 500)]);
+        const s2 = await setState(tx, t, "HELD", { wait_reason: "base_moved" });
+        await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "base_moved", from: v.base_sha, onto: head, files: rb.files.slice(0, 50) } });
+        return s2;
+      });
+      await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:waiting`, payload: { task_id: t.id, kind: "waiting" } });
+      await bc("HELD", seq, { wait_reason: "base_moved" });
+      return { state: "HELD", verdict: v };
+    }
+  }
   // Delivery through the gate (fakeGitHub offline; Writer App online)
   const delivered = await deliver(d.gh, { repo: d.ghRepo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full" }, action);
   if (delivered.kind === "pr" || delivered.kind === "branch") {

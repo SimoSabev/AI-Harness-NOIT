@@ -57,6 +57,8 @@ export const en = {
   "status.closed.headline": "The task is closed.",
   "status.expired.label": "Expired",
   "status.expired.headline": "Nobody decided in time; the task was closed and nothing was delivered.",
+  "status.base.label": "Base moved",
+  "status.base.headline": "Someone changed the same lines on main while the agent worked. The conflict is attached; run it again from the new main or resolve it by hand.",
   "tools.skillBlocked": "Blocked: {reason}",
   "mcp.catalog": "Catalog (exact versions, vetted before use)",
   "mcp.search": "Search the registry",

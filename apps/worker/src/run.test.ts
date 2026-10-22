@@ -451,3 +451,17 @@ describe("runTask steering (E8g, AC-8.5)", () => {
     expect(agent).not.toContain("-i");
   });
 });
+
+describe("runTask rebase attempt (E8f, AC-4.5)", () => {
+  it("applyFiles: no agent container; the files go into the work tree, then the usual export and verify", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    const { r } = await go({ docker, i: { applyFiles: [{ path: "src/cart.ts", data: Buffer.from("x") }] } });
+    expect(docker.calls.some((c) => c.args.some((x) => x.startsWith("/opt/mandat/fakes/")))).toBe(false);
+    expect(r.verdict).not.toBeNull();
+  });
+  it("a path that leaves the tree is refused (INFRA)", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    const { r } = await go({ docker, i: { applyFiles: [{ path: "../etc/passwd", data: Buffer.from("x") }] } });
+    expect(r.verdict?.reasons.join(" ")).toMatch(/INFRA/);
+  });
+});

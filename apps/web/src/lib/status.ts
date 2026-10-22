@@ -2,12 +2,12 @@ import { LOCALE, translate } from "../i18n/t";
 import type { Key, Lang } from "../i18n/t";
 
 // D-292: what the person sees — one status word + one sentence per task, never the internal state names.
-export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "key" | "stopped" | "approved" | "closed" | "expired" | "ask";
+export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "key" | "stopped" | "approved" | "closed" | "expired" | "ask" | "base";
 export type Tone = "gray" | "blue" | "green" | "red" | "amber";
 export interface Status { key: StatusKey; label: string; tone: Tone; headline: string }
 
 const TONES: Record<StatusKey, Tone> = {
-  queued: "gray", running: "blue", checking: "blue", review: "green", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", closed: "gray", expired: "gray", ask: "amber",
+  queued: "gray", running: "blue", checking: "blue", review: "green", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", closed: "gray", expired: "gray", ask: "amber", base: "amber",
 };
 
 const RUNNING = new Set(["PROVISIONING", "RUNNING", "EXPORTING", "RETRY"]);
@@ -27,6 +27,7 @@ function keyOf(t: { state: string; last_result: string | null; wait_reason: stri
   if (t.last_result === "FAILED" || t.state === "BLOCKED") return "failed";
   if (t.approved_by_human && t.last_result === "VERIFIED") return "approved";
   if (t.state === "HELD" && t.wait_reason === "tool_approval") return "ask";
+  if (t.state === "HELD" && t.wait_reason === "base_moved") return "base";
   if (t.state === "HELD" && t.wait_reason === "key_rejected") return "key";
   if (t.state === "HELD" && t.wait_reason === "empty_change") return "empty";
   if (t.last_result === "UNKNOWN" && (t.state === "HELD" || t.state === "GATED")) return "unknown";
@@ -41,7 +42,7 @@ export function groupTitle(g: Group, lang: Lang = "en"): string {
   return translate(lang, `group.${g}`);
 }
 export function groupOf(k: StatusKey): Group {
-  if (k === "review" || k === "failed" || k === "unknown" || k === "empty" || k === "key" || k === "ask") return "waiting";
+  if (k === "review" || k === "failed" || k === "unknown" || k === "empty" || k === "key" || k === "ask" || k === "base") return "waiting";
   if (k === "queued" || k === "running" || k === "checking") return "active";
   return "done";
 }

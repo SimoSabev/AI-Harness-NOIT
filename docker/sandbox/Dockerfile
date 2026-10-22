@@ -13,7 +13,10 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
     pnpm install --frozen-lockfile --filter "@mandat/mcp-bridge..." \
  && pnpm --filter "@mandat/mcp-bridge..." build \
- && pnpm --filter @mandat/mcp-bridge --prod deploy /out
+ && pnpm --filter @mandat/mcp-bridge --prod deploy /out \
+ && find /out -type d \( -name tests -o -name __tests__ -o -name test \) -prune -exec rm -rf {} + \
+ && find /out -type f \( -name "*.test.*" -o -name "*.spec.*" \) -delete
+# (the dependencies' own test files carry sample tokens; the R8 keyscan must see none in the sandbox image)
 
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 

@@ -55,6 +55,8 @@ export const bg: Record<Key, string> = {
   "status.closed.headline": "Задачата е приключена.",
   "status.expired.label": "Изтекла",
   "status.expired.headline": "Никой не реши навреме; задачата е затворена и нищо не е доставено.",
+  "status.base.label": "Base-ът се измести",
+  "status.base.headline": "Някой промени същите редове в main, докато агентът работеше. Конфликтът е приложен; пусни отново от новия main или го реши на ръка.",
   "tools.skillBlocked": "Блокиран: {reason}",
   "mcp.catalog": "Каталог (точни версии, проверени преди употреба)",
   "mcp.search": "Търси в регистъра",
