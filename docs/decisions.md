@@ -1678,3 +1678,18 @@ Realtime topic `session:<run_id>` най-много 2 в секунда на с�
 xterm.js влиза с истинския терминал на десктопа (E9ж, node-pty). (4) U4: без бисквитка примерът е изключен в production.
 Защо: v5 т. 3.5; таблицата работи еднакво локално и hosted (уеб сървърът няма достъп до runs/ на worker-а в hosted режим).
 Алтернативи: xterm.js 6.0.0 сега; четене на transcript.jsonl от диска (само локално). Източник: v5 т. 3.5. Статус: решено.
+
+## D-349 Роли като данни: `public.roles`, `members.role_id`, `has_cap` с обхват (22.10.2026)
+Решение: (1) Вградените роли са редове `builtin:<име>` с `org_id null` (owner, worker, approver, agent-operator, viewer по v5 т. 2.3);
+тригер забранява промяна/изтриване (копие → персонализирана роля с uuid id). (2) `members.role_id` (попълнено от старата
+`role`); старата колона остава и се синхронизира с тригер (owner-подобна = има settings.manage; approver-подобна = approve.level1;
+иначе viewer), за да не се чупят старите четци. (3) `private.cap_of(user, org, cap, repo?, type?, level?)` и
+`private.has_cap(org, cap, …)` = за auth.uid(); `private.authorize(viewer|approver|owner)` вече е has_cap(diff.view |
+approve.level1 | settings.manage) — така всички съществуващи RLS политики минават през capabilities без пренаписване.
+(4) Обхватът (repos, task_types, level_cap) ограничава действия, които назовават repo/вид/ниво; проверка без тях („може ли да
+вижда org-а“) не ги проверява — иначе роля „docs reviewer“ не би видяла нищо. (5) Одобрение: ниво ≥ 2 и „approved“ →
+approve.level2, иначе approve.level1, с repo/вид/ниво на задачата; правилата на харнеса → approve.rules. (6) API: GET/POST
+/api/roles (roles.manage), PATCH /api/roles/:id, PATCH /api/members/:id/role (members.manage); всяка промяна → ledger
+`role_change`; org-ът винаги запазва поне един член с roles.manage. Ключовете → keys.manage.
+Защо: v5 т. 4.3 / D-315; минимален риск за старите тестове (очакванията им не се променят).
+Алтернативи: пренаписване на всяка политика с has_cap (същото поведение, много повече SQL). Източник: v5 т. 4.3. Статус: решено.

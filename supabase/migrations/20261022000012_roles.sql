@@ -52,8 +52,9 @@ create or replace function private.cap_of(p_user uuid, p_org uuid, p_cap text, p
   select exists (
     select 1 from public.members m join public.roles r on r.id = m.role_id
      where m.org_id = p_org and m.user_id = p_user and p_cap = any (r.capabilities)
-       and (r.scope -> 'repos' is null or jsonb_typeof(r.scope -> 'repos') = 'null' or (p_repo is not null and r.scope -> 'repos' ? p_repo::text))
-       and (r.scope -> 'task_types' is null or jsonb_typeof(r.scope -> 'task_types') = 'null' or (p_type is not null and r.scope -> 'task_types' ? p_type))
+       -- D-349: the scope limits actions that name a repo / task type / level; a check without them ("may see the org") skips it
+       and (p_repo is null or r.scope -> 'repos' is null or jsonb_typeof(r.scope -> 'repos') = 'null' or r.scope -> 'repos' ? p_repo::text)
+       and (p_type is null or r.scope -> 'task_types' is null or jsonb_typeof(r.scope -> 'task_types') = 'null' or r.scope -> 'task_types' ? p_type)
        and (r.scope -> 'level_cap' is null or jsonb_typeof(r.scope -> 'level_cap') = 'null' or p_level is null or p_level <= (r.scope ->> 'level_cap')::int))
 $$;
 create or replace function private.has_cap(p_org uuid, p_cap text, p_repo uuid default null, p_type text default null, p_level int default null)

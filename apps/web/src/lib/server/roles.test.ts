@@ -40,8 +40,11 @@ describe("roles API (E8в, AC-8.3/8.7)", () => {
     expect((await setMemberRole(db, { uid: U.approver, org, member: U.viewer, roleId: docs })).status).toBe(403);
     expect((await setMemberRole(db, { uid: U.owner, org, member: U.viewer, roleId: docs })).status).toBe(200);
     expect(await capsOf(db, U.viewer, org)).toEqual(["diff.view"]);
+    // admin@demo is the second owner (D-286): demote it, then the owner is the last one who manages roles
+    const admin = "d0000000-0000-4000-8000-0000000000a4";
+    expect((await setMemberRole(db, { uid: U.owner, org, member: admin, roleId: "builtin:worker" })).status).toBe(200);
     expect((await setMemberRole(db, { uid: U.owner, org, member: U.owner, roleId: "builtin:viewer" })).body).toEqual({ error: "last_role_manager" });
     const l = await db.query<{ payload: { action: string } }>("select payload from public.ledger where kind = 'role_change' order by seq");
-    expect(l.rows.map((x) => x.payload.action)).toEqual(["create", "update", "assign"]);
+    expect(l.rows.map((x) => x.payload.action)).toEqual(["create", "update", "assign", "assign"]);
   });
 });

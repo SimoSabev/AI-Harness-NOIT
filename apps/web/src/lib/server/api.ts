@@ -8,6 +8,7 @@ import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { KeysBody } from "./keys";
 import type { KeysClient } from "./keys";
 import { board, inbox, membership, taskDetail } from "./queries";
+import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -165,8 +166,8 @@ export async function getKeys(req: Request, d: ApiDeps): Promise<Response> {
 export async function postKeys(req: Request, d: ApiDeps): Promise<Response> {
   const p = await post(req, d);
   if (p instanceof Response) return p;
-  const m = await membership(d.db, p.uid);
-  if (m?.role !== "owner") return json(403, { error: "not_an_owner" });
+  // E8в: capability, not the role name
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   const b = KeysBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_keys" });
@@ -177,8 +178,36 @@ export async function postKeys(req: Request, d: ApiDeps): Promise<Response> {
 export async function deleteKeys(req: Request, d: ApiDeps): Promise<Response> {
   const p = await post(req, d);
   if (p instanceof Response) return p;
-  const m = await membership(d.db, p.uid);
-  if (m?.role !== "owner") return json(403, { error: "not_an_owner" });
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   return json(200, await d.keys.clear());
+}
+
+// E8в (v5 т. 4.3): roles and member roles; every check is a capability (roles.manage / members.manage)
+export async function getRoles(req: Request, d: ApiDeps): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  const r = await listRoles(d.db, { uid: c.uid, org: c.org });
+  return json(r.status, r.body);
+}
+export async function postRole(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const r = await createRole(d.db, { uid: p.uid, org: p.org, body: p.body });
+  return json(r.status, r.body);
+}
+export async function patchRole(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!/^(builtin:[a-z-]{1,20}|[0-9a-f-]{36})$/.test(id)) return json(400, { error: "bad_role_id" });
+  const r = await updateRole(d.db, { uid: p.uid, org: p.org, id, body: p.body });
+  return json(r.status, r.body);
+}
+export async function patchMemberRole(req: Request, d: ApiDeps, member: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = (p.body ?? {}) as { role_id?: unknown };
+  if (!UUID.test(member) || typeof b.role_id !== "string" || b.role_id.length > 64) return json(400, { error: "bad_request" });
+  const r = await setMemberRole(d.db, { uid: p.uid, org: p.org, member, roleId: b.role_id });
+  return json(r.status, r.body);
 }
