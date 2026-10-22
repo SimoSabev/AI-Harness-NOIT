@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { pgliteDb } from "../../../worker/src/online/pglite-db.test-helper";
-import { BOARD_STATES, COLUMNS, boardColumn, isInboxItem } from "./board";
+import { BOARD_STATES, COLUMNS, boardColumn, columnTitle, isInboxItem } from "./board";
 
 // Демо промпт т. 8.1: every state → exactly one column; a FAILED verdict is always column 5; the TS copy equals SQL.
 const results = [null, "VERIFIED", "FAILED", "UNKNOWN"] as const;
 
 describe("board column", () => {
   it("7 колони точно, с имената от т. 8.1", () => {
-    expect(COLUMNS.map((c) => c.title)).toEqual(["Нови", "Работи", "Проверява", "Чака теб", "Блокирано / Провал", "Доставено", "Резултат"]);
+    expect(COLUMNS.map((c) => c.title)).toEqual(["New", "Working", "Checking", "Waiting for you", "Blocked / Failed", "Delivered", "Outcome"]);
+    expect(COLUMNS.map((c) => columnTitle(c.n, "bg"))).toEqual(["Нови", "Работи", "Проверява", "Чака теб", "Блокирано / Провал", "Доставено", "Резултат"]);
   });
 
   it("всяко състояние → точно една колона; ПРОВАЛ винаги в 5", () => {
