@@ -2,6 +2,7 @@ import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
 import { applyLocal } from "./commands/apply.js";
+import { ATTACKS } from "@mandat/bench";
 import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
@@ -155,12 +156,12 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     });
   program
     .command("redteam")
-    .description("run the E0 red team: R5, R6, R8, R14 (8.7)")
+    .description("run the red team: R5, R6, R8, R14 (E0) and R15–R20 (v5 E8h)")
     .option("--only <ids>", "e.g. R5,R14")
     .option("--json", "machine output")
     .action(async (o: { only?: string; json?: boolean }) => {
       const only = list(o.only);
-      if (only && only.some((x) => !["R5", "R6", "R8", "R14"].includes(x))) throw new MandatError("E_USAGE", `unknown attack in --only: ${o.only}`);
+      if (only && only.some((x) => !Object.keys(ATTACKS).includes(x))) throw new MandatError("E_USAGE", `unknown attack in --only: ${o.only}`);
       code = await redteamCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
 
