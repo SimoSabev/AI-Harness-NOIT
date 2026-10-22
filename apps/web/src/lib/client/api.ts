@@ -29,6 +29,9 @@ export const ERROR_TEXT: Record<string, Key> = {
   rule_gone: "error.rule_gone",
   already_decided: "error.already_decided",
   not_steerable: "error.not_steerable",
+  name_taken: "error.name_taken",
+  not_in_registry: "error.not_in_registry",
+  bad_version: "error.bad_version",
 };
 
 export function errorText(t: T, r: { status: number; body: Record<string, unknown> }, extra: Record<string, Key> = {}, fallback?: string): string {

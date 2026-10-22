@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { McpCatalog } from "../../components/mcp-catalog";
 import { PermissionEditor } from "../../components/permission-editor";
 import { Shell } from "../../components/shell";
 import { Meter, Panel, SampleNote, ToolCalls } from "../../components/workbench-parts";
@@ -9,6 +10,7 @@ import { withSample } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
 import { hasCap } from "../../lib/server/roles";
+import { mcpCatalog } from "../../lib/server/mcp";
 import { sampleOn } from "../../lib/server/sample-pref";
 import { tools } from "../../lib/server/workbench";
 
@@ -27,6 +29,7 @@ export default async function ToolsPage() {
   const show = await sampleOn();
   const real = await tools(db(), c.uid, c.org);
   const canEdit = await hasCap(db(), c.uid, c.org, "tools.manage");
+  const catalog = canEdit ? await mcpCatalog(db(), c.uid, c.org) : [];
   const t = withSample(real, { mcp: SAMPLE.mcp, skills: SAMPLE.skills, plugins: SAMPLE.plugins, permissions: SAMPLE.permissions, calls: SAMPLE.calls }, (x) => x.mcp.length + x.skills.length + x.plugins.length + x.permissions.length + x.calls.length === 0, show);
   const d = t.data;
   const max = Math.max(1, ...d.mcp.map((m) => m.calls_hour));
@@ -56,6 +59,7 @@ export default async function ToolsPage() {
               </tbody>
             </table>
           )}
+                  {canEdit && <McpCatalog rows={catalog} />}
         </Panel>
         <div className="flex flex-col gap-4">
           <Panel title={tr("tools.skills", { n: d.skills.length })} aside={tr("tools.skillsAside")}>

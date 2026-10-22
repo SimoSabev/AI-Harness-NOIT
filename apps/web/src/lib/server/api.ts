@@ -11,6 +11,8 @@ import { board, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import { steerTask } from "./steer";
+import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
+import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
@@ -256,4 +258,30 @@ export async function postSteer(req: Request, d: ApiDeps, taskId: string): Promi
   const b = (p.body ?? {}) as { text?: unknown };
   if (typeof b.text !== "string") return json(400, { error: "bad_text" });
   return done(await steerTask(d.db, { uid: p.uid, taskId, text: b.text }), d);
+}
+
+// E8e (v5 p. 4.5): the MCP catalog — search the official registry, add (exact version), approve (→ vetting by the worker)
+export async function getMcpRegistry(req: Request, d: ApiDeps): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  const q = (new URL(req.url).searchParams.get("q") ?? "").slice(0, 100);
+  try {
+    const rows = await listRegistry({ fetch: (u) => fetch(u, { signal: AbortSignal.timeout(10_000) }), query: q, limit: 100 });
+    return json(200, { servers: rows.slice(0, 30).map((r) => ({ name: r.name, description: r.description, versions: r.versions })) });
+  } catch {
+    return json(502, { error: "registry_unreachable" });
+  }
+}
+export async function postMcpServer(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await addMcpServer(d.db, { uid: p.uid, org: p.org, body: p.body, fetch: (u) => fetch(u, { signal: AbortSignal.timeout(10_000) }) }), d);
+}
+export async function postMcpApprove(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!UUID.test(id)) return json(404, { error: "unknown_server" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = ApproveMcpBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await approveMcpServer(d.db, { uid: p.uid, id, body: b.data, secondFactor: d.secondFactor }), d);
 }

@@ -217,6 +217,9 @@ importers:
       '@mandat/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mandat/mcp-bridge':
+        specifier: workspace:*
+        version: link:../../packages/mcp-bridge
       '@mandat/onboard':
         specifier: workspace:*
         version: link:../../packages/onboard
