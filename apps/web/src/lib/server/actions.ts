@@ -140,3 +140,22 @@ export async function createTask(db: Db, o: { uid: string; org: string; body: z.
   if (!ok) return err(409, "no_repo_for_type");
   return { status: 201, body: { id, state: "CREATED" }, broadcast: { org: o.org, task: id } };
 }
+
+/** E8g (v5 p. 4.7 (3), AC-9.2, D-356): a new attempt with the last CI log in its contract, at most ci_rounds (layer G, 2) rounds. */
+export async function fixCiTask(db: Db, o: { uid: string; taskId: string }): Promise<Result> {
+  const t = (await asService(db, (sql) => sql.query<{ org_id: string; state: string; wait_reason: string | null; attempt: number; ci_rounds: number; cap: number | null }>(
+    `select t.org_id::text as org_id, t.state, t.wait_reason, t.attempt, t.ci_rounds,
+            (select (h.layers -> 'g' ->> 'ci_rounds')::int from public.repos r join public.harness_profiles h on h.id = r.profile_id and h.status = 'approved' where r.id = t.repo_id) as cap
+       from public.tasks t where t.id = $1`,
+    [o.taskId],
+  ))).rows[0];
+  if (!t) return err(404, "unknown_task");
+  if (!(await canAct(db, o.uid, t.org_id))) return err(403, "not_an_approver");
+  if (t.state !== "HELD" || t.wait_reason !== "ci_failed") return err(409, "not_retryable");
+  if (t.ci_rounds >= (t.cap ?? 2)) return err(409, "ci_rounds_exhausted");
+  await asService(db, async (sql) => {
+    await sql.query("update public.tasks set state = 'CREATED', attempt = attempt + 1, retry_reason = 'ci', wait_reason = null, last_result = null, effective_level = null, state_entered_at = now(), updated_at = now(), seq = seq + 1 where id = $1", [o.taskId]);
+    await ledger(sql, t.org_id, "task_retry", o.taskId, { attempt: t.attempt + 1, by: o.uid, reason: "ci" });
+  });
+  return { status: 200, body: { state: "CREATED", attempt: t.attempt + 1 }, broadcast: { org: t.org_id, task: o.taskId } };
+}

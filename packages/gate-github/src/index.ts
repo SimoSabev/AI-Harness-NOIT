@@ -14,3 +14,5 @@ export type { ExternalPrInput, ExternalPrResult } from "./external.js";
 export { octokitGitHub } from "./octokit.js";
 export type { FileChange, OctokitOptions } from "./octokit.js";
 export { M, deleteM, demoRepoWithPull, editFile } from "./demo-repo.js";
+export { commitMessage, diffStats, prBody, prTitle } from "./templates.js";
+export type { FileStat } from "./templates.js";

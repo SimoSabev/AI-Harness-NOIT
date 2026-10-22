@@ -32,6 +32,7 @@ export const ERROR_TEXT: Record<string, Key> = {
   name_taken: "error.name_taken",
   not_in_registry: "error.not_in_registry",
   bad_version: "error.bad_version",
+  ci_rounds_exhausted: "error.ci_rounds_exhausted",
 };
 
 export function errorText(t: T, r: { status: number; body: Record<string, unknown> }, extra: Record<string, Key> = {}, fallback?: string): string {

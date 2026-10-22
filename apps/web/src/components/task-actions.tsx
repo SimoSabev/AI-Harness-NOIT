@@ -35,8 +35,9 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
 
   const canDecide = p.status === "review" && p.changesetId !== null && p.headSha !== null;
   const canRetry = p.status === "failed" || p.status === "unknown" || p.status === "empty" || p.status === "key" || p.status === "base";
+  const canFixCi = p.status === "ci";
   const canStop = p.status === "queued" || p.status === "running" || p.status === "checking";
-  if (!canDecide && !canRetry && !canStop) return null;
+  if (!canDecide && !canRetry && !canStop && !canFixCi) return null;
 
   return (
     <div className="space-y-3">
@@ -45,6 +46,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
           {canDecide && <button className={btn.primary} type="button" disabled={busy} onClick={() => setConfirm("approved")}>{t("actions.approve")}</button>}
           {canDecide && <button className={btn.danger} type="button" disabled={busy} onClick={() => setConfirm("rejected")}>{t("actions.reject")}</button>}
           {canRetry && <button className={btn.primary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/retry`, {})}>{t("actions.retry")}</button>}
+          {canFixCi && <button className={btn.primary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/fix-ci`, {})}>{t("actions.fixCi")}</button>}
           {canStop && <button className={btn.secondary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/stop`, {})}>{t("actions.stop")}</button>}
         </div>
       )}

@@ -19,7 +19,7 @@ describe("status (D-292)", () => {
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED" })).key).toBe("closed");
     expect(statusOf(t({ state: "GATED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
     expect(statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "key_rejected" }))).toMatchObject({ key: "key", label: "Key rejected", tone: "red" });
-    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed", "expired", "ask", "base"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
+    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed", "expired", "ask", "base", "ci"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
   });
   it("E8g: a HELD task closed by the sweeper says so (gray, done)", () => {
     const st = statusOf(t({ state: "CLOSED", wait_reason: "expired" }));
@@ -76,6 +76,7 @@ function stateFor(k: string): Partial<Parameters<typeof statusOf>[0]> {
     expired: { state: "CLOSED", wait_reason: "expired" },
     ask: { state: "HELD", last_result: "VERIFIED", wait_reason: "tool_approval" },
     base: { state: "HELD", last_result: "VERIFIED", wait_reason: "base_moved" },
+    ci: { state: "HELD", last_result: "VERIFIED", wait_reason: "ci_failed" },
   };
   return m[k] ?? {};
 }

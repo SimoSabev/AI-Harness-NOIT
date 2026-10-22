@@ -10,7 +10,7 @@ import { deliverLocal } from "./deliver-local.js";
 // E8g (v5 p. 4.7 (5), AC-9.3, D-356): a project without GitHub — the verified change becomes a branch mandat/<task>-a<n> in
 // Mandat's own mirror (one commit with the template message); a branch that exists is never overwritten.
 const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@x" };
-export function agentPatch(mirror: string): Buffer {
+function agentPatch(mirror: string): Buffer {
   const w = path.join(mkdtempSync(path.join(os.tmpdir(), "mandat-agent-")), "w");
   execFileSync("git", ["clone", "-q", mirror, w], { env });
   execFileSync("git", ["apply"], { cwd: w, env, input: readFileSync(path.join(repoRoot, "demo/recordings/scene1-task1.patch")) });

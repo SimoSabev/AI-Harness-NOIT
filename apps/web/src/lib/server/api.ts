@@ -1,4 +1,4 @@
-import { ApproveBody, CreateTaskBody, FailureLabelBody, approve, createTask, labelFailure, retryTask, stopTask } from "./actions";
+import { ApproveBody, CreateTaskBody, FailureLabelBody, approve, createTask, fixCiTask, labelFailure, retryTask, stopTask } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
 import type { RateLimiter } from "./guard";
@@ -284,4 +284,10 @@ export async function postMcpApprove(req: Request, d: ApiDeps, id: string): Prom
   const b = ApproveMcpBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await approveMcpServer(d.db, { uid: p.uid, id, body: b.data, secondFactor: d.secondFactor }), d);
+}
+export async function postFixCi(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!/^t_[a-z0-9_]{1,40}$/.test(id)) return json(404, { error: "unknown_task" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await fixCiTask(d.db, { uid: p.uid, taskId: id }), d);
 }

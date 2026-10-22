@@ -10,7 +10,7 @@ import type { LadderState } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { drift } from "@mandat/onboard";
 import type { SqlClient } from "@mandat/ledger";
-import { autoMerge, deliver } from "@mandat/gate-github";
+import { autoMerge, commitMessage, deliver } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
 import { readAtBase } from "@mandat/verify";
 import { runTask } from "../run.js";
@@ -22,6 +22,8 @@ import { inTransaction } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 import { mainHead, rebaseOnto } from "./rebase.js";
+import { ciNote } from "./ci.js";
+import { deliverLocal } from "./deliver-local.js";
 
 const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
 import type { Db } from "./db.js";
@@ -64,6 +66,7 @@ interface TaskRow {
   is_demo: boolean;
   replay: string | null;
   retry_reason: string | null;
+  provider: string;
 }
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
@@ -112,7 +115,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -200,8 +203,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const steersBefore = t.attempt > 1 ? (await d.db.query<{ id: string; text: string }>("select id::text as id, text from public.task_activities where task_id = $1 and kind = 'steer' order by id limit 20", [t.id])).rows : [];
   let steerCursor = steersBefore.length > 0 ? Number(steersBefore[steersBefore.length - 1]?.id) : 0;
   const steerNote = steersBefore.length > 0 ? ["Notes from a person during an earlier attempt:", ...steersBefore.map((r) => frameUntrusted({ author: "member", association: "member", source: "steer", text: r.text }))].join("\n") : null;
+  // E8g (D-356): a "Fix CI" attempt gets the failing checks of the previous round (framed)
+  const ciLog = t.retry_reason === "ci" ? await ciNote(d.db, t.id) : null;
   const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
-  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), steerNote);
+  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog].filter(Boolean).join("\n\n") || null);
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
@@ -474,8 +479,14 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       return { state: "HELD", verdict: v };
     }
   }
+  // E8g (D-356, AC-9.3): a local project gets the verified change as a branch in Mandat's mirror (`mandat apply` brings it in)
+  if (t.provider === "local" && v.result === "VERIFIED" && diffPatch.length > 0) {
+    const lb = await deliverLocal({ mirror, taskId: t.id, attempt: t.attempt, baseSha: v.base_sha, patch: diffPatch, message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }) }).catch(() => null);
+    if (lb?.ok) await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'local_branch', $3)", [t.org_id, t.id, lb.ref]);
+    else log(`[daemon] ${t.id}: no local branch (${lb ? lb.reason : "error"})`);
+  }
   // Delivery through the gate (fakeGitHub offline; Writer App online)
-  const delivered = await deliver(d.gh, { repo: d.ghRepo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full" }, action);
+  const delivered = await deliver(d.gh, { repo: d.ghRepo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full", task: { type: t.type, text: t.text }, appUrl: process.env.MANDAT_APP_URL ?? null }, action);
   if (delivered.kind === "pr" || delivered.kind === "branch") {
     await d.db.query("update public.changesets set head_sha = $2 where id = $1::uuid", [changesetId, delivered.head_sha]);
     // the delivery itself (branch / draft PR / PR): the card's „Отвори PR“ and the approval effects need its number

@@ -1,6 +1,7 @@
 import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
+import { applyLocal } from "./commands/apply.js";
 import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
@@ -63,6 +64,28 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       }
       const ledger = o.ledger ?? path.join(mandatHome({ home: g.home, env: io.env }), "ledger.jsonl");
       code = verifyLog(io, { ledger, org: "o_local", json: Boolean(o.json ?? g.json) });
+    });
+
+  // E8g (D-356, AC-9.3): bring Mandat's branch for a task into your working copy (merge --ff-only; it never overwrites your work)
+  program
+    .command("apply")
+    .description("merge Mandat's branch for a task into your working copy with --ff-only (refuses on divergence or local changes)")
+    .requiredOption("--task <id>", "task id (t_…)")
+    .option("--repo <path>", "your working copy", ".")
+    .option("--mirror <path>", "Mandat's mirror of the repo (default: from the task's repo in MANDAT_DB_URL)")
+    .action(async (o: { task: string; repo: string; mirror?: string }) => {
+      const g = globals();
+      let mirror = o.mirror;
+      if (!mirror) {
+        const db = depsIn?.db ?? openDb(dbUrl(io.env));
+        const r = (await db.query<{ remote_url: string }>("select r.remote_url from public.tasks t join public.repos r on r.id = t.repo_id where t.id = $1", [o.task])).rows[0];
+        mirror = r?.remote_url.startsWith("file://") ? r.remote_url.slice(7) : undefined;
+        if (!mirror) throw new MandatError("E_USAGE", "this task's repo has no local mirror; pass --mirror");
+      }
+      const r = await applyLocal({ mirror, repo: path.resolve(o.repo), taskId: o.task });
+      if (g.json ?? false) io.stdout(JSON.stringify(r) + "\n");
+      else io.stdout(r.ok ? `applied ${r.ref} (${r.files.length} file(s)): fast-forward to ${r.head.slice(0, 12)}\n` : `not applied: ${r.reason}${r.detail ? ` — ${r.detail}` : ""}\n`);
+      code = r.ok ? 0 : 3;
     });
 
   const contract = program.command("contract").description("seal or inspect a task contract");
