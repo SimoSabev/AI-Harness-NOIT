@@ -10,7 +10,7 @@ import { EMAIL, TOTP, login, totpNow } from "./fixtures";
 // т. 8.2 / D-298: Правила — сканирай (fakeGitHub) → предложение с „откъде“ → одобри с TOTP → PR чернова.
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const home = mkdtempSync(path.join(os.tmpdir(), "mandat-e2e-home-"));
-const worker = () => execFileSync("node", [path.join(repo, "packages/cli/dist/main.js"), "--home", home, "worker", "--once"], { env: { ...process.env, MANDAT_DB_URL: E2E_DB }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
+const worker = () => execFileSync("node", [path.join(repo, "packages/cli/dist/main.js"), "--home", home, "worker", "--once"], { env: { ...process.env, MANDAT_DB_URL: E2E_DB, MANDAT_BASELINE: "0" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
 
 test("правила: сканирай → предложение с източници → одобри с код → PR чернова, версия 1", async ({ page }) => {
   await login(page, EMAIL.owner);
