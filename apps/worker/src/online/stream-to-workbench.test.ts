@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createStreamCtx } from "@mandat/contract";
+import { createStreamCtx, streamEvent } from "@mandat/contract";
 import type { StreamEvent } from "@mandat/contract";
 import { claudeToStream } from "@mandat/agents";
 import { pgliteDb } from "./pglite-db.test-helper.js";
@@ -86,5 +86,29 @@ describe("stream → workbench (E7д, AC-6.1/6.2)", () => {
     const perSecond = (xs: number[]) => Math.max(0, ...[...new Set(xs.map((x) => Math.floor(x / 1000)))].map((s) => xs.filter((x) => Math.floor(x / 1000) === s).length));
     expect(beats.length).toBeGreaterThan(0);
     expect(perSecond(casts)).toBeLessThanOrEqual(2);
+  });
+  it("E8f: a newly touched file is written at once (the conflict check reads it), even inside the 500 ms window", async () => {
+    let now = 0;
+    const beats: { at: number; touching: string[] }[] = [];
+    const sink = {
+      session: () => Promise.resolve(),
+      beat: (_id: string, b: { touching?: string[] }) => {
+        beats.push({ at: now, touching: b.touching ?? [] });
+        return Promise.resolve();
+      },
+      toolCall: () => Promise.resolve(),
+      lines: () => Promise.resolve(),
+      end: () => Promise.resolve(),
+    };
+    const touched: string[][] = [];
+    const rec = sessionRecorder(sink, { taskId: null, repoId: null, agent: "claude", model: "m", account: null, now: () => now, onTouching: (f) => touched.push(f) });
+    const ctx = createStreamCtx(RUN);
+    rec.push(streamEvent(ctx, { kind: "init", text: "claude-sonnet-5-5" }));
+    now = 100;
+    rec.push(streamEvent(ctx, { kind: "tool_call", text: "Edit", tool: { kind: "builtin", name: "Edit", touching: ["src/cart.ts"], decision: null } }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(beats.some((b) => b.at === 100 && b.touching.includes("src/cart.ts"))).toBe(true);
+    expect(touched).toEqual([["src/cart.ts"]]);
+    await rec.close();
   });
 });
