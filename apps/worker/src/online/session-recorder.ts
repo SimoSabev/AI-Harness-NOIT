@@ -114,6 +114,7 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
   return {
     push(ev: StreamEvent): void {
       const s = ensure(ev);
+      let newTouch = false;
       if (s.n < MAX_LINES) s.buf.push({ seq: s.n++, kind: ev.kind, text: lineOf(ev) });
       switch (ev.kind) {
         case "init":
@@ -129,7 +130,10 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
             s.step = name;
             const before = s.touching.size;
             for (const p of ev.tool.touching) s.touching.add(p);
-            if (s.touching.size > before && o.onTouching) o.onTouching([...new Set([...sessions.values()].flatMap((x) => [...x.touching]))]);
+            if (s.touching.size > before) {
+              newTouch = true;
+              o.onTouching?.([...new Set([...sessions.values()].flatMap((x) => [...x.touching]))]);
+            }
             s.pending.push({ kind: ev.tool.kind, name, summary: ev.text ?? name, at: now() });
           }
           break;
@@ -155,7 +159,8 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
           break;
       }
       s.dirty = true;
-      flush(s, false);
+      // E8f: a newly touched file is written at once (the conflict check of other tasks reads it); broadcasts stay ≤ 2/s
+      flush(s, newTouch);
     },
     /** proxy usage poll: the run's spend so far (the leader) */
     usd(runId: string, usd: number): void {
