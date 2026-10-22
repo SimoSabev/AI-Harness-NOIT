@@ -3,8 +3,15 @@ import pg from "pg";
 import { E2E_DB } from "../playwright.config";
 import { EMAIL, login } from "./fixtures";
 
+// the re-queued task must not reach the worker that later specs run (it would fail and show up in "Waiting for you")
+test.afterAll(async () => {
+  const c = new pg.Client({ connectionString: E2E_DB });
+  await c.connect();
+  await c.query("delete from public.tasks where id = 't_e2e_ask'").finally(() => c.end());
+});
+
 // E8g (v5 p. 4.4, AC-8.1/8.5): a task waiting for a tool permission shows one card per ask; "Allow once" starts a new
-// attempt. The data is made here and the task leaves "Waiting for you" when the test ends (the inbox counts stay).
+// attempt. The data is made here and removed after the file (the inbox counts of the other specs stay).
 test("ask card: Needs permission → Allow once → the task is queued again; the Steer box is there while it waits to run", async ({ page }) => {
   const c = new pg.Client({ connectionString: E2E_DB });
   await c.connect();
