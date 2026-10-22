@@ -49,11 +49,13 @@ afterAll(async () => {
 
 describe("same file, two live tasks (docker)", () => {
   it("the later task waits for the earlier one, then runs to a verdict", async () => {
-    const d: DaemonDeps = { db, home, gh: fakeGitHub({ repos: { "mandat-demo/shop": {} } }), ghRepo: "mandat-demo/shop" };
+    const d: DaemonDeps = { db, home, gh: fakeGitHub({ repos: { "mandat-demo/shop": {} } }), ghRepo: "mandat-demo/shop", log: (l) => process.stderr.write(`${l}\n`) };
     const first = runDaemonOnce(d);
     await new Promise((res) => setTimeout(res, 4000));
     const second = runDaemonOnce(d);
     expect((await Promise.all([first, second])).sort()).toEqual(["t_conf_a", "t_conf_b"]);
+    process.stderr.write(`activities ${JSON.stringify((await db.query("select task_id, kind, text from public.task_activities")).rows)}\n`);
+    process.stderr.write(`sessions ${JSON.stringify((await db.query("select id, task_id, state, touching from public.agent_sessions")).rows)}\n`);
     // the live session of the first task recorded what it touches (the base of the check)
     expect((await db.query<{ touching: string[] }>("select touching from public.agent_sessions where task_id = 't_conf_a'")).rows.flatMap((r) => r.touching)).toContain("src/cart.ts");
     const rows = (await db.query<{ id: string; state: string; retry_reason: string | null; wait_for: string | null }>("select id, state, retry_reason, wait_for from public.tasks order by id")).rows;
