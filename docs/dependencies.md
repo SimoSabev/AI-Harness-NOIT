@@ -31,6 +31,8 @@
 | @types/node | 24.19.2 | 09.10.2026 | MIT | dev | типове за Node 24 |
 | @types/picomatch | 4.0.3 | 03.04.2026 | MIT | dev | типове |
 | pnpm | 12.14.0 | 15.10.2026 | MIT | инструмент (packageManager) | workspace |
+| @modelcontextprotocol/server | 2.3.1 | 05.10.2026 | Apache-2.0 | packages/mcp (Apache), packages/mcp-bridge (харнес) | MCP сървърът `mandat`; бриджът stdio → streamable HTTP на sidecar-а (E8д); npm time, прочетено 22.10.2026 |
+| @modelcontextprotocol/client | 2.3.1 | 05.10.2026 | Apache-2.0 | packages/mcp (dev), packages/mcp-bridge (харнес) | stdio клиент към MCP сървъра в sidecar-а (E8д); тестове |
 | @modelcontextprotocol/sdk | 1.32.1 | 05.10.2026 | MIT | САМО spikes/ (dependency на private пакета spikes, D-086) | MCP сървър за спайк S1; не влиза в продукта |
 
 ## Извън npm (отделни процеси или образи, не се линкват)
