@@ -31,3 +31,5 @@ export { pgKeyStore } from "./online/keys.js";
 export type { KeyStore } from "./online/keys.js";
 export { baselineFromRuns, runBaseline } from "./baseline.js";
 export type { BaselineRun } from "./baseline.js";
+export { sessionIdFor, sessionRecorder } from "./online/session-recorder.js";
+export type { RecorderOptions, SessionRecorder, SessionSink } from "./online/session-recorder.js";

@@ -14,6 +14,8 @@ import { autoMerge, deliver } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
 import { readAtBase } from "@mandat/verify";
 import { runTask } from "../run.js";
+import { sessionRecorder } from "./session-recorder.js";
+import { workbench } from "./workbench.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
 import { loadChannels, profileOfAgent, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { inTransaction } from "./db.js";
@@ -167,11 +169,22 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   await bc("RUNNING", seq);
   log(`[daemon] ${t.id}: running ${t.agent}${current ? ` on ${current.label}` : ""}`);
   const t0 = now().getTime();
-  const runOnce = () =>
-    (d.run ?? runTask)({
-      home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
-      ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
+  // E7д (AC-6.1/6.2): the agent's live session (leader + subagents, tool calls, beats ≤ 2/s) per attempt
+  const runOnce = async () => {
+    const rec = sessionRecorder(workbench(d.db, t.org_id), {
+      taskId: t.id, repoId: t.repo_id, agent: profile ? `claude@${profile}` : t.agent, model: contract.channel.model, account: profile ?? null,
+      ...(d.broadcast ? { broadcast: d.broadcast } : {}), log,
     });
+    try {
+      return await (d.run ?? runTask)({
+        home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
+        ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
+        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd) },
+      });
+    } finally {
+      await rec.close();
+    }
+  };
   const usageRow = async (o: RunTaskOutput) => {
     if (current) await d.db.query("insert into public.channel_usage (org_id, channel_id, task_id, attempt, usd, requests, limited) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)", [t.org_id, current.id, t.id, t.attempt, o.verdict?.usage.usd ?? 0, o.verdict?.usage.requests ?? 0, o.limit !== undefined && o.limit !== null]);
   };

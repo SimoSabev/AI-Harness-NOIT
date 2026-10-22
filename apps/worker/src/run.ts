@@ -5,9 +5,9 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf,
+  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent } from "@mandat/contract";
+import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent, StreamEvent } from "@mandat/contract";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
@@ -25,6 +25,10 @@ import type { RunGate, runTestProcedure } from "@mandat/verify";
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
   onCanary?: (value: string) => void;
+  /** E7д (D-310): every line of the agent → the unified stream (redacted); never throws into the run */
+  onStream?: (ev: StreamEvent) => void;
+  /** E7д: the proxy usage poll (USD so far) for the live session */
+  onUsage?: (runId: string, usd: number) => void;
 }
 export interface RunTaskInput {
   home: string;
@@ -305,6 +309,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
+        const streamCtx = createStreamCtx(runId);
+        const onStream = i.hooks?.onStream;
         let loginProblem = false;
         let lastTool = "";
         let pollWarned = false;
@@ -323,6 +329,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           ? setInterval(() => {
               ch.usage(runId).then((u) => {
                 usage = u;
+                i.hooks?.onUsage?.(runId, u.usd);
                 if (u.budgetStop) void stopAgent("budget_stop");
               }, () => {
                 if (!pollWarned) {
@@ -345,6 +352,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
+              }
+              if (onStream) {
+                try {
+                  for (const ev of adapter.toStream(line, streamCtx)) onStream(ev);
+                } catch {
+                  // the live view is best effort; the transcript and the verdict do not depend on it
+                }
               }
               let row: object;
               try {
