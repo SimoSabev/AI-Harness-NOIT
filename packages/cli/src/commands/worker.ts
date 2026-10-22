@@ -65,7 +65,8 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       once: o.once,
       pollMs: o.pollMs ?? 2000,
       ...(o.signal ? { signal: o.signal } : {}),
-      tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n") }),
+      // E8g (D-353): steering a live Claude Code waits for spike S2 (live); MANDAT_STEER=1 turns it on
+      tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n"), ...(env.MANDAT_STEER === "1" ? { steer: true } : {}) }),
       drain: async () => {
         // E7г (D-314): the baseline at connect runs in the sandbox; MANDAT_BASELINE=0 turns it off
         const baselineRunner = env.MANDAT_BASELINE === "0" ? undefined : (dir: string, policy: Parameters<typeof runBaseline>[1]) => runBaseline(dir, policy, { mandatHome: o.home, repoRoot, env });

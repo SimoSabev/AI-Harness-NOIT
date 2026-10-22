@@ -1,5 +1,5 @@
 import type { HarnessProfile, HookSpec, Materialized } from "@mandat/contract";
-import { HARNESS_ALWAYS, HARNESS_DIR, HOOKS, instructions, policyJson, rulesFor, uniq } from "./common.js";
+import { HARNESS_ALWAYS, HARNESS_DIR, HOOKS, harnessHooks, instructions, policyJson, rulesFor, uniq } from "./common.js";
 import type { CompileCtx, Files } from "./common.js";
 import { RULES, claudeRule, claudeToolName, ruleKind } from "./rules.js";
 
@@ -17,7 +17,7 @@ export function compileClaude(p: HarnessProfile, ctx: CompileCtx): Materialized 
   for (const c of [b.test, b.lint, b.typecheck]) if (c && !c.includes("{")) perms.allow.push(`Bash(${c} *)`, `Bash(${c})`);
   for (const m of p.layers.e.mcp) perms.allow.push(...(m.enabled_tools ? m.enabled_tools.map((t) => `mcp__${m.name}__${t}`) : [`mcp__${m.name}`]));
   const hooks: Record<string, { matcher?: string; hooks: { type: "command"; command: string; timeout: number }[] }[]> = {};
-  for (const h of p.layers.d) (hooks[EVENT[h.event]] ??= []).push({ ...(h.matcher ? { matcher: h.matcher } : {}), hooks: [{ type: "command", command: command(h), timeout: 10 }] });
+  for (const h of harnessHooks(p)) (hooks[EVENT[h.event]] ??= []).push({ ...(h.matcher ? { matcher: h.matcher } : {}), hooks: [{ type: "command", command: command(h), timeout: 10 }] });
   const settings = {
     permissions: { allow: uniq(perms.allow), deny: uniq(perms.deny), ask: uniq(perms.ask) },
     hooks,

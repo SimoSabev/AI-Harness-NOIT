@@ -10,6 +10,7 @@ import type { KeysClient } from "./keys";
 import { board, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
+import { steerTask } from "./steer";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
@@ -247,4 +248,12 @@ export async function postPermission(req: Request, d: ApiDeps): Promise<Response
   const b = PermissionBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await setPermission(d.db, { uid: p.uid, org: p.org, body: b.data, secondFactor: d.secondFactor }), d);
+}
+export async function postSteer(req: Request, d: ApiDeps, taskId: string): Promise<Response> {
+  if (!/^t_[a-z0-9_]{1,40}$/.test(taskId)) return json(404, { error: "unknown_task" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = (p.body ?? {}) as { text?: unknown };
+  if (typeof b.text !== "string") return json(400, { error: "bad_text" });
+  return done(await steerTask(d.db, { uid: p.uid, taskId, text: b.text }), d);
 }

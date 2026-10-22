@@ -6,6 +6,7 @@ import { Live } from "../../../components/live";
 import { Shell } from "../../../components/shell";
 import { TaskActions } from "../../../components/task-actions";
 import { AskCards } from "../../../components/ask-cards";
+import { SteerBox } from "../../../components/steer-box";
 import { CheckMark, StatusBadge, card } from "../../../components/ui";
 import { getT } from "../../../i18n/server";
 import type { Key } from "../../../i18n/t";
@@ -100,6 +101,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         <div className="mt-5">
           <TaskActions taskId={t.id} status={s.key} canAct={canAct(c.role)} changesetId={t.changeset_id} headSha={t.head_sha} twoFactor={t.requires_second_factor} />
         </div>
+        {(s.key === "running" || s.key === "queued") && canAct(c.role) && <SteerBox taskId={t.id} live={t.steerable === true} codex={t.agent === "codex" || t.agent.startsWith("fake-codex:")} />}
         {d.asks.length > 0 && <AskCards taskId={t.id} asks={d.asks} attempt={d.asks[0]?.attempt ?? 1} canDecide={canAct(c.role) && s.key === "ask"} />}
       </div>
 

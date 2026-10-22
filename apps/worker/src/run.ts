@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,6 +32,8 @@ export interface RunHooks {
   onStream?: (ev: StreamEvent) => void;
   /** E7д: the proxy usage poll (USD so far) for the live session */
   onUsage?: (runId: string, usd: number) => void;
+  /** E8g (D-353): new steer texts from people since the last call; polled while a steerable agent runs */
+  steer?: () => Promise<{ text: string; author: string }[]>;
 }
 export interface RunTaskInput {
   home: string;
@@ -329,8 +331,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         } else {
           setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider === "openai" ? { p: "openai" as const } : {}) }));
         }
+        const steerHook = adapter.supportsSteering && adapter.steerLine ? i.hooks?.steer : undefined;
         const launch = adapter.launch(
-          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}) },
+          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}), ...(steerHook ? { steer: { sessionId: randomUUID() } } : {}) },
           viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
@@ -367,6 +370,22 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             }, x.usagePollMs ?? 2000)
           : undefined;
         const limit = setTimeout(() => void stopAgent("timeout"), contract.repo_config.budgets.task_minutes * 60_000);
+        // E8g (D-353): steering = stream-json on stdin. The task is the first line; people's steer texts follow (framed by
+        // the adapter) until the agent's first result, then stdin ends and the agent finishes as before.
+        let stdin: PassThrough | undefined;
+        let steerPoll: NodeJS.Timeout | undefined;
+        if (launch.stdin === "pipe" && steerHook && adapter.steerLine) {
+          const line = adapter.steerLine.bind(adapter);
+          const pipe = new PassThrough();
+          stdin = pipe;
+          if (launch.firstStdinLine) pipe.write(launch.firstStdinLine + "\n");
+          const pump = async () => {
+            const xs = await steerHook().catch(() => []);
+            for (const s of xs) if (!pipe.writableEnded) pipe.write(line(s.text.slice(0, 2000), s.author.slice(0, 80)) + "\n");
+          };
+          await pump();
+          steerPoll = setInterval(() => void pump(), x.usagePollMs ?? 2000);
+        }
         try {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
@@ -374,11 +393,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}) },
             cmd: launch.argv,
             timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
+            ...(stdin ? { stdin: stdin as unknown as NodeJS.ReadableStream } : {}),
             onStdoutLine: (line) => {
               if (viaProfile && looksLikeLoginProblem(line)) loginProblem = true;
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
+                if (e.type === "result" && stdin && !stdin.writableEnded) stdin.end();
               }
               if (onStream || harness) {
                 try {
@@ -409,6 +430,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         } finally {
           clearTimeout(limit);
           if (poll) clearInterval(poll);
+          if (steerPoll) clearInterval(steerPoll);
+          if (stdin && !stdin.writableEnded) stdin.end();
           await queue;
         }
         if (useProxy) {

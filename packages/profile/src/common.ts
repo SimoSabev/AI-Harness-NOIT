@@ -39,3 +39,14 @@ export const HARNESS_ALWAYS = [
   { rule: "path:write outside allowed_paths", why: "D4 fails a change outside the contract's allowed paths after the export" },
   { rule: "control files changed by the agent", why: "D3 marks a changed .claude/, .codex/, .mcp.json, AGENTS.md or CLAUDE.md as UNKNOWN; the control layer itself is read-only" },
 ];
+
+/**
+ * E8g (D-352): layer D as compiled. The policy hook (deny-by-policy) runs before EVERY tool, whatever matcher D gave it:
+ * an ask or deny rule on an MCP tool, a path or the network must reach it. With ask/deny rules and no such hook, one is added.
+ */
+export function harnessHooks(p: HarnessProfile): HarnessProfile["layers"]["d"] {
+  const d = p.layers.d.map((h) => (h.event === "pre_tool" && h.script === "deny-by-policy" ? { ...h, matcher: null } : h));
+  const needs = p.layers.c.some((r) => r.decision !== "allow");
+  if (needs && !d.some((h) => h.event === "pre_tool" && h.script === "deny-by-policy")) d.unshift({ event: "pre_tool", matcher: null, script: "deny-by-policy", args: {} });
+  return d;
+}

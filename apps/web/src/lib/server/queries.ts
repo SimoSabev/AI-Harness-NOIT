@@ -15,10 +15,12 @@ export interface TaskRow {
   pr_number: number | null; approved_by_human: boolean; col: ColumnNo; repo_id: string;
   a_passed: number | null; a_total: number | null; inv_before: number | null; inv_after: number | null;
   ladder_level: number | null; ladder_s_up: number | null; ladder_pinned: boolean | null; ledger_seq: number | null;
+  /** E8g: a steerable agent is running now (the "Steer" box) */
+  steerable?: boolean;
 }
 
 const TASKS = `
-select t.id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.wait_reason, t.usd::float8 as usd, t.minutes::float8 as minutes, t.effective_level,
+select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t.state, t.wait_reason, t.usd::float8 as usd, t.minutes::float8 as minutes, t.effective_level,
        t.last_result, t.outcome_decided, t.seq::int as seq, to_char(t.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
        to_char(t.state_entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as state_entered_at,
        c.id::text as changeset_id, c.head_sha, coalesce(c.approval_needed, false) as approval_needed, coalesce(c.requires_second_factor, false) as requires_second_factor,

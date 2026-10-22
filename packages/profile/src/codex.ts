@@ -1,5 +1,5 @@
 import type { HarnessProfile, HookSpec, Materialized } from "@mandat/contract";
-import { HARNESS_ALWAYS, HOOKS, instructions, policyJson, rulesFor } from "./common.js";
+import { HARNESS_ALWAYS, HOOKS, harnessHooks, instructions, policyJson, rulesFor } from "./common.js";
 import type { CompileCtx, Files } from "./common.js";
 import { RULES, ruleKind } from "./rules.js";
 
@@ -31,7 +31,7 @@ export function compileCodex(p: HarnessProfile, ctx: CompileCtx): Materialized {
   toml.push("[agents]", `max_concurrent_threads_per_session = ${p.layers.g.max_subagents}`, "");
   for (const r of p.layers.f.roles) toml.push(`[agents.${r.role}]`, `config_file = ${str(`agents/${r.role}.toml`)}`, "");
   const hooks: Record<string, { command: string[]; matcher?: string }[]> = {};
-  for (const h of p.layers.d) (hooks[EVENT[h.event]] ??= []).push({ command: ["node", `${HOOKS}/${h.script}.mjs`, ...Object.entries(h.args).map(([k, v]) => `--${k}=${v}`)], ...(h.matcher ? { matcher: h.matcher } : {}) });
+  for (const h of harnessHooks(p)) (hooks[EVENT[h.event]] ??= []).push({ command: ["node", `${HOOKS}/${h.script}.mjs`, ...Object.entries(h.args).map(([k, v]) => `--${k}=${v}`)], ...(h.matcher ? { matcher: h.matcher } : {}) });
   const files: Files = [
     { path: "codex/config.toml", bytes: toml.join("\n"), mode: "0444" },
     { path: "codex/hooks.json", bytes: JSON.stringify({ hooks }, null, 2) + "\n", mode: "0444" },

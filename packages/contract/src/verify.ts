@@ -56,7 +56,7 @@ export function effectiveLevel(i: { ladder: number; riskCap: number; result: Ver
   return { level, reasons };
 }
 
-export type UntrustedSource = "pr_title" | "pr_body" | "pr_comment" | "issue" | "webhook" | "test_id" | "path" | "branch";
+export type UntrustedSource = "pr_title" | "pr_body" | "pr_comment" | "issue" | "webhook" | "test_id" | "path" | "branch" | "steer";
 
 const escapeXml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeAttr = (s: string) => escapeXml(s).replace(/"/g, "&quot;");

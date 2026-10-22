@@ -28,6 +28,7 @@ export const ERROR_TEXT: Record<string, Key> = {
   not_allowed: "error.not_allowed",
   rule_gone: "error.rule_gone",
   already_decided: "error.already_decided",
+  not_steerable: "error.not_steerable",
 };
 
 export function errorText(t: T, r: { status: number; body: Record<string, unknown> }, extra: Record<string, Key> = {}, fallback?: string): string {

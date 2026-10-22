@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, effectiveLevel, hashJcs, parseMandatYml, repoConfigFromPolicy, sealContract } from "@mandat/contract";
+import { HarnessProfile, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, repoConfigFromPolicy, sealContract } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
 import { decideDelivery, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -39,6 +39,8 @@ export interface DaemonDeps {
   log?: (line: string) => void;
   /** E3в: the wait of the limit chain (tests replace it) */
   sleep?: (ms: number) => Promise<void>;
+  /** E8g (D-353): steer a live Claude Code (stream-json stdin); off until spike S2 is green live (MANDAT_STEER=1) */
+  steer?: boolean;
 }
 
 interface TaskRow {
@@ -187,7 +189,12 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     return f;
   };
   const profileRef: ChannelRef | undefined = profile ? { label: `claude-profile-${profile}`, kind: "cli_profile", model: "claude-sonnet-5-5" } : undefined;
-  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined));
+  // E8g (D-353): steers from earlier attempts go into this attempt's contract (framed); newer ones to the live agent
+  const steersBefore = t.attempt > 1 ? (await d.db.query<{ id: string; text: string }>("select id::text as id, text from public.task_activities where task_id = $1 and kind = 'steer' order by id limit 20", [t.id])).rows : [];
+  let steerCursor = steersBefore.length > 0 ? Number(steersBefore[steersBefore.length - 1]?.id) : 0;
+  const steerNote = steersBefore.length > 0 ? ["Notes from a person during an earlier attempt:", ...steersBefore.map((r) => frameUntrusted({ author: "member", association: "member", source: "steer", text: r.text }))].join("\n") : null;
+  const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
+  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), steerNote);
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
@@ -205,15 +212,22 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     });
     // E8g: ask rules a person allowed once for exactly this attempt
     const grants = hp ? (await d.db.query<{ tool: string }>("select tool from public.tool_asks where task_id = $1 and status = 'once' and grant_attempt = $2 order by tool", [t.id, t.attempt])).rows.map((r) => r.tool) : [];
+    const steerHook = async () => {
+      const r = (await d.db.query<{ id: string; text: string }>("select id::text as id, text from public.task_activities where task_id = $1 and kind = 'steer' and id > $2 order by id limit 20", [t.id, steerCursor])).rows;
+      if (r.length > 0) steerCursor = Number(r[r.length - 1]?.id);
+      return r.map((x) => ({ text: x.text, author: "member" }));
+    };
+    if (steerable) await d.db.query("update public.tasks set steerable = true where id = $1", [t.id]);
     try {
       return await (d.run ?? runTask)({
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
-        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd) },
+        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}) },
         ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
       });
     } finally {
+      if (steerable) await d.db.query("update public.tasks set steerable = false where id = $1", [t.id]).catch(() => undefined);
       await rec.close();
     }
   };

@@ -80,7 +80,6 @@ Reads the diff and reports problems; never writes.
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
@@ -317,8 +316,7 @@ config_file = "agents/reviewer.toml"
         "command": [
           "node",
           "/opt/mandat/hooks/deny-by-policy.mjs"
-        ],
-        "matcher": "Bash"
+        ]
       }
     ],
     "post_tool_use": [
