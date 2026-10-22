@@ -5,10 +5,11 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf,
+  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
-import { compileProfile } from "@mandat/profile";
+import { compileProfile, grantOnce, parseAsks } from "@mandat/profile";
+import type { Ask } from "@mandat/profile";
 import { seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
@@ -47,6 +48,8 @@ export interface RunTaskInput {
   profile?: HarnessProfile;
   /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
   subjects?: string[];
+  /** E8g: ask rules a person allowed once for this attempt (they become allow in the compiled policy) */
+  grantOnce?: string[];
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
@@ -78,6 +81,8 @@ export interface RunTaskOutput {
   limit?: TaskUsage["limit"];
   /** D-293: the provider rejected the key (upstream 401/403 seen by the proxy) */
   authFailed?: boolean;
+  /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
+  asks?: Ask[];
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -246,7 +251,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
-    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[] } | null = null;
+    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
+    let asks: Ask[] = [];
     const set = (e: Evidence): void => {
       evd.set(e.detector, e);
     };
@@ -280,8 +286,10 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (i.profile) {
           const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : "claude";
           const base = target === "codex" ? "codex" : "claude";
-          const m = compileProfile(i.profile, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])] });
-          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: m.unsupported, files: m.files };
+          const granted = i.grantOnce ?? [];
+          const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
+          const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])] });
+          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: m.unsupported, files: m.files, granted };
           if (target === "codex") {
             const cp = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/codex-home && cp -R /m/in/harness/codex/. /m/codex-home/ && chmod -R u+w /m/codex-home"], timeoutMs: 60_000 });
             if (cp.exitCode !== 0) infra("E_DOCKER", "codex home seed failed");
@@ -421,7 +429,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             set(ev("AGENT", "unknown", `the agent changed its control layer: ${tampered.join(", ")}`.slice(0, 300), { files: tampered }, { cls: "config_change", id: tampered[0] ?? "-" }));
           }
         }
-        if (harness) await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, tampered, enforced_by_harness: harness.enforced, unsupported: harness.unsupported });
+        if (harness) {
+          // E8g (D-352): the hook's asks.jsonl is agent-writable; only asks naming an ask rule of the seeded policy count
+          const raw = await safeReadVolume(sctx, { volume: vol, file: "/m/out/asks.jsonl", limit: 65_536, role: "export" }).catch(() => null);
+          const policy = harness.files.find((f) => f.path === "policy.json");
+          if (raw && policy) asks = parseAsks(raw.toString("utf8"), JSON.parse(policy.bytes) as { rules: { tool: string; decision: string; reason?: string }[] });
+          await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, tampered, enforced_by_harness: harness.enforced, unsupported: harness.unsupported, asks, granted_once: harness.granted });
+        }
         await g.setPolicy("closed", []).catch(() => undefined);
         await g.stop();
         gate = undefined;
@@ -599,6 +613,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       ledger: w.ledgerFrom !== null && w.ledgerTo !== null ? { from: w.ledgerFrom, to: w.ledgerTo } : null,
       ...(usage.limit ? { limit: usage.limit } : {}),
       ...(usage.authFailed ? { authFailed: true } : {}),
+      ...(asks.length > 0 ? { asks } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

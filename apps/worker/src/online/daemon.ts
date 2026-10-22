@@ -203,12 +203,15 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       taskId: t.id, repoId: t.repo_id, agent: profile ? `claude@${profile}` : t.agent, model: contract.channel.model, account: profile ?? null,
       ...(d.broadcast ? { broadcast: d.broadcast } : {}), log,
     });
+    // E8g: ask rules a person allowed once for exactly this attempt
+    const grants = hp ? (await d.db.query<{ tool: string }>("select tool from public.tool_asks where task_id = $1 and status = 'once' and grant_attempt = $2 order by tool", [t.id, t.attempt])).rows.map((r) => r.tool) : [];
     try {
       return await (d.run ?? runTask)({
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd) },
         ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
+        ...(grants.length > 0 ? { grantOnce: grants } : {}),
       });
     } finally {
       await rec.close();
@@ -288,6 +291,21 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       return s2;
     });
     await bc("HELD", seq, { wait_reason: "key_rejected" });
+    return { state: "HELD", verdict: v };
+  }
+  // E8g (D-316/D-352): the agent hit an "ask" rule → a person decides (once / always / deny) before anything is delivered
+  if (out.asks && out.asks.length > 0) {
+    const asks = out.asks;
+    seq = await inTransaction(d.db, async (tx) => {
+      for (const a of asks) {
+        await tx.query("insert into public.tool_asks (org_id, task_id, attempt, tool, reason) values ($1::uuid, $2, $3, $4, $5) on conflict (task_id, attempt, tool) do nothing", [t.org_id, t.id, t.attempt, a.tool, a.reason.slice(0, 200)]);
+      }
+      const s2 = await setState(tx, t, "HELD", { wait_reason: "tool_approval", minutes, last_result: v.result });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "tool_approval", run_id: v.run_id, tools: asks.map((a) => a.tool) } });
+      return s2;
+    });
+    await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:waiting`, payload: { task_id: t.id, kind: "waiting" } });
+    await bc("HELD", seq, { wait_reason: "tool_approval" });
     return { state: "HELD", verdict: v };
   }
   // D-288 (EXPORT:empty_change, т. 5.7): an empty change is never VERIFIED online — no delivery, no ladder credit.

@@ -10,6 +10,7 @@ import type { KeysClient } from "./keys";
 import { board, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
+import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -229,4 +230,21 @@ export async function postProfileRollback(req: Request, d: ApiDeps, repoId: stri
   const b = ProfileRollbackBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await rollbackProfile(d.db, { uid: p.uid, repoId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+
+// E8g (v5 p. 4.4, AC-8.1): a person decides an ask of a HELD tool_approval task; the permission matrix is editable
+export async function postAskDecision(req: Request, d: ApiDeps, taskId: string): Promise<Response> {
+  if (!/^t_[a-z0-9_]{1,40}$/.test(taskId)) return json(404, { error: "unknown_task" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = AskDecisionBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await decideAsk(d.db, { uid: p.uid, taskId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+export async function postPermission(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = PermissionBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await setPermission(d.db, { uid: p.uid, org: p.org, body: b.data, secondFactor: d.secondFactor }), d);
 }

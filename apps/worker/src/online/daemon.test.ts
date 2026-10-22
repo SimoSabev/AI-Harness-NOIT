@@ -214,8 +214,8 @@ describe("daemon with harness profiles (E8б, AC-2.5/2.6)", () => {
   it("E8g: the agent hit an ask rule → tool_asks rows, HELD tool_approval, no delivery, a push; once-grants go to the next attempt", async () => {
     const s = await setup(2);
     await insertProfile(s.db, "approved");
-    const base = s.deps.run;
-    s.deps.run = async (i) => ({ ...(await (base as NonNullable<typeof base>)(i)), asks: [{ tool: "mcp:github.create_issue", reason: "a human decides on new issues" }] });
+    const base = s.deps.run as NonNullable<typeof s.deps.run>;
+    s.deps.run = async (i) => ({ ...(await base(i)), asks: [{ tool: "mcp:github.create_issue", reason: "a human decides on new issues" }] });
     await runDaemonOnce(s.deps);
     expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "tool_approval" });
     expect((await s.db.query<{ tool: string; attempt: number; status: string }>("select tool, attempt, status from public.tool_asks")).rows).toEqual([{ tool: "mcp:github.create_issue", attempt: 1, status: "pending" }]);

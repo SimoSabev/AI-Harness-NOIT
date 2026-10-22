@@ -25,6 +25,9 @@ export const ERROR_TEXT: Record<string, Key> = {
   no_repo_for_type: "error.no_repo_for_type",
   not_stoppable: "error.not_stoppable",
   rate_limited: "error.rate_limited",
+  not_allowed: "error.not_allowed",
+  rule_gone: "error.rule_gone",
+  already_decided: "error.already_decided",
 };
 
 export function errorText(t: T, r: { status: number; body: Record<string, unknown> }, extra: Record<string, Key> = {}, fallback?: string): string {

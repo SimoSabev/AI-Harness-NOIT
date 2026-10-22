@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PermissionEditor } from "../../components/permission-editor";
 import { Shell } from "../../components/shell";
 import { Meter, Panel, SampleNote, ToolCalls } from "../../components/workbench-parts";
 import { getT } from "../../i18n/server";
@@ -7,6 +8,7 @@ import { SAMPLE } from "../../lib/sample";
 import { withSample } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
+import { hasCap } from "../../lib/server/roles";
 import { sampleOn } from "../../lib/server/sample-pref";
 import { tools } from "../../lib/server/workbench";
 
@@ -24,6 +26,7 @@ export default async function ToolsPage() {
   const tr = await getT();
   const show = await sampleOn();
   const real = await tools(db(), c.uid, c.org);
+  const canEdit = await hasCap(db(), c.uid, c.org, "tools.manage");
   const t = withSample(real, { mcp: SAMPLE.mcp, skills: SAMPLE.skills, plugins: SAMPLE.plugins, permissions: SAMPLE.permissions, calls: SAMPLE.calls }, (x) => x.mcp.length + x.skills.length + x.plugins.length + x.permissions.length + x.calls.length === 0, show);
   const d = t.data;
   const max = Math.max(1, ...d.mcp.map((m) => m.calls_hour));
@@ -82,6 +85,7 @@ export default async function ToolsPage() {
               </tbody>
             </table>
           )}
+          {canEdit && <PermissionEditor />}
         </Panel>
         <Panel title={tr("tools.calls")} aside={<span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="beat size-1.5 rounded-full bg-ok" />{tr("tools.live")}</span>}>
           {d.calls.length === 0 ? <p className="p-4 text-sm text-mute">{tr("task.noCalls")}</p> : <ToolCalls calls={d.calls} t={tr} />}

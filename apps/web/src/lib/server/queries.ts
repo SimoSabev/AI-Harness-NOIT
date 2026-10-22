@@ -85,6 +85,8 @@ export interface TaskDetail {
   ladderEvents: { input: string; level_before: number; level_after: number; created_at: string }[];
   ledger: { seq: number; kind: string; ts: string; hash: string }[]; diff: string | null; activities: { kind: string; text: string }[];
   approvals: { decision: string; method: string; decided_at: string }[]; label: { layer: string; label: string } | null;
+  /** E8g: what the agent asked for (the cards of a HELD tool_approval task) */
+  asks: { id: string; attempt: number; tool: string; reason: string; status: string }[];
 }
 
 export async function taskDetail(db: Db, uid: string, org: string, role: Role, id: string): Promise<TaskDetail | null> {
@@ -100,7 +102,8 @@ export async function taskDetail(db: Db, uid: string, org: string, role: Role, i
     const activities = (await sql.query<{ kind: string; text: string }>("select kind, text from public.task_activities where task_id = $1 order by id limit 200", [id])).rows;
     const approvals = task.changeset_id ? (await sql.query<{ decision: string; method: string; decided_at: string }>("select decision, method, to_char(decided_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') as decided_at from public.approvals where changeset_id = $1::uuid order by decided_at", [task.changeset_id])).rows : [];
     const label = task.verdict_id ? ((await sql.query<{ layer: string; label: string }>("select layer, label from public.failure_labels where verdict_id = $1::uuid order by id desc limit 1", [task.verdict_id])).rows[0] ?? null) : null;
-    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label };
+    const asks = (await sql.query<TaskDetail["asks"][number]>("select id::text as id, attempt, tool, reason, status from public.tool_asks where task_id = $1 order by attempt desc, tool limit 50", [id])).rows;
+    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label, asks };
   });
 }
 
