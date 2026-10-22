@@ -377,3 +377,33 @@ describe("runTask (fake docker)", () => {
 
   });
 });
+
+describe("runTask with a harness profile (E8а, D-311)", () => {
+  it("the compiled control layer is seeded into /m/in/harness before the agent; the agent gets --settings and the subagent limits", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const docker = new FakeDocker({
+      head: () => shopCopy(),
+      agentLines: () => [
+        '{"type":"system","subtype":"init","session_id":"fake","model":"fake","tools":[],"mcp_servers":[]}',
+        '{"type":"system","subtype":"permission_denied","tool_name":"Bash"}',
+        '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}',
+      ],
+    });
+    const { r } = await go({ docker, i: { profile } });
+    const runs = docker.calls.filter((c) => c.args[0] === "run").map((c) => c.args);
+    const seedAt = runs.findIndex((a) => a.includes("node") && a.includes("-e") && a.join(" ").includes("/m/in/harness"));
+    const agentAt = runs.findIndex((a) => a.some((x) => x.startsWith("/opt/mandat/fakes/")));
+    expect(seedAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeLessThan(agentAt);
+    const agent = runs[agentAt] ?? [];
+    expect(agent).toContain("--settings");
+    expect(agent).toContain("/m/in/harness/claude/settings.json");
+    expect(agent).toContain("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=2");
+    const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { target: string; files_hash: string; denied: string[]; enforced_by_harness: unknown[] };
+    expect(h.target).toBe("claude");
+    expect(h.files_hash).toMatch(/^sha256:/);
+    expect(h.denied).toEqual(["Bash"]);
+    expect(h.enforced_by_harness.length).toBeGreaterThan(0);
+  });
+});
