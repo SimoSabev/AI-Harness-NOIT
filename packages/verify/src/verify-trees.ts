@@ -113,8 +113,12 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   for (const h of D3.security) i.onSecurity?.(h);
   const D4 = d4({ files: i.files, allowedPaths: i.allowedPaths, coveredByD3: d3CoveredPaths(i.files, rc, baseSnap, headSnap) });
   const pm = packageManagerOf(rc);
-  const pj = (d: string) => (existsSync(path.join(d, "package.json")) ? readFileSync(path.join(d, "package.json")) : null);
-  const D10 = d10Lockfile({ baseLock: readLockfile(i.baseDir, pm), headLock: readLockfile(head.dir, pm), pm, basePkg: pj(i.baseDir), headPkg: pj(head.dir) });
+  const pj = (d: string, p = "package.json") => (existsSync(path.join(d, p)) ? readFileSync(path.join(d, p)) : null);
+  // E8и: every other package.json the change touches (workspace packages) is checked like the root one
+  const manifests = [...new Set(i.files.flatMap((f) => [f.path, f.old_path ?? f.path]))]
+    .filter((p) => p !== "package.json" && /(^|\/)package\.json$/.test(p) && !p.split("/").includes("node_modules"))
+    .map((p) => ({ path: p, base: pj(i.baseDir, p), head: pj(head.dir, p) }));
+  const D10 = d10Lockfile({ baseLock: readLockfile(i.baseDir, pm), headLock: readLockfile(head.dir, pm), pm, basePkg: pj(i.baseDir), headPkg: pj(head.dir), manifests });
   evidence.push(D10.evidence, D3.evidence, D4.evidence);
   if (D10.evidence.status === "fail") {
     evidence.push(na("D1.base_tests", "lockfile rejected"), na("D2.inventory", "lockfile rejected"), na("MUST_PASS", "lockfile rejected"));
