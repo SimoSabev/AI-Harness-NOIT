@@ -27,7 +27,7 @@ describe("node --test reporter (E8и)", () => {
     writeFileSync(path.join(root, "tests", "money.test.mjs"), 'import { test } from "node:test";\ntest("adds", () => {});\n');
     const out = path.join(root, "report.json");
     try {
-      execFileSync(process.execPath, ["--test", `--test-reporter=${reporter}`, `--test-reporter-destination=${out}`, "tests/"], { cwd: root, stdio: "ignore" });
+      execFileSync(process.execPath, ["--test", `--test-reporter=${reporter}`, `--test-reporter-destination=${out}`], { cwd: root, stdio: "ignore" });
     } catch {
       /* a failing test exits 1 */
     }
