@@ -52,6 +52,12 @@ describe("stream → workbench (E7д, AC-6.1/6.2)", () => {
     const calls = (await db.query<{ tool: string; decision: string; summary: string }>("select tool, decision, summary from public.tool_calls order by at, tool")).rows;
     expect(calls.map((c) => [c.tool, c.decision])).toEqual(expect.arrayContaining([["Edit", "allowed"], ["Read", "allowed"], ["Bash", "denied"], ["mandat.mandat_status", "allowed"]]));
     for (const c of calls) expect(c.summary).not.toContain("mdt_abcdefghijklmnop");
+    // the terminal: the stream lines of the run, in order, redacted
+    const ln = (await db.query<{ seq: number; kind: string; text: string }>("select l.seq, l.kind, l.text from public.session_lines l join public.agent_sessions s on s.id = l.session_id where s.role = 'lead' order by l.seq")).rows;
+    expect(ln[0]?.kind).toBe("init");
+    expect(ln.map((l) => l.seq)).toEqual([...ln.map((l) => l.seq)].sort((a, b) => a - b));
+    expect(ln.some((l) => l.kind === "tool_call" && l.text.includes("git push"))).toBe(true);
+    for (const l of ln) expect(l.text).not.toContain("mdt_abcdefghijklmnop");
   });
   it("beats and broadcasts per session are throttled to ≤ 2/s even when the agent streams fast", async () => {
     let now = 0;
@@ -64,6 +70,7 @@ describe("stream → workbench (E7д, AC-6.1/6.2)", () => {
         return Promise.resolve();
       },
       toolCall: () => Promise.resolve(),
+      lines: () => Promise.resolve(),
       end: () => Promise.resolve(),
     };
     const rec = sessionRecorder(sink, { taskId: null, repoId: null, agent: "claude", model: "m", account: null, now: () => now, broadcast: () => {
