@@ -4,7 +4,7 @@ import type net from "node:net";
 import webpush from "web-push";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { checkPushEndpoint, isPrivateIp, pushPayload, sendWebPush, webPushHandler } from "./push.js";
+import { checkPushEndpoint, isPrivateIp, nightPushPayload, pushPayload, sendWebPush, webPushHandler } from "./push.js";
 
 const pub = () => Promise.resolve(["142.250.180.10"]);
 
@@ -46,6 +46,27 @@ describe("push-payload", () => {
     const f = pushPayload({ task_id: "t_y", kind: "failed", text: "x", result: "FAILED", level: 0 });
     expect(f).toBe(JSON.stringify({ task_id: "t_y", kind: "failed", title: "ПРОВАЛ: x", verdict: "ПРОВАЛ", level: 0 }));
     expect(f).not.toMatch(/mdt_|sk-|token|secret/i);
+  });
+});
+
+describe("нощен доклад (E9а)", () => {
+  it("заглавие от доклада ≤ 80 знака; без текст на задачи; само shift_id, kind, title", () => {
+    const p = JSON.parse(nightPushPayload({ shift_id: "50000000-0000-4000-8000-000000000001", report: { merged: 3, waiting: 1, parked: 2, failed: 0, skipped: 1, spent_usd: 4.2, learned: ["secret-ish text from a proposal"] } })) as Record<string, unknown>;
+    expect(Object.keys(p).sort()).toEqual(["kind", "shift_id", "title"]);
+    expect(p.title).toBe("Нощен доклад: 3 слети · 1 чакат · 2 паркирани · $4.20");
+    expect(JSON.stringify(p)).not.toContain("secret-ish");
+  });
+  it("outbox web_push {shift_id, kind: night_report}: лош shift_id → грешка; без VAPID → SKIPPED", async () => {
+    const db = await pgliteDb();
+    try {
+      await seedMinimal(db, { remoteUrl: "file:///x" });
+      await expect(webPushHandler({ db, env: {} })({ payload: { shift_id: "nope", kind: "night_report" } })).rejects.toThrow();
+      const logs: string[] = [];
+      await webPushHandler({ db, env: {}, log: (l) => logs.push(l) })({ payload: { shift_id: "50000000-0000-4000-8000-000000000001", kind: "night_report" } });
+      expect(logs).toEqual(["[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)"]);
+    } finally {
+      await db.end();
+    }
   });
 });
 
