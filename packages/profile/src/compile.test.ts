@@ -40,7 +40,8 @@ describe("compile for Claude Code (E8а)", () => {
     expect(s.permissions.deny).not.toContain("mcp__stripe");
     expect(s.permissions.ask).toEqual(["mcp__github__create_issue"]);
     expect(s.permissions.allow).toEqual(["Bash(npx vitest run *)", "Bash(npx vitest run)", "Bash(npx tsc --noEmit *)", "Bash(npx tsc --noEmit)", "mcp__mandat__mandat_status", "mcp__mandat__mandat_verify"]);
-    expect(s.hooks.PreToolUse?.[0]).toEqual({ matcher: "Bash", hooks: [{ type: "command", command: "node /opt/mandat/hooks/deny-by-policy.mjs", timeout: 10 }] });
+    // E8g (D-352): deny-by-policy runs for every tool (an ask rule on an MCP tool must reach it), whatever matcher D had
+    expect(s.hooks.PreToolUse?.[0]).toEqual({ hooks: [{ type: "command", command: "node /opt/mandat/hooks/deny-by-policy.mjs", timeout: 10 }] });
     expect(s.hooks.PostToolUse?.[0]?.hooks[0]?.command).toBe("node /opt/mandat/hooks/typecheck-changed.mjs");
     expect(s.hooks.Stop?.[0]?.hooks[0]?.command).toBe("node /opt/mandat/hooks/require-tests-ran.mjs");
     expect(s.pluginConfigs["cc-plugin-agents-md@builtin"]?.options.instructionFiles).toBe("managed-only");
@@ -70,6 +71,12 @@ describe("compile for Claude Code (E8а)", () => {
   it("what the harness enforces itself is listed with why", () => {
     expect(m.enforced_by_harness.map((x) => x.rule)).toEqual(expect.arrayContaining(["net:registry.npmjs.org", "path:write outside allowed_paths", "control files changed by the agent"]));
   });
+  it("E8g: layer C with ask/deny rules and no deny-by-policy hook in D → the compiler adds one for every tool", () => {
+    const p0 = profile();
+    const p = sealProfile({ ...p0, layers: { ...p0.layers, d: p0.layers.d.filter((h) => h.script !== "deny-by-policy") } });
+    const s = JSON.parse(file(compileProfile(p, "claude", ctx), "claude/settings.json")?.bytes ?? "{}") as { hooks: Record<string, { matcher?: string; hooks: { command: string }[] }[]> };
+    expect(s.hooks.PreToolUse).toEqual([{ hooks: [{ type: "command", command: "node /opt/mandat/hooks/deny-by-policy.mjs", timeout: 10 }] }]);
+  });
   it("snapshot", () => {
     expect(m).toMatchSnapshot();
   });
@@ -94,6 +101,7 @@ describe("compile for Codex (E8а)", () => {
   it("hooks.json: pre_tool_use → deny-by-policy; the agent file and the skill; argv + CODEX_HOME", () => {
     const h = JSON.parse(file(m, "codex/hooks.json")?.bytes ?? "{}") as { hooks: Record<string, { command: string[] }[]> };
     expect(h.hooks.pre_tool_use?.[0]?.command).toEqual(["node", "/opt/mandat/hooks/deny-by-policy.mjs"]);
+    expect(h.hooks.pre_tool_use?.[0]).not.toHaveProperty("matcher");
     expect(file(m, "codex/agents/reviewer.toml")?.bytes).toContain('model = "claude-haiku-5-5"');
     expect(file(m, "codex/skills/test-first/SKILL.md")).toBeDefined();
     expect(m.argv).toEqual(["-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"', "-c", "project_doc_max_bytes=0"]);
