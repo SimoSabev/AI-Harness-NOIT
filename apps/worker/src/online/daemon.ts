@@ -200,9 +200,11 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   };
   const profileRef: ChannelRef | undefined = profile ? { label: `claude-profile-${profile}`, kind: "cli_profile", model: "claude-sonnet-5-5" } : undefined;
   // E8g (D-353): steers from earlier attempts go into this attempt's contract (framed); newer ones to the live agent
-  const steersBefore = t.attempt > 1 ? (await d.db.query<{ id: string; text: string }>("select id::text as id, text from public.task_activities where task_id = $1 and kind = 'steer' order by id limit 20", [t.id])).rows : [];
-  let steerCursor = steersBefore.length > 0 ? Number(steersBefore[steersBefore.length - 1]?.id) : 0;
-  const steerNote = steersBefore.length > 0 ? ["Notes from a person during an earlier attempt:", ...steersBefore.map((r) => frameUntrusted({ author: "member", association: "member", source: "steer", text: r.text }))].join("\n") : null;
+  const steersBefore = t.attempt > 1 ? (await d.db.query<{ id: string; kind: string; text: string }>("select id::text as id, kind, text from public.task_activities where task_id = $1 and kind in ('steer', 'review') order by id limit 20", [t.id])).rows : [];
+  const steerIds = steersBefore.filter((r) => r.kind === "steer");
+  let steerCursor = steerIds.length > 0 ? Number(steerIds[steerIds.length - 1]?.id) : 0;
+  // E8g (D-356): review comments an approver chose are framed as PR comments; steer notes as a person's steer
+  const steerNote = steersBefore.length > 0 ? ["Notes from a person during an earlier attempt:", ...steersBefore.map((r) => frameUntrusted({ author: "member", association: "member", source: r.kind === "review" ? "pr_comment" : "steer", text: r.text }))].join("\n") : null;
   // E8g (D-356): a "Fix CI" attempt gets the failing checks of the previous round (framed)
   const ciLog = t.retry_reason === "ci" ? await ciNote(d.db, t.id) : null;
   const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);

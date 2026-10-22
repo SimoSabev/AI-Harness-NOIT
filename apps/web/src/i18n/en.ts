@@ -57,6 +57,8 @@ export const en = {
   "status.closed.headline": "The task is closed.",
   "status.expired.label": "Expired",
   "status.expired.headline": "Nobody decided in time; the task was closed and nothing was delivered.",
+  "actions.applyComments": "Apply comments",
+  "actions.commentsLabel": "The review comments the agent should act on (they go into a new attempt, marked as PR comments)",
   "status.ci.label": "CI failed",
   "status.ci.headline": "The project's own CI failed on the PR. Fix CI runs the agent again with the failing checks; after two rounds it is yours.",
   "actions.fixCi": "Fix CI",

@@ -159,3 +159,19 @@ export async function fixCiTask(db: Db, o: { uid: string; taskId: string }): Pro
   });
   return { status: 200, body: { state: "CREATED", attempt: t.attempt + 1 }, broadcast: { org: t.org_id, task: o.taskId } };
 }
+
+/** E8g (v5 p. 4.7 (4), D-356): the review comments an approver chose (pasted) → a new attempt with them in its contract. */
+export async function applyComments(db: Db, o: { uid: string; taskId: string; text: string }): Promise<Result> {
+  const text = o.text.trim();
+  if (text.length === 0 || text.length > 500) return err(400, "bad_text");
+  const t = (await asService(db, (sql) => sql.query<{ org_id: string; state: string; attempt: number }>("select org_id::text as org_id, state, attempt from public.tasks where id = $1", [o.taskId]))).rows[0];
+  if (!t) return err(404, "unknown_task");
+  if (!(await canAct(db, o.uid, t.org_id))) return err(403, "not_an_approver");
+  if (!["HELD", "GATED", "BLOCKED"].includes(t.state)) return err(409, "not_retryable");
+  await asService(db, async (sql) => {
+    await sql.query("insert into public.task_activities (org_id, task_id, kind, text, by_user) values ($1::uuid, $2, 'review', $3, $4::uuid)", [t.org_id, o.taskId, text, o.uid]);
+    await sql.query("update public.tasks set state = 'CREATED', attempt = attempt + 1, retry_reason = 'human', wait_reason = null, last_result = null, effective_level = null, state_entered_at = now(), updated_at = now(), seq = seq + 1 where id = $1", [o.taskId]);
+    await ledger(sql, t.org_id, "task_retry", o.taskId, { attempt: t.attempt + 1, by: o.uid, reason: "review_comments" });
+  });
+  return { status: 200, body: { state: "CREATED", attempt: t.attempt + 1 }, broadcast: { org: t.org_id, task: o.taskId } };
+}

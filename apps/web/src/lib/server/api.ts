@@ -1,4 +1,4 @@
-import { ApproveBody, CreateTaskBody, FailureLabelBody, approve, createTask, fixCiTask, labelFailure, retryTask, stopTask } from "./actions";
+import { ApproveBody, CreateTaskBody, FailureLabelBody, applyComments, approve, createTask, fixCiTask, labelFailure, retryTask, stopTask } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
 import type { RateLimiter } from "./guard";
@@ -290,4 +290,12 @@ export async function postFixCi(req: Request, d: ApiDeps, id: string): Promise<R
   const p = await post(req, d);
   if (p instanceof Response) return p;
   return done(await fixCiTask(d.db, { uid: p.uid, taskId: id }), d);
+}
+export async function postApplyComments(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!/^t_[a-z0-9_]{1,40}$/.test(id)) return json(404, { error: "unknown_task" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = (p.body ?? {}) as { text?: unknown };
+  if (typeof b.text !== "string") return json(400, { error: "bad_text" });
+  return done(await applyComments(d.db, { uid: p.uid, taskId: id, text: b.text }), d);
 }

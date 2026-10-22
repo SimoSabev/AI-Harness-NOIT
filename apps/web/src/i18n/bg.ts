@@ -55,6 +55,8 @@ export const bg: Record<Key, string> = {
   "status.closed.headline": "Задачата е приключена.",
   "status.expired.label": "Изтекла",
   "status.expired.headline": "Никой не реши навреме; задачата е затворена и нищо не е доставено.",
+  "actions.applyComments": "Приложи коментари",
+  "actions.commentsLabel": "Коментарите от ревюто, по които агентът да работи (влизат в нов опит, отбелязани като коментари от PR)",
   "status.ci.label": "CI падна",
   "status.ci.headline": "CI на проекта падна върху PR-а. „Поправи CI“ пуска агента отново с падналите проверки; след два кръга е твоя.",
   "actions.fixCi": "Поправи CI",

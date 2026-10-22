@@ -15,6 +15,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [comments, setComments] = useState<string | null>(null);
   if (!p.canAct) return null;
 
   const run = async (url: string, body: unknown) => {
@@ -36,8 +37,9 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
   const canDecide = p.status === "review" && p.changesetId !== null && p.headSha !== null;
   const canRetry = p.status === "failed" || p.status === "unknown" || p.status === "empty" || p.status === "key" || p.status === "base";
   const canFixCi = p.status === "ci";
+  const canComments = p.status === "review" || p.status === "ci";
   const canStop = p.status === "queued" || p.status === "running" || p.status === "checking";
-  if (!canDecide && !canRetry && !canStop && !canFixCi) return null;
+  if (!canDecide && !canRetry && !canStop && !canFixCi && !canComments) return null;
 
   return (
     <div className="space-y-3">
@@ -47,6 +49,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
           {canDecide && <button className={btn.danger} type="button" disabled={busy} onClick={() => setConfirm("rejected")}>{t("actions.reject")}</button>}
           {canRetry && <button className={btn.primary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/retry`, {})}>{t("actions.retry")}</button>}
           {canFixCi && <button className={btn.primary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/fix-ci`, {})}>{t("actions.fixCi")}</button>}
+          {canComments && comments === null && <button className={btn.ghost} type="button" disabled={busy} onClick={() => setComments("")}>{t("actions.applyComments")}</button>}
           {canStop && <button className={btn.secondary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/stop`, {})}>{t("actions.stop")}</button>}
         </div>
       )}
@@ -62,6 +65,17 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
           <div className="mt-3 flex gap-2">
             <button className={confirm === "approved" ? btn.primary : btn.danger} type="submit" disabled={busy}>{confirm === "approved" ? t("actions.yesApprove") : t("actions.yesReject")}</button>
             <button className={btn.ghost} type="button" onClick={() => setConfirm(null)}>{t("actions.back")}</button>
+          </div>
+        </form>
+      )}
+      {comments !== null && (
+        <form className="rounded-lg border border-line bg-raised p-4" onSubmit={(e) => (e.preventDefault(), void run(`/api/tasks/${p.taskId}/apply-comments`, { text: comments }).then(() => setComments(null)))}>
+          <label className="block text-sm">{t("actions.commentsLabel")}
+            <textarea className={`${input} mt-1 h-24`} maxLength={500} required value={comments} onChange={(e) => setComments(e.target.value)} />
+          </label>
+          <div className="mt-3 flex gap-2">
+            <button className={btn.primary} type="submit" disabled={busy || comments.trim() === ""}>{t("actions.applyComments")}</button>
+            <button className={btn.ghost} type="button" onClick={() => setComments(null)}>{t("actions.back")}</button>
           </div>
         </form>
       )}
