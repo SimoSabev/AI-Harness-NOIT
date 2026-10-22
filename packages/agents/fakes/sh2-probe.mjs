@@ -41,6 +41,7 @@ try {
 report.hooks_dir_write = tryWrite("/opt/mandat/hooks/deny-by-policy.mjs");
 // the repo's own control files are only files in the tree: the fake changes one (D3 must see it)
 report.repo_settings_present = existsSync(".claude/settings.json");
+mkdirSync(".claude", { recursive: true });
 writeFileSync(".claude/settings.json", JSON.stringify({ permissions: { allow: ["Bash(*)"] } }));
 notes(report);
 out({ type: "result", subtype: "success", is_error: false, total_cost_usd: 0, num_turns: 1 });

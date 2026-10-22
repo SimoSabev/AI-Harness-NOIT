@@ -29,7 +29,8 @@ describe("control layer from the profile (docker, fake agents)", () => {
     const h = JSON.parse(readFileSync(path.join(v.run_dir, "harness.json"), "utf8")) as { target: string; denied: string[]; files_hash: string };
     expect(h.target).toBe("claude");
     expect(h.denied).toEqual(["Bash"]);
-    expect(v.reasons.join(" ")).toContain(".claude/settings.json");
+    const ev = JSON.parse(readFileSync(path.join(v.run_dir, "verdict.json"), "utf8")) as { evidence: { detector: string; status: string; signature?: string }[] };
+    expect(ev.evidence.filter((e) => e.status !== "pass" && e.status !== "n/a").map((e) => e.signature ?? "").join(" ")).toContain("D3:protected_path:.claude/");
     expect(v.result).not.toBe("VERIFIED");
   });
   it("Codex (fake-codex:hook-probe): the pre_tool_use hook blocks git push; a tampered CODEX_HOME config → UNKNOWN config_change", () => {
