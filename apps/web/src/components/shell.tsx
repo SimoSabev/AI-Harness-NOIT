@@ -12,10 +12,14 @@ import { btn } from "./ui";
 
 // D-305: the frame of every page — a side bar that stays (sections, the projects with their health, settings, theme),
 // one primary action (+ Нова задача) on top. On a phone the side bar becomes a row of links.
-type Current = "tasks" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings";
+type Current = "tasks" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research";
 const NAV: { id: Current; href: string; label: string }[] = [
   { id: "tasks", href: "/", label: "Главна" },
+  { id: "agents", href: "/agents", label: "Агенти" },
   { id: "board", href: "/board", label: "Дъска" },
+  { id: "tools", href: "/tools", label: "Инструменти" },
+  { id: "night", href: "/night", label: "Нощна смяна" },
+  { id: "research", href: "/research", label: "Ресърч" },
   { id: "harness", href: "/harness", label: "Правила" },
   { id: "keys", href: "/keys", label: "Акаунти" },
   { id: "settings", href: "/settings", label: "Настройки" },

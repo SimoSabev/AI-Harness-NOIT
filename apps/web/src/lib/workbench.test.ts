@@ -27,3 +27,13 @@ describe("workbench view (D-307)", () => {
     for (const c of SAMPLE.research.current?.claims ?? []) expect(c.text.startsWith("[ПРИМЕР]")).toBe(true);
   });
 });
+
+import { nightPlan } from "./workbench";
+describe("nightPlan (D-307)", () => {
+  it("всяка задача отива на мястото, което се освобождава първо; Мандат проверява след всяка; не прелива извън нощта", () => {
+    const lanes = nightPlan([{ text: "a", repo: "r", risk: "low", est_minutes: 60 }, { text: "b", repo: "r", risk: "high", est_minutes: 120 }, { text: "c", repo: "r", risk: "low", est_minutes: 30 }, { text: "big", repo: "r", risk: "low", est_minutes: 470 }], 2, 480);
+    expect(lanes[0]?.map((s) => [s.label, s.left, s.width, s.kind])).toEqual([["r · a", 0, 12.5, "run"], ["Мандат", 12.5, 1.7, "judge"], ["r · c", 14.2, 6.3, "run"], ["Мандат", 20.4, 1.7, "judge"]]);
+    expect(lanes[1]?.[0]).toMatchObject({ label: "r · b", kind: "risk" });
+    expect(lanes.flat().some((s) => s.label.includes("big"))).toBe(false);
+  });
+});

@@ -8,7 +8,7 @@ for (const scheme of ["light", "dark"] as const) {
     await context.addCookies([{ name: "theme", value: scheme, url: baseURL ?? "http://localhost:3000" }]);
     await page.emulateMedia({ colorScheme: scheme });
     await login(page, EMAIL.approver);
-    for (const url of ["/", "/board", "/harness", "/tasks/new", "/tasks/t_seed_failed", "/tasks/t_seed_bugfix", "/keys", "/settings", "/?project=mandat-demo%2Fshop", "/login"]) {
+    for (const url of ["/", "/board", "/harness", "/tasks/new", "/tasks/t_seed_failed", "/tasks/t_seed_bugfix", "/keys", "/settings", "/?project=mandat-demo%2Fshop", "/agents", "/tools", "/night", "/research", "/login"]) {
       await page.goto(url);
       const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();
       const bad = r.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `${url}: ${v.id} (${v.nodes.length})`);

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Shell } from "../../components/shell";
-import { ThemeChoice, ViewChoice } from "../../components/theme-switch";
+import { SampleChoice, ThemeChoice, ViewChoice } from "../../components/theme-switch";
 import { card } from "../../components/ui";
 import { pageName } from "../../lib/brand";
-import { parseTheme, parseView } from "../../lib/prefs";
+import { parseSample, parseTheme, parseView } from "../../lib/prefs";
 import { pageCtx } from "../../lib/server/page";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,11 @@ export default async function SettingsPage() {
         <h2 id="s-view" className="font-display text-base font-semibold">Изглед на главната</h2>
         <p className="mt-1 mb-4 text-sm text-mute">Сменя се и с бутоните горе на главната.</p>
         <ViewChoice value={parseView(jar.get("view")?.value)} />
+      </section>
+      <section aria-labelledby="s-sample" className={`${card} mt-4 p-5`}>
+        <h2 id="s-sample" className="font-display text-base font-semibold">Примерни данни</h2>
+        <p className="mt-1 mb-4 text-sm text-mute">Агенти, инструменти, нощна смяна и ресърч още не се записват от всички агенти. Докато няма истински данни, екраните показват пример с етикет „ПРИМЕР“.</p>
+        <SampleChoice value={parseSample(jar.get("sample")?.value)} />
       </section>
       <section aria-labelledby="s-term" className={`${card} mt-4 p-5`}>
         <h2 id="s-term" className="font-display text-base font-semibold">В терминала</h2>

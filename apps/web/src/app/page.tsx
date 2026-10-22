@@ -15,6 +15,11 @@ import type { Group } from "../lib/status";
 import { db } from "../lib/server/db";
 import { pageCtx } from "../lib/server/page";
 import { board, repos } from "../lib/server/queries";
+import { sampleOn } from "../lib/server/sample-pref";
+import { homeExtras } from "../lib/server/workbench";
+import { SAMPLE } from "../lib/sample";
+import { withSample } from "../lib/workbench";
+import { Panel, Windows } from "../components/workbench-parts";
 import type { TaskRow as Row } from "../lib/server/queries";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +61,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const view = chosen ? "project" : parseView((await cookies()).get("view")?.value);
   const sel = view === "project" ? (chosen ?? o.projects[0]) : undefined;
   const waiting = all.filter((t) => groupOf(statusOf(t).key) === "waiting").length;
+  const ex = withSample(await homeExtras(db(), c.uid, c.org), SAMPLE.home, (x) => x.windows.length === 0 && x.mcpPerMin === 0 && x.conflicts.length === 0 && x.costToday === 0, await sampleOn());
+  const decide = all.filter((t) => groupOf(statusOf(t).key) === "waiting").slice(0, 6);
   return (
     <Shell current="tasks" waiting={waiting} wide={view !== "list"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -75,9 +82,16 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       ) : view === "list" ? (
         <Groups rows={all} />
       ) : (
-        <>
+        <div className="grid gap-6 2xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
           <FlowMap flow={o.flow} />
           <Swarm swarm={o.swarm} />
+          <ul aria-label="Сега" className="mt-4 flex flex-wrap gap-2 text-sm">
+            {ex.data.conflicts.map((k) => <li key={k.path}><Link href="/agents?by=problems" className="inline-flex h-8 items-center gap-2 rounded-lg border border-warn/40 bg-warn-soft px-3 text-warn no-underline">⚠ Конфликт: {k.sessions} агента пипат {k.repo}/{k.path}</Link></li>)}
+            <li className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute">Цена днес <span className="font-mono text-ink">${ex.data.costToday.toFixed(2)}</span></li>
+            <li><Link href="/tools" className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute no-underline">MCP <span className="font-mono text-ink">{ex.data.mcpPerMin}/мин</span> · {ex.data.denied24h} спрени от вратата</Link></li>
+            {ex.sample && <li className="inline-flex h-8 items-center rounded-lg border border-dashed border-line-strong px-3 text-xs text-warn">ПРИМЕР · <Link href="/settings" className="ml-1 underline">скрий</Link></li>}
+          </ul>
           {view === "map" && (
             <>
               <ProjectTiles projects={o.projects} />
@@ -116,7 +130,16 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
               </div>
             </div>
           )}
-        </>
+        </div>
+        <aside className="flex flex-col gap-4">
+          {view !== "map" && <Panel title="Решения" aside={String(decide.length)}>
+            {decide.length === 0 ? <p className="p-4 text-sm text-mute">Нищо не чака теб.</p> : (
+              <ul className="space-y-1.5 p-3">{decide.map((t) => { const st = statusOf(t); return <li key={t.id}><Link href={`/tasks/${t.id}`} className="block rounded-lg bg-raised px-3 py-2 no-underline hover:brightness-110"><span className="block truncate text-sm text-ink">{t.text}</span><span className="text-xs text-mute">{st.label}</span></Link></li>; })}</ul>
+            )}
+          </Panel>}
+          <Panel title={`Отворени · ${ex.data.windows.length}`} aside={ex.sample ? "пример" : undefined}><div className="p-3"><Windows windows={ex.data.windows} /></div></Panel>
+        </aside>
+        </div>
       )}
       <Live topic={`org:${c.org}:board`} since={b.since} realtime={c.realtime} fast={o.flow.running + o.flow.checking > 0} />
     </Shell>

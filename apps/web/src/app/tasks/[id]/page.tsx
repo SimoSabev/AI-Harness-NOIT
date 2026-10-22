@@ -16,6 +16,11 @@ import { reasonText, testsOf } from "../../../lib/verdict-view";
 import { db } from "../../../lib/server/db";
 import { canAct, pageCtx } from "../../../lib/server/page";
 import { taskDetail } from "../../../lib/server/queries";
+import { sampleOn } from "../../../lib/server/sample-pref";
+import { sessionOf } from "../../../lib/server/workbench";
+import { sessionSample } from "../../../lib/sample";
+import { withSample } from "../../../lib/workbench";
+import { Panel, SampleNote, SessionTree, ToolCalls, Windows } from "../../../components/workbench-parts";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +50,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const failed = d.evidence.filter((e) => e.status === "fail");
   const checks = d.evidence.filter((e) => e.status !== "n/a");
   const minutes = t.minutes > 0 ? `${t.minutes.toFixed(1)} мин` : null;
+  const sess = withSample(await sessionOf(db(), c.uid, c.org, id), sessionSample(id), (x) => x.sessions.length + x.calls.length === 0, await sampleOn());
   return (
     <Shell current="task" waiting={c.waiting}>
       <Link href="/" className="text-sm text-mute hover:text-ink">← Задачи</Link>
@@ -91,6 +97,18 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
           <TaskActions taskId={t.id} status={s.key} canAct={canAct(c.role)} changesetId={t.changeset_id} headSha={t.head_sha} twoFactor={t.requires_second_factor} />
         </div>
       </div>
+
+      <section aria-labelledby="sess-h" className="mt-8">
+        <h2 id="sess-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">Сесията отвътре</h2>
+        {sess.sample && <SampleNote what="агентите на тази задача, повикванията им на инструменти и отворените прозорци" table="agent_sessions, tool_calls, open_windows" />}
+        <div className="mt-2 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+          <div className="flex flex-col gap-4">
+            <Panel title="Агенти в сесията">{sess.data.sessions.length ? <div className="p-4"><SessionTree sessions={sess.data.sessions} /></div> : <p className="p-4 text-sm text-mute">Няма записани агенти.</p>}</Panel>
+            <Panel title={`Отворени · ${sess.data.windows.length}`}><div className="p-3"><Windows windows={sess.data.windows} /></div></Panel>
+          </div>
+          <Panel title="Повиквания на инструменти" aside={`${sess.data.calls.length}`}>{sess.data.calls.length ? <ToolCalls calls={sess.data.calls} /> : <p className="p-4 text-sm text-mute">Още няма повиквания.</p>}</Panel>
+        </div>
+      </section>
 
       {(t.a_total !== null || t.inv_before !== null || d.ladder || t.ledger_seq !== null) && (
         <section aria-labelledby="trust-h" className="mt-8">

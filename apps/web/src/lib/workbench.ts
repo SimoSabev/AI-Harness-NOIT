@@ -43,3 +43,19 @@ export function tree<T extends { id: string; parent_id: string | null }>(rows: T
   for (const r of rows.filter((x) => x.parent_id === null || !rows.some((y) => y.id === x.parent_id))) walk(r, 0);
   return out;
 }
+
+/** The night plan (design H5): each queued task goes to the slot that frees up first; Mandat checks after each. Percent of the window. */
+export function nightPlan(queue: { text: string; repo: string; risk: string; est_minutes: number }[], slots: number, windowMinutes: number, judgeMinutes = 8): { slot: number; left: number; width: number; label: string; kind: "run" | "judge" | "risk" }[][] {
+  const free = Array.from({ length: slots }, () => 0);
+  const lanes: ReturnType<typeof nightPlan> = Array.from({ length: slots }, () => []);
+  const pct = (m: number) => Math.round((m / windowMinutes) * 1000) / 10;
+  for (const q of queue) {
+    const slot = free.indexOf(Math.min(...free));
+    const start = free[slot] as number;
+    if (start + q.est_minutes > windowMinutes) continue;
+    lanes[slot]?.push({ slot, left: pct(start), width: pct(q.est_minutes), label: `${q.repo} · ${q.text}`, kind: q.risk === "high" ? "risk" : "run" });
+    lanes[slot]?.push({ slot, left: pct(start + q.est_minutes), width: pct(judgeMinutes), label: "Мандат", kind: "judge" });
+    free[slot] = start + q.est_minutes + judgeMinutes;
+  }
+  return lanes;
+}

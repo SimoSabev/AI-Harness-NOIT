@@ -129,3 +129,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* D-307: motion — slow and quiet; prefers-reduced-motion turns all of it off (above). */
+@keyframes flow-dash { to { stroke-dashoffset: -48; } }
+@keyframes beat { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+@keyframes rise { from { transform: translateY(4px); } to { transform: none; } }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.flow-line { stroke-dasharray: 2 10; animation: flow-dash 2.4s linear infinite; }
+.flow-line-slow { stroke-dasharray: 1 14; animation: flow-dash 4s linear infinite; }
+.beat { animation: beat 2.2s ease-in-out infinite; }
+.rise { animation: rise .35s ease-out both; }
+.sweep { position: relative; overflow: hidden; }
+.sweep::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 22%, transparent), transparent); animation: sweep 2.6s ease-in-out infinite; }

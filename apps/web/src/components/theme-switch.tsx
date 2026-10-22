@@ -79,3 +79,15 @@ export function ViewTabs({ value }: { value: View }) {
     </div>
   );
 }
+
+/** D-307: show the labelled sample where the system does not record something yet. */
+export function SampleChoice({ value }: { value: boolean }) {
+  const router = useRouter();
+  const [v, setV] = useState(value);
+  return (
+    <label className="flex cursor-pointer items-center gap-3 text-sm">
+      <input type="checkbox" checked={v} onChange={(e) => { setV(e.target.checked); document.cookie = prefCookie("sample", e.target.checked ? "1" : "0"); router.refresh(); }} className="size-4 accent-[var(--accent)]" />
+      Показвай пример, където още няма истински данни
+    </label>
+  );
+}
