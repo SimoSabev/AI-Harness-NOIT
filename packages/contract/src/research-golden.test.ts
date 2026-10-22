@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { GoldenSet } from "./research.js";
+import { GoldenSet } from "./research-golden.js";
 
 // E8к (v5 т. 4.10): the golden set of the RS spike — 20 questions, 10 project + 10 general; a project answer is literal
 // text in the cited file, so the set itself is checked, not trusted.

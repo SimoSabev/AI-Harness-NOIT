@@ -4,7 +4,7 @@ import { citationInSource, goldenHit, normalizeForCitation, substringShare } fro
 // E8к (v5 т. 4.10 (3)): a citation counts only when its quote is a substring of the source after normalization.
 describe("citations (E8к)", () => {
   it("нормализация: NFKC, малки букви, интервали, кавички и тирета, невидими знаци", () => {
-    expect(normalizeForCitation("  The “Quick” brown​ fox — jumps\n\tover ")).toBe('the "quick" brown fox - jumps over');
+    expect(normalizeForCitation("  The “Quick”\u00a0brown\u200b fox — jumps\n\tover ")).toBe('the "quick" brown fox - jumps over');
     expect(normalizeForCitation("ﬁle")).toBe("file");
   });
   it("подниз след нормализация; многоточие в края/началото се маха; празен цитат не се брои", () => {

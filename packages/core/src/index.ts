@@ -25,3 +25,4 @@ export { d7ci } from "./d7.js";
 export type { CheckRunInfo, CommitStatusInfo } from "./d7.js";
 export { addedLines, applySite, d11Mutation, mutationSites, specialCases } from "./d11.js";
 export type { MutantRun, MutationSite, SpecialCase } from "./d11.js";
+export { citationInSource, goldenHit, normalizeForCitation, substringShare } from "./citations.js";
