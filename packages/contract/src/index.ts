@@ -10,7 +10,7 @@ export * from "./npm-allowlist.js";
 export * from "./policy.js";
 export * from "./verify.js";
 export * from "./explain.js";
-export { INSTALL_ARGV, LOCKFILE, installCommand, lockAllowlist, pnpmAllowlist, yarnAllowlist } from "./lockfiles.js";
+export { INSTALL_ARGV, LOCKFILE, installCommand, isBerryLock, lockAllowlist, pnpmAllowlist, yarnAllowlist } from "./lockfiles.js";
 export type { LockAllowlistResult, PackageManager } from "./lockfiles.js";
 export * from "./workbench.js";
 export * from "./agent-stream.js";

@@ -1,4 +1,4 @@
-import { parse } from "yaml";
+import { parse, parseAllDocuments } from "yaml";
 import type { GateRoute } from "./gate.js";
 import { npmAllowlistFromLockfile } from "./npm-allowlist.js";
 import type { NpmAllowlistResult } from "./npm-allowlist.js";
@@ -19,7 +19,20 @@ export const INSTALL_ARGV: Record<PackageManager, string[]> = {
  * which the sandbox cannot reach; the lockfile is pointed at the gate for the install only and put back as it was
  * (the tree keeps the agent's lockfile byte for byte) [НП: yarn 1.22.22 rewrite of the registry host — not relied on].
  */
-export function installCommand(pm: PackageManager): string[] {
+/**
+ * E8и (D-358): yarn berry (lockfile `__metadata`) installs with the yarn 4 pinned in the image, never the repo's `yarnPath`;
+ * the registry is the gate (plain HTTP inside the sandbox network), no scripts, no global cache, node_modules linker and the
+ * install state in /tmp so the tree changes only under node_modules.
+ */
+const BERRY_ENV = [
+  "YARN_IGNORE_PATH=1", "YARN_NPM_REGISTRY_SERVER=http://egress-gate/npm", "YARN_UNSAFE_HTTP_WHITELIST=egress-gate", "YARN_ENABLE_SCRIPTS=0",
+  "YARN_ENABLE_TELEMETRY=0", "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_CACHE_FOLDER=/home/agent/.yarn-berry-cache", "YARN_NODE_LINKER=node-modules",
+  "YARN_INSTALL_STATE_PATH=/tmp/yarn-install-state.gz", "YARN_ENABLE_IMMUTABLE_INSTALLS=1", "YARN_ENABLE_PROGRESS_BARS=0",
+];
+export const isBerryLock = (text: string | null): boolean => text !== null && /^__metadata:/m.test(text);
+
+export function installCommand(pm: PackageManager, berry = false): string[] {
+  if (pm === "yarn" && berry) return ["/bin/sh", "-c", `${BERRY_ENV.join(" ")} node /opt/yarn-berry/yarn.js install --immutable`];
   if (pm !== "yarn") return INSTALL_ARGV[pm];
   const y = INSTALL_ARGV.yarn.join(" ");
   return ["/bin/sh", "-c", `cp yarn.lock /tmp/yarn.lock.orig && sed -i -e 's#https://registry.yarnpkg.com/#http://egress-gate/npm/#g' -e 's#https://registry.npmjs.org/#http://egress-gate/npm/#g' yarn.lock && ${y}; rc=$?; cp /tmp/yarn.lock.orig yarn.lock; exit $rc`];
@@ -27,7 +40,7 @@ export function installCommand(pm: PackageManager): string[] {
 
 export type LockAllowlistResult =
   | { ok: true; routes: GateRoute[]; packages: number }
-  | { ok: false; reason: Extract<NpmAllowlistResult, { ok: false }>["reason"] | "missing_lockfile" | "workspace" | "yarn_berry"; path: string };
+  | { ok: false; reason: Extract<NpmAllowlistResult, { ok: false }>["reason"] | "missing_lockfile" | "workspace" | "berry_version" | "config_deps"; path: string };
 
 function collector() {
   const routes: GateRoute[] = [];
@@ -54,18 +67,49 @@ function collector() {
 const NAME = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
 const VERSION = /^\d+\.\d+\.\d+[\w.+-]*$/;
 
-/** pnpm lockfile v9 (pnpm 9–12): `packages:` keys `name@version` with `resolution: {integrity}`; one importer (no workspace). */
-export function pnpmAllowlist(text: string): LockAllowlistResult {
-  let l: unknown;
+/**
+ * pnpm lockfile v9 (pnpm 9–12): `packages:` keys `name@version` with `resolution: {integrity}`. E8и: a workspace has one
+ * importer per package (`link:` versions live only in importers, never in `packages:`); an importer outside the repo is refused.
+ */
+type PnpmLock = { lockfileVersion?: unknown; importers?: Record<string, unknown>; packages?: Record<string, { resolution?: Record<string, unknown> }> } | null;
+/**
+ * pnpm 11+ with `packageManager` writes two YAML documents: the env lockfile (importer "." with only `configDependencies` /
+ * `packageManagerDependencies`) and the project's. The sandbox has its own pinned pnpm (`manage-package-manager-versions=false`),
+ * so the env document needs no routes; config dependencies are code pnpm would fetch and load → refused.
+ */
+function pnpmDocs(text: string): { main: unknown } | { error: "not_v3" | "config_deps"; path: string } {
+  let docs: unknown[];
   try {
-    l = parse(text);
+    const all = parseAllDocuments(text);
+    if (!Array.isArray(all) || all.some((d) => d.errors.length > 0)) return { error: "not_v3", path: "" };
+    docs = all.map((d) => d.toJS() as unknown);
   } catch {
-    return { ok: false, reason: "not_v3", path: "" };
+    return { error: "not_v3", path: "" };
   }
-  const lock = l as { lockfileVersion?: unknown; importers?: Record<string, unknown>; packages?: Record<string, { resolution?: Record<string, unknown> }> } | null;
+  const main: unknown[] = [];
+  for (const d of docs) {
+    const root = (d as { importers?: Record<string, Record<string, unknown> | null> } | null)?.importers?.["."];
+    const keys = Object.keys(root ?? {});
+    const env = keys.length > 0 && keys.every((k) => k === "configDependencies" || k === "packageManagerDependencies");
+    if (!env) {
+      main.push(d);
+      continue;
+    }
+    const config = Object.keys((root?.["configDependencies"] ?? {}) as Record<string, unknown>);
+    if (config.length > 0) return { error: "config_deps", path: config[0] as string };
+  }
+  return main.length === 1 ? { main: main[0] } : { error: "not_v3", path: "" };
+}
+
+export function pnpmAllowlist(text: string): LockAllowlistResult {
+  const docs = pnpmDocs(text);
+  if ("error" in docs) return { ok: false, reason: docs.error, path: docs.path };
+  const l = docs.main;
+  const lock = l as PnpmLock;
   if (!lock || typeof lock !== "object" || lock.lockfileVersion !== "9.0") return { ok: false, reason: "not_v3", path: "" };
   const importers = Object.keys(lock.importers ?? { ".": {} });
-  if (importers.some((k) => k !== ".")) return { ok: false, reason: "workspace", path: importers.find((k) => k !== ".") ?? "" };
+  const outside = importers.find((k) => k !== "." && (!/^[\w@.-]+(\/[\w@.-]+)*$/.test(k) || k.split("/").includes("..")));
+  if (outside !== undefined) return { ok: false, reason: "workspace", path: outside };
   const c = collector();
   let packages = 0;
   for (const [key, entry] of Object.entries(lock.packages ?? {})) {
@@ -84,9 +128,49 @@ export function pnpmAllowlist(text: string): LockAllowlistResult {
 
 const REGISTRIES = ["https://registry.yarnpkg.com/", "https://registry.npmjs.org/"];
 
-/** yarn v1 (`# yarn lockfile v1`): `resolved "<registry>/<name>/-/<file>.tgz#sha1"` + `integrity sha512-…`. Berry → refused. */
+/** yarn 4 writes lockfile versions 8–10 (yarn 3 wrote 6); an older one would be rewritten by `install`, which `--immutable` refuses */
+const BERRY_VERSIONS = new Set([8, 9, 10]);
+const BUILTIN_PATCH = /^[^@]*@?[^@]+@patch:.+#(optional!)?(~)?builtin<compat\/[a-z-]+>/;
+
+/**
+ * yarn berry (E8и, D-358): entries `resolution: "<name>@npm:<version>"` with a `checksum` → the same /npm/ paths as npm.
+ * Skipped: the repo's own workspaces (`@workspace:`) and yarn's builtin compat patches (the patched package has its own
+ * npm entry). Anything else (git, http, file:, link:, portal:, a patch file) is not from the registry → refused.
+ */
+function berryAllowlist(text: string): LockAllowlistResult {
+  let l: unknown;
+  try {
+    l = parse(text);
+  } catch {
+    return { ok: false, reason: "not_v3", path: "" };
+  }
+  if (!l || typeof l !== "object") return { ok: false, reason: "not_v3", path: "" };
+  const { __metadata: meta, ...entries } = l as Record<string, { version?: unknown; resolution?: unknown; checksum?: unknown } | null>;
+  const v = Number(meta?.version);
+  if (!BERRY_VERSIONS.has(v)) return { ok: false, reason: "berry_version", path: String(meta?.version ?? "") };
+  const c = collector();
+  let packages = 0;
+  for (const [key, entry] of Object.entries(entries)) {
+    const res = typeof entry?.resolution === "string" ? entry.resolution : "";
+    if (/^(@[^@/]+\/)?[^@/]+@workspace:/.test(res) || BUILTIN_PATCH.test(res)) continue;
+    const m = /^((?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*)@npm:([^@:#]+)$/i.exec(res);
+    if (!m) return { ok: false, reason: "git_or_url_dep", path: key };
+    const [, name = "", version = ""] = m;
+    if (!VERSION.test(version)) return { ok: false, reason: "git_or_url_dep", path: key };
+    if (typeof entry?.checksum !== "string" || entry.checksum.length === 0) {
+      // a binary for another platform (`conditions`): yarn never fetched it, so no checksum → no route; the gate refuses it
+      if (typeof (entry as { conditions?: unknown } | null)?.conditions === "string") continue;
+      return { ok: false, reason: "bad_integrity", path: key };
+    }
+    packages++;
+    c.pkg(name, `/npm/${name}/-/${name.split("/").at(-1) as string}-${version}.tgz`);
+  }
+  return { ok: true, routes: c.routes, packages };
+}
+
+/** yarn v1 (`# yarn lockfile v1`): `resolved "<registry>/<name>/-/<file>.tgz#sha1"` + `integrity sha512-…`; berry → berryAllowlist. */
 export function yarnAllowlist(text: string): LockAllowlistResult {
-  if (/^__metadata:/m.test(text)) return { ok: false, reason: "yarn_berry", path: "" };
+  if (isBerryLock(text)) return berryAllowlist(text);
   const c = collector();
   let packages = 0;
   for (const block of text.split(/\n(?=\S)/)) {
