@@ -366,3 +366,30 @@ describe("gate server", () => {
     expect(junk).toBeNull();
   });
 });
+
+describe("MCP routes to the sidecar (E8e, D-354)", () => {
+  it("the schema: an mcp route needs its target (http://<host>:<port>) and a per-minute budget; others must not have one", () => {
+    const ok = { id: "mcp-issues", method: "POST", match: { kind: "exact", path: "/mcp/issues" }, upstream: "mcp", mcp: { target: "http://mandat-mcp-r_x-issues:8080", per_min: 60 } };
+    expect(GateRouteSchema.safeParse(ok).success).toBe(true);
+    expect(GateRouteSchema.safeParse({ ...ok, mcp: undefined }).success).toBe(false);
+    expect(GateRouteSchema.safeParse({ ...ok, mcp: { target: "https://evil.example.com", per_min: 60 } }).success).toBe(false);
+    expect(GateRouteSchema.safeParse({ ...LLM[0], mcp: ok.mcp }).success).toBe(false);
+  });
+  it("forwards /mcp/<name> to the sidecar's /mcp; over the budget → 429 and a proxy_block line", async () => {
+    let seen = "";
+    const up = await stub((req, res) => {
+      seen = req.url ?? "";
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"ok":true}');
+    });
+    const route = (method: "POST" | "GET") => ({ id: `mcp-issues-${method}`, method, match: { kind: "exact" as const, path: "/mcp/issues" }, upstream: "mcp" as const, mcp: { target: up.url, per_min: 2 } });
+    const { base, lines } = await gate(pol("agent", [route("POST"), route("GET")]));
+    const post = () => fetch(`${base}/mcp/issues`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect((await post()).status).toBe(200);
+    expect(seen).toBe("/mcp");
+    expect((await post()).status).toBe(200);
+    expect((await post()).status).toBe(429);
+    expect(up.calls()).toBe(2);
+    await waitFor(() => lines().some((l) => l.kind === "proxy_block" && l.status === 429));
+  });
+});
