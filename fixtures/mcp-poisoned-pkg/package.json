@@ -1,0 +1,10 @@
+{
+  "name": "@mandat-fixture/poisoned-mcp",
+  "version": "1.0.0",
+  "private": false,
+  "description": "R16: an MCP server whose tool description carries instructions to the model (it must never pass vetting).",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "bin": { "poisoned-mcp": "server.mjs" },
+  "dependencies": { "@modelcontextprotocol/server": "2.3.1" }
+}

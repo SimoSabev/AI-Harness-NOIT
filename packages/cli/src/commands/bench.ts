@@ -47,7 +47,7 @@ export async function failGateCommand(io: Io, o: { mandatHome: string; json: boo
 /** 6.13 / D-090. */
 export async function redteamCommand(io: Io, o: { mandatHome: string; only?: string[]; json: boolean; docker?: DockerRunner }): Promise<number> {
   const r = await runRedteam(
-    { home: o.mandatHome, contractPath: contractPath(), env: io.env, ...(o.docker ? { docker: o.docker } : {}) },
+    { home: o.mandatHome, contractPath: contractPath(), env: io.env, repoRoot, ...(o.docker ? { docker: o.docker } : {}) },
     o.only,
     (row) => {
       if (!o.json) io.stdout(`${row.id} ${row.sub} ${row.ok ? "✓" : "✗"} ${row.detail}\n`);

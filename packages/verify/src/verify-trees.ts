@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedLines, anyMatch, applySite, d1, d10Lockfile, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, weakenedAssertions } from "@mandat/core";
+import { addedLines, anyMatch, applySite, d1, d10Lockfile, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -113,7 +113,8 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   for (const h of D3.security) i.onSecurity?.(h);
   const D4 = d4({ files: i.files, allowedPaths: i.allowedPaths, coveredByD3: d3CoveredPaths(i.files, rc, baseSnap, headSnap) });
   const pm = packageManagerOf(rc);
-  const D10 = d10Lockfile({ baseLock: readLockfile(i.baseDir, pm), headLock: readLockfile(head.dir, pm), pm });
+  const pj = (d: string) => (existsSync(path.join(d, "package.json")) ? readFileSync(path.join(d, "package.json")) : null);
+  const D10 = d10Lockfile({ baseLock: readLockfile(i.baseDir, pm), headLock: readLockfile(head.dir, pm), pm, basePkg: pj(i.baseDir), headPkg: pj(head.dir) });
   evidence.push(D10.evidence, D3.evidence, D4.evidence);
   if (D10.evidence.status === "fail") {
     evidence.push(na("D1.base_tests", "lockfile rejected"), na("D2.inventory", "lockfile rejected"), na("MUST_PASS", "lockfile rejected"));
@@ -140,11 +141,11 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   removeTree(head.dir);
   // D-300: mutation sites on the changed SOURCE lines of tree B (not tests, not protected files)
   const sources = i.files.filter((f) => (f.status === "A" || f.status === "M") && !f.binary && /\.[cm]?[jt]sx?$/.test(f.path) && !anyMatch(rc.tests.test_globs, f.path) && !anyMatch(rc.protected_paths, f.path));
-  const sites: MutationSite[] = mutationSites({
-    files: sources.flatMap((f) => (existsSync(path.join(bDir, f.path)) ? [{ path: f.path, content: readFileSync(path.join(bDir, f.path), "utf8") }] : [])),
-    added: addedLines(i.diffPatch.toString("utf8")),
-    max: i.maxMutants ?? MAX_MUTANTS,
-  });
+  const sourceFiles = sources.flatMap((f) => (existsSync(path.join(bDir, f.path)) ? [{ path: f.path, content: readFileSync(path.join(bDir, f.path), "utf8") }] : []));
+  const added = addedLines(i.diffPatch.toString("utf8"));
+  const sites: MutationSite[] = mutationSites({ files: sourceFiles, added, max: i.maxMutants ?? MAX_MUTANTS });
+  // D-357: an answer hard-coded for the tests' own inputs passes every mutant; D11 looks for it in the changed lines
+  const special = specialCases({ files: sourceFiles, added, tests: listFiles(bDir).filter((f) => anyMatch(rc.tests.test_globs, f)).slice(0, 200).map((f) => readFileSync(path.join(bDir, f), "utf8")) });
   const mutants = sites.map((st) => {
     const original = readFileSync(path.join(bDir, st.path));
     return { path: st.path, original, mutated: Buffer.from(applySite(original.toString("utf8"), st), "utf8") };
@@ -169,7 +170,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   );
   evidence.push(i.mustPass.length === 0 && i.external ? na("MUST_PASS", "no contract") : mustPass({ ids: i.mustPass, a: a.report, b: b.report }).evidence);
   const bClean = !b.timedOut && b.exit === 0 && b.report.valid;
-  evidence.push(sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
+  evidence.push(special.length > 0 ? d11Mutation({ sites, runs: [], b: b.report, special }).evidence : sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
   const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
   const mut = evidence.at(-1);
   i.progress?.(`[verify]    baseline${cachedBaseline ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}${mut && mut.status !== "n/a" ? ` · mutants ${mut.summary}` : ""}`);
