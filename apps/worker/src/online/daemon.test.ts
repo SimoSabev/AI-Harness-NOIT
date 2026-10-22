@@ -264,3 +264,20 @@ describe("daemon steering (E8g, AC-8.5)", () => {
     expect(c.text).toContain('source="steer">round &lt;down&gt;</untrusted>');
   });
 });
+
+describe("daemon and MCP sidecars (E8e, D-354)", () => {
+  it("the declared secrets of each stdio server of the profile and its call budget go to runTask (only those names)", async () => {
+    const s = await setup(0);
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const l = demoProfileLayers();
+    const ref = { name: "issues", transport: "stdio" as const, package: "@example/issues-mcp@1.3.0", url: null, version: "1.3.0", digest: null, tools_hash: `sha256:${"e".repeat(64)}`, enabled_tools: null, egress_hosts: [], secrets: ["ISSUES_TOKEN"] };
+    const p = sealProfile({ version: 1, repo_id: DEMO_REPO_ID, layers: { ...l, e: { ...l.e, mcp: [ref] } }, sources: {}, approved_by: null, approved_at: null });
+    const id = (await s.db.query<{ id: string }>("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash, status, approved_at) values ($1, $2, 1, $3::jsonb, '{}', $4, 'approved', now()) returning id::text as id", [DEMO_ORG_ID, DEMO_REPO_ID, JSON.stringify(p.layers), p.profile_hash])).rows[0]?.id;
+    await s.db.query("update public.repos set profile_id = $2 where id = $1", [DEMO_REPO_ID, id]);
+    await s.db.query("insert into public.mcp_servers (org_id, name, transport, version, budget_calls_min, vet_status) values ($1, 'issues', 'stdio', '1.3.0', 12, 'approved')", [DEMO_ORG_ID]);
+    s.deps.mcpSecrets = (_org, name) => Promise.resolve(name === "issues" ? { ISSUES_TOKEN: "t0k", OTHER: "x" } : {});
+    await runDaemonOnce(s.deps);
+    expect(s.runs[0]?.mcpSecrets).toEqual({ issues: { ISSUES_TOKEN: "t0k" } });
+    expect(s.runs[0]?.mcpBudgets).toEqual({ issues: 12 });
+  });
+});
