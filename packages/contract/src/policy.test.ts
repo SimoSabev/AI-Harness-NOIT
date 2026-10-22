@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseMandatYml, repoConfigFromPolicy } from "./policy.js";
+import { NODE_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy } from "./policy.js";
 import { packageManagerOf } from "./schemas.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -58,6 +58,13 @@ describe("repoConfigFromPolicy (F18, unsupported-runner)", () => {
     expect(pnpm.ok && pnpm.config.runtime.install).toBe("pnpm install --frozen-lockfile --ignore-scripts");
     const yarn = repoConfigFromPolicy(ok(demo.replace("package_manager: npm", "package_manager: yarn").replace("install: npm ci --ignore-scripts", "install: yarn install --frozen-lockfile --ignore-scripts")).policy);
     expect(yarn.ok && packageManagerOf(yarn.config)).toBe("yarn");
+  });
+  it("E8и (D-358): node --test с репортера на харнеса → node-test (vitest-json форма); без репортера → unsupported_runner", () => {
+    const node = repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: node").replace(/command: .*/, `command: ${NODE_TEST_COMMAND}`)).policy);
+    expect(node.ok && node.config.tests).toMatchObject({ format: "node-test", command: "node --test --test-reporter=/opt/mandat/reporters/node-test.mjs --test-reporter-destination=$MANDAT_REPORT" });
+    expect(repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: node").replace(/command: .*/, "command: node --test")).policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "npm/node" });
+    const bun = repoConfigFromPolicy(ok(demo.replace("package_manager: npm", "package_manager: bun").replace("install: npm ci --ignore-scripts", "install: bun install --frozen-lockfile --ignore-scripts")).policy);
+    expect(bun.ok && packageManagerOf(bun.config)).toBe("bun");
   });
   it("друга install команда, mocha → unsupported_runner", () => {
     const pnpm = ok(demo.replace("package_manager: npm", "package_manager: pnpm").replace("install: npm ci --ignore-scripts", "install: pnpm install --frozen-lockfile"));

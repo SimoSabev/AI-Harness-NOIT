@@ -62,4 +62,11 @@ describe("workspaces (E8и)", () => {
     expect(scanRepo(memView(v1)).yarnBerry).toBe(false);
     expect(propose(scanRepo(memView(v1))).warnings.join(" ")).not.toContain("yarn berry");
   });
+
+  it("node --test (E8и): командата е с репортера на харнеса; пясъчникът я изпълнява (няма needs_human за runner)", () => {
+    const files = { "package.json": JSON.stringify({ name: "x", scripts: { test: "node --test" } }), "package-lock.json": "{}", "src/a.mjs": "", "tests/a.test.mjs": "" };
+    const p = propose(scanRepo(memView(files)));
+    expect(p.policy.tests).toMatchObject({ framework: "node", command: "node --test --test-reporter=/opt/mandat/reporters/node-test.mjs --test-reporter-destination=$MANDAT_REPORT" });
+    expect(p.needs_human.join(" ")).not.toContain("runner");
+  });
 });
