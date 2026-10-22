@@ -102,6 +102,21 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     cd / && rm -rf /tmp/pm /root/.npm; \
     pnpm --version | grep -F "${PNPM_VERSION}"; yarn --version | grep -F "${YARN_VERSION}"
 
+# E8и (D-358): yarn berry for repos with a yarn 4 lockfile (`__metadata`), the single-file release from @yarnpkg/cli-dist,
+# pinned by integrity; run as `node /opt/yarn-berry/yarn.js` with YARN_IGNORE_PATH=1 (the repo's yarnPath is never used).
+ARG YARN_BERRY_VERSION=4.18.1
+ARG YARN_BERRY_INTEGRITY=sha512-EH+A4TxAtBWXKE0DGQxW9Bo9crXHLJ73mfxjTQJuv8XonNWWTpei8BQ5JjczHJNU9GROTycwMFn8iOvRIZXUcA==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    mkdir /tmp/yb && cd /tmp/yb; \
+    npm pack --silent "@yarnpkg/cli-dist@${YARN_BERRY_VERSION}"; \
+    got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "yarnpkg-cli-dist-${YARN_BERRY_VERSION}.tgz")"; \
+    [ "$got" = "$YARN_BERRY_INTEGRITY" ] || { echo "integrity mismatch for yarn berry: $got" >&2; exit 1; }; \
+    mkdir -p /opt/yarn-berry; \
+    tar -xzf "yarnpkg-cli-dist-${YARN_BERRY_VERSION}.tgz" -C /opt/yarn-berry --strip-components=2 package/bin/yarn.js; \
+    cd / && rm -rf /tmp/yb /root/.npm; \
+    YARN_IGNORE_PATH=1 node /opt/yarn-berry/yarn.js --version | grep -Fx "${YARN_BERRY_VERSION}"
+
 COPY packages/agents/fakes/ /opt/mandat/fakes/
 # v5 E8а / SH2: the harness hooks (ESM, no dependencies); the agent can run them, never change them
 COPY packages/agents/hooks/ /opt/mandat/hooks/
