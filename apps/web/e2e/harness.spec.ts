@@ -7,34 +7,34 @@ import { expect, test } from "@playwright/test";
 import { E2E_DB } from "../playwright.config";
 import { EMAIL, TOTP, login, totpNow } from "./fixtures";
 
-// т. 8.2 / D-298: Правила — сканирай (fakeGitHub) → предложение с „откъде“ → одобри с TOTP → PR чернова.
+// Demo prompt §8.2 / D-298: Rules — scan (fakeGitHub) → a proposal with “source” → approve with TOTP → draft PR.
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const home = mkdtempSync(path.join(os.tmpdir(), "mandat-e2e-home-"));
 const worker = () => execFileSync("node", [path.join(repo, "packages/cli/dist/main.js"), "--home", home, "worker", "--once"], { env: { ...process.env, MANDAT_DB_URL: E2E_DB, MANDAT_BASELINE: "0" }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 120_000 });
 
-test("правила: сканирай → предложение с източници → одобри с код → PR чернова, версия 1", async ({ page }) => {
+test("rules: scan → a proposal with sources → approve with a code → draft PR, version 1", async ({ page }) => {
   await login(page, EMAIL.owner);
   await page.goto("/harness");
-  await expect(page.getByRole("heading", { name: "Правила на репото", level: 1 })).toBeVisible();
-  await page.getByRole("button", { name: "Сканирай репото" }).click();
-  await expect(page.getByText("Сканирам репото…")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Repository rules", level: 1 })).toBeVisible();
+  await page.getByRole("button", { name: "Scan the repository" }).click();
+  await expect(page.getByText("Scanning the repository…")).toBeVisible();
   worker();
   await page.reload();
-  await expect(page.getByText("Чака одобрение")).toBeVisible();
-  await expect(page.getByRole("row", { name: /Команда за инсталиране.*от lockfile/ })).toBeVisible();
-  await expect(page.getByRole("row", { name: /CI процес.*от CI конфигурацията/ })).toBeVisible();
-  await page.getByLabel("Код от приложението за кодове (6 цифри)").fill(totpNow(TOTP));
-  await page.getByRole("button", { name: "Одобри правилата" }).click();
-  await expect(page.getByText("Одобрено. Правилата важат за следващите задачи.")).toBeVisible();
+  await expect(page.getByText("Awaiting approval")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Install command.*from the lockfile/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /CI workflow.*from the CI configuration/ })).toBeVisible();
+  await page.getByLabel("Code from the authenticator app (6 digits)").fill(totpNow(TOTP));
+  await page.getByRole("button", { name: "Approve the rules" }).click();
+  await expect(page.getByText("Approved. The rules apply to the next tasks.")).toBeVisible();
   worker();
   await page.reload();
-  await expect(page.getByText(/PR чернова #\d+/)).toBeVisible();
-  await expect(page.getByText(/Версия на правилата: 1/)).toBeVisible();
+  await expect(page.getByText(/draft PR #\d+/)).toBeVisible();
+  await expect(page.getByText(/Rules version: 1/)).toBeVisible();
 });
 
-test("правила: approver не може да одобрява", async ({ page }) => {
+test("rules: an approver cannot approve", async ({ page }) => {
   await login(page, EMAIL.approver);
   await page.goto("/harness");
-  await expect(page.getByRole("button", { name: "Одобри правилата" })).toHaveCount(0);
-  await expect(page.getByText("Само собственик сканира и одобрява правилата.").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve the rules" })).toHaveCount(0);
+  await expect(page.getByText("Only an owner scans and approves the rules.").first()).toBeVisible();
 });

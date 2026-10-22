@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { openDb } from "@mandat/worker";
+import { cliLang, tt } from "../i18n.js";
+import type { Lang, TuiKey } from "../i18n.js";
 import type { Io } from "../output.js";
 import { localDbUrl } from "./local.js";
 
@@ -48,34 +50,36 @@ function fit(s: string, w: number): string {
   return cps.length > w ? cps.slice(0, Math.max(0, w - 1)).join("") + "…" : s + " ".repeat(w - cps.length);
 }
 
-export function renderTui(m: TuiModel, o: { width: number; height: number; color: boolean; focus: number }): string {
+export function renderTui(m: TuiModel, o: { width: number; height: number; color: boolean; focus: number; lang?: Lang }): string {
+  const lang = o.lang ?? "en";
+  const t = (k: TuiKey, p?: Record<string, string | number>) => tt(lang, k, p);
   const fg = (c: Rgb, s: string) => (o.color ? `\u001b[38;2;${c[0]};${c[1]};${c[2]}m${s}\u001b[0m` : s);
   const inv = (s: string) => (o.color ? `\u001b[48;2;${C.accent[0]};${C.accent[1]};${C.accent[2]}m\u001b[38;2;18;24;7m${s}\u001b[0m` : s);
   const W = Math.max(40, o.width);
   const out: string[] = [];
   const arrow = (c: Rgb) => fg(c, " ━▶ ");
-  const flowPlain = `задачи ${m.flow.queued} ━▶ агенти ${m.flow.running} ━▶ мандат ${m.flow.checking} ━▶ ти ${m.flow.you} ━▶ готово ${m.flow.done24h}`;
-  out.push(visibleWidth(flowPlain) <= W ? `${fg(C.mute, "задачи")} ${fg(C.ink, String(m.flow.queued))}${arrow(C.accent)}${fg(C.mute, "агенти")} ${fg(C.accent, String(m.flow.running))}${arrow(C.accent)}${fg(C.mute, "мандат")} ${fg(C.info, String(m.flow.checking))}${arrow(C.warn)}${fg(C.warn, `ти ${m.flow.you}`)}${arrow(C.idle)}${fg(C.mute, "готово")} ${fg(C.ink, String(m.flow.done24h))}` : fit(flowPlain, W));
+  const flowPlain = `${t("tui.flow.tasks")} ${m.flow.queued} ━▶ ${t("tui.flow.agents")} ${m.flow.running} ━▶ ${t("tui.flow.mandat")} ${m.flow.checking} ━▶ ${t("tui.flow.you")} ${m.flow.you} ━▶ ${t("tui.flow.done")} ${m.flow.done24h}`;
+  out.push(visibleWidth(flowPlain) <= W ? `${fg(C.mute, t("tui.flow.tasks"))} ${fg(C.ink, String(m.flow.queued))}${arrow(C.accent)}${fg(C.mute, t("tui.flow.agents"))} ${fg(C.accent, String(m.flow.running))}${arrow(C.accent)}${fg(C.mute, t("tui.flow.mandat"))} ${fg(C.info, String(m.flow.checking))}${arrow(C.warn)}${fg(C.warn, `${t("tui.flow.you")} ${m.flow.you}`)}${arrow(C.idle)}${fg(C.mute, t("tui.flow.done"))} ${fg(C.ink, String(m.flow.done24h))}` : fit(flowPlain, W));
   const tone = (col: number): Rgb => (col === 5 ? C.bad : col === 4 ? C.warn : col === 3 ? C.info : col === 2 ? C.accent : C.idle);
   const hexes = m.swarm.slice(0, Math.max(0, W - 2)).map((s) => fg(tone(s.col), "⬢")).join("");
-  out.push(m.swarm.length ? hexes : fg(C.mute, "няма живи агенти"));
+  out.push(m.swarm.length ? hexes : fg(C.mute, t("tui.noAgents")));
   out.push(fg(C.idle, "─".repeat(W)));
   if (m.panes.length === 0) {
-    out.push(fg(C.ink, "Още няма задачи."), fg(C.mute, "Дай задача в браузъра (http://localhost:3000/tasks/new) или с mandat run."));
+    out.push(fg(C.ink, t("tui.empty")), fg(C.mute, t("tui.emptyHint")));
   } else {
     const cols = Math.min(m.panes.length, W >= 120 ? 3 : W >= 80 ? 2 : 1);
     const pw = Math.floor((W - (cols - 1)) / cols);
     const bodyH = Math.max(3, Math.floor((o.height - out.length - 2) / Math.ceil(Math.min(m.panes.length, cols * 2) / cols)) - 1);
-    const STATE: Record<number, string> = { 1: "опашка", 2: "работи", 3: "мандат", 4: "ЧАКА ТЕБ", 5: "ПРОВАЛ" };
+    const STATE: Record<number, string> = { 1: t("tui.state.1"), 2: t("tui.state.2"), 3: t("tui.state.3"), 4: t("tui.state.4"), 5: t("tui.state.5") };
     const blocks = m.panes.slice(0, cols * 2).map((p, i) => {
-      const head = fit(` [${i + 1}] ${p.name} · ${p.health === "bad" ? "ПРОВАЛ" : p.health === "warn" ? "чака теб" : p.health === "ok" ? "върви" : "тихо"} `, pw);
+      const head = fit(` [${i + 1}] ${p.name} · ${t(`tui.health.${p.health}`)} `, pw);
       const lines = [i === o.focus ? inv(head) : fg(p.health === "bad" ? C.bad : p.health === "warn" ? C.warn : C.accent, head)];
       for (const l of p.lines.slice(0, bodyH - 1)) {
         const st = STATE[l.col] ?? "";
         const left = fit(` ⬢ ${l.text}`, Math.max(4, pw - 10));
         lines.push(`${fg(tone(l.col), left.slice(0, 3))}${fg(C.ink, left.slice(3))}${fg(tone(l.col), fit(` ${st}`, pw - visibleWidth(left)))}`);
       }
-      lines.push(fg(C.mute, fit(` ${p.done24h} готови за 24 ч`, pw)));
+      lines.push(fg(C.mute, fit(` ${t("tui.done24h", { n: p.done24h })}`, pw)));
       while (lines.length < bodyH + 1) lines.push(" ".repeat(pw));
       return lines;
     });
@@ -85,7 +89,7 @@ export function renderTui(m: TuiModel, o: { width: number; height: number; color
       for (let k = 0; k < h; k++) out.push(row.map((b) => b[k] ?? " ".repeat(pw)).join(fg(C.idle, "│")));
     }
   }
-  const keys = " 1-6 панел · tab следващ · o браузър · r обнови · q изход";
+  const keys = t("tui.keys");
   while (out.length < o.height - 1) out.push("");
   out.length = Math.min(out.length, o.height - 1);
   out.push(o.color ? inv(fit(keys, W)) : fit(keys, W).trimEnd());
@@ -109,6 +113,7 @@ select t.id, r.full_name as repo, t.text, t.agent, t.last_result,
 export async function tuiCommand(io: Io, o: { dbPort: number; once: boolean; width?: number; height?: number }): Promise<number> {
   const db = openDb(io.env.MANDAT_DB_URL ?? localDbUrl(o.dbPort));
   const color = io.env.NO_COLOR === undefined && !o.once;
+  const lang = cliLang(io.env);
   const size = () => ({ width: o.width ?? process.stdout.columns ?? 100, height: o.height ?? process.stdout.rows ?? 30 });
   let focus = 0;
   let model: TuiModel;
@@ -116,11 +121,11 @@ export async function tuiCommand(io: Io, o: { dbPort: number; once: boolean; wid
   try {
     await load();
   } catch {
-    io.stderr("tui: базата не отговаря. Пусни първо `pnpm local`.\n");
+    io.stderr(`${tt(lang, "tui.dbDown")}\n`);
     await db.end().catch(() => undefined);
     return 3;
   }
-  const draw = () => renderTui(model, { ...size(), color, focus });
+  const draw = () => renderTui(model, { ...size(), color, focus, lang });
   if (o.once || !process.stdin.isTTY) {
     io.stdout(draw() + "\n");
     await db.end();

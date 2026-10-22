@@ -28,7 +28,7 @@
 | 3 | E7в ключове (envelope, boot токен) | phase/e7c-key-envelope | E7а | ГОТОВО (live чака Симо; safeStorage → E9ж) (docs/reports/E7c.md) | 4/5 | истински ключ |
 | 4 | E7г базова линия, flaky, рисков профил | phase/e7d-baseline | E7а | ГОТОВО (docs/tasks/e7d.md) | 4/4 | — |
 | 5 | E7д сесията на живо | phase/e7e-live-session | E7а | ГОТОВО (live чака Симо) (docs/reports/E7e.md) | 3/3 | истински агент |
-| 6 | E7е езиков каталог | phase/e7f-i18n | — | В ХОД (паралелно) | 0/— | — |
+| 6 | E7е езиков каталог | phase/e7f-i18n | — | ГОТОВО (docs/reports/E7f.md) | все редове | — |
 | 7 | E7ж първо пускане на чужда машина | phase/e7g-first-run | E7в | ГОТОВО (live чака Симо) (docs/reports/E7g.md) | 1/3 | macOS/Windows при Симо |
 | 8 | E8а контролен слой и компилатор | phase/e8a-profile-compiler | E7а (SH2) | не е започната | 0/— | истински агент с deny |
 | 9 | E8б харнес-профил A–H | phase/e8b-profile | E8а, E7г | не е започната | 0/— | — |

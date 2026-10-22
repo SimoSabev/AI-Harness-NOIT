@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, loginScript, parseBanner, stepOf } from "./banner.js";
 
 const BANNER = [
   "",
@@ -23,6 +23,17 @@ describe("desktop banner (D-303)", () => {
     expect(parseBanner(BANNER.replace(/ {2}Ключ:.*\n/, "").replace(/ {2}Адрес:.*\n/, ""))?.totp).toBeNull();
     expect(parseBanner("  Отвори:  http://localhost:3000\n")).toBeNull();
     expect(parseBanner(BANNER.replace("http://localhost:3000", "https://evil.example"))).toBeNull();
+  });
+
+  it("the English banner (E7е) gives the same fields", () => {
+    const en = BANNER.replace("Отвори:", "Open:   ").replace("Имейл:", "Email:").replace("Парола:", "Password:").replace("Ключ:", "Key: ").replace("Адрес:", "URI: ");
+    expect(parseBanner(en)).toEqual(parseBanner(BANNER));
+  });
+
+  it("error lines of pnpm local in either language", () => {
+    expect(isErrorLine("✗ Docker не отговаря")).toBe(true);
+    expect(isErrorLine("Error: listen EADDRINUSE")).toBe(true);
+    expect(isErrorLine("[2/4] database")).toBe(false);
   });
 
   it("стъпките [n/4] за прозореца при пускане", () => {

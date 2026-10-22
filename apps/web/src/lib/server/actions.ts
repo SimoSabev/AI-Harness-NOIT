@@ -5,7 +5,7 @@ import { jcs, sha256Tag } from "@mandat/contract";
 import { asService, asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 
-// Демо промпт т. 8.1: the POST actions. Role check with the user's identity (RLS + private.authorize), then ONE
+// Demo prompt §8.1: the POST actions. Role check with the user's identity (RLS + private.authorize), then ONE
 // transaction as service_role. Approval = private.approve_changeset (CAS head_sha, partial unique index, trigger on
 // method + freshness ≤ 2 min, ledger, outbox) — never separate client calls.
 
@@ -64,7 +64,7 @@ export async function approve(db: Db, o: { uid: string; changesetId: string; bod
   try {
     const id = await asService(db, async (sql) => {
       const r = await sql.query<{ id: string }>("select private.approve_changeset($1::uuid, $2, $3::uuid, $4, $5, $6, $7, $8::timestamptz)::text as id", [o.changesetId, o.body.head_sha, o.uid, o.body.decision, o.body.reason ?? null, o.body.client, method, mfaAt?.toISOString() ?? null]);
-      // the card leaves „Чака теб“ in the same transaction: approved → the gate continues (column 3); rejected → closed
+      // the card leaves "Waiting for you" in the same transaction: approved → the gate continues (column 3); rejected → closed
       await sql.query("update public.changesets set approval_needed = false where id = $1::uuid", [o.changesetId]);
       await sql.query(
         o.body.decision === "approved"

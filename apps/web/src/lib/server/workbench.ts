@@ -51,7 +51,7 @@ export async function sessionOf(db: Db, uid: string, org: string, task: string):
     sessions: tree((await sql.query<FleetRow>(`${FLEET} and s.task_id = $2 order by s.started_at`, [org, task])).rows),
     calls: await recentCalls(sql, org, task, 200),
     windows: await windowsOf(sql, org, task),
-    // E7д: the terminal = the lines of the latest leader session of the task (RLS: members of the org)
+    // E7e: the terminal = the lines of the latest leader session of the task (RLS: members of the org)
     lines: terminalLines(
       (await sql.query<{ seq: number; kind: string; text: string }>(
         `select l.seq, l.kind, l.text from public.session_lines l

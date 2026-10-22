@@ -13,7 +13,7 @@ import type { Db } from "./sql";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
 
-// Демо промпт т. 8.1: the internal API as plain functions (Request → Response); app/api/**/route.ts only wires deps.
+// Demo prompt §8.1: the internal API as plain functions (Request → Response); app/api/**/route.ts only wires deps.
 export interface ApiDeps {
   db: Db;
   /** the signed-in user's id, or null */

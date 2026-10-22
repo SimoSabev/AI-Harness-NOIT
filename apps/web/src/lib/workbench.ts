@@ -1,3 +1,6 @@
+import { translate } from "../i18n/t";
+import type { Lang } from "../i18n/t";
+
 // D-307: what the workbench screens show. The server fills it from the database (lib/server/workbench.ts); where the
 // system does not record something yet, `withSample` puts the labelled sample (lib/sample.ts) in its place.
 export type AgentState = "running" | "waiting" | "done" | "failed" | "idle";
@@ -45,7 +48,7 @@ export function tree<T extends { id: string; parent_id: string | null }>(rows: T
 }
 
 /** The night plan (design H5): each queued task goes to the slot that frees up first; Mandat checks after each. Percent of the window. */
-export function nightPlan(queue: { text: string; repo: string; risk: string; est_minutes: number }[], slots: number, windowMinutes: number, judgeMinutes = 8): { slot: number; left: number; width: number; label: string; kind: "run" | "judge" | "risk" }[][] {
+export function nightPlan(queue: { text: string; repo: string; risk: string; est_minutes: number }[], slots: number, windowMinutes: number, judgeMinutes = 8, lang: Lang = "en"): { slot: number; left: number; width: number; label: string; kind: "run" | "judge" | "risk" }[][] {
   const free = Array.from({ length: slots }, () => 0);
   const lanes: ReturnType<typeof nightPlan> = Array.from({ length: slots }, () => []);
   const pct = (m: number) => Math.round((m / windowMinutes) * 1000) / 10;
@@ -54,13 +57,13 @@ export function nightPlan(queue: { text: string; repo: string; risk: string; est
     const start = free[slot] as number;
     if (start + q.est_minutes > windowMinutes) continue;
     lanes[slot]?.push({ slot, left: pct(start), width: pct(q.est_minutes), label: `${q.repo} · ${q.text}`, kind: q.risk === "high" ? "risk" : "run" });
-    lanes[slot]?.push({ slot, left: pct(start + q.est_minutes), width: pct(judgeMinutes), label: "Мандат", kind: "judge" });
+    lanes[slot]?.push({ slot, left: pct(start + q.est_minutes), width: pct(judgeMinutes), label: translate(lang, "brand.judge"), kind: "judge" });
     free[slot] = start + q.est_minutes + judgeMinutes;
   }
   return lanes;
 }
 
-/** E7д: the read-only terminal of the card — one line per stream event (already redacted by the worker), ≤ 50 000. */
+/** E7e: the read-only terminal of the card — one line per stream event (already redacted by the worker), ≤ 50 000. */
 export interface TerminalLine { seq: number; mark: string; text: string }
 const MARK: Record<string, string> = { init: "▶", text: " ", step: "·", tool_call: "$", tool_result: "←", permission: "✕", subagent_start: "┬", subagent_stop: "┴", usage: "Σ", result: "■", unparsed: "?" };
 export function terminalLines(rows: { seq: number; kind: string; text: string }[]): TerminalLine[] {
