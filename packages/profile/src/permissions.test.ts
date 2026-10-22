@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolRule } from "@mandat/contract";
-import { applyPermissions, grantOnce, opensDangerous, parseAsks } from "./permissions.js";
+import { applyPermissions, forbidAtNight, grantOnce, opensDangerous, parseAsks } from "./permissions.js";
 
 // E8g (v5 p. 4.4, D-352): tool_permissions (subject × tool → decision) is the source of layer C; "ask" becomes a card.
 const C: ToolRule[] = [
@@ -67,5 +67,18 @@ describe("parseAsks", () => {
   });
   it("empty / missing → []", () => {
     expect(parseAsks("", policy)).toEqual([]);
+  });
+});
+
+describe("forbidAtNight (E9а)", () => {
+  it("the night's forbidden tools become deny rules for the subject night; an existing night rule is overridden; invalid patterns are dropped", () => {
+    const c: ToolRule[] = [{ subject: "any", tool: "bash:npm view *", decision: "allow", reason: "" }, { subject: "night", tool: "bash:curl *", decision: "allow", reason: "x" }];
+    const out = forbidAtNight(c, ["bash:curl *", "mcp:stripe.*", "not a pattern"]);
+    expect(out).toEqual([
+      { subject: "any", tool: "bash:npm view *", decision: "allow", reason: "" },
+      { subject: "night", tool: "bash:curl *", decision: "deny", reason: "forbidden by the night shift" },
+      { subject: "night", tool: "mcp:stripe.*", decision: "deny", reason: "forbidden by the night shift" },
+    ]);
+    expect(forbidAtNight(c, [])).toEqual(c);
   });
 });
