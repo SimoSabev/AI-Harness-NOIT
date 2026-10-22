@@ -18,7 +18,7 @@ export const MandatPolicy = z
     runtime: z
       .object({
         node: z.enum(["20", "22", "24"]),
-        package_manager: z.enum(["npm", "pnpm", "yarn"]),
+        package_manager: z.enum(["npm", "pnpm", "yarn", "bun"]),
         install: z.string().min(1).max(200),
       })
       .strict(),
@@ -119,12 +119,12 @@ export function parseMandatYml(text: string): ParsedPolicy {
 
 /** Bridge to the E0 detectors: the E0 RepoConfig supports only npm + vitest (F18). */
 /** The one install command per package manager (lockfile frozen, no install scripts). */
-export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts" } as const;
+export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts", bun: "bun install --frozen-lockfile --ignore-scripts" } as const;
 
 export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoConfig } | { ok: false; reason: "unsupported_runner"; detail: string } {
   const pm = p.runtime.package_manager;
   const fw = p.tests.framework;
-  // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report)
+  // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report). D-358: yarn berry, bun (text lockfile)
   const install = INSTALL_CMD[pm];
   if ((fw !== "vitest" && fw !== "jest") || p.runtime.install !== install || p.runtime.node !== "24") {
     return { ok: false, reason: "unsupported_runner", detail: `${pm}/${fw}` };

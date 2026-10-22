@@ -5,14 +5,17 @@ import type { NpmAllowlistResult } from "./npm-allowlist.js";
 
 // D-301: pnpm (lockfile v9) and yarn v1 next to npm. The install in the sandbox reaches only the gate; the gate lets
 // through exactly the tarballs (and packuments) of the lockfile, from registry.npmjs.org (yarnpkg.com is the same registry).
-export type PackageManager = "npm" | "pnpm" | "yarn";
-export const LOCKFILE: Record<PackageManager, string> = { npm: "package-lock.json", pnpm: "pnpm-lock.yaml", yarn: "yarn.lock" };
+export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
+export const LOCKFILE: Record<PackageManager, string> = { npm: "package-lock.json", pnpm: "pnpm-lock.yaml", yarn: "yarn.lock", bun: "bun.lock" };
 export const INSTALL_ARGV: Record<PackageManager, string[]> = {
   npm: ["npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
   // pnpm 12 does not take the registry from NPM_CONFIG_REGISTRY: the gate, the store (tmpfs home) and copy-import are flags
   pnpm: ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts", "--registry=http://egress-gate/npm/", "--store-dir=/home/agent/.pnpm-store", "--package-import-method=copy", "--config.manage-package-manager-versions=false"],
   yarn: ["yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive"],
+  // E8и (D-358): bun's registry and cache come from the environment (installCommand)
+  bun: ["bun", "install", "--frozen-lockfile", "--ignore-scripts"],
 };
+const BUN_ENV = ["BUN_CONFIG_REGISTRY=http://egress-gate/npm/", "BUN_INSTALL_CACHE_DIR=/home/agent/.bun-cache", "DO_NOT_TRACK=1"];
 
 /**
  * The argv of the install container. yarn v1 fetches the `resolved` URLs of yarn.lock as written (https://registry.yarnpkg.com/…),
@@ -33,6 +36,7 @@ export const isBerryLock = (text: string | null): boolean => text !== null && /^
 
 export function installCommand(pm: PackageManager, berry = false): string[] {
   if (pm === "yarn" && berry) return ["/bin/sh", "-c", `${BERRY_ENV.join(" ")} node /opt/yarn-berry/yarn.js install --immutable`];
+  if (pm === "bun") return ["/bin/sh", "-c", `${BUN_ENV.join(" ")} ${INSTALL_ARGV.bun.join(" ")}`];
   if (pm !== "yarn") return INSTALL_ARGV[pm];
   const y = INSTALL_ARGV.yarn.join(" ");
   return ["/bin/sh", "-c", `cp yarn.lock /tmp/yarn.lock.orig && sed -i -e 's#https://registry.yarnpkg.com/#http://egress-gate/npm/#g' -e 's#https://registry.npmjs.org/#http://egress-gate/npm/#g' yarn.lock && ${y}; rc=$?; cp /tmp/yarn.lock.orig yarn.lock; exit $rc`];
@@ -193,10 +197,66 @@ export function yarnAllowlist(text: string): LockAllowlistResult {
   return { ok: true, routes: c.routes, packages };
 }
 
+/** JSONC → JSON: drop the trailing commas bun writes (outside strings only); comments are not part of bun.lock */
+function stripTrailingCommas(text: string): string {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i] as string;
+    if (inString) {
+      out += ch;
+      if (ch === "\\") out += text[++i] ?? "";
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    if (ch === ",") {
+      const rest = /^\s*([}\]])/.exec(text.slice(i + 1));
+      if (rest) continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * bun.lock (text, bun ≥ 1.2; E8и spike, D-358): `packages` values are `["<name>@<version>", "<registry or ''>", {meta}, "sha512-…"]`.
+ * The default registry ('') only, an npm version, sha512; the repo's workspaces (`@workspace:`) are skipped. Every platform
+ * binary is listed with its integrity, so every one gets a route (bun fetches only its own). bun.lockb (binary) is not read.
+ */
+export function bunAllowlist(text: string): LockAllowlistResult {
+  let l: unknown;
+  try {
+    l = JSON.parse(stripTrailingCommas(text));
+  } catch {
+    return { ok: false, reason: "not_v3", path: "" };
+  }
+  const lock = l as { lockfileVersion?: unknown; packages?: Record<string, unknown> } | null;
+  if (!lock || typeof lock !== "object" || (lock.lockfileVersion !== 1 && lock.lockfileVersion !== 2)) return { ok: false, reason: "not_v3", path: "" };
+  const c = collector();
+  let packages = 0;
+  for (const [key, entry] of Object.entries(lock.packages ?? {})) {
+    if (!Array.isArray(entry) || typeof entry[0] !== "string") return { ok: false, reason: "git_or_url_dep", path: key };
+    const id = entry[0];
+    const at = id.lastIndexOf("@");
+    const name = id.slice(0, at);
+    const version = id.slice(at + 1);
+    if (at > 0 && version.startsWith("workspace:")) continue;
+    if (at <= 0 || !NAME.test(name) || !VERSION.test(version)) return { ok: false, reason: "git_or_url_dep", path: key };
+    if (entry[1] !== "") return { ok: false, reason: "foreign_resolved", path: key };
+    const integrity = entry[3];
+    if (typeof integrity !== "string" || !integrity.startsWith("sha512-")) return { ok: false, reason: "bad_integrity", path: key };
+    packages++;
+    c.pkg(name, `/npm/${name}/-/${name.split("/").at(-1) as string}-${version}.tgz`);
+  }
+  return { ok: true, routes: c.routes, packages };
+}
+
 export function lockAllowlist(pm: PackageManager, raw: string | null): LockAllowlistResult {
   if (raw === null) return pm === "npm" ? npmAllowlistFromLockfile(null) : { ok: false, reason: "missing_lockfile", path: LOCKFILE[pm] };
   if (pm === "pnpm") return pnpmAllowlist(raw);
   if (pm === "yarn") return yarnAllowlist(raw);
+  if (pm === "bun") return bunAllowlist(raw);
   let j: unknown;
   try {
     j = JSON.parse(raw);
