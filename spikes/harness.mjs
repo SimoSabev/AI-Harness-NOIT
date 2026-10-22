@@ -12,7 +12,7 @@ import { contractForAgent, parseContract, renderAgentContract, ulid } from "@man
 import { packTree } from "@mandat/export";
 import { createRedactor } from "@mandat/redaction";
 import { dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner } from "@mandat/sandbox";
-import { hostConfig, infraUserFor, readGateLog, runSandbox, startRunGate } from "@mandat/worker";
+import { hostConfig, infraUserFor, readGateLog, runSandbox, seedHarness, startRunGate } from "@mandat/worker";
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -45,12 +45,13 @@ export async function spikeRun(o) {
   const raw = [];
   try {
     await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol]);
-    const tree = o.seed === "shop" ? packTree(path.join(repoRoot, "fixtures", "shop")) : packTree(mkReadme());
+    const tree = o.seedDir ? packTree(o.seedDir) : o.seed === "shop" ? packTree(path.join(repoRoot, "fixtures", "shop")) : packTree(mkReadme());
     await runSandbox(ctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: tree, timeoutMs: 120_000 });
     const files = { "contract.txt": renderAgentContract(contractForAgent(contract)), ...(o.extraIn ?? {}) };
     for (const [name, text] of Object.entries(files)) {
       await runSandbox(ctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", `cat > /m/in/${name} && chmod 0444 /m/in/${name}`], stdin: Readable.from([text]), timeoutMs: 60_000 });
     }
+    if (o.harnessFiles) await seedHarness(ctx, vol, o.harnessFiles); // v5 SH2: /m/in/harness (root, ro for the agent)
     gate = await startRunGate({ docker, runId, runDir, mandatHome, home: os.homedir(), tree: "agent", gateImage: images.gate, user, extraCa: host.extraCa }, { phase: "agent", routes: [...API_KEY_ROUTES] });
     if (o.extraHosts) appendFileSync(gate.paths.hosts, o.extraHosts.join("\n") + "\n");
     if (o.extraNetworkMember) {
@@ -86,7 +87,13 @@ export async function spikeRun(o) {
     await channel.revokeTaskCredential(runId).catch(() => undefined);
     writeFileSync(path.join(runDir, "transcript.jsonl"), raw.join("\n") + "\n");
     const gateLog = readGateLog(gate.paths.log);
-    return { exit: res.exitCode, events, transcript: raw, usage, gateLog, runDir };
+    const outFiles = {};
+    for (const f of o.readOut ?? []) {
+      let text = "";
+      await runSandbox(ctx, { role: "test", volume: vol, volumeReadonly: true, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", `cat /m/out/${f} 2>/dev/null || true`], timeoutMs: 30_000, onStdout: (c) => (text += c.toString()) });
+      outFiles[f] = r.redactText(text).text;
+    }
+    return { exit: res.exitCode, events, transcript: raw, usage, gateLog, runDir, outFiles };
   } finally {
     await gate?.stop();
     await dockerText(docker, ["volume", "rm", "-f", vol]);

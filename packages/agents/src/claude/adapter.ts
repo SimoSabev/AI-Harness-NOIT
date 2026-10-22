@@ -15,6 +15,8 @@ export function claudeAdapter(o: { model: string; cliVersion: "2.1.302" }): Agen
         appendSystemPromptFile: ctx.contractFile,
         memory: { enabled: false },
         steering: { enabled: false },
+        // D-342: a subscription cannot run --bare (bare mode never reads OAuth credentials)
+        control: "PROFILE" in channel ? { variant: "B", settingsFile: null, mcpConfigFile: null } : undefined,
       });
       if ("PROFILE" in channel) return { argv, env: { [canary.name]: canary.value }, stdin: "closed" }; // D-295
       if (!("ANTHROPIC_API_KEY" in channel)) throw new Error("claude needs an anthropic channel");

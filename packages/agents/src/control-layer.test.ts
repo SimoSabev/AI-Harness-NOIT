@@ -39,7 +39,7 @@ describe("Claude Code control layer variants (SH2, D-312)", () => {
     const s = sh2Settings();
     expect(s.permissions.deny).toContain("Bash(git push *)");
     expect(s.hooks.PreToolUse[0]?.hooks[0]?.command).toBe("node /opt/mandat/hooks/deny-by-policy.mjs");
-    expect(s.pluginConfigs["cc-plugin-agents-md@builtin"].options.instructionFiles).toBe("managed-only");
+    expect(s.pluginConfigs["cc-plugin-agents-md@builtin"]?.options.instructionFiles).toBe("managed-only");
     expect(s.disableAllHooks).toBeUndefined();
   });
 });
