@@ -5,6 +5,7 @@ import { doctorDeep, infraUserFor } from "@mandat/worker";
 import type { DoctorDeepResult, HostConfig } from "@mandat/worker";
 import type { CliDeps } from "../deps.js";
 import { printJson } from "../output.js";
+import { doctorReport } from "./doctor-report.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 
@@ -30,7 +31,7 @@ const real = (p: string): string => {
   }
 };
 
-export async function doctor(io: Io, deps: CliDeps, o: { mandatHome: string; host: HostConfig; deep: boolean; keep: boolean; json: boolean }): Promise<number> {
+export async function doctor(io: Io, deps: CliDeps, o: { mandatHome: string; host: HostConfig; deep: boolean; keep: boolean; json: boolean; report?: boolean }): Promise<number> {
   const checks: Check[] = [];
   const add = (c: Check) => checks.push(c);
   add({ name: "node", ok: deps.nodeVersion === "24.22.0", detail: deps.nodeVersion });
@@ -76,6 +77,11 @@ export async function doctor(io: Io, deps: CliDeps, o: { mandatHome: string; hos
     add({ name: "r14", ok: r14.blocked === 8, detail: `R14 probes ${r14.blocked}/8 blocked` });
   }
   const exit = checks.every((c) => c.ok) ? 0 : 3;
+  if (o.report) {
+    // E7ж: anonymous (no paths, home, user name or IPs) — safe to paste into docs/setup
+    printJson(io, doctorReport({ platform: os.platform(), release: os.release(), arch: os.arch(), checks, home: os.homedir(), user: os.userInfo().username }));
+    return exit;
+  }
   if (o.json) {
     printJson(io, { checks: checks.map(({ name, ok, detail }) => ({ name, ok, detail })), ...(r14 ? { r14: { blocked: r14.blocked, total: 8, probes: r14.probes } } : {}), exit });
   } else {

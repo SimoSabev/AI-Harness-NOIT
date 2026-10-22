@@ -47,6 +47,16 @@
 Хранилище или `MANDAT_HOME` под `/mnt/<буква>/` в WSL не се поддържа: клонирай в WSL файловата система (`~/`), D-094.
 Всичко без ключ (тестовете, fake агентите, bench, redteam) работи без `ANTHROPIC_API_KEY`.
 
+## Бърз старт по ОС (E7ж)
+| ОС | Подготовка | Пускане |
+| --- | --- | --- |
+| macOS (Apple Silicon/Intel) | Docker Desktop (Settings → Resources: ≥ 2 CPU); `brew install git node@24`; `npm i -g pnpm@12.14.0` | `pnpm install --frozen-lockfile && pnpm local` (или `pnpm desktop`) |
+| Windows | WSL2 + Ubuntu; Docker Desktop с WSL2 backend; клонирай в `~/` на WSL (не под `/mnt/c`, D-094); в WSL: node 24, pnpm 12.14.0, git ≥ 2.43 | в WSL: `pnpm install --frozen-lockfile && pnpm local` |
+| Linux | Docker Engine ≥ 25.0.5 (rootless препоръчано); node 24, pnpm 12.14.0, git ≥ 2.43 | `pnpm install --frozen-lockfile && pnpm local` |
+
+Ако нещо не тръгне: `pnpm mandat doctor` казва какво да се поправи; `pnpm mandat doctor --report` печата анонимен отчет (без пътища,
+потребител и IP), който можеш да пратиш. Ако Docker регистърът не е достъпен, `pnpm local` повтаря строежа без apt (D-302).
+
 ## Как се пуска (от нулата)
 ```sh
 pnpm install --frozen-lockfile

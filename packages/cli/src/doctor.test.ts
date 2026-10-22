@@ -90,3 +90,13 @@ describe("doctor", () => {
     expect((await cli(["proxy", "status"], deps({ proxyRunning: false }), { MANDAT_PROXY_ADMIN_PORT: "x" })).code).toBe(2);
   });
 });
+
+describe("doctor --report (E7ж)", () => {
+  it("prints the anonymous JSON report; the exit code is the same as the plain doctor", async () => {
+    const r = await cli(["--home", home(), "doctor", "--report"], deps({ proxyRunning: false }));
+    const j = JSON.parse(r.stdout) as { os: string; checks: { name: string; code: string | null }[] };
+    expect(j.os).toMatch(/^[a-z0-9]+ \S+$/);
+    expect(j.checks.map((c) => c.name)).toContain("node");
+    expect(r.stdout).not.toContain((await import("node:os")).homedir());
+  });
+});

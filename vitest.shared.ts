@@ -18,4 +18,4 @@ export function workspaceAliases(): { find: RegExp; replacement: string }[] {
   return out;
 }
 
-export const EXCLUDE = ["**/node_modules/**", "**/dist/**", "fixtures/**", ".mandat/**"];
+export const EXCLUDE = ["**/node_modules/**", "**/dist/**", "fixtures/**", ".mandat/**", ".claude/**"];

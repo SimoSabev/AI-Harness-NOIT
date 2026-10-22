@@ -16,3 +16,4 @@ demo/recordings/playwright/
 demo/screenshots/*.tmp.png
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+.claude/worktrees/

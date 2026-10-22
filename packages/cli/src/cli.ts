@@ -88,8 +88,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--deep", "run r14-netprobe in a temporary sandbox")
     .option("--keep", "keep the temporary run directory")
     .option("--json", "machine output")
-    .action(async (o: { deep?: boolean; keep?: boolean; json?: boolean }) => {
-      code = await doctor(io, deps(), { mandatHome: home(), host: hostConfig(io.env), deep: Boolean(o.deep), keep: Boolean(o.keep), json: json(o) });
+    .option("--report", "an anonymous JSON report (no paths, user name or IPs) for docs/setup (E7ж)")
+    .action(async (o: { deep?: boolean; keep?: boolean; json?: boolean; report?: boolean }) => {
+      code = await doctor(io, deps(), { mandatHome: home(), host: hostConfig(io.env), deep: Boolean(o.deep), keep: Boolean(o.keep), json: json(o), report: Boolean(o.report) });
     });
 
   program
