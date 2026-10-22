@@ -14,6 +14,8 @@ import type { EffectHandler } from "./outbox.js";
 import { PgOutbox } from "./pg-outbox.js";
 import { webPushHandler } from "./push.js";
 import { approvalHandlers } from "./effects.js";
+import { mcpHandlers } from "./mcp.js";
+import type { McpVetRunner } from "./mcp.js";
 
 // Демо промпт т. 8.2 Поток 1 (стъпки 1–4, 6, 9; стъпка 5 LLM е забранена): connect → scan a clean clone (hooks off)
 // → proposal + field_sources + ledger config_change/proposed; after the owner's TOTP approval (web, private.approve_harness)
@@ -25,6 +27,8 @@ export interface HarnessDeps {
   tmpRoot?: string;
   /** E7г (D-314): runs the base tests twice in the sandbox; absent (no Docker) → the baseline step is skipped */
   baselineRunner?: (treeDir: string, policy: MandatPolicy) => Promise<Baseline>;
+  /** E8e (D-354): runs an MCP server once without network and vets its definitions; absent → mcp_vet stays pending */
+  mcpVetRunner?: McpVetRunner;
 }
 
 export interface Existing { ".mandat.yml": string | null; "AGENTS.md": string | null; "CLAUDE.md": string | null }
@@ -162,7 +166,7 @@ export function harnessHandlers(d: HarnessDeps): { harness_scan: EffectHandler; 
 export async function drainHarnessOutbox(d: HarnessDeps & { env?: Record<string, string | undefined>; log?: (l: string) => void }): Promise<{ done: number; failed: number; skipped: number }> {
   const c = await d.db.connect();
   try {
-    return await drainOutbox(new PgOutbox(c), { ...harnessHandlers(d), ...approvalHandlers(d), web_push: webPushHandler({ db: d.db, ...(d.env ? { env: d.env } : {}), ...(d.log ? { log: d.log } : {}) }) });
+    return await drainOutbox(new PgOutbox(c), { ...harnessHandlers(d), ...approvalHandlers(d), ...(d.mcpVetRunner ? mcpHandlers({ db: d.db, vetRunner: d.mcpVetRunner }) : {}), web_push: webPushHandler({ db: d.db, ...(d.env ? { env: d.env } : {}), ...(d.log ? { log: d.log } : {}) }) });
   } finally {
     c.release();
   }

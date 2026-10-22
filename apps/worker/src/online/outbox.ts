@@ -1,6 +1,6 @@
 // T3-2 (демо промпт т. 3.4): effects run after commit, idempotent by idempotency_key; a repeated drain never repeats an effect.
 
-export type OutboxKind = "check_run" | "draft_pr" | "ready_for_review" | "approval_check" | "merge" | "push_branch" | "web_push" | "harness_scan" | "harness_pr" | "baseline" | "proxy_restart";
+export type OutboxKind = "check_run" | "draft_pr" | "ready_for_review" | "approval_check" | "merge" | "push_branch" | "web_push" | "harness_scan" | "harness_pr" | "baseline" | "proxy_restart" | "mcp_vet";
 export interface OutboxRow {
   id: number;
   org_id: string;

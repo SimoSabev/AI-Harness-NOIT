@@ -34,3 +34,5 @@ export type { BaselineRun } from "./baseline.js";
 export { sessionIdFor, sessionRecorder } from "./online/session-recorder.js";
 export type { RecorderOptions, SessionRecorder, SessionSink } from "./online/session-recorder.js";
 export { HELD_DAYS, closeExpiredHeld, heldDays } from "./online/held-expiry.js";
+export { mcpHandlers, recordMcpBlocked, refOf, vetMcpServer } from "./online/mcp.js";
+export type { McpServerRow, McpVetResult, McpVetRunner } from "./online/mcp.js";
