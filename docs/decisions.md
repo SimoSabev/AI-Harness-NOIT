@@ -1499,6 +1499,11 @@ prefers-reduced-motion. Анимацията на появата е само д�
 is not recognized“ в @mandat/web). Емулаторът важи и под Linux/WSL; там CI (`pnpm check`) е проверката.
 Не е проверено: под Windows останалата част от `pnpm local` (Docker, пясъчникът) и `pnpm gitleaks` (`"$PWD"`); README
 все още препоръчва WSL.
+Допълнение (22.10.2026): `pnpm local` стигна до [4/4] под Windows и падна на `spawn pnpm ENOENT` (там pnpm е pnpm.cmd).
+`mandat local` вече пуска уеб сървъра с `node <next>/dist/bin/next start -p 3000` в apps/web (webStartSpawn), без pnpm и
+без shell: работи на всяка ОС и Ctrl+C спира самия сървър (през shell kill() би спрял cmd.exe, а сървърът би държал порта).
+Тест: local.test.ts. Остава под Windows (без промяна): apps/desktop пуска `spawn("pnpm", ["local"])`; `mandat doctor`
+вика `pnpm -v` без shell; 5 CLI теста падат под Windows и преди тази промяна (verify-log, pnpm --silent, proxy ×2, WSL DrvFs).
 Защо: Симо, 22.10.2026 — `pnpm local` падна на Windows; „направи поправката за Windows постоянна в хранилището“.
 Алтернативи: cross-env в apps/web (нова зависимост, правило 8); WSL за всички (у Симо няма Linux дистрибуция).
 Източник: https://pnpm.io/settings#shellemulator (22.10.2026), проверено с pnpm 12.14.0. Статус: решено.

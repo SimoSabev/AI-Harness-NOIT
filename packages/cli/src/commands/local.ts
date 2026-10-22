@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFileSync, readdirSync, statfsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
 import { compareVersions, imageTags } from "@mandat/sandbox";
@@ -22,6 +23,14 @@ export const WEB_PORT = 3000;
 
 export function dbRunArgs(port: number): string[] {
   return ["run", "-d", "--name", LOCAL_DB.container, "-v", `${LOCAL_DB.volume}:/var/lib/postgresql/data`, "-e", "POSTGRES_PASSWORD=postgres", "-p", `127.0.0.1:${port}:5432`, LOCAL_DB.image];
+}
+
+// D-309: node runs next's own bin, not `pnpm --filter … start`: pnpm is pnpm.cmd on Windows (spawn needs a shell for
+// it), and through a shell kill() would stop cmd.exe and leave the server holding the port.
+export function webStartSpawn(root: string): { cmd: string; args: string[]; cwd: string } {
+  const cwd = path.join(root, "apps", "web");
+  const next = createRequire(path.join(cwd, "package.json")).resolve("next/dist/bin/next");
+  return { cmd: process.execPath, args: [next, "start", "-p", String(WEB_PORT)], cwd };
 }
 
 export function localDbUrl(port: number): string {
@@ -198,7 +207,8 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   });
   const env = { ...clean, MANDAT_DB_URL: url, MANDAT_DEMO_DEV_AUTH: "1", NEXT_TELEMETRY_DISABLED: "1", MANDAT_LOCAL_CONTROL_URL: control.url, MANDAT_LOCAL_CONTROL_TOKEN: control.token };
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
-  const web = spawn("pnpm", ["--filter", "@mandat/web", "start"], { cwd: repoRoot, env, stdio: ["ignore", "ignore", "inherit"] });
+  const ws = webStartSpawn(repoRoot);
+  const web = spawn(ws.cmd, ws.args, { cwd: ws.cwd, env, stdio: ["ignore", "ignore", "inherit"] });
   const stop = new AbortController();
   const onSig = () => stop.abort();
   process.once("SIGINT", onSig);

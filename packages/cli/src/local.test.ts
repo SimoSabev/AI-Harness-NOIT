@@ -1,5 +1,8 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { LOCAL_DB, dbRunArgs, localDbUrl, localPreflight, pendingMigrations, retryWithoutApt, totpLines } from "./commands/local.js";
+import { LOCAL_DB, WEB_PORT, dbRunArgs, localDbUrl, localPreflight, pendingMigrations, retryWithoutApt, totpLines, webStartSpawn } from "./commands/local.js";
+import { repoRoot } from "./paths.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -17,6 +20,14 @@ describe("mandat local (D-292)", () => {
     expect(pendingMigrations(["b.sql", "a.sql"], new Set())).toEqual(["shim", "a.sql", "b.sql"]);
     expect(pendingMigrations(["b.sql", "a.sql", "c.sql"], new Set(["shim", "a.sql"]))).toEqual(["b.sql", "c.sql"]);
     expect(pendingMigrations(["a.sql"], new Set(["shim", "a.sql"]))).toEqual([]);
+  });
+  it("the web server: node runs next directly, no pnpm and no shell, so it starts on Windows and Ctrl+C stops it (D-309)", () => {
+    const s = webStartSpawn(repoRoot);
+    expect(s.cmd).toBe(process.execPath);
+    expect(existsSync(s.args[0] ?? "")).toBe(true);
+    expect(s.args[0]).toMatch(/next[\\/]dist[\\/]bin[\\/]next$/);
+    expect(s.args.slice(1)).toEqual(["start", "-p", String(WEB_PORT)]);
+    expect(s.cwd).toBe(path.join(repoRoot, "apps", "web"));
   });
 });
 
