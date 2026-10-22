@@ -1,9 +1,9 @@
-# E8i (D-358): yarn berry (4.x, lockfile v8) + vitest variant of the demo shop (real lockfile, real install in the sandbox).
+# E8i (D-358): yarn berry (4.x, lockfile v10) + vitest variant of the demo shop (real lockfile, real install in the sandbox).
 version: 2
 runtime:
   node: "24"
   package_manager: yarn
-  install: yarn install --immutable
+  install: yarn install --frozen-lockfile --ignore-scripts # D-358: the berry lockfile makes the sandbox run the pinned yarn 4 (--immutable)
 tests:
   framework: vitest
   command: npx vitest run --reporter=json --outputFile=$MANDAT_REPORT

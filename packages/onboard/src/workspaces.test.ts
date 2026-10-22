@@ -50,12 +50,16 @@ describe("workspaces (E8и)", () => {
     expect(p.needs_human.join(" ")).not.toContain("monorepo");
   });
 
-  it("yarn berry (lockfile с __metadata) → yarn install --immutable; yarn v1 остава --frozen-lockfile", () => {
+  it("yarn berry (lockfile с __metadata): същият install низ (D-301: само назовава мениджъра), lockfile-ът избира yarn 4; предупреждение", () => {
     const berry = { "package.json": JSON.stringify({ name: "x", scripts: { test: "vitest run" }, devDependencies: { vitest: "5.0.5" } }), "yarn.lock": "# generated\n\n__metadata:\n  version: 10\n", "src/a.ts": "", "tests/a.spec.ts": "" };
     const s = scanRepo(memView(berry));
     expect(s.yarnBerry).toBe(true);
-    expect(propose(s).policy.runtime.install).toBe("yarn install --immutable");
+    const p = propose(s);
+    expect(p.policy.runtime.install).toBe("yarn install --frozen-lockfile --ignore-scripts");
+    expect(p.needs_human.join(" ")).not.toContain("runner");
+    expect(p.warnings.join(" ")).toContain("yarn berry");
     const v1 = { ...berry, "yarn.lock": "# yarn lockfile v1\n" };
-    expect(propose(scanRepo(memView(v1))).policy.runtime.install).toBe("yarn install --frozen-lockfile --ignore-scripts");
+    expect(scanRepo(memView(v1)).yarnBerry).toBe(false);
+    expect(propose(scanRepo(memView(v1))).warnings.join(" ")).not.toContain("yarn berry");
   });
 });

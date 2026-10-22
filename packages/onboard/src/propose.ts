@@ -82,6 +82,8 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
     }
     if (o.baseline.status !== "ok") warnings.push(`baseline: ${o.baseline.status}`);
   }
+  // E8и (D-358): the install string only names the manager (D-301); a berry lockfile makes the sandbox use the pinned yarn 4
+  if (scan.yarnBerry) warnings.push("yarn berry: installed with the yarn 4 pinned in the sandbox (`--immutable`, node_modules linker), not the repo's yarnPath");
   const blocked = scan.instructions.filter((f) => f.invisible.length > 0).map((f) => `${f.path}: ${f.invisible.length} invisible character(s) (${[...new Set(f.invisible.map((h) => h.codepoint))].slice(0, 3).join(", ")})`);
   for (const f of scan.instructions.filter((x) => x.patterns.length > 0)) warnings.push(`${f.path}: ${f.patterns.join(", ")}`);
   const riskCap: 1 | 3 = riskReasons.length > 0 ? 1 : 3;
@@ -104,7 +106,7 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   src["risk_classes"] = riskReasons.length > 0 ? (riskReasons.some((r) => r.startsWith("baseline")) ? "baseline" : "ci.yml") : "human";
   const raw = {
     version: 2,
-    runtime: { node: scan.node, package_manager: pm, install: pm === "yarn" && scan.yarnBerry ? "yarn install --immutable" : (INSTALL[pm] as string) },
+    runtime: { node: scan.node, package_manager: pm, install: INSTALL[pm] as string },
     tests: { framework, command: testCmd, env: { CI: "true" }, test_globs: globs, ...(o.baseline?.flaky?.length ? { flaky: [...o.baseline.flaky].sort() } : {}) },
     ci: wf ? { provider: "github_actions", workflow: wf.path, required_checks: wf.testJobs } : null,
     task_types: taskTypes,
