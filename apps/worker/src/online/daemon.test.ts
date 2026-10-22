@@ -281,3 +281,29 @@ describe("daemon and MCP sidecars (E8e, D-354)", () => {
     expect(s.runs[0]?.mcpBudgets).toEqual({ issues: 12 });
   });
 });
+
+describe("daemon and file conflicts (E8f, AC-4.2)", () => {
+  it("same_file wait: the later task touching a file another live task touches is stopped and re-queued behind it", async () => {
+    const s = await setup(0);
+    const { createStreamCtx, streamEvent } = await import("@mandat/contract");
+    await s.db.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, state, created_at) values ('t_other', $1, $2, 'bugfix', 'fake:honest-fix', 'y', 'RUNNING', now() - interval '1 hour')", [DEMO_ORG_ID, DEMO_REPO_ID]);
+    await s.db.query("insert into public.agent_sessions (id, org_id, task_id, agent, model, role, state, touching) values ('s_other', $1, 't_other', 'fake', 'fake', 'lead', 'running', '{src/cart.ts}')", [DEMO_ORG_ID]);
+    const base = s.deps.run as NonNullable<typeof s.deps.run>;
+    let stop: string | null = null;
+    s.deps.run = async (i) => {
+      const ctx = createStreamCtx("r_01JABCDEFGHJKMNPQRSTVWXYZ0");
+      i.hooks?.onStream?.(streamEvent(ctx, { kind: "tool_call", tool: { kind: "builtin", name: "Edit", touching: ["src/cart.ts"], decision: null } }));
+      for (let k = 0; k < 50 && stop === null; k++) {
+        await new Promise((r) => setTimeout(r, 20));
+        stop = i.hooks?.stopRequested?.() ?? null;
+      }
+      const out = await base(i);
+      return { ...out, agentExit: null, stopped: "conflict" as const };
+    };
+    await runDaemonOnce(s.deps);
+    expect(stop).toBe("conflict");
+    expect((await s.db.query("select state, wait_for, retry_reason, attempt from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "CREATED", wait_for: "t_other", retry_reason: "conflict", attempt: 2 });
+    expect((await s.db.query("select kind, text from public.task_activities where task_id = 't_web_1'")).rows).toEqual([{ kind: "conflict", text: "src/cart.ts · t_other" }]);
+    expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
+  });
+});
