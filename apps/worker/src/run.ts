@@ -246,7 +246,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
-    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[] } | null = null;
+    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[] } | null = null;
     const set = (e: Evidence): void => {
       evd.set(e.detector, e);
     };
@@ -281,7 +281,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : "claude";
           const base = target === "codex" ? "codex" : "claude";
           const m = compileProfile(i.profile, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])] });
-          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: m.unsupported };
+          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: m.unsupported, files: m.files };
           if (target === "codex") {
             const cp = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/codex-home && cp -R /m/in/harness/codex/. /m/codex-home/ && chmod -R u+w /m/codex-home"], timeoutMs: 60_000 });
             if (cp.exitCode !== 0) infra("E_DOCKER", "codex home seed failed");
@@ -409,7 +409,19 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         }
         if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
-        if (harness) await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, enforced_by_harness: harness.enforced, unsupported: harness.unsupported });
+        // SH2-CX (D-312): Codex runs from a writable copy (CODEX_HOME); a changed config after the run = config_change → UNKNOWN
+        const tampered: string[] = [];
+        if (harness?.target === "codex") {
+          for (const f of harness.files.filter((x) => x.path.startsWith("codex/") && /\.(toml|json)$/.test(x.path))) {
+            const now = await safeReadVolume(sctx, { volume: vol, file: `/m/codex-home/${f.path.slice("codex/".length)}`, limit: 1_048_576, role: "export" });
+            if (now === null || now.toString("utf8") !== f.bytes) tampered.push(f.path);
+          }
+          if (tampered.length > 0) {
+            sec({ kind: "config_change", severity: "warn", detail: { files: tampered.join(", ").slice(0, 300) }, source: "worker" });
+            set(ev("AGENT", "unknown", `the agent changed its control layer: ${tampered.join(", ")}`.slice(0, 300), { files: tampered }, { cls: "config_change", id: tampered[0] ?? "-" }));
+          }
+        }
+        if (harness) await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, tampered, enforced_by_harness: harness.enforced, unsupported: harness.unsupported });
         await g.setPolicy("closed", []).catch(() => undefined);
         await g.stop();
         gate = undefined;

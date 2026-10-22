@@ -106,11 +106,12 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .command("run")
     .description("run one task: agent in a sandbox → export → verify → verdict → ledger")
     .requiredOption("--contract <file>", "sealed contract JSON")
-    .requiredOption("--agent <agent>", "claude | fake:<scenario>")
+    .requiredOption("--agent <agent>", "claude | fake:<scenario> | fake-codex:<scenario>")
+    .option("--profile <file>", "harness profile JSON: compiled into the agent's control layer (E8а)")
     .option("--keep", "keep the Docker volumes")
     .option("--json", "machine output (progress on stderr)")
-    .action(async (o: { contract: string; agent: string; keep?: boolean; json?: boolean }) => {
-      code = await runCommand(io, { mandatHome: home(), contract: o.contract, agent: o.agent, keep: Boolean(o.keep), json: json(o), ...(depsIn ? { docker: depsIn.docker } : {}) });
+    .action(async (o: { contract: string; agent: string; keep?: boolean; json?: boolean; profile?: string }) => {
+      code = await runCommand(io, { mandatHome: home(), contract: o.contract, agent: o.agent, keep: Boolean(o.keep), json: json(o), ...(o.profile ? { profile: o.profile } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
 
   const list = (v: string | undefined): string[] | undefined => (v === undefined ? undefined : v.split(",").map((s) => s.trim()).filter(Boolean));
