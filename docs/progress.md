@@ -34,7 +34,7 @@
 | 9 | E8б харнес-профил A–H | phase/e8b-profile | E8а, E7г | ГОТОВО („Пробвай“ отложено) (docs/tasks/e8b.md) | 3/4 | — |
 | 10 | E8в роли | phase/e8c-roles | — | ГОТОВО (docs/reports/E8c.md) | 3/3 | — |
 | 11 | E8г права с ask, насочване, HELD срок | phase/e8d-permissions | E8а, E8в | ГОТОВО (live чака Симо) (docs/reports/E8d.md) | 3/3 | S2 live → MANDAT_STEER=1 |
-| 12 | E8д MCP каталог и скилове | phase/e8e-mcp-catalog | E8а | не е започната | 0/— | CLI ↔ бридж на живо |
+| 12 | E8д MCP каталог и скилове | phase/e8e-mcp-catalog | E8а | ГОТОВО (live чака Симо) (docs/reports/E8e.md) | 4/4 | CLI ↔ бридж на живо (чеклист 18) |
 | 13 | E8е конфликти, WIP, rebase | phase/e8f-coordination | E7д | не е започната | 0/— | — |
 | 14 | E8ж доставка | phase/e8g-delivery | E7б | не е започната | 0/— | L1–L3 |
 | 15 | E8з threat model, redteam 10, bench 20 | phase/e8h-redteam | E8а, E8д | не е започната | 0/— | — |
@@ -51,7 +51,7 @@
 | 26 | E11 платформа | phase/e11-* | E10 | не е започната | 0/— | — |
 
 ## Текуща задача
-E7 (офлайн) и E8а–E8г са готови. Следва E8д (MCP каталог, vetting, sidecar, скилове), после E8е (координация),
-E8ж (доставка), E8з (червен отбор), E8и (monorepo), E8к (спайк RS). Живите части — docs/setup/local-live-checklist.md.
+E7 (офлайн) и E8а–E8д са готови. Следва E8е (конфликти по файл, WIP лимит, rebase), после E8ж (доставка),
+E8з (червен отбор), E8и (monorepo), E8к (спайк RS). Живите части — docs/setup/local-live-checklist.md.
 
 ## Разход API: $0 (v5 бюджет ≤ $25, D-328)

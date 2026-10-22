@@ -1,8 +1,14 @@
 import { expect, test } from "@playwright/test";
+import pg from "pg";
+import { E2E_DB } from "../playwright.config";
 import { EMAIL, login } from "./fixtures";
 
 // D-307: the workbench screens exist with the design; without records they show the sample, marked; it can be switched off.
 test("agents, tools, night shift, research and the task session: the design with SAMPLE", async ({ page, context }) => {
+  // E8e: a repo scan (harness.spec) fills the skills and plugins catalog; the sample shows only on empty pages
+  const c = new pg.Client({ connectionString: E2E_DB });
+  await c.connect();
+  await c.query("delete from public.skills; delete from public.plugins").finally(() => c.end());
   await login(page, EMAIL.approver);
   // U4 (D-332): `next start` is production, where the sample is off unless the person turns it on
   await context.addCookies([{ name: "sample", value: "1", url: page.url() }]);
