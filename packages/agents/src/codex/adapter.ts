@@ -1,3 +1,4 @@
+import { codexToStream } from "./to-stream.js";
 import type { AgentAdapter } from "../adapter.js";
 import { buildCodexArgv } from "./argv.js";
 import { parseCodexLine } from "./stream.js";
@@ -13,5 +14,6 @@ export function codexAdapter(o: { model: string; cliVersion: "0.160.1" }): Agent
       return { argv: buildCodexArgv({ model: o.model, prompt: ctx.prompt }), env: { OPENAI_API_KEY: channel.OPENAI_API_KEY, [canary.name]: canary.value }, stdin: "closed" };
     },
     parseLine: parseCodexLine,
+    toStream: codexToStream,
   };
 }

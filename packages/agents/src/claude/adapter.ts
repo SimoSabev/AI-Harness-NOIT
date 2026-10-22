@@ -1,3 +1,4 @@
+import { claudeToStream } from "./to-stream.js";
 import type { AgentAdapter } from "../adapter.js";
 import { buildClaudeArgv } from "./argv.js";
 import { parseStreamLine } from "./stream.js";
@@ -20,5 +21,6 @@ export function claudeAdapter(o: { model: string; cliVersion: "2.1.302" }): Agen
       return { argv, env: { ANTHROPIC_API_KEY: channel.ANTHROPIC_API_KEY, [canary.name]: canary.value }, stdin: "closed" };
     },
     parseLine: parseStreamLine,
+    toStream: claudeToStream,
   };
 }

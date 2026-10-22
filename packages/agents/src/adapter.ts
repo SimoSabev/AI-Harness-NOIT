@@ -1,3 +1,4 @@
+import type { StreamCtx, StreamEvent } from "@mandat/contract";
 export interface AgentRunContext {
   runId: string;
   taskId: string;
@@ -41,6 +42,8 @@ export type AgentEvent =
 export interface AgentAdapter {
   readonly id: string;
   readonly supportsSteering: boolean;
+  /** v5 2.1: one line of the agent's stdout → the unified stream (D-310) */
+  toStream(line: string, ctx: StreamCtx, windows?: Readonly<Record<string, number>>): StreamEvent[];
   launch(ctx: AgentRunContext, channel: SandboxChannelEnv, canary: { name: "AWS_SECRET_ACCESS_KEY"; value: string }): AgentLaunchSpec;
   parseLine(line: string): AgentEvent[];
 }

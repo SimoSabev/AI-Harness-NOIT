@@ -9,3 +9,5 @@ export type { CodexArgvOptions } from "./codex/argv.js";
 export { codexClaimedDone, parseCodexLine } from "./codex/stream.js";
 export { codexAdapter } from "./codex/adapter.js";
 export { fakeCodexAdapter } from "./fake/adapter.js";
+export { claudeTool, claudeToStream } from "./claude/to-stream.js";
+export { codexToStream } from "./codex/to-stream.js";
