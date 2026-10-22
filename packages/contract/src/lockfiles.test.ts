@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { INSTALL_ARGV, LOCKFILE, installCommand, isBerryLock, lockAllowlist, pnpmAllowlist, yarnAllowlist } from "./lockfiles.js";
+import { INSTALL_ARGV, LOCKFILE, bunAllowlist, installCommand, isBerryLock, lockAllowlist, pnpmAllowlist, yarnAllowlist } from "./lockfiles.js";
+import { packageManagerOf } from "./schemas.js";
 
 const PNPM = `lockfileVersion: '9.0'
 
@@ -78,11 +79,33 @@ __metadata:
   linkType: hard
 `;
 
+// an excerpt of a real bun 1.4.3 bun.lock (JSONC: trailing commas)
+const BUN = `{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "shop",
+      "devDependencies": {
+        "vitest": "5.0.5",
+      },
+    },
+  },
+  "packages": {
+    "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0" } }, "sha512-AAAA"],
+
+    "@rolldown/binding-android-arm-eabi": ["@rolldown/binding-android-arm-eabi@1.2.15", "", { "os": "android", "cpu": "arm" }, "sha512-BBBB"],
+
+    "vitest": ["vitest@5.0.5", "", { "bin": { "vitest": "vitest.mjs" } }, "sha512-CCCC"],
+  }
+}
+`;
+
 const paths = (r: ReturnType<typeof lockAllowlist>) => (r.ok ? r.routes.map((x) => x.match.path) : r.reason);
 
 describe("lockfiles (D-301)", () => {
   it("имена и команди за инсталиране", () => {
-    expect(LOCKFILE).toEqual({ npm: "package-lock.json", pnpm: "pnpm-lock.yaml", yarn: "yarn.lock" });
+    expect(LOCKFILE).toEqual({ npm: "package-lock.json", pnpm: "pnpm-lock.yaml", yarn: "yarn.lock", bun: "bun.lock" });
     expect(INSTALL_ARGV.pnpm.slice(0, 4)).toEqual(["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"]);
     expect(INSTALL_ARGV.pnpm).toContain("--registry=http://egress-gate/npm/");
     expect(INSTALL_ARGV.yarn).toEqual(["yarn", "install", "--frozen-lockfile", "--ignore-scripts", "--non-interactive"]);
@@ -152,6 +175,33 @@ describe("lockfiles (D-301)", () => {
     for (const part of ["YARN_IGNORE_PATH=1", "YARN_NPM_REGISTRY_SERVER=http://egress-gate/npm", "YARN_UNSAFE_HTTP_WHITELIST=egress-gate", "YARN_ENABLE_SCRIPTS=0",
       "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_NODE_LINKER=node-modules", "YARN_INSTALL_STATE_PATH=/tmp/", "node /opt/yarn-berry/yarn.js install --immutable"]) expect(c).toContain(part);
     expect(installCommand("yarn", false)).toEqual(installCommand("yarn"));
+  });
+
+  it("bun (E8и): bun.lock (JSONC) → /npm/… за всички платформи; workspace се прескача; чужд registry, git, без integrity, стара версия → отказ", () => {
+    const r = bunAllowlist(BUN);
+    expect(r.ok && r.packages).toBe(3);
+    expect(paths(r)).toEqual([
+      "/npm/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz", "/npm/@jridgewell/trace-mapping", "/npm/@jridgewell%2ftrace-mapping", "/npm/@jridgewell%2Ftrace-mapping",
+      "/npm/@rolldown/binding-android-arm-eabi/-/binding-android-arm-eabi-1.2.15.tgz", "/npm/@rolldown/binding-android-arm-eabi", "/npm/@rolldown%2fbinding-android-arm-eabi", "/npm/@rolldown%2Fbinding-android-arm-eabi",
+      "/npm/vitest/-/vitest-5.0.5.tgz", "/npm/vitest",
+    ]);
+    // a string with "," before "}" stays intact (only JSONC trailing commas go)
+    expect(bunAllowlist(BUN.replace('"name": "shop"', '"name": "a,}b,]"')).ok).toBe(true);
+    expect(bunAllowlist(BUN.replace('"packages": {', '"packages": {\n    "shop": ["shop@workspace:.", {}],\n')).ok).toBe(true);
+    expect(paths(bunAllowlist(BUN.replace('["vitest@5.0.5", ""', '["vitest@5.0.5", "https://evil.example/"')))).toBe("foreign_resolved");
+    expect(paths(bunAllowlist(BUN.replace('["vitest@5.0.5", "", { "bin": { "vitest": "vitest.mjs" } }, "sha512-CCCC"]', '["vitest@github:x/y#abc", {}, "x-y-abc"]')))).toBe("git_or_url_dep");
+    expect(paths(bunAllowlist(BUN.replace('"sha512-CCCC"', '"sha1-CCCC"')))).toBe("bad_integrity");
+    expect(paths(bunAllowlist(BUN.replace('"lockfileVersion": 2', '"lockfileVersion": 0')))).toBe("not_v3");
+    expect(paths(bunAllowlist("{ not json"))).toBe("not_v3");
+    expect(lockAllowlist("bun", BUN).ok).toBe(true);
+    expect(paths(lockAllowlist("bun", null))).toBe("missing_lockfile");
+  });
+
+  it("bun: инсталиране с прикования bun от образа, само през вратата, без скриптове; packageManagerOf", () => {
+    const b = installCommand("bun");
+    expect(b.slice(0, 2)).toEqual(["/bin/sh", "-c"]);
+    for (const part of ["BUN_CONFIG_REGISTRY=http://egress-gate/npm/", "BUN_INSTALL_CACHE_DIR=/home/agent/.bun-cache", "DO_NOT_TRACK=1", "bun install --frozen-lockfile --ignore-scripts"]) expect(b[2]).toContain(part);
+    expect(packageManagerOf({ runtime: { node: "24", install: "bun install --frozen-lockfile --ignore-scripts" } })).toBe("bun");
   });
 
   it("yarn v1: resolved от npm/yarnpkg → /npm/…, без #hash", () => {
