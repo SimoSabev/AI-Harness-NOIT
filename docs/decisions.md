@@ -1638,3 +1638,19 @@ Claude Code never reads OAuth credentials or the system keychain“. С `--bare`
 кодерът строи с `turbo run build --concurrency=1` (`pnpm check` на Симо не се променя). Тагът на образите е хеш на съдържанието,
 затова преди `pnpm test:docker` винаги `pnpm mandat images build` (с MANDAT_SANDBOX_APT=0 и MANDAT_EXTRA_CA_CERTS).
 Защо: средата (D-145) — без промяна на продукта. Алтернативи: —. Източник: тази сесия. Статус: решено.
+
+## D-345 Ключовете към проксито: заключен старт + еднократен boot токен, подаден от CLI-то (22.10.2026)
+Решение: (1) `mandat proxy start` взима ключовете от env на командата (и ги запечатва в `$MANDAT_HOME/keys.sealed.json`) или от
+хранилището; минтва `mdt_boot_<32 байта>` и пуска контейнера само с него (`-e MANDAT_PROXY_BOOT_TOKEN`, стойността е в env на
+docker CLI процеса, D-043). (2) Проксито стартира заключено (`/healthz` → `locked:true`, inference → 503 `proxy_locked`);
+`POST /admin/boot` с токена (bearer, TTL 60 s от старта на процеса) приема ключовете веднъж; хешът на изразходвания токен се
+пише в `/var/lib/mandat-proxy/boot-spent`, затова след рестарт на контейнера същият токен е невалиден → проксито остава
+заключено, докато `pnpm local` (proxy-heal, на 30 s) не го пресъздаде с нов токен и запазените ключове. (3) KEK: env `MANDAT_KEK`
+(base64 на 32 байта) или `$MANDAT_HOME/kek` (0600). (4) Онлайн: `private.api_keys` (само service role) + `private.store_api_key`
+→ outbox `proxy_restart`; `pgKeyStore` в worker-а.
+Защо: т. 3.3 иска проксито да *изтегли* ключовете от контролния адрес, но контейнерът на проксито е в мрежата mandat-upstream и
+не стига до 127.0.0.1 на хоста; обратната посока (CLI → публикувания админ порт на 127.0.0.1) дава същите свойства без host
+мрежа: ключът само в паметта, токенът еднократен и с TTL, `docker inspect` без ключ.
+Алтернативи: `--network host` за проксито (разширява достъпа му); ключ във файл, монтиран ro (ключът на диска в чист вид).
+[НП] Electron safeStorage за KEK — проверява се в E9ж (документацията на Electron 44, линк + дата тогава).
+Източник: v5 т. 3.3. Статус: решено.

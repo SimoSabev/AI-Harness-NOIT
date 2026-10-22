@@ -27,3 +27,5 @@ export { approvalHandlers, humanMerged } from "./online/effects.js";
 export { workbench } from "./online/workbench.js";
 export type { Workbench } from "./online/workbench.js";
 export { HARNESS_IN, harnessFilesHash, seedHarness } from "./harness-seed.js";
+export { pgKeyStore } from "./online/keys.js";
+export type { KeyStore } from "./online/keys.js";

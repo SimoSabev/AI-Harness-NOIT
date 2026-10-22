@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Verdict, hashJcs, parseVitestReport } from "@mandat/contract";
 import type { Channel } from "@mandat/channels";
 import { verifyLedger } from "@mandat/ledger";
+import { createRedactor } from "@mandat/redaction";
 import type { DockerRunner } from "@mandat/sandbox";
 import { buildShopFixture } from "./fixtures.js";
 import { startRunGate } from "@mandat/verify";
@@ -209,7 +210,10 @@ describe("runTask (fake docker)", () => {
   });
 
   it("ExportRejection формат (D-063) и redact → hash → write (D-075)", async () => {
-    const seg = Array.from(randomBytes(40), (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
+    // a random segment the entropy rule surely flags (a random draw can fall under the threshold: the test was flaky)
+    const draw = () => Array.from(randomBytes(40), (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
+    let seg = draw();
+    while (createRedactor({ exactSecrets: [] }).redactText(`src/${seg}`).text !== "src/[REDACTED:entropy]") seg = draw();
     const head = () => shopCopy((d) => symlinkSync("/etc/passwd", path.join(d, "src", seg)));
     const { r, h } = await go({ docker: new FakeDocker({ head }) });
     const dir = r.runDir ?? "";

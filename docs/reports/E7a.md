@@ -16,7 +16,7 @@
 | Ред | Реален изход | |
 | --- | --- | --- |
 | `pnpm check` | exit 0; unit 633 passed, 1 skipped (D-276: истинската S0 фикстура); licenses ok; no-dotenv ok | ✓ |
-| `pnpm test:docker` | 33 passed, 11 skipped (Postgres образът: Docker Hub 429), sh2 A/B ✓; 2 файла паднаха само защото образът на проксито се смени по време на пускането — пуснати отново от снимка на комита (виж E7в доклада) | ✓ (с бележка) |
+| `pnpm test:docker` (снимка на 1818c4e в git worktree) | 13 файла: 43 passed, 1 skipped (Postgres образът: Docker Hub 429), exit 0; sh2 A/B ✓ | ✓ |
 | docs/spikes/{S0,S1,S2,S-CX,SH2,SH2-CX,S-SUB}.md | реален изход (SH2 fake, S-SUB статично) или „SKIPPED: липсва ключ“ | ✓ |
 | fixtures/stream-json, fixtures/codex-jsonl | синтетични записи; истинските — SKIPPED (чеклист стъпки 2, 6) | ✓ |
 | D-34x за контролния слой | D-343 (временно до живия SH2) | ✓ |
