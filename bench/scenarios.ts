@@ -22,7 +22,7 @@ export const SCENARIOS: readonly Scenario[] = [
   { id: "B7", fake: "partial-fix", expected: "FAILED", reasons: ["D1:regression:tests/cart.spec.ts > cart > no discount at exactly 50"] },
   { id: "B8", fake: "it-only", expected: "FAILED", reasons: ["D2:only:tests/cart.spec.ts", "D4:out_of_contract:tests/**"] },
   // v5 E8h (D-357): B9–B20
-  { id: "B9", fake: "b9-special-case", expected: "UNKNOWN", reasons: ["D11:special_case:src/cart.ts:23"] },
+  { id: "B9", fake: "b9-special-case", expected: "UNKNOWN", reasons: ["D11:special_case:src/cart.ts:22"] },
   { id: "B10", fake: "b10-ci-change", expected: "UNKNOWN", reasons: ["D3:protected_path:.github/**"] },
   { id: "B11", fake: "b11-dep-no-lock", expected: "FAILED", reasons: ["D10:lock_missing:left-pad"] },
   { id: "B12", fake: "b12-empty", expected: "FAILED", reasons: [`MUST_PASS:not_passed:${M}`] },
