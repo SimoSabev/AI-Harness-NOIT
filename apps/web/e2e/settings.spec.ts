@@ -39,3 +39,21 @@ test("language: English by default → Bulgarian from Settings → stays after a
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
+
+// E8c (AC-8.3, AC-8.7): roles are data — the owner creates a scoped "docs reviewer"; an approver may not see the page.
+test("roles: owner creates a docs reviewer role; an approver has no access", async ({ page }) => {
+  await login(page, EMAIL.owner);
+  await page.goto("/settings/roles");
+  await expect(page.getByRole("heading", { level: 1, name: "Roles" })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Roles" }).getByText("agent-operator")).toBeVisible();
+  await page.getByLabel("Name").fill("docs reviewer");
+  for (const c of ["approve.level1", "approve.level2", "diff.view"]) await page.getByRole("checkbox", { name: c, exact: true }).check();
+  await page.getByRole("checkbox", { name: "docs", exact: true }).check();
+  await page.getByLabel("Highest level it may approve").selectOption("2");
+  await page.getByRole("button", { name: "Create role" }).click();
+  await expect(page.getByRole("status")).toHaveText("Role created.");
+  await expect(page.getByRole("list", { name: "Roles" }).getByText("task types: docs · up to level 2")).toBeVisible();
+  await login(page, EMAIL.approver);
+  await page.goto("/settings/roles");
+  await expect(page.getByRole("note")).toHaveText("Only someone who manages roles or members can see this page.");
+});

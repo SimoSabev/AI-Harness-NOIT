@@ -6,8 +6,8 @@ export function csrfToken(): string {
   return m ? decodeURIComponent(m[1] ?? "") : "";
 }
 
-export async function postJson(url: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-mandat-csrf": csrfToken() }, body: JSON.stringify(body), credentials: "same-origin" });
+export async function postJson(url: string, body: unknown, method: "POST" | "PATCH" = "POST"): Promise<{ status: number; body: Record<string, unknown> }> {
+  const r = await fetch(url, { method, headers: { "content-type": "application/json", "x-mandat-csrf": csrfToken() }, body: JSON.stringify(body), credentials: "same-origin" });
   const parsed = (await r.json().catch(() => ({}))) as Record<string, unknown>;
   return { status: r.status, body: parsed };
 }

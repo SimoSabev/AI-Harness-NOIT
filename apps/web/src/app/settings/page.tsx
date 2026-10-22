@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { Shell } from "../../components/shell";
 import { LangChoice, SampleChoice, ThemeChoice, ViewChoice } from "../../components/theme-switch";
@@ -43,6 +44,11 @@ export default async function SettingsPage() {
         <h2 id="s-sample" className="font-display text-base font-semibold">{t("settings.sample")}</h2>
         <p className="mt-1 mb-4 text-sm text-mute">{t("settings.sampleHint")}</p>
         <SampleChoice value={parseSample(jar.get("sample")?.value)} />
+      </section>
+      <section aria-labelledby="s-roles" className={`${card} mt-4 p-5`}>
+        <h2 id="s-roles" className="font-display text-base font-semibold">{t("settings.roles")}</h2>
+        <p className="mt-1 mb-3 text-sm text-mute">{t("settings.rolesHint")}</p>
+        <Link href="/settings/roles" className="text-sm text-accent underline-offset-4 hover:underline">{t("settings.rolesLink")}</Link>
       </section>
       <section aria-labelledby="s-term" className={`${card} mt-4 p-5`}>
         <h2 id="s-term" className="font-display text-base font-semibold">{t("settings.terminal")}</h2>
