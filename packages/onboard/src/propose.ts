@@ -26,7 +26,7 @@ export interface Proposal {
   suggested_tasks: SuggestedTask[];
 }
 
-const INSTALL: Record<string, string> = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts" };
+const INSTALL: Record<string, string> = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts", bun: "bun install --frozen-lockfile --ignore-scripts" };
 const TEST_CMD: Record<string, string> = {
   vitest: "npx vitest run --reporter=json --outputFile=$MANDAT_REPORT",
   jest: "npx jest --json --outputFile=$MANDAT_REPORT",
@@ -41,9 +41,11 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const needs: string[] = [];
   const riskReasons: string[] = [];
   const warnings: string[] = [];
-  const pm = scan.packageManager === "pnpm" || scan.packageManager === "yarn" ? scan.packageManager : "npm";
+  // E8и (D-358): bun with the text lockfile (bun.lock); the binary bun.lockb is not read
+  const pm = scan.packageManager === "pnpm" || scan.packageManager === "yarn" || (scan.packageManager === "bun" && scan.lockfile === "bun.lock") ? scan.packageManager : "npm";
   if (!scan.packageManager) needs.push("runtime.package_manager: no lockfile");
-  if (scan.packageManager === "bun") needs.push("runtime.package_manager: bun is not supported");
+  if (scan.lockfile === "bun.lockb") needs.push("runtime.package_manager: bun.lockb is binary; run `bun install --save-text-lockfile` and commit bun.lock");
+  if (/^\s*bun\s+test\b/.test(scan.scripts.test ?? "")) needs.push("tests: `bun test` writes no vitest/jest JSON report; run the tests with vitest or jest");
   src["runtime.package_manager"] = scan.packageManager ? "lockfile" : "human";
   src["runtime.install"] = scan.packageManager ? "lockfile" : "human";
   src["runtime.node"] = "human"; // .nvmrc / engines / default: a human confirms the runtime

@@ -48,7 +48,7 @@ export interface ScanResult {
   skills: Omit<RepoSkill, "text">[];
 }
 
-const LOCKFILES: [string, PackageManager][] = [["pnpm-lock.yaml", "pnpm"], ["package-lock.json", "npm"], ["yarn.lock", "yarn"], ["bun.lockb", "bun"], ["bun.lock", "bun"]];
+const LOCKFILES: [string, PackageManager][] = [["pnpm-lock.yaml", "pnpm"], ["package-lock.json", "npm"], ["yarn.lock", "yarn"], ["bun.lock", "bun"], ["bun.lockb", "bun"]];
 const INSTRUCTIONS = /^(AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.cursorrules|\.windsurfrules|\.github\/copilot-instructions\.md|\.cursor\/rules\/.+|\.claude\/.+\.md|\.codex\/.+)$/;
 const SECRET_NAME = /(^|\/)(\.env(\..+)?|.+\.pem|.+\.key|id_rsa|id_ed25519|.+\.p12|.+\.pfx|credentials\.json|\.npmrc|\.netrc|secrets?\.(json|ya?ml))$/;
 const DANGEROUS = [".github/workflows", ".husky", ".claude", ".codex", ".vscode", ".devcontainer", ".cursor"];

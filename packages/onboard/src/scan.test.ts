@@ -26,7 +26,7 @@ describe("скенер без AI: 6 fixtures (т. 8.2)", () => {
     const pb = propose(scanRepo(memView(bun)));
     expect(pb.policy.runtime).toMatchObject({ package_manager: "bun", install: "bun install --frozen-lockfile --ignore-scripts" });
     expect(pb.needs_human).toEqual([]);
-    const lockb = { ...bun, "bun.lockb": "binary" };
+    const lockb: Record<string, string> = { ...bun, "bun.lockb": "binary" };
     delete lockb["bun.lock"];
     expect(propose(scanRepo(memView(lockb))).needs_human.join(" ")).toContain("bun.lockb");
     const bunTest = { ...bun, "package.json": JSON.stringify({ name: "x", scripts: { test: "bun test" } }) };
