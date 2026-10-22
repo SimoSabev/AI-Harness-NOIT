@@ -117,6 +117,14 @@ describe("lockfiles (D-301)", () => {
     expect(paths(r)).toEqual(paths(pnpmAllowlist(PNPM)));
   });
 
+  it("pnpm 12 с packageManager (E8и): два YAML документа — env документът се прескача; configDependencies → отказ", () => {
+    const env = "---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    configDependencies: {}\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.14.0\n        version: 12.14.0\n\npackages:\n\n  '@pnpm/exe@12.14.0':\n    resolution: {integrity: sha512-CCCC}\n\n";
+    const r = pnpmAllowlist(`${env}---\n${PNPM}`);
+    expect(paths(r)).toEqual(paths(pnpmAllowlist(PNPM)));
+    expect(paths(pnpmAllowlist(`${env.replace("configDependencies: {}", "configDependencies:\n      evil: 1.0.0+sha512-DDDD")}---\n${PNPM}`))).toBe("config_deps");
+    expect(paths(pnpmAllowlist(`${env}---\n${PNPM}---\n${PNPM}`))).toBe("not_v3");
+  });
+
   it("yarn berry (E8и): npm: → /npm/…; workspace и вграден patch се прескачат; друг протокол, без checksum, стара версия → отказ", () => {
     expect(isBerryLock(BERRY)).toBe(true);
     expect(isBerryLock(YARN)).toBe(false);
@@ -131,7 +139,7 @@ describe("lockfiles (D-301)", () => {
     expect(paths(yarnAllowlist(BERRY.replace("#optional!builtin<compat/typescript>::", "#./patches/ts.patch::")))).toBe("git_or_url_dep");
     expect(paths(yarnAllowlist(BERRY.replace("  checksum: 10c0/4a25ff50\n", "")))).toBe("bad_integrity");
     expect(paths(yarnAllowlist(BERRY.replace("version: 10\n  cacheKey", "version: 6\n  cacheKey")))).toBe("berry_version");
-    expect(paths(yarnAllowlist("__metadata:\n  version: 10\n:::"))).toBe("not_v3");
+    expect(paths(yarnAllowlist("__metadata:\n  version: 10\n\"a@npm:1\": [\n"))).toBe("not_v3");
   });
 
   it("yarn berry: инсталиране с прикования yarn 4 от образа, само през вратата, без скриптове, без запис в дървото извън node_modules", () => {
