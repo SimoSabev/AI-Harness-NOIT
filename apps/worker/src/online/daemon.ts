@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, repoConfigFromPolicy, sealContract } from "@mandat/contract";
+import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
 import { decideDelivery, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -9,6 +9,7 @@ import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
 import type { LadderState } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { drift } from "@mandat/onboard";
+import { forbidAtNight } from "@mandat/profile";
 import type { SqlClient } from "@mandat/ledger";
 import { autoMerge, commitMessage, deliver } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
@@ -67,7 +68,18 @@ interface TaskRow {
   replay: string | null;
   retry_reason: string | null;
   provider: string;
+  /** E9а: the night shift the task belongs to */
+  shift_id: string | null;
 }
+
+/** E9а: the approved profile with the night's forbidden tools as deny rules for the subject night (and its hash recomputed) */
+function nightProfile(hp: HarnessProfile, forbid: readonly string[]): HarnessProfile {
+  if (forbid.length === 0) return hp;
+  const layers = { ...hp.layers, c: forbidAtNight(hp.layers.c, forbid) };
+  return { ...hp, layers, profile_hash: profileHash(layers) };
+}
+/** added + removed lines of a unified diff (headers excluded) */
+const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n").filter((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---"))).length;
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
 export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null): Contract {
@@ -115,12 +127,15 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
   const t = q.rows[0];
   if (!t) throw new Error(`no task ${taskId}`);
+  // E9а (v5 5.1): a night task runs under the shift's rules (forbidden tools → layer C for the subject night; auto_merge)
+  const nightRules = t.shift_id ? NightRules.safeParse((await d.db.query<{ rules: unknown }>("select rules from public.night_shifts where id = $1::uuid", [t.shift_id])).rows[0]?.rules) : null;
+  const night = nightRules?.success ? nightRules.data : null;
   const bc = async (state: string, seq: number, extra: { result?: string | null; level?: number | null; wait_reason?: string | null; usd?: number; minutes?: number } = {}) => {
     const p = boardPayload({ id: t.id, seq, state, result: extra.result ?? null, level: extra.level ?? null, wait_reason: extra.wait_reason ?? null, usd: extra.usd ?? 0, minutes: extra.minutes ?? 0 });
     await d.broadcast?.(`org:${t.org_id}:board`, "task", p).catch(() => undefined);
@@ -207,8 +222,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const steerNote = steersBefore.length > 0 ? ["Notes from a person during an earlier attempt:", ...steersBefore.map((r) => frameUntrusted({ author: "member", association: "member", source: r.kind === "review" ? "pr_comment" : "steer", text: r.text }))].join("\n") : null;
   // E8g (D-356): a "Fix CI" attempt gets the failing checks of the previous round (framed)
   const ciLog = t.retry_reason === "ci" ? await ciNote(d.db, t.id) : null;
+  // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
+  const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
   const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
-  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog].filter(Boolean).join("\n\n") || null);
+  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog, nightNote ? `Note from Mandat (night shift): ${nightNote}` : null].filter(Boolean).join("\n\n") || null);
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
@@ -288,7 +305,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
-        ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
+        ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
@@ -416,9 +433,11 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const lad = await d.db.query<{ level: number; s_up: number; s_down: number; pinned: boolean }>("select level, s_up, s_down, pinned from public.ladder_state where repo_id = $1 and task_type = $2 and agent = $3", [t.repo_id, t.type, t.agent]);
   const ladder: LadderState = lad.rows[0] ? { level: lad.rows[0].level as 0 | 1 | 2 | 3, s_up: Number(lad.rows[0].s_up), s_down: Number(lad.rows[0].s_down), pinned: lad.rows[0].pinned } : { level: 0, s_up: 0, s_down: 0, pinned: false };
   const lvl = effectiveLevel({ ladder: ladder.level, riskCap: contract.risk_cap, result: v.result, mode: "full", levelCap: 3, rulesetStrict: t.ruleset_strict, d7: "pass" });
-  const action = decideDelivery({ result: v.result, effectiveLevel: lvl.level, mode: "full", origin: "mandat" });
   const diffFile = out.runDir ? path.join(out.runDir, "export", "diff.patch") : null;
   const diffPatch = diffFile && existsSync(diffFile) ? readFileSync(diffFile) : Buffer.alloc(0);
+  let action = decideDelivery({ result: v.result, effectiveLevel: lvl.level, mode: "full", origin: "mandat" });
+  // E9а: at night only what the shift allows merges by itself (level ≥ min_level, changed lines ≤ max_lines); the rest waits
+  if (night && action.kind === "pr_then_auto_merge" && (lvl.level < night.auto_merge.min_level || patchLines(diffPatch) > night.auto_merge.max_lines)) action = { kind: "draft_pr" };
   const usd = v.usage.usd;
   const needsHuman = v.result !== "FAILED" && (action.kind === "draft_pr" || action.kind === "hold" || action.kind === "branch_only");
   const requires2fa = v.result === "VERIFIED" && lvl.level === 1;
