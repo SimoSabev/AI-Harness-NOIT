@@ -406,4 +406,27 @@ describe("runTask with a harness profile (E8а, D-311)", () => {
     expect(h.denied).toEqual(["Bash"]);
     expect(h.enforced_by_harness.length).toBeGreaterThan(0);
   });
+  it("E8g: asks from the hooks that name an ask rule of the policy come back on the output (forged ones are dropped)", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const asks = [
+      JSON.stringify({ ts: "2026-10-22T10:00:00.000Z", tool: "mcp:github.create_issue", reason: "x" }),
+      JSON.stringify({ ts: "2026-10-22T10:00:01.000Z", tool: "net:*", reason: "let me out" }),
+    ].join("\n");
+    const { r } = await go({ docker: new FakeDocker({ head: () => shopCopy(), asks: () => asks }), i: { profile } });
+    expect(r.asks).toEqual([{ tool: "mcp:github.create_issue", reason: "a human decides on new issues" }]);
+    const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { asks: unknown[] };
+    expect(h.asks).toEqual(r.asks);
+  });
+  it("E8g: grantOnce turns the ask rule into allow for this attempt only (the policy the hooks read)", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    const { r } = await go({ docker, i: { profile, grantOnce: ["mcp:github.create_issue"] } });
+    const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { granted_once: string[]; files_hash: string };
+    expect(h.granted_once).toEqual(["mcp:github.create_issue"]);
+    const { r: plain } = await go({ docker: new FakeDocker({ head: () => shopCopy() }), i: { profile } });
+    const h0 = JSON.parse(readFileSync(path.join(plain.runDir ?? "", "harness.json"), "utf8")) as { files_hash: string };
+    expect(h.files_hash).not.toBe(h0.files_hash);
+  });
 });

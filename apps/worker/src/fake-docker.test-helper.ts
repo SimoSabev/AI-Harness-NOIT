@@ -21,6 +21,8 @@ export interface FakeOpts {
   notes?: (ctx: { canary: string; token: string }) => string;
   notesExit?: number;
   notesTimedOut?: boolean;
+  /** what the hooks wrote to /m/out/asks.jsonl (E8g) */
+  asks?: () => string;
 }
 
 export class FakeDocker implements DockerRunner {
@@ -73,6 +75,11 @@ export class FakeDocker implements DockerRunner {
       else if (head) for await (const c of packTree(head) as AsyncIterable<Buffer>) out(c);
       if (this.o.tarStderr) ro.onStderr?.(Buffer.from(this.o.tarStderr));
       return { exitCode: this.o.tarExit ?? 0, timedOut: false };
+    }
+    if (cmd[0] === "sh" && a.includes("/m/out/asks.jsonl")) {
+      const n = this.o.asks?.() ?? "";
+      if (n) out(n);
+      return { exitCode: n ? 0 : 1, timedOut: false };
     }
     if (cmd[0] === "sh" && a.includes("/m/out/notes.txt")) {
       if (this.o.notesTimedOut) return { exitCode: 137, timedOut: true };
