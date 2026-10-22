@@ -41,7 +41,8 @@ describe("MCP sidecar (docker)", () => {
     });
     const notes = JSON.parse(readFileSync(path.join(r.runDir ?? "", "notes.txt"), "utf8")) as { tools: string[]; probe: { work_entries: number; llm_key: boolean; own_secret: boolean; net: string }; agent_has_secret: boolean };
     expect(notes.tools).toEqual(["create_issue", "probe"]);
-    expect(notes.probe).toEqual({ work_entries: -1, llm_key: false, own_secret: true, net: "blocked" });
+    // /m/work exists in the image as an empty folder: none of the agent's tree is there
+    expect(notes.probe).toEqual({ work_entries: 0, llm_key: false, own_secret: true, net: "blocked" });
     expect(notes.agent_has_secret).toBe(false);
     expect(blocked).toEqual([]);
     const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { mcp_serving: string[] };
