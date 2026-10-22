@@ -117,6 +117,27 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     cd / && rm -rf /tmp/yb /root/.npm; \
     YARN_IGNORE_PATH=1 node /opt/yarn-berry/yarn.js --version | grep -Fx "${YARN_BERRY_VERSION}"
 
+# E8и (D-358): bun for repos with a text bun.lock — only `bun install` (the tests still run with vitest/jest); the platform
+# binary from @oven/bun-linux-<arch> (x64: the baseline build, no AVX2 needed), pinned by integrity.
+ARG BUN_VERSION=1.4.3
+ARG BUN_INTEGRITY_amd64=sha512-4kW2iuLPQLv3N6o21tLwD1ALhI75LFT9YvlpoHrkM6IalbuS3LNKcHc9ex5kAHifJEFFm0ExGx1Zj75wdDux7w==
+ARG BUN_INTEGRITY_arm64=sha512-ylogDFxDD+aRKO0TJauwDzCWM+rULvc85gRNZQ9CnY6rm2BU4GC2XUDi20bh67CIuB4Wt/0PL1xpsJ2hqplMww==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) PKG=bun-linux-x64-baseline; WANT="$BUN_INTEGRITY_amd64" ;; \
+      arm64) PKG=bun-linux-aarch64; WANT="$BUN_INTEGRITY_arm64" ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    mkdir /tmp/bun && cd /tmp/bun; \
+    npm pack --silent "@oven/${PKG}@${BUN_VERSION}"; \
+    got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "oven-${PKG}-${BUN_VERSION}.tgz")"; \
+    [ "$got" = "$WANT" ] || { echo "integrity mismatch for bun: $got" >&2; exit 1; }; \
+    tar -xzf "oven-${PKG}-${BUN_VERSION}.tgz" -C /usr/local/bin --strip-components=2 package/bin/bun; \
+    chmod 0755 /usr/local/bin/bun; \
+    cd / && rm -rf /tmp/bun /root/.npm; \
+    DO_NOT_TRACK=1 bun --version | grep -Fx "${BUN_VERSION}"
+
 COPY packages/agents/fakes/ /opt/mandat/fakes/
 # v5 E8а / SH2: the harness hooks (ESM, no dependencies); the agent can run them, never change them
 COPY packages/agents/hooks/ /opt/mandat/hooks/

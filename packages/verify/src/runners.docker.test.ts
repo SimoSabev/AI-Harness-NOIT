@@ -37,8 +37,8 @@ async function verify(f: { remote: string; repo: string }, extra: string[]) {
 }
 
 describe("runners (docker, D-301)", () => {
-  // E8и (D-358): yarn berry (yarn 4 lockfile) on the same shop
-  for (const [fixture, src, test] of [["shop-pnpm-jest", "src/cart.js", "tests/cart.spec.js"], ["shop-yarn-vitest", "src/cart.ts", "tests/cart.spec.ts"], ["shop-yarn-berry", "src/cart.ts", "tests/cart.spec.ts"]] as const) {
+  // E8и (D-358): yarn berry (yarn 4 lockfile) and bun (bun.lock) on the same shop
+  for (const [fixture, src, test] of [["shop-pnpm-jest", "src/cart.js", "tests/cart.spec.js"], ["shop-yarn-vitest", "src/cart.ts", "tests/cart.spec.ts"], ["shop-yarn-berry", "src/cart.ts", "tests/cart.spec.ts"], ["shop-bun-vitest", "src/cart.ts", "tests/cart.spec.ts"]] as const) {
     it(`${fixture}: честна поправка → VERIFIED; изтрит тест → FAILED D2:missing_test`, async () => {
       const ok = repoFrom(fixture);
       edit(ok.repo, src, (s) => s.replace("= 50000;", "= 5000;"));
