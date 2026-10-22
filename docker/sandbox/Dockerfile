@@ -141,10 +141,12 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
 COPY packages/agents/fakes/ /opt/mandat/fakes/
 # v5 E8а / SH2: the harness hooks (ESM, no dependencies); the agent can run them, never change them
 COPY packages/agents/hooks/ /opt/mandat/hooks/
+# E8и (D-358): test reporters the harness passes to runners without a JSON report of their own (node --test)
+COPY packages/verify/reporters/ /opt/mandat/reporters/
 COPY --from=mcpbridge /out /opt/mandat/mcp-bridge
 # E4 (т. 9.0): recorded transcripts + fixed patches for the deterministic replay agents
 COPY demo/recordings/*.jsonl demo/recordings/*.patch /opt/mandat/replay/
-RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay /opt/mandat/hooks && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* /opt/mandat/hooks/* \
+RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay /opt/mandat/hooks /opt/mandat/reporters && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* /opt/mandat/hooks/* /opt/mandat/reporters/* \
  && mkdir -p /m/work /m/out /m/in /home/agent \
  && chown 1000:1000 /m /m/work /m/out && chown root:root /m/in && chmod 0755 /m/in
 
