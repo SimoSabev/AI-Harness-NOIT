@@ -177,7 +177,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       o = await (d.run ?? runTask)({
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
-        hooks: { onCanary: (v) => rec.secret(v), onAgentEvent: (e) => rec.event(e) },
+        hooks: { onCanary: (v) => rec.secret(v), onAgentEvent: (e) => rec.event(e), onGateBlocks: (b) => rec.gate(b) },
       });
       return o;
     } finally {

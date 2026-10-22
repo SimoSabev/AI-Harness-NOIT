@@ -62,6 +62,9 @@ export function classifyTool(name: string, input: unknown): ToolClass {
   return { kind: "builtin", tool: toolName(name), summary, paths: WRITES.has(name) ? paths : [], subagent: SUBAGENT.has(name) };
 }
 
+/** D-308: what the gate refused for the agent's tree, aggregated (run.ts reads the gate log at the end of the run). */
+export interface GateBlock { kind: "dns_block" | "proxy_block"; target: string; count: number }
+
 interface Pending { session: string; name: string; c: ToolClass; t0: number; sub: string | null }
 
 export interface MapperInput {
@@ -154,6 +157,17 @@ export function sessionMapper(o: MapperInput) {
       }
       return ops;
     },
+    /** the gate's refusals: denied `mandat` calls on the lead */
+    gate(blocks: GateBlock[]): RecordOp[] {
+      if (closed || blocks.length === 0) return [];
+      const ops: RecordOp[] = [];
+      lead(ops);
+      for (const b of blocks) {
+        const c: ToolClass = { kind: "mandat", tool: b.kind === "dns_block" ? "gate.dns" : "gate.http", summary: `${b.target} ×${b.count}`, paths: [], subagent: false };
+        ops.push(call({ session: ids.lead, name: c.tool, c, t0: 0, sub: null }, "denied", null));
+      }
+      return ops;
+    },
     /** the run is over: unfinished calls are errors; open subagents and the lead end */
     close(ok: boolean): RecordOp[] {
       if (closed || !opened) {
@@ -203,6 +217,9 @@ export function recorder(wb: Workbench, repoId: string | null, m: SessionMapper,
     secret: (v: string) => m.secret(v),
     event(e: AgentEvent): void {
       if (!stopped) run(m.push(e));
+    },
+    gate(blocks: GateBlock[]): void {
+      if (!stopped) run(m.gate(blocks));
     },
     async close(ok: boolean): Promise<void> {
       run(m.close(ok));

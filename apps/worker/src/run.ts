@@ -27,6 +27,8 @@ export interface RunHooks {
   onCanary?: (value: string) => void;
   /** D-308: every parsed event of the agent's stream, in order (the session recorder); a throw here is ignored */
   onAgentEvent?: (e: AgentEvent) => void;
+  /** D-308: the gate's refusals for the agent's tree, aggregated, once at the end of the run; a throw here is ignored */
+  onGateBlocks?: (blocks: { kind: "dns_block" | "proxy_block"; target: string; count: number }[]) => void;
 }
 export interface RunTaskInput {
   home: string;
@@ -511,6 +513,12 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         const detail: SecurityEvent["detail"] = line.kind === "dns_block" ? { qname: line.qname ?? "", qtype: line.qtype ?? 0, count } : { method: line.method ?? "", path: line.path ?? "", count };
         if (tree !== "agent") detail.tree = tree;
         sec({ kind: line.kind as "proxy_block" | "dns_block", severity: "warn", detail, source: "gate" });
+      }
+      try {
+        const blocks = [...agg.values()].filter((a) => a.tree === "agent").map(({ line, count }) => ({ kind: line.kind as "proxy_block" | "dns_block", target: line.kind === "dns_block" ? (line.qname ?? "") : `${line.method ?? ""} ${line.path ?? ""}`.trim(), count }));
+        if (blocks.length > 0) i.hooks?.onGateBlocks?.(blocks);
+      } catch {
+        // the recorder must never stop the run (D-308)
       }
     }
 

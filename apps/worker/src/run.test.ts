@@ -315,6 +315,30 @@ describe("runTask (fake docker)", () => {
     expect(r.verdict?.tree_sha).not.toBeNull();
   });
 
+  it("D-308 hooks: every parsed agent event in order; the agent tree's gate blocks once, aggregated", async () => {
+    const lines = () => [
+      '{"type":"system","subtype":"init","session_id":"s","model":"m","tools":[],"mcp_servers":[]}',
+      JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "u1", name: "Bash", input: { command: "dig evil.example" } }] } }),
+      JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "u1", is_error: true }] } }),
+    ];
+    const blocking: typeof startRunGate = async (ctx, ...rest) => {
+      const g = await fakeGate()(ctx, ...rest);
+      if (ctx.tree === "agent") {
+        const l = { ts: "2026-10-22T08:00:00.000Z", run_id: ctx.runId, kind: "dns_block", qname: "evil.example", qtype: 1 };
+        writeFileSync(g.paths.log, `${JSON.stringify(l)}\n${JSON.stringify(l)}\n`);
+      }
+      return g;
+    };
+    const seen: string[] = [];
+    const blocks: unknown[] = [];
+    await go({
+      docker: new FakeDocker({ head: honest, agentLines: lines }),
+      x: { startGate: blocking },
+      i: { hooks: { onAgentEvent: (e) => { seen.push(e.type); throw new Error("ignored"); }, onGateBlocks: (b) => blocks.push(...b) } },
+    });
+    expect(seen).toEqual(["init", "tool_use", "tool_result"]);
+    expect(blocks).toEqual([{ kind: "dns_block", target: "evil.example", count: 2 }]);
+  });
   it("transcript формат (D-062)", async () => {
     const lines = (c: { token: string }) => [JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: `key ${c.token}` }] } }), "plain text"];
     const { r } = await go({ docker: new FakeDocker({ head: honest, agentLines: lines }) });

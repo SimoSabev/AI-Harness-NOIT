@@ -95,6 +95,17 @@ describe("sessionMapper (D-308)", () => {
     m.push({ type: "result", subtype: "error", isError: true, totalCostUsd: null, numTurns: null });
     expect(m.close(true).filter((o) => o.op === "end")).toEqual([{ op: "end", id: "s_demo_1_a1", state: "failed" }]);
   });
+  it("gate blocks become denied mandat calls on the lead (after the stream, before the end)", () => {
+    const m = sessionMapper({ ...base, now: () => 0 });
+    m.push(use("u1", "Bash", { command: "curl x" }));
+    expect(calls(m.gate([{ kind: "dns_block", target: "evil.example", count: 3 }, { kind: "proxy_block", target: "GET /v1/files", count: 1 }]))).toEqual([
+      { session_id: "s_demo_1_a1", kind: "mandat", tool: "gate.dns", summary: "evil.example ×3", decision: "denied", duration_ms: null },
+      { session_id: "s_demo_1_a1", kind: "mandat", tool: "gate.http", summary: "GET /v1/files ×1", decision: "denied", duration_ms: null },
+    ]);
+    expect(sessionMapper({ ...base, now: () => 0 }).gate([{ kind: "dns_block", target: "a", count: 1 }])[0]).toMatchObject({ op: "session" });
+    m.close(true);
+    expect(m.gate([{ kind: "dns_block", target: "late", count: 1 }])).toEqual([]);
+  });
   it("the canary never reaches a summary", () => {
     const m = sessionMapper({ ...base, now: () => 0 });
     m.secret("Zq9cAnArYvAlUe0123456789abcdefghijklmnop");
