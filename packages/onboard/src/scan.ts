@@ -36,6 +36,8 @@ export interface ScanResult {
   srcDirs: string[];
   testDirs: string[];
   hasCss: boolean;
+  /** E8б: style facts from .editorconfig / prettier / eslint config (file names and indent only) */
+  style: string[];
 }
 
 const LOCKFILES: [string, PackageManager][] = [["pnpm-lock.yaml", "pnpm"], ["package-lock.json", "npm"], ["yarn.lock", "yarn"], ["bun.lockb", "bun"], ["bun.lock", "bun"]];
@@ -136,7 +138,22 @@ export function scanRepo(v: RepoView): ScanResult {
     srcDirs: ["src", "lib", "app", "packages", "apps"].filter((d) => dirs.includes(d)),
     testDirs: ["tests", "test", "__tests__", "e2e"].filter((d) => dirs.includes(d)),
     hasCss: files.some((f) => /\.(css|scss)$/.test(f)),
+    style: styleFacts(v, files),
   };
+}
+
+function styleFacts(v: RepoView, files: string[]): string[] {
+  const out: string[] = [];
+  const ec = files.includes(".editorconfig") ? (v.read(".editorconfig") ?? "") : "";
+  const indentStyle = /^\s*indent_style\s*=\s*(space|tab)/m.exec(ec)?.[1];
+  const indentSize = /^\s*indent_size\s*=\s*(\d{1,2})/m.exec(ec)?.[1];
+  if (indentStyle === "tab") out.push("indent: tabs (.editorconfig)");
+  else if (indentStyle === "space" && indentSize) out.push(`indent: ${indentSize} spaces (.editorconfig)`);
+  const prettier = files.find((f) => /^\.prettierrc(\.(json|ya?ml|js|cjs|mjs))?$|^prettier\.config\.[cm]?js$/.test(f));
+  if (prettier) out.push(`formatter: prettier (${prettier})`);
+  const eslint = files.find((f) => /^(\.eslintrc(\.(json|ya?ml|js|cjs))?|eslint\.config\.[cm]?[jt]s)$/.test(f));
+  if (eslint) out.push(`linter: eslint (${eslint})`);
+  return out;
 }
 
 /** A view over a checked-out directory (skips .git and node_modules; symlinks are listed but not followed). */

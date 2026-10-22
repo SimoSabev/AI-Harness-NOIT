@@ -16,3 +16,5 @@ export { HARD, drift } from "./drift.js";
 export type { Drift } from "./drift.js";
 export { filesPatch, lineDiff } from "./patch.js";
 export type { FileChange } from "./patch.js";
+export { proposeProfile } from "./propose-profile.js";
+export type { GitHistory, ProfileProposal } from "./propose-profile.js";

@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { FIXTURES, memView } from "./fixtures.test-helper.js";
-import { generateHarnessFiles, propose, proposeProfile, renderAgentsBlock, scanRepo } from "./index.js";
+import type { renderAgentsBlock} from "./index.js";
+import { generateHarnessFiles, propose, proposeProfile, scanRepo } from "./index.js";
 
 // D-311: the visible layer (in the repo: the AGENTS.md block, CLAUDE.md, .mandat.yml) never carries permissions, hooks,
 // MCP servers or secrets — those live only in the control layer under /m/in/harness.
 describe("visible layer without control (E8б)", () => {
   it("AGENTS.md, CLAUDE.md and .mandat.yml contain no permissions, hooks, MCP config or secrets", () => {
-    const scan = scanRepo(memView(FIXTURES["npm-vitest"]));
+    const scan = scanRepo(memView(FIXTURES["npm-vitest"] ?? {}));
     const p = propose(scan);
     const prof = proposeProfile(scan, { repoId: "local", version: 1 }).profile;
     const files = generateHarnessFiles({ ...agentsInput(p), existingAgents: null, existingClaude: null, yaml: p.yaml });
