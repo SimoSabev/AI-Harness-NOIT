@@ -1,4 +1,5 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -305,5 +306,67 @@ describe("daemon and file conflicts (E8f, AC-4.2)", () => {
     expect((await s.db.query("select state, wait_for, retry_reason, attempt from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "CREATED", wait_for: "t_other", retry_reason: "conflict", attempt: 2 });
     expect((await s.db.query("select kind, text from public.task_activities where task_id = 't_web_1'")).rows).toEqual([{ kind: "conflict", text: "src/cart.ts · t_other" }]);
     expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
+  });
+});
+
+describe("daemon and a moved base (E8f, AC-4.5)", () => {
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@x" };
+  const recorded = () => readFileSync(path.join(repoRoot, "demo/recordings/scene1-task1.patch"));
+  const work = (mirror: string) => {
+    const w = path.join(mkdtempSync(path.join(os.tmpdir(), "mandat-w-")), "w");
+    execFileSync("git", ["clone", "-q", mirror, w], { env });
+    return w;
+  };
+  const agentPatch = (mirror: string) => {
+    const w = work(mirror);
+    execFileSync("git", ["apply"], { cwd: w, env, input: recorded() });
+    return execFileSync("git", ["diff", "--binary"], { cwd: w, env });
+  };
+  const moveMain = (mirror: string, file: string, edit: (s: string) => string) => {
+    const w = work(mirror);
+    writeFileSync(path.join(w, file), edit(readFileSync(path.join(w, file), "utf8")));
+    execFileSync("git", ["commit", "-qam", "someone else"], { cwd: w, env });
+    execFileSync("git", ["push", "-q", "origin", "HEAD:main", "HEAD:master"], { cwd: w, env });
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: w, env, encoding: "utf8" }).trim();
+  };
+  const runWith = (s: Awaited<ReturnType<typeof setup>>, patch: Buffer, onRun?: () => void) => {
+    s.deps.run = (i) => {
+      s.runs.push(i);
+      onRun?.();
+      const c = JSON.parse(readFileSync(i.contractPath, "utf8")) as { base_commit: string };
+      const runDir = path.join(s.deps.home, "runs", `r${s.runs.length}`);
+      mkdirSync(path.join(runDir, "export"), { recursive: true });
+      writeFileSync(path.join(runDir, "export", "diff.patch"), patch);
+      return Promise.resolve({ verdict: verdict("VERIFIED", c.base_commit), exit: 0, runDir, ledger: { from: 1, to: 3 }, agentExit: 0 });
+    };
+  };
+  it("main moved elsewhere during the run → no delivery; a rebase attempt with the rebased files; its own verdict → PR", async () => {
+    const s = await setup(2);
+    const patch = agentPatch(s.fx.mirror);
+    let moved = "";
+    runWith(s, patch, () => {
+      if (!moved) moved = moveMain(s.fx.mirror, "README.md", (x) => x + "\nmore\n");
+    });
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query("select state, attempt, retry_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "CREATED", attempt: 2, retry_reason: "rebase" });
+    expect(s.gh.state.calls.filter((c) => /^(createRef|createPull)/.test(c))).toEqual([]);
+    await runDaemonOnce(s.deps);
+    const second = s.runs[1];
+    expect(second?.applyFiles?.map((f) => f.path)).toEqual(["src/cart.ts"]);
+    expect((JSON.parse(readFileSync(second?.contractPath ?? "", "utf8")) as { base_commit: string }).base_commit).toBe(moved);
+    expect((await s.db.query<{ n: number }>("select count(*)::int as n from public.verdicts where task_id = 't_web_1'")).rows[0]?.n).toBe(2);
+    expect(s.gh.state.calls.some((c) => /^createPull/.test(c))).toBe(true);
+  });
+  it("main changed the same line → HELD base_moved with the conflict; nothing delivered, never force", async () => {
+    const s = await setup(2);
+    const patch = agentPatch(s.fx.mirror);
+    let moved = false;
+    runWith(s, patch, () => {
+      if (!moved) moved = Boolean(moveMain(s.fx.mirror, "src/cart.ts", (x) => x.replace("const DISCOUNT_THRESHOLD_CENTS = 50000;", "const DISCOUNT_THRESHOLD_CENTS = 40000;")));
+    });
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "base_moved" });
+    expect((await s.db.query("select kind, text from public.task_activities where task_id = 't_web_1'")).rows).toEqual([{ kind: "base_moved", text: "src/cart.ts" }]);
+    expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge|forcePush)/.test(c))).toEqual([]);
   });
 });
