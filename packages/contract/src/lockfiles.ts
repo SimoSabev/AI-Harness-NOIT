@@ -66,7 +66,7 @@ function collector() {
       add("doc", `/npm/${scope}%2F${p}`);
     } else add("doc", `/npm/${name}`);
   };
-  return { routes, pkg };
+  return { routes, pkg, tgz: (path: string) => add("tgz", path) };
 }
 
 const NAME = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
@@ -169,6 +169,8 @@ function berryAllowlist(text: string): LockAllowlistResult {
     }
     packages++;
     c.pkg(name, `/npm/${name}/-/${name.split("/").at(-1) as string}-${version}.tgz`);
+    // yarn 4 asks for a scoped tarball with the slash encoded (`/@scope%2fname/-/…`); exact, so the gate's %2f rule never applies
+    if (name.startsWith("@")) c.tgz(`/npm/${name.replace("/", "%2f")}/-/${name.split("/").at(-1) as string}-${version}.tgz`);
   }
   return { ok: true, routes: c.routes, packages };
 }
