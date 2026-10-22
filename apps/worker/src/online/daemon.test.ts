@@ -211,4 +211,21 @@ describe("daemon with harness profiles (E8б, AC-2.5/2.6)", () => {
     await runDaemonOnce(s.deps);
     expect((await s.db.query<{ wait_reason: string }>("select wait_reason from public.tasks where id = 't_web_1'")).rows[0]?.wait_reason).toBe("harness_unapproved");
   });
+  it("E8g: the agent hit an ask rule → tool_asks rows, HELD tool_approval, no delivery, a push; once-grants go to the next attempt", async () => {
+    const s = await setup(2);
+    await insertProfile(s.db, "approved");
+    const base = s.deps.run;
+    s.deps.run = async (i) => ({ ...(await (base as NonNullable<typeof base>)(i)), asks: [{ tool: "mcp:github.create_issue", reason: "a human decides on new issues" }] });
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "tool_approval" });
+    expect((await s.db.query<{ tool: string; attempt: number; status: string }>("select tool, attempt, status from public.tool_asks")).rows).toEqual([{ tool: "mcp:github.create_issue", attempt: 1, status: "pending" }]);
+    expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
+    expect((await s.db.query<{ payload: unknown }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload)).toEqual([{ task_id: "t_web_1", kind: "waiting" }]);
+    // a person said "allow once" (the web server does this): attempt 2 runs with the grant
+    await s.db.query("update public.tool_asks set status = 'once', grant_attempt = 2");
+    await s.db.query("update public.tasks set state = 'CREATED', attempt = 2, wait_reason = null where id = 't_web_1'");
+    s.deps.run = base;
+    await runDaemonOnce(s.deps);
+    expect(s.runs.at(-1)?.grantOnce).toEqual(["mcp:github.create_issue"]);
+  });
 });
