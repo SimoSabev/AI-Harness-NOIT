@@ -229,3 +229,38 @@ describe("daemon with harness profiles (E8б, AC-2.5/2.6)", () => {
     expect(s.runs.at(-1)?.grantOnce).toEqual(["mcp:github.create_issue"]);
   });
 });
+
+describe("daemon steering (E8g, AC-8.5)", () => {
+  it("a steerable agent gets a steer hook: new steer rows once each (framed later by the adapter); tasks.steerable while it runs", async () => {
+    const s = await setup(0);
+    await s.db.query("update public.tasks set agent = 'fake:steer-echo' where id = 't_web_1'");
+    await s.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_web_1', 'steer', 'use cents')", [DEMO_ORG_ID]);
+    const base = s.deps.run as NonNullable<typeof s.deps.run>;
+    const got: unknown[] = [];
+    let steerable: boolean | undefined;
+    s.deps.run = async (i) => {
+      steerable = (await s.db.query<{ steerable: boolean }>("select steerable from public.tasks where id = 't_web_1'")).rows[0]?.steerable;
+      got.push(await i.hooks?.steer?.(), await i.hooks?.steer?.());
+      return base(i);
+    };
+    await runDaemonOnce(s.deps);
+    expect(steerable).toBe(true);
+    expect(got).toEqual([[{ text: "use cents", author: "member" }], []]);
+    expect((await s.db.query<{ steerable: boolean }>("select steerable from public.tasks where id = 't_web_1'")).rows[0]?.steerable).toBe(false);
+  });
+  it("Claude Code is steerable only with deps.steer (S2 live first); Codex never", async () => {
+    const s = await setup(0);
+    await s.db.query("update public.tasks set agent = 'fake:honest-fix' where id = 't_web_1'");
+    await runDaemonOnce(s.deps);
+    expect(s.runs[0]?.hooks?.steer).toBeUndefined();
+  });
+  it("steers from an earlier attempt go into the contract of the next one (framed)", async () => {
+    const s = await setup(0);
+    await s.db.query("update public.tasks set attempt = 2 where id = 't_web_1'");
+    await s.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_web_1', 'steer', 'round <down>')", [DEMO_ORG_ID]);
+    await runDaemonOnce(s.deps);
+    const { readFileSync } = await import("node:fs");
+    const c = JSON.parse(readFileSync(s.runs[0]?.contractPath ?? "", "utf8")) as { text: string };
+    expect(c.text).toContain('source="steer">round &lt;down&gt;</untrusted>');
+  });
+});
