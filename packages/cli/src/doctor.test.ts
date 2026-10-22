@@ -35,6 +35,7 @@ const deps = (o: Parameters<typeof fakeDocker>[0], healthz = 200, proc = "Linux 
   procVersion: () => proc,
   toolVersion: (c) => Promise.resolve(c === "git" ? "2.47.1" : "12.14.0"),
   nodeVersion: "24.22.0",
+  bootProxy: () => Promise.resolve(true),
 });
 
 async function cli(args: string[], d: CliDeps, env: Record<string, string> = {}) {

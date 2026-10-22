@@ -33,7 +33,7 @@ describe("accounts commands with a fake docker (D-295)", () => {
         return Promise.resolve({ exitCode: 0, timedOut: false });
       },
     },
-    healthz: () => Promise.resolve({ ok: true, status: 200 }), procVersion: () => "", toolVersion: () => Promise.resolve("2.47.1"), nodeVersion: "24.22.0",
+    healthz: () => Promise.resolve({ ok: true, status: 200 }), procVersion: () => "", toolVersion: () => Promise.resolve("2.47.1"), nodeVersion: "24.22.0", bootProxy: () => Promise.resolve(true),
   });
   const io = () => {
     const o = { out: "", err: "" };

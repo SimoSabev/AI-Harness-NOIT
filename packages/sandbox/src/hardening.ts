@@ -233,7 +233,8 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
   if (!/^(mandat-llm-proxy|mandat-llm-proxy-test-[a-z0-9-]+|mandat-test-stub-[a-z0-9-]+)$/.test(o.name)) forbid("invalid proxy name");
   if (!/^\d+:\d+$/.test(o.user)) forbid("invalid user");
   if (o.image.startsWith("-")) forbid("invalid image");
-  checkEnv(o.envNames, o.publicEnv);
+  // E7в / D-345: the proxy gets only the one-time boot token by name (the key names stay allowed for the old path)
+  checkEnv(o.envNames.filter((n) => n !== "MANDAT_PROXY_BOOT_TOKEN"), o.publicEnv);
   const args = ["run", "-d", "--name", o.name];
   if (o.name === "mandat-llm-proxy") args.push("--restart", "unless-stopped");
   args.push(

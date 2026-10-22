@@ -13,6 +13,8 @@ export interface CliDeps {
   nodeVersion: string;
   /** tests: a fake ledger database for `verify-log --org <uuid>` */
   db?: SqlClient & { end?: () => Promise<void> };
+  /** E7в / D-345: hands the keys to a freshly started proxy once (POST /admin/boot on the loopback admin port) */
+  bootProxy(port: number, token: string, keys: { anthropic: string; openai?: string }): Promise<boolean>;
   /** tests: a local TSA instead of the network */
   tsaFetcher?: Fetcher;
 }
@@ -20,6 +22,14 @@ export interface CliDeps {
 export function realDeps(): CliDeps {
   return {
     docker: realDockerRunner(),
+    async bootProxy(port, token, keys) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/admin/boot`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(keys), signal: AbortSignal.timeout(5000) });
+        return r.status === 204;
+      } catch {
+        return false;
+      }
+    },
     async healthz(port) {
       try {
         const r = await fetch(`http://127.0.0.1:${port}/healthz`, { signal: AbortSignal.timeout(1500) });

@@ -6,3 +6,7 @@ export { SseResponsesUsage, SseUsage, responsesUsageOf } from "./sse-usage.js";
 export { createProxyServer, limitOf, PROXY_VERSION } from "./server.js";
 export { ProxyState } from "./state.js";
 export type { Limit, TaskUsage, RequestLine } from "./state.js";
+export { BOOT_TTL_MS, BootGate, bootTokenHash, mintBootToken } from "./boot.js";
+export type { BootOptions } from "./boot.js";
+export { FileKeyStore, kekId, loadKek, openKey, sealKey } from "./envelope.js";
+export type { KeyProvider, SealedKey } from "./envelope.js";
