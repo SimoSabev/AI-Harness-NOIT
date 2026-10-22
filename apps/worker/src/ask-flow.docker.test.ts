@@ -23,7 +23,7 @@ describe("ask flow (docker, fake:ask-probe)", () => {
     expect(a1.asks).toEqual([{ tool: "mcp:github.create_issue", reason: "a human decides on new issues" }]);
     expect(a1.verdict?.result).not.toBe("VERIFIED");
     const h1 = JSON.parse(readFileSync(path.join(a1.runDir ?? "", "harness.json"), "utf8")) as { denied: string[] };
-    expect(h1.denied).toEqual(["mcp__github__create_issue"]);
+    expect(h1.denied).toEqual(["github.create_issue"]); // the unified stream names MCP tools server.tool
     const a2 = await runTask({ home, contractPath, agent: "fake:ask-probe", keep: false, json: true, profile, grantOnce: ["mcp:github.create_issue"] });
     expect(a2.asks).toBeUndefined();
     expect(a2.verdict?.result).toBe("VERIFIED");

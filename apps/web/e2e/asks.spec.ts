@@ -23,7 +23,7 @@ test("ask card: Needs permission → Allow once → the task is queued again; th
   await page.getByRole("button", { name: "Allow once" }).click();
   await expect(page.getByText("Decided: allowed once")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Steer the agent" })).toBeVisible();
-  await page.getByLabel("Steer the agent").fill("keep the amounts in cents");
+  await page.getByLabel("Your note to the agent").fill("keep the amounts in cents");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Saved; it goes into the next attempt.")).toBeVisible();
 });

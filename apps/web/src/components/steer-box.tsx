@@ -34,7 +34,7 @@ export function SteerBox({ taskId, live, codex }: { taskId: string; live: boolea
       <h2 id="steer-h" className="text-sm font-medium">{t("steer.title")}</h2>
       {!live && <p className="text-xs text-mute">{t("steer.notLive")}</p>}
       <div className="flex gap-2">
-        <input className={`${input} flex-1`} value={text} maxLength={500} onChange={(e) => setText(e.target.value)} placeholder={t("steer.placeholder")} aria-label={t("steer.title")} />
+        <input className={`${input} flex-1`} value={text} maxLength={500} onChange={(e) => setText(e.target.value)} placeholder={t("steer.placeholder")} aria-label={t("steer.note")} />
         <button type="submit" className={btn.secondary} disabled={busy || text.trim() === ""}>{t("steer.send")}</button>
       </div>
       {msg && <p role={msg.ok ? "status" : "alert"} className={`text-sm ${msg.ok ? "text-ok" : "text-bad"}`}>{msg.text}</p>}

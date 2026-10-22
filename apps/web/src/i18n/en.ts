@@ -58,6 +58,7 @@ export const en = {
   "status.expired.label": "Expired",
   "status.expired.headline": "Nobody decided in time; the task was closed and nothing was delivered.",
   "steer.title": "Steer the agent",
+  "steer.note": "Your note to the agent",
   "steer.placeholder": "e.g. keep amounts in cents",
   "steer.send": "Send",
   "steer.sentLive": "Sent; the agent sees it now.",

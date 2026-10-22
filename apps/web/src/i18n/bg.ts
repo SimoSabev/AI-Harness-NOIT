@@ -56,6 +56,7 @@ export const bg: Record<Key, string> = {
   "status.expired.label": "Изтекла",
   "status.expired.headline": "Никой не реши навреме; задачата е затворена и нищо не е доставено.",
   "steer.title": "Насочи агента",
+  "steer.note": "Твоята бележка към агента",
   "steer.placeholder": "напр. дръж сумите в стотинки",
   "steer.send": "Изпрати",
   "steer.sentLive": "Изпратено; агентът го вижда сега.",
