@@ -5,7 +5,7 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf, profileHash,
+  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
@@ -289,6 +289,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let baseDir = "";
 
     const pm = packageManagerOf(contract.repo_config); // D-301
+    let berry = false; // E8и (D-358): yarn.lock with __metadata
     try {
       // ---------- PROVISION (7.4)
       await timed("provision", async () => {
@@ -296,6 +297,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         baseDir = clone.dir;
         const b = readLockfile(baseDir, pm);
         const allow = lockAllowlist(pm, b ? b.toString("utf8") : null);
+        berry = isBerryLock(b ? b.toString("utf8") : null);
         if (!allow.ok) infra("E_LOCKFILE_BASE", `base lockfile rejected: ${allow.reason}`);
         if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
         const seed = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(baseDir), timeoutMs: 120_000 });
@@ -331,7 +333,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- INSTALL (7.5)
       await timed("install", async () => {
-        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm), timeoutMs: 300_000 });
+        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm, berry), timeoutMs: 300_000 });
         if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `${pm} install exit ${r.exitCode}`);
         out(`[install]   ${contract.repo_config.runtime.install} via gate`);
       });

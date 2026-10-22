@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { LOCKFILE, installCommand, lockAllowlist, parseVitestReport } from "@mandat/contract";
+import { LOCKFILE, installCommand, isBerryLock, lockAllowlist, parseVitestReport } from "@mandat/contract";
 import type { PackageManager, ParsedReport } from "@mandat/contract";
 import { packTree } from "@mandat/export";
 import { dockerText, names } from "@mandat/sandbox";
@@ -48,7 +48,8 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
   const installCode = i.tree === "base" ? "E_INSTALL_BASE" : "E_INSTALL_TREE";
   const pm = i.packageManager ?? "npm";
   const lockFile = path.join(i.treeDir, LOCKFILE[pm]);
-  const allow = lockAllowlist(pm, existsSync(lockFile) ? readFileSync(lockFile, "utf8") : null);
+  const lockText = existsSync(lockFile) ? readFileSync(lockFile, "utf8") : null;
+  const allow = lockAllowlist(pm, lockText);
   if (!allow.ok) return { ok: false, code: i.tree === "base" ? "E_LOCKFILE_BASE" : "E_INSTALL_TREE" };
   let gate: RunGate | undefined;
   try {
@@ -63,7 +64,7 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
     } catch (e) {
       return { ok: false, code: (e as { code?: string }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START" };
     }
-    const inst = await runSandbox(ctx, { role: "install", volume: vol, network: gate.net, tree, env: { phase: "install" }, cmd: installCommand(pm), timeoutMs: 300_000 });
+    const inst = await runSandbox(ctx, { role: "install", volume: vol, network: gate.net, tree, env: { phase: "install" }, cmd: installCommand(pm, isBerryLock(lockText)), timeoutMs: 300_000 });
     await gate.stop();
     gate = undefined;
     if (inst.exitCode !== 0 || inst.timedOut) return { ok: false, code: installCode };
