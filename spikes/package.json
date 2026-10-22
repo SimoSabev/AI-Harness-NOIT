@@ -2,7 +2,7 @@
   "name": "spikes",
   "version": "0.0.0",
   "private": true,
-  "description": "E0 spikes S0\u2013S2 (not part of the product, D-086, D-087)",
+  "description": "E0 spikes S0–S2 (not part of the product, D-086, D-087)",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "dependencies": {
@@ -14,7 +14,8 @@
     "@modelcontextprotocol/sdk": "1.32.1",
     "zod": "4.6.7",
     "@mandat/export": "workspace:*",
-    "@mandat/redaction": "workspace:*"
+    "@mandat/redaction": "workspace:*",
+    "@mandat/core": "workspace:*"
   },
   "files": [
     "*.mjs"

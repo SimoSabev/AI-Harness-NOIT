@@ -613,6 +613,9 @@ importers:
       '@mandat/contract':
         specifier: workspace:*
         version: link:../packages/contract
+      '@mandat/core':
+        specifier: workspace:*
+        version: link:../packages/core
       '@mandat/export':
         specifier: workspace:*
         version: link:../packages/export
