@@ -162,11 +162,10 @@ function berryAllowlist(text: string): LockAllowlistResult {
     if (!m) return { ok: false, reason: "git_or_url_dep", path: key };
     const [, name = "", version = ""] = m;
     if (!VERSION.test(version)) return { ok: false, reason: "git_or_url_dep", path: key };
-    if (typeof entry?.checksum !== "string" || entry.checksum.length === 0) {
-      // a binary for another platform (`conditions`): yarn never fetched it, so no checksum → no route; the gate refuses it
-      if (typeof (entry as { conditions?: unknown } | null)?.conditions === "string") continue;
-      return { ok: false, reason: "bad_integrity", path: key };
-    }
+    // yarn 4 writes no checksum for a platform binary (`conditions`), even on the platform that fetched it: its exact
+    // name@version is the pin (the registry never changes a published version); anything else without a checksum is refused
+    const conditional = typeof (entry as { conditions?: unknown } | null)?.conditions === "string";
+    if ((typeof entry?.checksum !== "string" || entry.checksum.length === 0) && !conditional) return { ok: false, reason: "bad_integrity", path: key };
     packages++;
     c.pkg(name, `/npm/${name}/-/${name.split("/").at(-1) as string}-${version}.tgz`);
     // yarn 4 asks for a scoped tarball with the slash encoded (`/@scope%2fname/-/…`); exact, so the gate's %2f rule never applies
