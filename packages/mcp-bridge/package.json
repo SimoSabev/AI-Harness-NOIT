@@ -2,7 +2,7 @@
   "name": "@mandat/mcp-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP servers for the agent: vetting (definitions hash, poisoned descriptions), the registry client, the stdio → streamable HTTP bridge of the sidecar",
+  "description": "MCP servers for the agent: vetting (definitions hash, poisoned descriptions), the registry client, the stdio \u2192 streamable HTTP bridge of the sidecar",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "files": [
@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@mandat/contract": "workspace:*",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "zod": "4.6.7"
   }
 }
