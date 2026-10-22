@@ -33,3 +33,25 @@ describe("workbench (D-307)", () => {
     expect(() => ResearchClaimWrite.parse({ text: "x", verdict: "maybe", source_ns: [] })).toThrow();
   });
 });
+
+describe("night shift v5 (2.4, D-320)", () => {
+  it("on_fail is retry_then_park; old values read as it; retries default 1", async () => {
+    const { NightRules, NightQuestion } = await import("./index.js");
+    const r = NightRules.parse({ auto_merge: { min_level: 3, max_lines: 80 }, on_fail: "retry_once", same_file: "wait", forbid_tools: [] });
+    expect(r.on_fail).toBe("retry_then_park");
+    expect(r.retries).toBe(1);
+    expect(() => NightRules.parse({ ...r, retries: 4 })).toThrow();
+    const q = NightQuestion.parse({ shift_id: "11111111-1111-4111-8111-111111111111", task_id: "t_n1", what_stopped: "D4 outside allowed paths", tried: ["attempt 1"], proposal: "add src/x to allowed_paths", status: "open", answer: null });
+    expect(q.status).toBe("open");
+    expect(() => NightQuestion.parse({ ...q, status: "maybe" })).toThrow();
+  });
+});
+
+describe("evidence and ledger kinds v5 (2.6)", () => {
+  it("new detectors, ledger kinds and security event kinds", async () => {
+    const { DetectorId, LedgerKind, SecurityEventKind } = await import("./index.js");
+    for (const d of ["D5.hidden", "D8.static", "D12.ui", "RESEARCH", "REVIEW"]) expect(DetectorId.parse(d)).toBe(d);
+    for (const k of ["profile_change", "role_change", "tool_permission", "mcp_change", "night_question", "research_run", "conflict", "parked"]) expect(LedgerKind.parse(k)).toBe(k);
+    for (const k of ["tool_poisoning", "mcp_definition_changed", "ask_denied", "conflict_file", "config_change"]) expect(SecurityEventKind.parse(k)).toBe(k);
+  });
+});
