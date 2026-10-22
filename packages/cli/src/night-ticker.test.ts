@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { NightTick } from "@mandat/worker";
 import { nightTicker } from "./commands/worker.js";
 
 // E9а (v5 5.1): the night shift ticks in the worker's effects loop, at most every 30 s, and says what changed.
@@ -7,12 +8,12 @@ describe("night ticker (E9а)", () => {
     let t = 0;
     const calls: number[] = [];
     const logs: string[] = [];
-    const results = [
+    const results: NightTick[] = [
       { started: ["s1"], parked: [], done: [] },
       { started: [], parked: ["t_night_1", "t_night_2"], done: ["s1"] },
       { started: [], parked: [], done: [] },
     ];
-    const tick = nightTicker({ now: () => t, log: (l) => logs.push(l), tick: () => { calls.push(t); return Promise.resolve(results[calls.length - 1] ?? results[2]); } });
+    const tick = nightTicker({ now: () => t, log: (l) => logs.push(l), tick: () => { calls.push(t); return Promise.resolve(results[calls.length - 1] ?? { started: [], parked: [], done: [] }); } });
     await tick();
     t = 10_000;
     await tick();
