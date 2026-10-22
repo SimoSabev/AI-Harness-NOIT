@@ -29,7 +29,7 @@ const BUN_ENV = ["BUN_CONFIG_REGISTRY=http://egress-gate/npm/", "BUN_INSTALL_CAC
  */
 const BERRY_ENV = [
   "YARN_IGNORE_PATH=1", "YARN_NPM_REGISTRY_SERVER=http://egress-gate/npm", "YARN_UNSAFE_HTTP_WHITELIST=egress-gate", "YARN_ENABLE_SCRIPTS=0",
-  "YARN_ENABLE_TELEMETRY=0", "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_CACHE_FOLDER=/home/agent/.yarn-berry-cache", "YARN_NODE_LINKER=node-modules",
+  "YARN_ENABLE_TELEMETRY=0", "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_CACHE_FOLDER=/home/agent/.yarn-berry-cache", "YARN_GLOBAL_FOLDER=/home/agent/.yarn-berry-global", "YARN_NODE_LINKER=node-modules",
   "YARN_INSTALL_STATE_PATH=/tmp/yarn-install-state.gz", "YARN_ENABLE_IMMUTABLE_INSTALLS=1", "YARN_ENABLE_PROGRESS_BARS=0",
 ];
 export const isBerryLock = (text: string | null): boolean => text !== null && /^__metadata:/m.test(text);
