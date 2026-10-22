@@ -20,6 +20,10 @@ export function parseTheme(v: string | undefined): Theme {
 export function parseView(v: string | undefined): View {
   return VIEWS.some((x) => x.id === v) ? (v as View) : "map";
 }
-export function prefCookie(name: "theme" | "view", value: string): string {
+/** D-307: samples fill the screens the system does not record yet; on unless switched off. */
+export function parseSample(v: string | undefined): boolean {
+  return v !== "0";
+}
+export function prefCookie(name: "theme" | "view" | "sample", value: string): string {
   return `${name}=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }
