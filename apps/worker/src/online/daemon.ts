@@ -41,6 +41,8 @@ export interface DaemonDeps {
   sleep?: (ms: number) => Promise<void>;
   /** E8g (D-353): steer a live Claude Code (stream-json stdin); off until spike S2 is green live (MANDAT_STEER=1) */
   steer?: boolean;
+  /** E8e (D-354): the secret values of an MCP server (api_keys provider mcp:<name>, a JSON object NAME → value) */
+  mcpSecrets?: (org: string, name: string) => Promise<Record<string, string>>;
 }
 
 interface TaskRow {
@@ -210,6 +212,19 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       taskId: t.id, repoId: t.repo_id, agent: profile ? `claude@${profile}` : t.agent, model: contract.channel.model, account: profile ?? null,
       ...(d.broadcast ? { broadcast: d.broadcast } : {}), log,
     });
+    // E8e (D-354): each stdio MCP server of the profile gets only its declared secrets and its call budget
+    const mcpRefs = hp ? hp.layers.e.mcp.filter((m) => m.transport === "stdio") : [];
+    const mcpSecrets: Record<string, Record<string, string>> = {};
+    const mcpBudgets: Record<string, number> = {};
+    if (mcpRefs.length > 0) {
+      for (const b of (await d.db.query<{ name: string; budget_calls_min: number }>("select name, budget_calls_min from public.mcp_servers where org_id = $1::uuid and name = any($2::text[])", [t.org_id, mcpRefs.map((m) => m.name)])).rows) mcpBudgets[b.name] = b.budget_calls_min;
+      if (d.mcpSecrets) {
+        for (const m of mcpRefs.filter((x) => x.secrets.length > 0)) {
+          const all = await d.mcpSecrets(t.org_id, m.name).catch(() => ({}) as Record<string, string>);
+          mcpSecrets[m.name] = Object.fromEntries(m.secrets.filter((n) => typeof all[n] === "string").map((n) => [n, all[n] as string]));
+        }
+      }
+    }
     // E8g: ask rules a person allowed once for exactly this attempt
     const grants = hp ? (await d.db.query<{ tool: string }>("select tool from public.tool_asks where task_id = $1 and status = 'once' and grant_attempt = $2 order by tool", [t.id, t.attempt])).rows.map((r) => r.tool) : [];
     const steerHook = async () => {
@@ -225,6 +240,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}) },
         ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
+        ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
+        ...(Object.keys(mcpBudgets).length > 0 ? { mcpBudgets } : {}),
       });
     } finally {
       if (steerable) await d.db.query("update public.tasks set steerable = false where id = $1", [t.id]).catch(() => undefined);

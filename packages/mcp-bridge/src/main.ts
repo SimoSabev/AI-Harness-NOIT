@@ -3,8 +3,8 @@ import { startBridge } from "./bridge.js";
 import { SidecarSpec, serverEnv } from "./spec.js";
 
 // E8e (D-354): `mandat-mcp-bridge` in the sidecar container. `--vet`: start the server, print the vetting (hash, findings,
-// per-tool hashes) as one JSON line and exit (no network, at approval). Otherwise serve /mcp on :8080; a block is printed
-// as a JSON line the worker reads from the container log (security_event mcp_definition_changed).
+// per-tool hashes) as one JSON line and exit (no network, at approval). Otherwise serve /mcp on :8080; the worker reads
+// GET /status from inside the container (the sandbox has no log driver) → a block is security_event mcp_definition_changed.
 const spec = SidecarSpec.parse(JSON.parse(process.env.MANDAT_MCP_SPEC ?? "null"));
 const vet = process.argv.includes("--vet");
 const out = (o: unknown) => process.stdout.write(JSON.stringify(o) + "\n");

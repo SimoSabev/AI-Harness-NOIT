@@ -11,7 +11,7 @@ import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProf
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
-import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarLines, startSidecar, stopSidecars } from "./mcp-sidecar.js";
+import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
@@ -58,6 +58,8 @@ export interface RunTaskInput {
   grantOnce?: string[];
   /** E8e (D-354): the values of each MCP server's declared secrets (from the key store); only its sidecar gets them */
   mcpSecrets?: Record<string, Record<string, string>>;
+  /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
+  mcpBudgets?: Record<string, number>;
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
@@ -344,7 +346,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "the installed package is not the vetted one (digest)" });
             continue;
           }
-          const started = await startSidecar(sctx, { gate: g, ref, installed, secrets: i.mcpSecrets?.[ref.name] ?? {} });
+          const started = await startSidecar(sctx, { gate: g, ref, installed, secrets: i.mcpSecrets?.[ref.name] ?? {}, perMin: i.mcpBudgets?.[ref.name] ?? 60 });
           mcpStarted.push(ref.name);
           if (started.line.event === "blocked") {
             i.hooks?.onMcpBlocked?.({ name: ref.name, reason: started.line.reason ?? "changed", hash: started.line.hash });
@@ -504,8 +506,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           if (raw && policy) asks = parseAsks(raw.toString("utf8"), JSON.parse(policy.bytes) as { rules: { tool: string; decision: string; reason?: string }[] });
           // E8e: a rug pull during the run (tools/list_changed) is a later "blocked" line of the sidecar
           for (const name of mcpStarted) {
-            for (const l of (await sidecarLines(sctx, mcpNames.container(runId, name))).filter((x) => x.event === "blocked" && x.reason === "list_changed")) {
-              i.hooks?.onMcpBlocked?.({ name, reason: "list_changed", hash: l.hash });
+            const st = await sidecarStatus(sctx, mcpNames.container(runId, name));
+            if (st?.state === "blocked" && st.reason === "list_changed") {
+              i.hooks?.onMcpBlocked?.({ name, reason: "list_changed", hash: st.hash });
               sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name, reason: "list_changed" }, source: "worker" });
             }
           }

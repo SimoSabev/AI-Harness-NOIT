@@ -1789,3 +1789,22 @@ ask/deny правила, а D няма такъв hook): иначе ask прав
 Защо: v5 т. 4.4 (3), AC-8.5; правило 9 (непровереното е [НП] + спайк, не поведение по подразбиране).
 Алтернативи: насочване през файл в /m/in (агентът трябва да го чете сам; не е в транскрипта).
 Източник: v5 т. 4.4, спайк S2 (docs/spikes/S2*). Статус: решено; live чака Симо.
+
+## D-354 MCP каталог: точни версии, проверка без мрежа, sidecar зад вратата; скилове с хеш (22.10.2026)
+Решение: (1) `mcp_servers` += source/registry_name/package/url/version (точна semver, никога latest)/digest/tools_hash/
+secrets (имена)/enabled_tools/budget_calls_min/vet_status (pending → vetting → approved | blocked)/vet_findings/approved_*;
+`mcp_tool_defs` (хеш на описание и схема по инструмент). (2) Регистърът (`/v0.1/servers`, [V] 22.10.2026) е само
+откриване. (3) Одобрение = `tools.manage` (+ TOTP, ако стига извън машината) → outbox `mcp_vet` → worker-ът инсталира
+пакета през вратата (npm prefix маршрут само за харнеса, преди агента; scoped packument `/npm/@scope%2fname` е единственото
+позволено %2f) и пуска бриджа `--vet` без мрежа. Чисто → approved + нова версия на слой E (`private.profile_layer_version`,
+само един слой се сменя); находки → blocked. (4) Изпълнение: sidecar = образът на пясъчника с роля `mcp` (собствен volume,
+обявени тайни, без LLM ключове), internal мрежа само с вратата; маршрут `upstream: mcp` с бюджет в минута. Бриджът
+(`packages/mcp-bridge`, SDK 2.3.1: low-level Server + createMcpHandler, stateless) сверява хеша при старт и спира на
+`tools/list_changed` → `security_event mcp_definition_changed` + каталогът blocked. (5) Скилове: репо + вградени, sha256;
+невидим знак → блок; материализира се само текст със същия хеш. (6) Плъгини: вградени редове (verdict в PR — вкл.;
+снимка при UI, нощен доклад, Slack — изкл. до фазите им).
+Защо: v5 т. 4.5; research-tools.md §4.3 (tool poisoning, rug pull). Алтернативи: npx в агентския контейнер (тайните и
+файловете на агента са достъпни на сървъра); доверие в регистъра (той не сканира код).
+Отворено: egress на stdio сървъри към обявени хостове и http сървъри (втора врата) [НП]; streamable HTTP от Claude Code и
+Codex през вратата [НП → чеклист 18].
+Източник: v5 т. 4.5, research-tools.md §4.1/§4.3. Статус: решено.

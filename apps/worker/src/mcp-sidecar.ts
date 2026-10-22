@@ -101,7 +101,7 @@ export async function vetMcp(ctx: SandboxCtx, o: { volume: string; ref: McpServe
 }
 
 /** Starts the sidecar (detached) on the MCP network and connects the gate to it; resolves with the bridge's first line. */
-export async function startSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: McpServerRef; installed: Installed; secrets: Record<string, string>; timeoutMs?: number }): Promise<{ line: BridgeLine; route: GateRoute[] }> {
+export async function startSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: McpServerRef; installed: Installed; secrets: Record<string, string>; perMin?: number; timeoutMs?: number }): Promise<{ line: BridgeLine; route: GateRoute[] }> {
   const net = mcpNames.net(ctx.runId);
   const exists = (await dockerText(ctx.docker, ["network", "inspect", net])).exitCode === 0;
   if (!exists) {
@@ -116,11 +116,12 @@ export async function startSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: Mcp
   if (r.exitCode !== 0) throw new MandatError("E_DOCKER", `mcp ${o.ref.name}: sidecar did not start`);
   const deadline = Date.now() + (o.timeoutMs ?? 60_000);
   for (;;) {
-    const line = (await sidecarLines(ctx, name)).find((x) => x.event === "serving" || x.event === "blocked");
-    if (line) {
+    const st = await sidecarStatus(ctx, name);
+    if (st) {
+      const line: BridgeLine = { event: st.state === "serving" ? "serving" : "blocked", name: o.ref.name, reason: st.reason, hash: st.hash, tools: st.tools };
       const target = `http://${name}:8080`;
       const route: GateRoute[] = line.event === "serving"
-        ? (["POST", "GET"] as const).map((method) => ({ id: `mcp-${o.ref.name}-${method}`, method, match: { kind: "exact" as const, path: `/mcp/${o.ref.name}` }, upstream: "mcp" as const, mcp: { target, per_min: 60 } }))
+        ? (["POST", "GET"] as const).map((method) => ({ id: `mcp-${o.ref.name}-${method}`, method, match: { kind: "exact" as const, path: `/mcp/${o.ref.name}` }, upstream: "mcp" as const, mcp: { target, per_min: o.perMin ?? 60 } }))
         : [];
       return { line, route };
     }
@@ -129,10 +130,19 @@ export async function startSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: Mcp
   }
 }
 
-/** The bridge's JSON lines so far (serving / blocked; a rug pull during the run is a later "blocked" line). */
-export async function sidecarLines(ctx: SandboxCtx, name: string): Promise<BridgeLine[]> {
-  const r = await dockerText(ctx.docker, ["logs", name], 30_000);
-  return r.stdout.split("\n").map(parseLine).filter((x): x is BridgeLine => x !== null);
+/**
+ * The bridge's /status, asked from inside its own container (the sandbox runs with --log-driver none, and the worker is
+ * not on the internal MCP network). A rug pull during the run shows up here as blocked / list_changed.
+ */
+export async function sidecarStatus(ctx: SandboxCtx, name: string): Promise<{ state: string; reason: string | null; hash: string; tools: number } | null> {
+  const r = await dockerText(ctx.docker, ["exec", name, "node", "-e", 'fetch("http://127.0.0.1:8080/status").then((r) => r.text()).then((t) => process.stdout.write(t), () => process.exit(3))'], 30_000);
+  if (r.exitCode !== 0) return null;
+  try {
+    const j = JSON.parse(r.stdout) as { state: string; reason: string | null; hash: string; tools: number };
+    return typeof j.state === "string" && typeof j.hash === "string" ? j : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function stopSidecars(ctx: SandboxCtx, names: string[]): Promise<void> {

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { upsertSkills } from "./skills.js";
+import { upsertBuiltinPlugins, upsertSkills } from "./skills.js";
 
 // E8e (v5 p. 4.5 (5), AC-5.7): the scan writes the skills catalog — the harness's skills (approved), the repo's (with hash;
 // blocked ones carry the reason and never reach an agent). A rescan updates the rows, never duplicates them.
@@ -26,6 +26,16 @@ describe("skills catalog (AC-5.7)", () => {
       { name: "review", source: "builtin", approved: true, blocked_reason: null, has_hash: true },
       { name: "sneaky", source: "repo", approved: false, blocked_reason: "invisible character U+202E", has_hash: true },
       { name: "test-first", source: "builtin", approved: true, blocked_reason: null, has_hash: true },
+    ]);
+  });
+  it("builtin plugins: the verdict in the PR is on; the night report, the UI snapshot and Slack wait for their phases", async () => {
+    await upsertBuiltinPlugins(db, DEMO_ORG_ID);
+    await upsertBuiltinPlugins(db, DEMO_ORG_ID);
+    expect((await db.query("select name, kind, enabled from public.plugins order by name")).rows).toEqual([
+      { name: "mandat-verdict-in-pr", kind: "check", enabled: true },
+      { name: "night-report", kind: "notify", enabled: false },
+      { name: "slack-notify", kind: "notify", enabled: false },
+      { name: "ui-snapshot", kind: "check", enabled: false },
     ]);
   });
 });

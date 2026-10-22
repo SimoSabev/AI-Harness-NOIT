@@ -1,6 +1,7 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, openDb, runBaseline, runDaemonOnce, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, openDb, pgKeyStore, runBaseline, runDaemonOnce, vetMcpDocker } from "@mandat/worker";
+import { loadKek } from "@mandat/llm-proxy";
 import { repoRoot } from "../paths.js";
 import type { Io } from "../output.js";
 
@@ -58,6 +59,12 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   const broadcast = broadcasterFromEnv(env);
   io.stderr(`mandat worker: ${gh === undefined ? "?" : env.GITHUB_WRITER_APP_ID ? "GitHub App" : "fakeGitHub (offline)"} · realtime ${broadcast ? "on" : "off (polling)"}\n`);
   const slots = o.slots ?? slotsFrom(env.MANDAT_WORKER_SLOTS, 1);
+  // E8e (D-354): an MCP server's secrets are one sealed value (provider mcp:<name>) = a JSON object NAME → value
+  const mcpSecrets = async (org: string, name: string): Promise<Record<string, string>> => {
+    const raw = await pgKeyStore(db, org, loadKek({ env, mandatHome: o.home })).get(`mcp:${name}`);
+    const j: unknown = raw ? JSON.parse(raw) : {};
+    return j !== null && typeof j === "object" ? Object.fromEntries(Object.entries(j).filter((e): e is [string, string] => typeof e[1] === "string")) : {};
+  };
   if (slots > 1) io.stderr(`mandat worker: ${slots} задачи едновременно\n`);
   try {
     await workerSlots({
@@ -66,7 +73,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       pollMs: o.pollMs ?? 2000,
       ...(o.signal ? { signal: o.signal } : {}),
       // E8g (D-353): steering a live Claude Code waits for spike S2 (live); MANDAT_STEER=1 turns it on
-      tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n"), ...(env.MANDAT_STEER === "1" ? { steer: true } : {}) }),
+      tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n"), ...(env.MANDAT_STEER === "1" ? { steer: true } : {}), mcpSecrets }),
       drain: async () => {
         // E7г (D-314): the baseline at connect runs in the sandbox; MANDAT_BASELINE=0 turns it off
         const baselineRunner = env.MANDAT_BASELINE === "0" ? undefined : (dir: string, policy: Parameters<typeof runBaseline>[1]) => runBaseline(dir, policy, { mandatHome: o.home, repoRoot, env });
