@@ -216,9 +216,14 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const sameFile = hp ? hp.layers.g.same_file : "wait";
   let conflictWith: string | null = null;
   let checking = false;
-  const onTouching = (files: string[]) => {
-    if (checking) return;
+  let myFiles: string[] = [];
+  let lastCheck = 0;
+  // checked when a new file is touched and again every 2 s while the run asks (the other task may write its files later)
+  const check = () => {
+    if (checking || myFiles.length === 0 || conflictWith) return;
     checking = true;
+    lastCheck = Date.now();
+    const files = myFiles;
     void (async () => {
       const others = await liveTouches(d.db, { repoId: t.repo_id, except: t.id });
       const me = (await d.db.query<{ started_at: string }>("select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') as started_at from public.tasks where id = $1", [t.id])).rows[0]?.started_at ?? "";
@@ -234,6 +239,14 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       .finally(() => {
         checking = false;
       });
+  };
+  const onTouching = (files: string[]) => {
+    myFiles = files;
+    check();
+  };
+  const stopRequested = (): "conflict" | null => {
+    if (Date.now() - lastCheck > 2000) check();
+    return conflictWith ? "conflict" : null;
   };
   const runOnce = async () => {
     const rec = sessionRecorder(workbench(d.db, t.org_id), {
@@ -267,7 +280,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       return await (d.run ?? runTask)({
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
-        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested: () => (conflictWith ? "conflict" : null) },
+        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),

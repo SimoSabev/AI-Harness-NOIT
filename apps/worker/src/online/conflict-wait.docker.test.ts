@@ -54,6 +54,8 @@ describe("same file, two live tasks (docker)", () => {
     await new Promise((res) => setTimeout(res, 4000));
     const second = runDaemonOnce(d);
     expect((await Promise.all([first, second])).sort()).toEqual(["t_conf_a", "t_conf_b"]);
+    // the live session of the first task recorded what it touches (the base of the check)
+    expect((await db.query<{ touching: string[] }>("select touching from public.agent_sessions where task_id = 't_conf_a'")).rows.flatMap((r) => r.touching)).toContain("src/cart.ts");
     const rows = (await db.query<{ id: string; state: string; retry_reason: string | null; wait_for: string | null }>("select id, state, retry_reason, wait_for from public.tasks order by id")).rows;
     expect(rows.find((r) => r.id === "t_conf_b")).toMatchObject({ state: "CREATED", retry_reason: "conflict", wait_for: "t_conf_a" });
     expect(rows.find((r) => r.id === "t_conf_a")?.state).not.toBe("CREATED");
