@@ -295,7 +295,7 @@ describe("daemon steering (E8g, AC-8.5)", () => {
     await s.db.query("update public.night_shifts set status = 'done'");
     await runDaemonOnce(s.deps);
     expect(s.runs[0]?.subjects ?? []).not.toContain("night");
-    expect(s.runs[0]?.profile?.layers.c.some((r) => r.subject === "night")).toBe(false);
+    expect(s.runs[0]?.profile?.layers.c.some((r) => r.reason === "forbidden by the night shift")).toBe(false);
   });
   it("E9а: at night a level-2 change is not auto-merged when the shift's rule wants level 3 → HELD approval (waiting for a person)", async () => {
     const s = await setup(2);

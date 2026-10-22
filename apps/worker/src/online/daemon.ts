@@ -134,7 +134,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const t = q.rows[0];
   if (!t) throw new Error(`no task ${taskId}`);
   // E9а (v5 5.1): a night task runs under the shift's rules (forbidden tools → layer C for the subject night; auto_merge)
-  const nightRules = t.shift_id ? NightRules.safeParse((await d.db.query<{ rules: unknown }>("select rules from public.night_shifts where id = $1::uuid", [t.shift_id])).rows[0]?.rules) : null;
+  const nightRules = t.shift_id ? NightRules.safeParse((await d.db.query<{ rules: unknown }>("select rules from public.night_shifts where id = $1::uuid and status = 'running'", [t.shift_id])).rows[0]?.rules) : null;
   const night = nightRules?.success ? nightRules.data : null;
   const bc = async (state: string, seq: number, extra: { result?: string | null; level?: number | null; wait_reason?: string | null; usd?: number; minutes?: number } = {}) => {
     const p = boardPayload({ id: t.id, seq, state, result: extra.result ?? null, level: extra.level ?? null, wait_reason: extra.wait_reason ?? null, usd: extra.usd ?? 0, minutes: extra.minutes ?? 0 });
