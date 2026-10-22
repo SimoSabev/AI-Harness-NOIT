@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { effectiveLevel, hashJcs, parseMandatYml, repoConfigFromPolicy, sealContract } from "@mandat/contract";
+import { HarnessProfile, effectiveLevel, hashJcs, parseMandatYml, repoConfigFromPolicy, sealContract } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
 import { decideDelivery, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -82,6 +82,22 @@ async function setState(tx: SqlClient, t: TaskRow, state: string, extra: Record<
   return Number(r.rows[0]?.seq ?? 0);
 }
 
+/** The approved profile (validated: the hash must match the layers); "unapproved" if the repo has profiles but none usable. */
+export async function approvedProfile(db: SqlClient, repoId: string): Promise<HarnessProfile | "unapproved" | null> {
+  const r = (await db.query<{ version: number; layers: unknown; sources: unknown; profile_hash: string; approved_by: string | null; approved_at: string | null }>(
+    `select h.version, h.layers, h.sources, h.profile_hash, h.approved_by::text as approved_by, to_char(h.approved_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as approved_at
+       from public.repos r join public.harness_profiles h on h.id = r.profile_id and h.status = 'approved' where r.id = $1::uuid`,
+    [repoId],
+  )).rows[0];
+  if (r) {
+    const both = r.approved_by !== null && r.approved_at !== null;
+    const p = HarnessProfile.safeParse({ version: r.version, repo_id: repoId, layers: r.layers, sources: r.sources, profile_hash: r.profile_hash, approved_by: both ? r.approved_by : null, approved_at: both ? r.approved_at : null });
+    return p.success ? p.data : "unapproved";
+  }
+  const any = await db.query("select 1 from public.harness_profiles where repo_id = $1::uuid limit 1", [repoId]);
+  return any.rows.length > 0 ? "unapproved" : null;
+}
+
 /** Runs one CREATED task to its gate decision. */
 export async function processTask(d: DaemonDeps, taskId: string): Promise<{ state: string; verdict: Verdict | null }> {
   const log = d.log ?? (() => undefined);
@@ -133,6 +149,18 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     }
     if (dr.soft.length > 0) await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'harness_drift', $3)", [t.org_id, t.id, `! меко отклонение от харнеса: ${dr.soft.slice(0, 10).join(", ")}`.slice(0, 500)]);
   }
+  // E8б (AC-2.5/2.6, D-351): the approved harness profile of the repo → the agent's control layer. A repo onboarded with
+  // profiles but without an approved (or with a tampered) one is blocked; a repo that predates profiles runs as before.
+  const hp = await approvedProfile(d.db, t.repo_id);
+  if (hp === "unapproved") {
+    const seq = await inTransaction(d.db, async (tx) => {
+      const s = await setState(tx, t, "BLOCKED", { wait_reason: "harness_unapproved" });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "harness_unapproved" } });
+      return s;
+    });
+    await bc("BLOCKED", seq, { wait_reason: "harness_unapproved" });
+    return { state: "BLOCKED", verdict: null };
+  }
   // E3в (Ф3 П4): the channel is chosen here, before contract_hash; orgs without channels keep the E0 default.
   // D-295: claude@<profile> runs on that subscription profile; no channel selection, no proxy
   const profile = profileOfAgent(t.agent);
@@ -180,6 +208,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd) },
+        ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
       });
     } finally {
       await rec.close();

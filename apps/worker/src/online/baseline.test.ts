@@ -69,3 +69,14 @@ describe("baseline on connect (E7г, AC-1.2): async through the outbox", () => {
     expect((await db.query<{ policy_yaml: string }>("select policy_yaml from public.harness_proposals where id = $1", [id])).rows[0]?.policy_yaml).toBe(before);
   });
 });
+
+describe("scan → a proposed harness profile (E8б, AC-2.1)", () => {
+  it("the scan also stores a proposed profile version with 8 layers and the commit conventions from git history", async () => {
+    const gh = fakeGitHub({ repos: { "mandat-demo/shop": {} } });
+    await scanForProposal({ db, gh, ghRepo: "mandat-demo/shop" }, DEMO_REPO_ID);
+    const p = (await db.query<{ version: number; status: string; layers: { b: { conventions: string[] } } & Record<string, unknown> }>("select version, status, layers from public.harness_profiles where repo_id = $1 order by version desc limit 1", [DEMO_REPO_ID])).rows[0];
+    expect(p?.status).toBe("proposed");
+    expect(Object.keys(p?.layers ?? {}).sort()).toEqual(["a", "b", "c", "d", "e", "f", "g", "h"]);
+    expect(p?.layers.b.conventions.join(" ")).toContain("median change");
+  });
+});
