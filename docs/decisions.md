@@ -1863,3 +1863,39 @@ B11 (нова зависимост без lockfile) падаше като инф
 Алтернативи: специалният случай като FAILED (отхвърлено — легитимна корекция може да съвпадне с тестов вход; UNKNOWN е
 честното); D10 lock_missing като UNKNOWN (отхвърлено — без lockfile инсталацията не е възпроизводима, това е провал).
 Източник: v5 т. 4.8. Статус: решено; прегледът на модела на заплахите чака Симо.
+## D-358 Monorepo, yarn berry, bun и node --test в пясъчника (22.10.2026)
+Решение: (1) Workspaces: скенерът чете `pnpm-workspace.yaml` (`packages:` с `!` изключения) или `package.json#workspaces`
+(масив или `{packages}`); пакет = директория с package.json по глобовете. Предложението: install и един тестов run в корена
+(един отчет; отделни runs по пакет и сливане на отчети — не сега), `test_globs` и `allowed_paths` по пакет, package.json на
+всеки пакет е защитен. pnpm lockfile v9 с много importers минава; importer извън хранилището (`..`) → отказ. pnpm 11+ с
+`packageManager` пише два YAML документа; env документът (`configDependencies`/`packageManagerDependencies`) не дава маршрути
+(pnpm в образа е прикован, `manage-package-manager-versions=false`); непразни `configDependencies` → отказ `config_deps`.
+D10 `lock_missing` гледа всеки променен package.json (нов пакет с зависимости — също). (2) yarn berry: lockfile с
+`__metadata` (версии 8–10); маршрути само за `<име>@npm:<версия>` с checksum (бинарните по платформа, `conditions`, yarn 4
+ги пише без checksum — пинът им е точното име@версия); scoped tarball и с кодирана `%2f` (така ги иска yarn 4); workspace и
+вградени compat patch-ове се прескачат; друг протокол → отказ. Инсталира прикованият yarn 4.18.1
+от образа (`YARN_IGNORE_PATH=1` — `yarnPath` на репото никога), само през вратата, без скриптове, node_modules linker.
+Низът `runtime.install` остава `yarn install --frozen-lockfile --ignore-scripts` (D-301: назовава мениджъра; lockfile-ът
+избира yarn 1 или 4) — договорите и хешовете не се променят. (3) bun: текстовият `bun.lock` (JSONC), маршрути за записите
+от подразбиращия се registry със sha512; bun 1.4.3 в образа (x64 baseline, без AVX2), инсталира само той, тестовете остават
+vitest/jest. (4) node --test: собствен репортер в образа пише Vitest JSON формата; `tests.format: node-test`; командата е
+фиксирана (`NODE_TEST_COMMAND`), друга → unsupported_runner. mocha → needs_human (Q-058).
+Защо: v5 т. 4.9; повечето истински JS репа са monorepo или с друг мениджър. Един и същ модел навсякъде: lockfile → точни
+маршрути във вратата → прикован инструмент без скриптове.
+Факти и линкове (22.10.2026): docs/spikes/RUNNERS.md — https://yarnpkg.com/configuration/yarnrc,
+https://bun.com/docs/install/lockfile, https://bun.com/docs/install/registries, https://nodejs.org/api/test.html#custom-reporters;
+наблюдавано локално с pnpm 12.14.0, yarn 4.18.1, bun 1.4.3, Node 22.22 и в образа с Node 24.22.0.
+Алтернативи: berry чрез `yarnPath` от репото (отхвърлено — кодът на репото избира инструмента на инсталацията); `bun test`
+(свой формат; по-късно); TAP парсер за node --test (губи файла).
+Източник: v5 т. 4.9. Статус: решено.
+## D-359 Спайк RS без ключове: златен набор, правило за подниз-цитат, обхват на E9г по подразбиране (22.10.2026)
+Решение: (1) `fixtures/research/golden.json` — 20 въпроса (10 проектни, чийто отговор тестът намира дословно във файла на
+demo-shop; 10 общи със стабилен отговор и URL); схема `GoldenSet` в contract. (2) Цитат се брои само като подниз на
+източника след нормализация (`packages/core/src/citations.ts`: NFKC, малки букви, кавички/тирета, невидими знаци, интервали;
+многоточие в края = отрязване) — същото правило за E9г. (3) `node spikes/rs-run.mjs` мери Tavily/Exa/Brave с ключове от
+средата (никога от файл, никога в изхода); Anthropic web search/fetch се мери едва през проксито в E9г (правило 2).
+(4) Докато няма числа, обхватът на E9г е одобреното подразбиране на Q-047…Q-050 (PRD v1.1).
+Защо: v5 т. 4.10; без ключове живата част е SKIPPED, но наборът, правилото и скриптът не зависят от ключ.
+Факти: формите на заявките — docs/prd/research/research-tools.md (Tavily [V], Exa/Brave [НП], 22.10.2026).
+Алтернативи: Anthropic през директен ключ в скрипта (отхвърлено — ключът е само в проксито).
+Източник: v5 т. 4.10. Статус: решено; живото пускане чака Симо (чеклист 15).
