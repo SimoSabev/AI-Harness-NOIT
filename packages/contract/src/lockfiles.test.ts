@@ -138,6 +138,9 @@ describe("lockfiles (D-301)", () => {
     expect(paths(yarnAllowlist(BERRY.replace('resolution: "typescript@npm:6.0.3"', 'resolution: "typescript@git+https://github.com/x/y.git#commit=abc"')))).toBe("git_or_url_dep");
     expect(paths(yarnAllowlist(BERRY.replace("#optional!builtin<compat/typescript>::", "#./patches/ts.patch::")))).toBe("git_or_url_dep");
     expect(paths(yarnAllowlist(BERRY.replace("  checksum: 10c0/4a25ff50\n", "")))).toBe("bad_integrity");
+    // a binary for another platform: yarn writes no checksum for what it never fetched → no route (the gate refuses it)
+    const other = BERRY.replace("  checksum: 10c0/4a25ff50\n", "  conditions: os=android & cpu=arm\n");
+    expect(paths(yarnAllowlist(other))).toEqual(paths(yarnAllowlist(BERRY)).slice(0, 4));
     expect(paths(yarnAllowlist(BERRY.replace("version: 10\n  cacheKey", "version: 6\n  cacheKey")))).toBe("berry_version");
     expect(paths(yarnAllowlist("__metadata:\n  version: 10\n\"a@npm:1\": [\n"))).toBe("not_v3");
   });
