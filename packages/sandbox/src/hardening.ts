@@ -1,7 +1,7 @@
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 
-export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate";
+export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate" | "mcp";
 export interface MountSpec {
   kind: "volume" | "bind";
   source: string;
@@ -99,8 +99,13 @@ const SPEC_KEYS = new Set([
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SECRET_LOOKING = /mdt_|sk-ant-/;
 
-function checkEnv(envNames: string[], publicEnv: Record<string, string>): void {
+function checkEnv(envNames: string[], publicEnv: Record<string, string>, role: RunRole): void {
   for (const n of envNames) {
+    // E8e (D-354): the MCP sidecar carries the secrets its catalog row names — never an LLM key
+    if (role === "mcp") {
+      if (!/^[A-Z_][A-Z0-9_]*$/.test(n) || SECRETS.has(n)) forbid("an MCP sidecar gets only its own declared secrets, never an LLM key", { name: n });
+      continue;
+    }
     if (!SECRETS.has(n)) forbid(`envNames may only contain secret names (${SECRET_ENV_NAMES.join(", ")})`, { name: n });
   }
   for (const [k, v] of Object.entries(publicEnv)) {
@@ -163,7 +168,7 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
     if (!okUser) forbid("the sandbox always runs as 1000:1000 (seed of contract.txt: 0:0)", { user: spec.user });
   }
   if (!/^\d+:\d+$/.test(spec.user)) forbid("invalid user");
-  checkEnv(spec.envNames, spec.publicEnv);
+  checkEnv(spec.envNames, spec.publicEnv, spec.role);
 
   const args = ["run"];
   args.push(spec.detach ? "-d" : "--rm");
@@ -179,6 +184,9 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
   for (const m of spec.mounts) {
     if (m.kind === "volume") {
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(m.source)) forbid("invalid volume name", { source: m.source });
+      if (spec.role === "mcp" && (!m.source.startsWith("mandat-mcp-") || !(m.target === "/m/mcp" || m.target.startsWith("/m/mcp/")))) {
+        forbid("an MCP sidecar mounts only its own mandat-mcp-* volume under /m/mcp (D-354)", { source: m.source, target: m.target });
+      }
       if ((m.source.startsWith(PROFILE_PREFIX) || m.target === PROFILE_DIR) && !(spec.role === "agent" && m.source.startsWith(PROFILE_PREFIX) && m.target === PROFILE_DIR)) {
         forbid("a subscription profile volume is only for the agent, at PROFILE_DIR (D-295)", { source: m.source, target: m.target });
       }
@@ -234,7 +242,7 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
   if (!/^\d+:\d+$/.test(o.user)) forbid("invalid user");
   if (o.image.startsWith("-")) forbid("invalid image");
   // E7в / D-345: the proxy gets only the one-time boot token by name (the key names stay allowed for the old path)
-  checkEnv(o.envNames.filter((n) => n !== "MANDAT_PROXY_BOOT_TOKEN"), o.publicEnv);
+  checkEnv(o.envNames.filter((n) => n !== "MANDAT_PROXY_BOOT_TOKEN"), o.publicEnv, "gate");
   const args = ["run", "-d", "--name", o.name];
   if (o.name === "mandat-llm-proxy") args.push("--restart", "unless-stopped");
   args.push(

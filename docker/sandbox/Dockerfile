@@ -1,5 +1,20 @@
 # syntax=docker/dockerfile:1
 # mandat-sandbox: unmodified Claude Code + the fake agents. Built ONLY locally, never published (4.1).
+
+# E8e (D-354): the MCP sidecar bridge (stdio MCP server → streamable HTTP), deployed with its production dependencies.
+# The sidecar runs this same image with role mcp; the agent never runs it.
+FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS mcpbridge
+WORKDIR /src
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    npm i -g --no-audit --no-fund pnpm@12.14.0
+COPY . .
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    pnpm install --frozen-lockfile --filter "@mandat/mcp-bridge..." \
+ && pnpm --filter "@mandat/mcp-bridge..." build \
+ && pnpm --filter @mandat/mcp-bridge --prod deploy /out
+
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 
 # curl + dig for the R14 probes. SANDBOX_APT=0 only where Debian mirrors are unreachable (D-151);
@@ -87,6 +102,7 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
 COPY packages/agents/fakes/ /opt/mandat/fakes/
 # v5 E8а / SH2: the harness hooks (ESM, no dependencies); the agent can run them, never change them
 COPY packages/agents/hooks/ /opt/mandat/hooks/
+COPY --from=mcpbridge /out /opt/mandat/mcp-bridge
 # E4 (т. 9.0): recorded transcripts + fixed patches for the deterministic replay agents
 COPY demo/recordings/*.jsonl demo/recordings/*.patch /opt/mandat/replay/
 RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay /opt/mandat/hooks && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* /opt/mandat/hooks/* \

@@ -61,6 +61,8 @@ export async function imageTags(repoRoot: string): Promise<{ sandbox: string; ga
     ...root,
     ...walk(path.join(repoRoot, "packages", "agents", "fakes")),
     ...walk(path.join(repoRoot, "packages", "agents", "hooks")),
+    // E8e: the MCP sidecar bridge and its workspace dependencies are built into the image
+    ...(existsSync(path.join(repoRoot, "packages", "mcp-bridge", "package.json")) ? [...workspaceDeps(repoRoot, "mcp-bridge")].flatMap((p) => packageFiles(repoRoot, p)) : []),
     // E4: the replay recordings and patches are copied into the image (not the *.webm videos)
     ...walk(path.join(repoRoot, "demo", "recordings")).filter((f) => /\.(jsonl|patch)$/.test(f)),
   ].filter((f) => existsSync(f)));

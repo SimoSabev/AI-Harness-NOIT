@@ -36,3 +36,4 @@ export type { RecorderOptions, SessionRecorder, SessionSink } from "./online/ses
 export { HELD_DAYS, closeExpiredHeld, heldDays } from "./online/held-expiry.js";
 export { mcpHandlers, recordMcpBlocked, refOf, vetMcpServer } from "./online/mcp.js";
 export type { McpServerRow, McpVetResult, McpVetRunner } from "./online/mcp.js";
+export { vetMcpDocker } from "./mcp-vet-docker.js";

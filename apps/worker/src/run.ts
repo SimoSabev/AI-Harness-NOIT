@@ -7,9 +7,10 @@ import { spawnSync } from "node:child_process";
 import {
   MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
+import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks } from "@mandat/profile";
 import type { Ask } from "@mandat/profile";
+import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarLines, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
@@ -32,6 +33,8 @@ export interface RunHooks {
   onStream?: (ev: StreamEvent) => void;
   /** E7д: the proxy usage poll (USD so far) for the live session */
   onUsage?: (runId: string, usd: number) => void;
+  /** E8e (D-354): an MCP sidecar refused to serve (another hash than the approved one, or tools/list_changed) */
+  onMcpBlocked?: (o: { name: string; reason: string; hash: string }) => void;
   /** E8g (D-353): new steer texts from people since the last call; polled while a steerable agent runs */
   steer?: () => Promise<{ text: string; author: string }[]>;
 }
@@ -52,10 +55,14 @@ export interface RunTaskInput {
   subjects?: string[];
   /** E8g: ask rules a person allowed once for this attempt (they become allow in the compiled policy) */
   grantOnce?: string[];
+  /** E8e (D-354): the values of each MCP server's declared secrets (from the key store); only its sidecar gets them */
+  mcpSecrets?: Record<string, Record<string, string>>;
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
 export interface RunInternals {
+  /** E8e tests: a local package archive per MCP server name instead of the npm package */
+  mcpTarballs?: Record<string, Buffer>;
   repoRoot?: string;
   env?: Record<string, string | undefined>;
   progress?: (line: string) => void;
@@ -255,6 +262,10 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const evd = new Map<string, Evidence>();
     let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
     let asks: Ask[] = [];
+    let installRoutes: GateRoute[] = [];
+    const mcpRoutes: GateRoute[] = [];
+    const mcpStarted: string[] = [];
+    const mcpSkipped: { rule: string; why: string }[] = [];
     const set = (e: Evidence): void => {
       evd.set(e.detector, e);
     };
@@ -298,7 +309,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           }
         }
         try {
-          gate = await startGate(gctx("agent"), { phase: "install", routes: allow.ok ? allow.routes : [] });
+          installRoutes = allow.ok ? allow.routes : [];
+          gate = await startGate(gctx("agent"), { phase: "install", routes: installRoutes });
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START", (e as Error).message);
         }
@@ -313,12 +325,42 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         out(`[install]   ${contract.repo_config.runtime.install} via gate`);
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
+      // ---------- MCP sidecars (E8e, D-354): vetted stdio servers of the profile, each in its own container
+      await timed("install", async () => {
+        const refs = harness && i.profile ? i.profile.layers.e.mcp.filter((m) => m.transport === "stdio") : [];
+        if (refs.length === 0) return;
+        const g = gate as RunGate;
+        await g.setPolicy("install", [...installRoutes, NPM_PREFIX_ROUTE]);
+        for (const ref of refs) {
+          if (ref.tools_hash === null) {
+            mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "not vetted in the catalog; the agent does not get it" });
+            continue;
+          }
+          const installed = await installMcp(sctx, { volume: mcpNames.vol(runId, ref.name), network: g.net, ref, ...(x.mcpTarballs?.[ref.name] ? { tarball: x.mcpTarballs[ref.name] } : {}) });
+          if (ref.digest !== null && installed.integrity !== ref.digest) {
+            mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "the installed package is not the vetted one (digest)" });
+            continue;
+          }
+          const started = await startSidecar(sctx, { gate: g, ref, installed, secrets: i.mcpSecrets?.[ref.name] ?? {} });
+          mcpStarted.push(ref.name);
+          if (started.line.event === "blocked") {
+            i.hooks?.onMcpBlocked?.({ name: ref.name, reason: started.line.reason ?? "changed", hash: started.line.hash });
+            sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name: ref.name, reason: started.line.reason ?? "changed" }, source: "worker" });
+            mcpSkipped.push({ rule: `mcp:${ref.name}`, why: `blocked at start: ${started.line.reason ?? "changed"}` });
+          } else {
+            mcpRoutes.push(...started.route);
+          }
+        }
+        await g.setPolicy("install", installRoutes);
+        out(`[mcp]       ${mcpRoutes.length / 2} sidecar(s) serving${mcpSkipped.length ? `, ${mcpSkipped.length} not` : ""}`);
+      });
+      if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- AGENT (7.6)
       await timed("agent", async () => {
         const g = gate as RunGate;
         try {
           channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret") });
-          await g.setPolicy("agent", channel.gateRoutes(), channel.gateTunnels?.());
+          await g.setPolicy("agent", [...channel.gateRoutes(), ...mcpRoutes], channel.gateTunnels?.());
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
         }
@@ -457,7 +499,14 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           const raw = await safeReadVolume(sctx, { volume: vol, file: "/m/out/asks.jsonl", limit: 65_536, role: "export" }).catch(() => null);
           const policy = harness.files.find((f) => f.path === "policy.json");
           if (raw && policy) asks = parseAsks(raw.toString("utf8"), JSON.parse(policy.bytes) as { rules: { tool: string; decision: string; reason?: string }[] });
-          await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, tampered, enforced_by_harness: harness.enforced, unsupported: harness.unsupported, asks, granted_once: harness.granted });
+          // E8e: a rug pull during the run (tools/list_changed) is a later "blocked" line of the sidecar
+          for (const name of mcpStarted) {
+            for (const l of (await sidecarLines(sctx, mcpNames.container(runId, name))).filter((x) => x.event === "blocked" && x.reason === "list_changed")) {
+              i.hooks?.onMcpBlocked?.({ name, reason: "list_changed", hash: l.hash });
+              sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name, reason: "list_changed" }, source: "worker" });
+            }
+          }
+          await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, tampered, enforced_by_harness: harness.enforced, unsupported: [...harness.unsupported, ...mcpSkipped], asks, granted_once: harness.granted, mcp_serving: mcpRoutes.filter((r) => r.method === "POST").map((r) => r.match.path.slice(5)) });
         }
         await g.setPolicy("closed", []).catch(() => undefined);
         await g.stop();
@@ -626,6 +675,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     // ---------- cleanup (7.10)
     const ps = await dockerText(docker, ["ps", "-aq", "--filter", `label=mandat.run=${runId}`]);
     for (const c of ps.stdout.split("\n").filter(Boolean)) await dockerText(docker, ["rm", "-f", c]);
+    if (mcpStarted.length > 0) await stopSidecars(sctx, mcpStarted);
     for (const t of ["agent", "base", "a", "b"] as const) await dockerText(docker, ["network", "rm", names.net(runId, t)]);
     if (!i.keep) for (const t of ["agent", "base", "a", "b"] as const) await dockerText(docker, ["volume", "rm", "-f", names.vol(runId, t)]);
     rmSync(tmpRoot, { recursive: true, force: true });

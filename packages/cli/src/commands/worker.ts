@@ -1,6 +1,6 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, openDb, runBaseline, runDaemonOnce } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, openDb, runBaseline, runDaemonOnce, vetMcpDocker } from "@mandat/worker";
 import { repoRoot } from "../paths.js";
 import type { Io } from "../output.js";
 
@@ -73,7 +73,9 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         // E8g: overdue HELD tasks are closed before the outbox drains, so their notification goes out in the same pass
         const expired = await closeExpiredHeld(db, { now: new Date(), days: heldDays(env) });
         if (expired.length > 0) io.stderr(`[held] expired: ${expired.join(", ")}\n`);
-        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, ...(baselineRunner ? { baselineRunner } : {}) });
+        // E8e (D-354): vetting an approved MCP server runs it once in Docker without network; MANDAT_MCP_VET=0 turns it off
+        const mcpVetRunner = env.MANDAT_MCP_VET === "0" ? undefined : (s: Parameters<typeof vetMcpDocker>[0]) => vetMcpDocker(s, { mandatHome: o.home, repoRoot, env });
+        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, ...(baselineRunner ? { baselineRunner } : {}), ...(mcpVetRunner ? { mcpVetRunner } : {}) });
         if (fx.done + fx.failed > 0) io.stderr(`[outbox] harness: ${fx.done} done, ${fx.failed} failed\n`);
       },
     });
