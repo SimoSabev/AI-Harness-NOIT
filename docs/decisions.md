@@ -1693,3 +1693,24 @@ approve.level2, иначе approve.level1, с repo/вид/ниво на зада
 `role_change`; org-ът винаги запазва поне един член с roles.manage. Ключовете → keys.manage.
 Защо: v5 т. 4.3 / D-315; минимален риск за старите тестове (очакванията им не се променят).
 Алтернативи: пренаписване на всяка политика с has_cap (същото поведение, много повече SQL). Източник: v5 т. 4.3. Статус: решено.
+
+## D-350 Компилаторът на профила (`packages/profile`) и пътят до пясъчника (22.10.2026)
+Решение: (1) `compileProfile(profile, target, {runId, subjects, skills})` е чиста функция; таблицата правило × цел
+(`RULES`: native | harness | unsupported) е едно място, което ползват компилаторът и UI. (2) Claude Code: `claude/settings.json`
+(permissions allow/deny/ask от слой C за субектите на задачата; `net:*` не влиза — налага го вратата), куки от слой D към
+`/opt/mandat/hooks/*.mjs`, `pluginConfigs … instructionFiles: managed-only`; `claude/mcp.json` (всички сървъри през вратата:
+`http://egress-gate/mcp/<name>`, освен изричен http URL); `claude/agents/<role>.md`; `claude/skills/<name>/SKILL.md` само с
+одобрено съдържание (иначе `unsupported`); `instructions.md` (слой B + definition of done); `policy.json` за куките. argv:
+`--settings … --mcp-config … --strict-mcp-config`; env: лимитите на подагентите от слой G (+ CLAUDE_CODE_STOP_HOOK_BLOCK_CAP=3).
+Под `--permission-mode dontAsk` всичко неодобрено се отказва, затова MCP инструментите на профила и командите му
+(test/lint/typecheck) са в `permissions.allow`. (3) Codex: `codex/config.toml` (workspace-write, never, без мрежа,
+`project_doc_max_bytes=0`, developer_instructions, MCP през вратата с enabled_tools, agents), `codex/hooks.json` [НП формат →
+SH2-CX на живо], агенти, скилове; worker-ът копира `/m/in/harness/codex` в `/m/codex-home` (писаемо копие за CLI-то) и след
+агента сравнява config.toml/hooks.json байт по байт → разлика = security_event `config_change` + AGENT unknown (SH2-CX).
+(4) Gemini/local: само `instructions.md` + `policy.json`; останалото е `harness` или `unsupported` до E9в. (5) `runTask` получава
+`profile` (и `subjects`), компилира, сийдва `/m/in/harness` (root, 0444/0555) преди агента и пише `harness.json` (хеш, откази,
+подправени файлове, какво налага харнесът, какво не се поддържа). `mandat run --profile <file>` за ръчна проба.
+(6) Куки: deny-by-policy (deny/ask → exit 2; ask → asks.jsonl), lint-changed/typecheck-changed (съвет, винаги exit 0; име на файл
+с shell знаци → не се пуска), require-tests-ran (блокира веднъж, после `stop_hook_active` пуска), limit-subagents, record-ask.
+Защо: v5 т. 4.1; D-311, D-343. Алтернативи: CLAUDE_CONFIG_DIR = контролният слой (несъвместимо с абонамента, D-343).
+Източник: v5 т. 4.1. Статус: решено; [НП] части — SH2/SH2-CX на живо.
