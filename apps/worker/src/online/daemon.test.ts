@@ -264,6 +264,37 @@ describe("daemon steering (E8g, AC-8.5)", () => {
     const c = JSON.parse(readFileSync(s.runs[0]?.contractPath ?? "", "utf8")) as { text: string };
     expect(c.text).toContain('source="steer">round &lt;down&gt;</untrusted>');
   });
+  // E9а (v5 5.1): a task of the night shift
+  const nightShift = async (db: Awaited<ReturnType<typeof pgliteDb>>, rules: { min_level: number; max_lines: number; forbid: string[] }) => {
+    const id = "50000000-0000-4000-8000-0000000000d1";
+    await db.query(
+      "insert into public.night_shifts (id, org_id, starts_at, ends_at, budget_usd, rules, status) values ($1, $2, now(), now() + interval '8 hours', 10, $3::jsonb, 'running')",
+      [id, DEMO_ORG_ID, JSON.stringify({ auto_merge: { min_level: rules.min_level, max_lines: rules.max_lines }, on_fail: "retry_then_park", retries: 1, same_file: "wait", forbid_tools: rules.forbid })],
+    );
+    await db.query("update public.tasks set shift_id = $1 where id = 't_web_1'", [id]);
+  };
+  it("E9а: a shift task runs with the subject night and the night's forbidden tools denied; a night retry carries Mandat's note", async () => {
+    const s = await setup(0);
+    await insertProfile(s.db, "approved");
+    await nightShift(s.db, { min_level: 2, max_lines: 200, forbid: ["bash:curl *"] });
+    await s.db.query("update public.tasks set attempt = 2, retry_reason = 'night' where id = 't_web_1'");
+    await s.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_web_1', 'night', 'FAILED after 1 attempt(s): `MUST_PASS:not_passed:x`. Describe it better.')", [DEMO_ORG_ID]);
+    await runDaemonOnce(s.deps);
+    const r = s.runs[0];
+    expect(r?.subjects).toContain("night");
+    expect(r?.profile?.layers.c).toContainEqual({ subject: "night", tool: "bash:curl *", decision: "deny", reason: "forbidden by the night shift" });
+    const { profileHash } = await import("@mandat/contract");
+    expect(r?.profile?.profile_hash).toBe(profileHash(r?.profile?.layers as never));
+    const c = JSON.parse(readFileSync(r?.contractPath ?? "", "utf8")) as { text: string };
+    expect(c.text).toContain("Note from Mandat (night shift): FAILED after 1 attempt(s): `MUST_PASS:not_passed:x`. Describe it better.");
+  });
+  it("E9а: at night a level-2 change is not auto-merged when the shift's rule wants level 3 → HELD approval (waiting for a person)", async () => {
+    const s = await setup(2);
+    await nightShift(s.db, { min_level: 3, max_lines: 200, forbid: [] });
+    await runDaemonOnce(s.deps);
+    const t = (await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0];
+    expect(t).toEqual({ state: "HELD", wait_reason: "approval" });
+  });
 });
 
 describe("daemon and MCP sidecars (E8e, D-354)", () => {
