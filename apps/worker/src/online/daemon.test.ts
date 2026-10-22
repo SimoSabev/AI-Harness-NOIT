@@ -176,3 +176,39 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(() => contractForTask({ id: "t_x", type: "css", text: "x", agent: "claude" }, p.policy, "a".repeat(40))).toThrow(/task type/);
   });
 });
+
+describe("daemon with harness profiles (E8б, AC-2.5/2.6)", () => {
+  const insertProfile = async (db: Awaited<ReturnType<typeof setup>>["db"], status: "proposed" | "approved") => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const p = sealProfile({ version: 1, repo_id: DEMO_REPO_ID, layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const r = await db.query<{ id: string }>("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash) values ($1, $2, 1, $3::jsonb, '{}', $4) returning id::text as id", [DEMO_ORG_ID, DEMO_REPO_ID, JSON.stringify(p.layers), p.profile_hash]);
+    const id = r.rows[0]?.id as string;
+    if (status === "approved") {
+      await db.query("update public.harness_profiles set status = 'approved', approved_at = now() where id = $1", [id]);
+      await db.query("update public.repos set profile_id = $2 where id = $1", [DEMO_REPO_ID, id]);
+    }
+    return p;
+  };
+  it("a repo with only a proposed profile → BLOCKED harness_unapproved, the agent never runs", async () => {
+    const s = await setup(0);
+    await insertProfile(s.db, "proposed");
+    await runDaemonOnce(s.deps);
+    const t = (await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0];
+    expect(t).toEqual({ state: "BLOCKED", wait_reason: "harness_unapproved" });
+    expect(s.runs).toHaveLength(0);
+  });
+  it("the approved profile goes to runTask (the control layer of the agent)", async () => {
+    const s = await setup(0);
+    const p = await insertProfile(s.db, "approved");
+    await runDaemonOnce(s.deps);
+    expect(s.runs[0]?.profile?.profile_hash).toBe(p.profile_hash);
+  });
+  it("a tampered approved profile (hash does not match the layers) → BLOCKED harness_unapproved", async () => {
+    const s = await setup(0);
+    await insertProfile(s.db, "approved");
+    await s.db.query("alter table public.harness_profiles disable trigger harness_profiles_guard");
+    await s.db.query("update public.harness_profiles set layers = jsonb_set(layers, '{g,mutants}', '9')");
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ wait_reason: string }>("select wait_reason from public.tasks where id = 't_web_1'")).rows[0]?.wait_reason).toBe("harness_unapproved");
+  });
+});
