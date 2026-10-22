@@ -173,7 +173,7 @@ describe("lockfiles (D-301)", () => {
     expect(y.slice(0, 2)).toEqual(["/bin/sh", "-c"]);
     const c = y[2] ?? "";
     for (const part of ["YARN_IGNORE_PATH=1", "YARN_NPM_REGISTRY_SERVER=http://egress-gate/npm", "YARN_UNSAFE_HTTP_WHITELIST=egress-gate", "YARN_ENABLE_SCRIPTS=0",
-      "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_NODE_LINKER=node-modules", "YARN_INSTALL_STATE_PATH=/tmp/", "node /opt/yarn-berry/yarn.js install --immutable"]) expect(c).toContain(part);
+      "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_GLOBAL_FOLDER=/home/agent/", "YARN_NODE_LINKER=node-modules", "YARN_INSTALL_STATE_PATH=/tmp/", "node /opt/yarn-berry/yarn.js install --immutable"]) expect(c).toContain(part);
     expect(installCommand("yarn", false)).toEqual(installCommand("yarn"));
   });
 
