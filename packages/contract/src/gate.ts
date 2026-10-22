@@ -9,7 +9,7 @@ export const GateRouteSchema = z
     match: z.object({ kind: z.enum(["exact", "prefix"]), path: z.string().startsWith("/") }),
     upstream: z.enum(["llm_proxy", "npm_registry", "local_ok", "mcp"]),
     /** E8e (D-354): an MCP sidecar on the run's MCP network (plain HTTP, internal) and its call budget per minute */
-    mcp: z.object({ target: z.string().regex(/^http:\/\/[a-z0-9_.-]{1,200}(:\d{1,5})?$/), per_min: z.number().int().min(1).max(10_000) }).strict().optional(),
+    mcp: z.object({ target: z.string().regex(/^http:\/\/[A-Za-z0-9_.-]{1,200}(:\d{1,5})?$/), per_min: z.number().int().min(1).max(10_000) }).strict().optional(),
   })
   .strict()
   .refine((r) => (r.upstream === "mcp") === (r.mcp !== undefined), { message: "an mcp route (and only an mcp route) has an mcp target" });

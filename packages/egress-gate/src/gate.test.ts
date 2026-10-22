@@ -383,6 +383,8 @@ describe("MCP routes to the sidecar (E8e, D-354)", () => {
   it("the schema: an mcp route needs its target (http://<host>:<port>) and a per-minute budget; others must not have one", () => {
     const ok = { id: "mcp-issues", method: "POST", match: { kind: "exact", path: "/mcp/issues" }, upstream: "mcp", mcp: { target: "http://mandat-mcp-r_x-issues:8080", per_min: 60 } };
     expect(GateRouteSchema.safeParse(ok).success).toBe(true);
+    // the sidecar's name carries the run id (a ULID, upper case)
+    expect(GateRouteSchema.safeParse({ ...ok, mcp: { target: "http://mandat-mcp-r_01M5J8Z8WAZR4N0TBGC94C4A66-probe:8080", per_min: 60 } }).success).toBe(true);
     expect(GateRouteSchema.safeParse({ ...ok, mcp: undefined }).success).toBe(false);
     expect(GateRouteSchema.safeParse({ ...ok, mcp: { target: "https://evil.example.com", per_min: 60 } }).success).toBe(false);
     expect(GateRouteSchema.safeParse({ ...LLM[0], mcp: ok.mcp }).success).toBe(false);
