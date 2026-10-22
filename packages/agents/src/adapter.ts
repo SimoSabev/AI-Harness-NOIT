@@ -31,8 +31,9 @@ export interface AgentLaunchSpec {
 export type AgentEvent =
   | { type: "init"; sessionId: string; model: string; tools: string[]; mcpServers: { name: string; status: string }[]; capabilities: string[] }
   | { type: "assistant_text"; text: string }
-  | { type: "tool_use"; id: string; name: string; input: unknown }
-  | { type: "tool_result"; toolUseId: string; isError: boolean }
+  // D-308: `parent` is the tool_use id of the subagent (Task/Agent) call this event happened inside, if any.
+  | { type: "tool_use"; id: string; name: string; input: unknown; parent?: string }
+  | { type: "tool_result"; toolUseId: string; isError: boolean; parent?: string }
   | { type: "api_retry"; attempt: number; errorStatus: number | null; error: string }
   | { type: "permission_denied"; tool: string }
   | { type: "user_echo"; text: string }

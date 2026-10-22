@@ -37,11 +37,12 @@ export function parseStreamLine(line: string): AgentEvent[] {
     const content = (j.message as Json | undefined)?.content;
     if (type === "user" && typeof content === "string") return [{ type: "user_echo", text: content }];
     const out: AgentEvent[] = [];
+    const parent = typeof j.parent_tool_use_id === "string" && j.parent_tool_use_id ? { parent: j.parent_tool_use_id } : {};
     for (const b of arr(content)) {
       const block = b as Json;
       if (type === "assistant" && block.type === "text") out.push({ type: "assistant_text", text: str(block.text) });
-      else if (type === "assistant" && block.type === "tool_use") out.push({ type: "tool_use", id: str(block.id), name: str(block.name), input: block.input ?? null });
-      else if (type === "user" && block.type === "tool_result") out.push({ type: "tool_result", toolUseId: str(block.tool_use_id), isError: block.is_error === true });
+      else if (type === "assistant" && block.type === "tool_use") out.push({ type: "tool_use", id: str(block.id), name: str(block.name), input: block.input ?? null, ...parent });
+      else if (type === "user" && block.type === "tool_result") out.push({ type: "tool_result", toolUseId: str(block.tool_use_id), isError: block.is_error === true, ...parent });
       else if (type === "user" && block.type === "text") out.push({ type: "user_echo", text: str(block.text) });
     }
     return out.length > 0 ? out : [{ type: "unparsed", raw: line }];

@@ -52,4 +52,30 @@ describe("codex-parse", () => {
     expect(parseCodexLine("{nope")).toEqual([{ type: "unparsed", raw: "{nope" }]);
     expect(parseCodexLine("[1]")[0]?.type).toBe("unparsed");
   });
+  it("инструменти: command_execution, file_change, mcp_tool_call, web_search → tool_use/tool_result (D-308)", () => {
+    const L = (o: object) => parseCodexLine(JSON.stringify(o));
+    expect(L({ type: "item.started", item: { id: "i1", type: "command_execution", command: "pnpm test", aggregated_output: "", exit_code: null, status: "in_progress" } })).toEqual([
+      { type: "tool_use", id: "i1", name: "Bash", input: { command: "pnpm test" } },
+    ]);
+    expect(L({ type: "item.completed", item: { id: "i1", type: "command_execution", command: "pnpm test", aggregated_output: "x", exit_code: 1, status: "failed" } })).toEqual([
+      { type: "tool_use", id: "i1", name: "Bash", input: { command: "pnpm test" } },
+      { type: "tool_result", toolUseId: "i1", isError: true },
+    ]);
+    expect(L({ type: "item.completed", item: { id: "i2", type: "file_change", changes: [{ path: "src/cart.ts", kind: "update" }, { path: "src/b.ts", kind: "add" }], status: "completed" } })).toEqual([
+      { type: "tool_use", id: "i2", name: "Edit", input: { paths: ["src/cart.ts", "src/b.ts"] } },
+      { type: "tool_result", toolUseId: "i2", isError: false },
+    ]);
+    expect(L({ type: "item.started", item: { id: "i3", type: "mcp_tool_call", server: "postgres", tool: "query", arguments: { sql: "select 1" }, result: null, error: null, status: "in_progress" } })).toEqual([
+      { type: "tool_use", id: "i3", name: "mcp__postgres__query", input: { sql: "select 1" } },
+    ]);
+    expect(L({ type: "item.completed", item: { id: "i4", type: "web_search", query: "zod refine", action: {} } })).toEqual([
+      { type: "tool_use", id: "i4", name: "WebSearch", input: { query: "zod refine" } },
+      { type: "tool_result", toolUseId: "i4", isError: false },
+    ]);
+    expect(L({ type: "item.completed", item: { id: "i5", type: "command_execution", command: "rm -rf /", aggregated_output: "", exit_code: null, status: "declined" } })).toEqual([
+      { type: "tool_use", id: "i5", name: "Bash", input: { command: "rm -rf /" } },
+      { type: "permission_denied", tool: "Bash" },
+    ]);
+    expect(L({ type: "item.started", item: { id: "i6", type: "reasoning", text: "…" } })[0]?.type).toBe("unparsed");
+  });
 });

@@ -77,6 +77,13 @@ describe("stream парсер", () => {
     expect(parseStreamLine('{"type":"user","message":{"content":"MANGO"}}')).toEqual([{ type: "user_echo", text: "MANGO" }]);
     expect(parseStreamLine('{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0.1,"num_turns":3}')).toEqual([{ type: "result", subtype: "success", isError: false, totalCostUsd: 0.1, numTurns: 3 }]);
   });
+  it("подагент: parent_tool_use_id остава на tool_use и tool_result (D-308)", () => {
+    expect(parseStreamLine('{"type":"assistant","parent_tool_use_id":"t0","message":{"content":[{"type":"tool_use","id":"t2","name":"Read","input":{"file_path":"/m/work/a.ts"}}]}}')).toEqual([
+      { type: "tool_use", id: "t2", name: "Read", input: { file_path: "/m/work/a.ts" }, parent: "t0" },
+    ]);
+    expect(parseStreamLine('{"type":"user","parent_tool_use_id":"t0","message":{"content":[{"type":"tool_result","tool_use_id":"t2","is_error":false}]}}')).toEqual([{ type: "tool_result", toolUseId: "t2", isError: false, parent: "t0" }]);
+    expect(parseStreamLine('{"type":"assistant","parent_tool_use_id":null,"message":{"content":[{"type":"tool_use","id":"t3","name":"Bash","input":{}}]}}')).toEqual([{ type: "tool_use", id: "t3", name: "Bash", input: {} }]);
+  });
   it("stream парсер: фикстура S0 (ако е записана)", () => {
     const f = new URL("../../../fixtures/stream-json/claude-2.1.302-s0.jsonl", import.meta.url);
     if (!existsSync(f)) return; // S0 needs the live proxy with a key (D-151); the fixture is recorded by Simo.
