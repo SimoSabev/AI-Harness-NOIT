@@ -34,6 +34,8 @@ export interface RunHooks {
   onStream?: (ev: StreamEvent) => void;
   /** E7д: the proxy usage poll (USD so far) for the live session */
   onUsage?: (runId: string, usd: number) => void;
+  /** E8f (D-355): the daemon asks the run to stop the agent (a same-file conflict with an earlier task); polled every second */
+  stopRequested?: () => "conflict" | null;
   /** E8e (D-354): an MCP sidecar refused to serve (another hash than the approved one, or tools/list_changed) */
   onMcpBlocked?: (o: { name: string; reason: string; hash: string }) => void;
   /** E8g (D-353): new steer texts from people since the last call; polled while a steerable agent runs */
@@ -95,6 +97,8 @@ export interface RunTaskOutput {
   authFailed?: boolean;
   /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
   asks?: Ask[];
+  /** why the harness stopped the agent, if it did */
+  stopped?: "timeout" | "budget_stop" | "conflict";
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -274,7 +278,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     };
     const gateLogs: { tree: string; file: string }[] = [];
     let infraCode: ErrorCode | null = null;
-    let agentStop: "timeout" | "budget_stop" | null = null;
+    let agentStop: "timeout" | "budget_stop" | "conflict" | null = null;
     const startGate = x.startGate ?? startRunGate;
     const user = x.infraUser ?? (await infraUserFor(docker).catch(() => ({ user: "1000:1000" }))).user;
     const ipv6Sysctl = x.ipv6Sysctl ?? (await probeIpv6(docker, images.sandbox));
@@ -397,7 +401,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           queue = queue.then(fn, fn);
         };
         const agentName = names.agent(runId);
-        const stopAgent = async (why: "timeout" | "budget_stop"): Promise<void> => {
+        const stopAgent = async (why: "timeout" | "budget_stop" | "conflict"): Promise<void> => {
           if (agentStop) return;
           agentStop = why;
           await dockerText(docker, ["stop", "-t", "30", agentName], 90_000);
@@ -417,6 +421,11 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             }, x.usagePollMs ?? 2000)
           : undefined;
         const limit = setTimeout(() => void stopAgent("timeout"), contract.repo_config.budgets.task_minutes * 60_000);
+        const stopPoll = i.hooks?.stopRequested
+          ? setInterval(() => {
+              if (i.hooks?.stopRequested?.() === "conflict") void stopAgent("conflict");
+            }, 1000)
+          : undefined;
         // E8g (D-353): steering = stream-json on stdin. The task is the first line; people's steer texts follow (framed by
         // the adapter) until the agent's first result, then stdin ends and the agent finishes as before.
         let stdin: PassThrough | undefined;
@@ -477,6 +486,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         } finally {
           clearTimeout(limit);
           if (poll) clearInterval(poll);
+          if (stopPoll) clearInterval(stopPoll);
           if (steerPoll) clearInterval(steerPoll);
           if (stdin && !stdin.writableEnded) stdin.end();
           await queue;
@@ -693,6 +703,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       ...(usage.limit ? { limit: usage.limit } : {}),
       ...(usage.authFailed ? { authFailed: true } : {}),
       ...(asks.length > 0 ? { asks } : {}),
+      ...(agentStop ? { stopped: agentStop } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

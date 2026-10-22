@@ -16,6 +16,8 @@ export interface RecorderOptions {
   now?: () => number;
   broadcast?: (topic: string, event: string, payload: Record<string, unknown>) => Promise<void>;
   log?: (line: string) => void;
+  /** E8f (D-355): called with all files the run touches whenever a new one appears (conflict check) */
+  onTouching?: (files: string[]) => void;
 }
 const BEAT_MS = 500;
 const MAX_LINES = 50_000;
@@ -125,7 +127,9 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
           if (ev.tool) {
             const name = toolName(ev.tool.name);
             s.step = name;
+            const before = s.touching.size;
             for (const p of ev.tool.touching) s.touching.add(p);
+            if (s.touching.size > before && o.onTouching) o.onTouching([...new Set([...sessions.values()].flatMap((x) => [...x.touching]))]);
             s.pending.push({ kind: ev.tool.kind, name, summary: ev.text ?? name, at: now() });
           }
           break;

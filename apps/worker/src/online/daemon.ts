@@ -20,6 +20,7 @@ import type { RunTaskInput, RunTaskOutput } from "../run.js";
 import { loadChannels, profileOfAgent, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { inTransaction } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
+import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 import type { Db } from "./db.js";
 
 // Демо промпт т. 5.8 + 8.1 (D-275, D-280): the online worker. One task at a time per process; every state change +
@@ -207,10 +208,33 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   log(`[daemon] ${t.id}: running ${t.agent}${current ? ` on ${current.label}` : ""}`);
   const t0 = now().getTime();
   // E7д (AC-6.1/6.2): the agent's live session (leader + subagents, tool calls, beats ≤ 2/s) per attempt
+  // E8f (D-355): another live task of the repo touching the same file → a card; with same_file "wait" the later one stops
+  const sameFile = hp ? hp.layers.g.same_file : "wait";
+  let conflictWith: string | null = null;
+  let checking = false;
+  const onTouching = (files: string[]) => {
+    if (checking) return;
+    checking = true;
+    void (async () => {
+      const others = await liveTouches(d.db, { repoId: t.repo_id, except: t.id });
+      const me = (await d.db.query<{ started_at: string }>("select to_char(created_at at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') as started_at from public.tasks where id = $1", [t.id])).rows[0]?.started_at ?? "";
+      const cs = findConflicts({ task_id: t.id, started_at: me, files }, others);
+      if (cs.length === 0) return;
+      if ((await recordConflicts(d.db, { org: t.org_id, taskId: t.id, conflicts: cs })) > 0 && d.broadcast) {
+        await d.broadcast(`org:${t.org_id}:board`, "conflict", { task_id: t.id, files: [...new Set(cs.map((c) => c.file))].slice(0, 20), with: [...new Set(cs.map((c) => c.with))] }).catch(() => undefined);
+      }
+      const mine = cs.find((c) => c.later === t.id);
+      if (sameFile === "wait" && mine) conflictWith = mine.with;
+    })()
+      .catch((e: unknown) => log(`[daemon] ${t.id}: conflict check failed: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`))
+      .finally(() => {
+        checking = false;
+      });
+  };
   const runOnce = async () => {
     const rec = sessionRecorder(workbench(d.db, t.org_id), {
       taskId: t.id, repoId: t.repo_id, agent: profile ? `claude@${profile}` : t.agent, model: contract.channel.model, account: profile ?? null,
-      ...(d.broadcast ? { broadcast: d.broadcast } : {}), log,
+      ...(d.broadcast ? { broadcast: d.broadcast } : {}), log, onTouching,
     });
     // E8e (D-354): each stdio MCP server of the profile gets only its declared secrets and its call budget
     const mcpRefs = hp ? hp.layers.e.mcp.filter((m) => m.transport === "stdio") : [];
@@ -237,7 +261,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       return await (d.run ?? runTask)({
         home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
-        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}) },
+        hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested: () => (conflictWith ? "conflict" : null) },
         ...(hp ? { profile: hp, subjects: profile ? [`account:${profile}`] : [] } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
@@ -253,6 +277,18 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   };
   let out = await runOnce();
   await usageRow(out);
+  // E8f (D-355): stopped for a same-file conflict → a new attempt that waits for the earlier task (no verdict, no ladder)
+  if (out.stopped === "conflict" && conflictWith) {
+    const other = conflictWith;
+    seq = await inTransaction(d.db, async (tx) => {
+      await tx.query("update public.tasks set attempt = attempt + 1, retry_reason = 'conflict', wait_for = $2 where id = $1", [t.id, other]);
+      const s2 = await setState(tx, t, "CREATED", { wait_reason: null });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_retry", task_id: t.id, payload: { attempt: t.attempt + 1, reason: "conflict", wait_for: other } });
+      return s2;
+    });
+    await bc("CREATED", seq, { wait_reason: null });
+    return { state: "CREATED", verdict: null };
+  }
   // E3в (Ф3 П6 + В-2): the limit chain. A spill is a NEW attempt on a fallback channel, at most once per task.
   let waits = 0;
   let spills = 0;
@@ -454,20 +490,8 @@ export function keyRejected(o: { authFailed: boolean; result: string; emptyChang
 
 /** The loop: take the oldest CREATED task (row lock, SKIP LOCKED), process it; repeat. */
 export async function runDaemonOnce(d: DaemonDeps): Promise<string | null> {
-  const c = await d.db.connect();
-  let id: string | null;
-  try {
-    await c.query("begin");
-    const r = await c.query<{ id: string }>("select id from public.tasks where state = 'CREATED' order by created_at limit 1 for update skip locked");
-    id = r.rows[0]?.id ?? null;
-    if (id) await c.query("update public.tasks set state = 'CONTRACTED', state_entered_at = now(), seq = seq + 1 where id = $1", [id]);
-    await c.query("commit");
-  } catch (e) {
-    await c.query("rollback").catch(() => undefined);
-    throw e;
-  } finally {
-    c.release();
-  }
+  // E8f (D-355): the claim honours the repo's WIP limit and a wait for another task
+  const id = await claimNext(d.db);
   if (id) await processTask(d, id);
   return id;
 }
