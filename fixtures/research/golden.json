@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "note": "E8к (v5 т. 4.10): 20 questions with known answers. Project answers are literal text in the cited demo-shop file; general ones are stable facts with an authoritative URL. A reply counts when it contains one of `answers` after normalization (core/citations.ts).",
+  "questions": [
+    { "id": "P01", "kind": "project", "question": "In the demo shop, what is the value of DISCOUNT_THRESHOLD_CENTS in src/cart.ts?", "answers": ["50000"], "source": "fixtures/demo-shop/src/cart.ts" },
+    { "id": "P02", "kind": "project", "question": "What percentage discount does the demo shop's cart apply over the threshold?", "answers": ["10%"], "source": "fixtures/demo-shop/src/cart.ts" },
+    { "id": "P03", "kind": "project", "question": "Which exact vitest version does the demo shop pin in package.json?", "answers": ["5.0.5"], "source": "fixtures/demo-shop/package.json" },
+    { "id": "P04", "kind": "project", "question": "Which exact TypeScript version does the demo shop pin in package.json?", "answers": ["6.0.3"], "source": "fixtures/demo-shop/package.json" },
+    { "id": "P05", "kind": "project", "question": "Which test file glob does the demo shop's vitest.config.ts include?", "answers": ["tests/**/*.spec.ts"], "source": "fixtures/demo-shop/vitest.config.ts" },
+    { "id": "P06", "kind": "project", "question": "Which Node.js version does the demo shop's CI workflow set up?", "answers": ["24.22.0"], "source": "fixtures/demo-shop/.github/workflows/ci.yml" },
+    { "id": "P07", "kind": "project", "question": "Which command installs the demo shop's dependencies in its CI workflow?", "answers": ["npm ci --ignore-scripts"], "source": "fixtures/demo-shop/.github/workflows/ci.yml" },
+    { "id": "P08", "kind": "project", "question": "In the demo shop, what string does formatCents return for zero cents?", "answers": ["0.00 EUR"], "source": "fixtures/demo-shop/src/money.ts" },
+    { "id": "P09", "kind": "project", "question": "Which error type does the demo shop's parseEuros throw for an invalid string?", "answers": ["RangeError"], "source": "fixtures/demo-shop/src/money.ts" },
+    { "id": "P10", "kind": "project", "question": "Which moduleResolution does the demo shop's tsconfig.json use?", "answers": ["Bundler"], "source": "fixtures/demo-shop/tsconfig.json" },
+    { "id": "G01", "kind": "general", "question": "What is the reason phrase of HTTP status code 429?", "answers": ["Too Many Requests"], "source": "https://www.rfc-editor.org/rfc/rfc6585" },
+    { "id": "G02", "kind": "general", "question": "Which RFC defines the JSON Canonicalization Scheme (JCS)?", "answers": ["8785"], "source": "https://www.rfc-editor.org/rfc/rfc8785" },
+    { "id": "G03", "kind": "general", "question": "What is PostgreSQL's default TCP port?", "answers": ["5432"], "source": "https://www.postgresql.org/docs/current/runtime-config-connection.html" },
+    { "id": "G04", "kind": "general", "question": "What is the SPDX license identifier for the GNU GPL version 3 or any later version?", "answers": ["GPL-3.0-or-later"], "source": "https://spdx.org/licenses/GPL-3.0-or-later.html" },
+    { "id": "G05", "kind": "general", "question": "Which HTTP method asks a proxy to open a tunnel to a destination server?", "answers": ["CONNECT"], "source": "https://www.rfc-editor.org/rfc/rfc9110" },
+    { "id": "G06", "kind": "general", "question": "Which Linux capability allows binding a socket to a port below 1024?", "answers": ["CAP_NET_BIND_SERVICE"], "source": "https://man7.org/linux/man-pages/man7/capabilities.7.html" },
+    { "id": "G07", "kind": "general", "question": "At most how many characters is the cited_text of a citation from Anthropic's web search tool?", "answers": ["150"], "source": "https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool" },
+    { "id": "G08", "kind": "general", "question": "Which lockfile must exist for `npm ci` to run (besides npm-shrinkwrap.json)?", "answers": ["package-lock.json"], "source": "https://docs.npmjs.com/cli/commands/npm-ci" },
+    { "id": "G09", "kind": "general", "question": "What is the default TCP port of the https URI scheme?", "answers": ["443"], "source": "https://www.rfc-editor.org/rfc/rfc9110" },
+    { "id": "G10", "kind": "general", "question": "Which `docker run` option drops all Linux capabilities from a container?", "answers": ["--cap-drop=ALL", "--cap-drop ALL"], "source": "https://docs.docker.com/engine/containers/run/" }
+  ]
+}
