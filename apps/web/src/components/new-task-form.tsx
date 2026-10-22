@@ -13,9 +13,11 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
   const router = useRouter();
   const t = useT();
   const [text, setText] = useState(() => t("newTask.example"));
-  const [type, setType] = useState<(typeof TYPES)[number]>("bugfix");
   // D-295: the first signed-in subscription account is the default agent (like in other harnesses)
   const [agent, setAgent] = useState<string>(accounts[0]?.agent ?? "fake:delete-test");
+  // The type picks the contract's scope from .mandat.yml (paths, tests). A real agent starts with the widest one
+  // (feature: code and tests); the demo agents' scenarios are bug fixes.
+  const [type, setType] = useState<(typeof TYPES)[number]>(accounts.length > 0 ? "feature" : "bugfix");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ordered: { id: string; label: string; hint: string; needsKey: boolean }[] = [
@@ -54,6 +56,9 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
               <option key={x} value={x}>{t(`newTask.type.${x}`)}</option>
             ))}
           </select>
+          <span className="mt-1.5 block text-xs text-mute">
+            {t(`newTask.scope.${type}`)} <a href="/harness" className="underline">{t("newTask.scopeChange")}</a>
+          </span>
         </label>
       </div>
 
