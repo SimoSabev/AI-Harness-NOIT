@@ -121,17 +121,22 @@ export function parseMandatYml(text: string): ParsedPolicy {
 /** The one install command per package manager (lockfile frozen, no install scripts). */
 export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts", bun: "bun install --frozen-lockfile --ignore-scripts" } as const;
 
+/** E8и (D-358): `node --test` runs with the harness reporter (/opt/mandat/reporters, read-only in the image), which writes the vitest JSON shape */
+export const NODE_TEST_COMMAND = "node --test --test-reporter=/opt/mandat/reporters/node-test.mjs --test-reporter-destination=$MANDAT_REPORT";
+const nodeTestOk = (cmd: string) => /^node --test( |$)/.test(cmd) && cmd.includes("--test-reporter=/opt/mandat/reporters/node-test.mjs") && cmd.includes("--test-reporter-destination=$MANDAT_REPORT");
+
 export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoConfig } | { ok: false; reason: "unsupported_runner"; detail: string } {
   const pm = p.runtime.package_manager;
   const fw = p.tests.framework;
   // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report). D-358: yarn berry, bun (text lockfile)
   const install = INSTALL_CMD[pm];
-  if ((fw !== "vitest" && fw !== "jest") || p.runtime.install !== install || p.runtime.node !== "24") {
+  const runner = fw === "vitest" || fw === "jest" || (fw === "node" && nodeTestOk(p.tests.command));
+  if (!runner || p.runtime.install !== install || p.runtime.node !== "24") {
     return { ok: false, reason: "unsupported_runner", detail: `${pm}/${fw}` };
   }
   const config = RepoConfig.parse({
     runtime: { install, node: "24" },
-    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs, ...(p.tests.flaky?.length ? { flaky: p.tests.flaky } : {}) },
+    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : fw === "node" ? "node-test" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs, ...(p.tests.flaky?.length ? { flaky: p.tests.flaky } : {}) },
     protected_paths: p.protected_paths,
     protected_json_fields: p.protected_json_fields,
     config_paths: p.config_paths,

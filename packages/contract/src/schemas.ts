@@ -40,7 +40,7 @@ export const RepoConfig = z.object({
   runtime: z.object({ install: z.enum(["npm ci --ignore-scripts", "pnpm install --frozen-lockfile --ignore-scripts", "yarn install --frozen-lockfile --ignore-scripts", "bun install --frozen-lockfile --ignore-scripts"]), node: z.literal("24") }),
   tests: z.object({
     command: z.string().min(1).max(500), // run with /bin/sh -c in the test sandbox
-    format: z.enum(["vitest-json", "jest-json"]), // D-301: jest --json has the same shape (testResults[].assertionResults[])
+    format: z.enum(["vitest-json", "jest-json", "node-test"]), // D-301: jest --json has the same shape (testResults[].assertionResults[]); D-358: so does the node --test reporter
     env: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(200)),
     test_globs: z.array(Glob).min(1),
     /** E7г / D-314: optional, so contracts without it keep their hash */

@@ -1,4 +1,4 @@
-import { parseMandatYml, repoConfigFromPolicy, sha256Tag } from "@mandat/contract";
+import { NODE_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy, sha256Tag } from "@mandat/contract";
 import type { MandatPolicy } from "@mandat/contract";
 import { stringify } from "yaml";
 import { classifyCommand } from "./commands.js";
@@ -31,7 +31,7 @@ const TEST_CMD: Record<string, string> = {
   vitest: "npx vitest run --reporter=json --outputFile=$MANDAT_REPORT",
   jest: "npx jest --json --outputFile=$MANDAT_REPORT",
   mocha: "npx mocha --reporter json",
-  node: "node --test",
+  node: NODE_TEST_COMMAND, // E8и (D-358): the harness reporter writes the vitest JSON shape
 };
 const PROTECTED_BASE = [".github/**", ".mandat.yml", ".claude/**", ".mcp.json", ".codex/**", "AGENTS.md", "CLAUDE.md", ".npmrc", "**/__snapshots__/**"];
 const CONFIG_PATHS = [".mandat.yml", ".claude/**", ".codex/**", ".npmrc", "AGENTS.md", "CLAUDE.md"];
@@ -125,7 +125,7 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const parsed = parseMandatYml(yaml);
   if (!parsed.ok) throw new Error(`proposal does not validate: ${parsed.error}`);
   const rc = repoConfigFromPolicy(parsed.policy);
-  if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm, pnpm (lockfile v9) or yarn v1 with vitest or jest on node 24 (D-301)`);
+  if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm, pnpm (lockfile v9), yarn (v1 or berry) or bun (bun.lock) with vitest, jest or node --test on node 24 (D-301, D-358)`);
   if (scan.monorepo.tool && ws.length === 0) needs.push(`monorepo (${scan.monorepo.tool}): no workspace package found (pnpm-workspace.yaml / package.json workspaces); set allowed_paths by hand (D-358)`);
   return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings, suggested_tasks: suggested };
 }
