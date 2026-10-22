@@ -174,6 +174,8 @@ describe("lockfiles (D-301)", () => {
     const c = y[2] ?? "";
     for (const part of ["YARN_IGNORE_PATH=1", "YARN_NPM_REGISTRY_SERVER=http://egress-gate/npm", "YARN_UNSAFE_HTTP_WHITELIST=egress-gate", "YARN_ENABLE_SCRIPTS=0",
       "YARN_ENABLE_GLOBAL_CACHE=0", "YARN_GLOBAL_FOLDER=/home/agent/", "YARN_NODE_LINKER=node-modules", "YARN_INSTALL_STATE_PATH=/tmp/", "node /opt/yarn-berry/yarn.js install --immutable"]) expect(c).toContain(part);
+    // the install phase also carries yarn v1's YARN_* settings; berry refuses unknown ones ("Unrecognized or legacy configuration settings")
+    expect(c.startsWith("unset YARN_REGISTRY YARN_DISABLE_SELF_UPDATE_CHECK YARN_CACHE_FOLDER; ")).toBe(true);
     expect(installCommand("yarn", false)).toEqual(installCommand("yarn"));
   });
 
