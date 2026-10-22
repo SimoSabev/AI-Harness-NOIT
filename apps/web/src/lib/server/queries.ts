@@ -5,7 +5,7 @@ import type { Summary } from "../inbox";
 import { asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 
-// Демо промпт т. 8.1: GET /api/inbox, /api/board, /api/tasks/:id — all under RLS as the user.
+// Demo prompt §8.1: GET /api/inbox, /api/board, /api/tasks/:id — all under RLS as the user.
 export type Role = "owner" | "approver" | "viewer";
 export interface TaskRow {
   id: string; type: string; agent: string; text: string; state: string; wait_reason: string | null; usd: number; minutes: number;

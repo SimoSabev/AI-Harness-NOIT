@@ -5,7 +5,7 @@ import type { Result, SecondFactor } from "./actions";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
 
-// Демо промпт т. 8.2 (7)–(8): POST /api/repos/:id/harness/approve {proposal_id, edited_yaml?, generate, factor_id, code}
+// Demo prompt §8.2 (7)–(8): POST /api/repos/:id/harness/approve {proposal_id, edited_yaml?, generate, factor_id, code}
 // → owner + a NEW TOTP code → files by template → private.approve_harness (one transaction). Never auto-approved.
 export const HarnessApproveBody = z.object({
   proposal_id: z.string().uuid(),

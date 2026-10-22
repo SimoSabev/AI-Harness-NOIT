@@ -1,3 +1,4 @@
+import type { Key, T } from "../i18n/t";
 import type { Tone } from "../lib/status";
 
 // D-305: the building blocks. Colours come from the theme tokens (globals.css), so dark and light are one design.
@@ -36,15 +37,15 @@ export function StatusBadge({ tone, label }: { tone: Tone; label: string }) {
   );
 }
 
-export function CheckMark({ status }: { status: string }) {
-  const m: Record<string, { s: string; c: string; t: string }> = {
-    pass: { s: "✓", c: "bg-ok-soft text-ok", t: "мина" },
-    fail: { s: "✕", c: "bg-bad-soft text-bad", t: "не мина" },
-    unknown: { s: "?", c: "bg-warn-soft text-warn", t: "неясно" },
+export function CheckMark({ status, t }: { status: string; t: T }) {
+  const m: Record<string, { s: string; c: string; t: Key }> = {
+    pass: { s: "✓", c: "bg-ok-soft text-ok", t: "mark.pass" },
+    fail: { s: "✕", c: "bg-bad-soft text-bad", t: "mark.fail" },
+    unknown: { s: "?", c: "bg-warn-soft text-warn", t: "mark.unknown" },
   };
-  const v = m[status] ?? { s: "–", c: "bg-raised text-mute", t: "не се прилага" };
+  const v = m[status] ?? { s: "–", c: "bg-raised text-mute", t: "mark.na" };
   return (
-    <span className={`hex inline-flex h-6 w-7 shrink-0 items-center justify-center text-xs font-bold ${v.c}`} role="img" aria-label={v.t}>
+    <span className={`hex inline-flex h-6 w-7 shrink-0 items-center justify-center text-xs font-bold ${v.c}`} role="img" aria-label={t(v.t)}>
       {v.s}
     </span>
   );

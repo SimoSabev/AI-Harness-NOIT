@@ -3,17 +3,19 @@ import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, Tray, app, dialog, nativeImage } from "electron";
-import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, loginScript, parseBanner, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
+import { desktopLang, dt, loadingPage } from "./i18n.js";
+import type { DesktopKey, Lang } from "./i18n.js";
 
 // D-303: the desktop window of the harness (no name yet, D-296). It runs `pnpm local` (the same harness, the same sandbox), shows its steps,
 // signs in with the password it printed (never written anywhere) and keeps the app in the tray. Built only locally.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const icon = nativeImage.createFromPath(path.join(repoRoot, "apps/web/public/icon-192.png"));
 const SECURE = { contextIsolation: true, nodeIntegration: false, sandbox: true } as const;
-const LOADING = `data:text/html;charset=utf-8,${encodeURIComponent(
-  '<!doctype html><meta charset="utf-8"><title>Харнес</title><body style="font:15px system-ui;margin:0;display:grid;place-items:center;height:100vh;background:#fafafa;color:#18181b"><div><b>Харнесът се пуска…</b><p id="s" style="color:#52525b">проверка на компютъра</p></div>',
-)}`;
+// E7f: the language is chosen once the app is ready (app.getLocale() needs it): MANDAT_LANG, else the system locale.
+let lang: Lang = "en";
+const t = (key: DesktopKey, params?: Record<string, string | number>) => dt(lang, key, params);
 
 let child: ChildProcess | null = null;
 let win: BrowserWindow | null = null;
@@ -61,32 +63,33 @@ async function open(b: Banner): Promise<void> {
   if (b.totp) {
     await dialog.showMessageBox(win, {
       type: "info",
-      title: "Двуфакторен код",
-      message: "Добави този ключ в приложение за кодове (Google Authenticator, 1Password…). Показва се само сега.",
+      title: t("totp.title"),
+      message: t("totp.message"),
       detail: `${b.totp.secret}\n\n${b.totp.uri}`,
-      buttons: ["Добавих го"],
+      buttons: [t("totp.button")],
     });
   }
 }
 
 function start(): void {
+  lang = desktopLang(process.env, app.getLocale());
   win = new BrowserWindow({ width: 1200, height: 820, title: "", icon, webPreferences: SECURE });
   win.on("close", (e) => {
     if (child) {
       e.preventDefault();
-      win?.hide(); // keeps running in the tray; „Спри и излез“ stops it
+      win?.hide(); // keeps running in the tray; "Stop and quit" stops it
     }
   });
-  void win.loadURL(LOADING);
+  void win.loadURL(loadingPage(lang));
   let out = "";
-  child = spawn("pnpm", ["local"], { cwd: repoRoot, env: childEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
+  child = spawn("pnpm", ["local"], { cwd: repoRoot, env: { ...childEnv(process.env), MANDAT_LANG: lang }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (d: Buffer) => {
     if (banner) return;
     out += d.toString("utf8");
     banner = parseBanner(out);
     if (banner) {
       out = "";
-      void open(banner).catch((e: unknown) => dialog.showErrorBox("Харнес", `Интерфейсът не тръгна: ${e instanceof Error ? e.message : String(e)}`));
+      void open(banner).catch((e: unknown) => dialog.showErrorBox(t("app.name"), t("error.ui", { error: e instanceof Error ? e.message : String(e) })));
     }
   });
   let errTail = "";
@@ -100,15 +103,15 @@ function start(): void {
   });
   child.on("exit", (code) => {
     child = null;
-    if (!banner) dialog.showErrorBox("Харнесът не тръгна", errTail.split("\n").filter((l) => /✗|грешка|не отговаря|не станаха|Error/i.test(l)).join("\n") || `pnpm local излезе с ${code ?? "?"}`);
+    if (!banner) dialog.showErrorBox(t("error.start"), errTail.split("\n").filter(isErrorLine).join("\n") || t("error.exit", { code: code ?? "?" }));
     app.quit();
   });
   tray = new Tray(icon.resize({ width: 18, height: 18 }));
-  tray.setToolTip("Харнес");
+  tray.setToolTip(t("app.name"));
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Отвори", click: show },
+    { label: t("tray.open"), click: show },
     { type: "separator" },
-    { label: "Спри и излез", click: () => (child ? child.kill("SIGINT") : app.quit()) },
+    { label: t("tray.quit"), click: () => (child ? child.kill("SIGINT") : app.quit()) },
   ]));
   tray.on("click", show);
 }

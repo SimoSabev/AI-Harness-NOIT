@@ -1,31 +1,26 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AGENTS } from "../lib/agents";
-import { ERROR_TEXT, postJson } from "../lib/client/api";
+import { useT } from "../i18n/client";
+import { AGENTS, agentHint, agentLabel } from "../lib/agents";
+import { errorText, postJson } from "../lib/client/api";
 import { btn, card, input } from "./ui";
 
-const TYPES = [
-  { id: "bugfix", label: "Поправка на бъг" },
-  { id: "feature", label: "Нова функция" },
-  { id: "docs", label: "Документация" },
-  { id: "css", label: "Стилове" },
-] as const;
-
-const EXAMPLE = "Отстъпката от 10% трябва да важи за поръчки над 50 лв. Сега не важи. Поправи го.";
+const TYPES = ["bugfix", "feature", "docs", "css"] as const;
 
 // D-292: the one form of the minimal harness. Demo agents first: they work without any key.
 export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { anthropic: boolean; openai: boolean }; accounts: { name: string; agent: string; email: string | null; plan: string | null }[] }) {
   const router = useRouter();
-  const [text, setText] = useState(EXAMPLE);
-  const [type, setType] = useState<(typeof TYPES)[number]["id"]>("bugfix");
+  const t = useT();
+  const [text, setText] = useState(() => t("newTask.example"));
+  const [type, setType] = useState<(typeof TYPES)[number]>("bugfix");
   // D-295: the first signed-in subscription account is the default agent (like in other harnesses)
   const [agent, setAgent] = useState<string>(accounts[0]?.agent ?? "fake:delete-test");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ordered: { id: string; label: string; hint: string; needsKey: boolean }[] = [
-    ...accounts.map((a) => ({ id: a.agent, label: `Claude Code · ${a.name}`, hint: `${a.email ?? "абонамент"} · ${a.plan ?? "абонамент"}`, needsKey: false })),
-    ...[...AGENTS].sort((a, b) => Number(a.needsKey) - Number(b.needsKey)),
+    ...accounts.map((a) => ({ id: a.agent, label: t("agent.account", { name: a.name }), hint: `${a.email ?? t("agent.subscription")} · ${a.plan ?? t("agent.subscription")}`, needsKey: false })),
+    ...[...AGENTS].sort((a, b) => Number(a.needsKey) - Number(b.needsKey)).map((a) => ({ ...a, label: agentLabel(a.id, t.lang), hint: agentHint(a.id, t.lang) })),
   ];
   const hasKey = (id: string) => (id === "claude" ? ready.anthropic : id === "codex" ? ready.openai : true);
 
@@ -39,32 +34,32 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
       return;
     }
     setBusy(false);
-    setError(ERROR_TEXT[String(r.body.error)] ?? `Задачата не беше създадена (грешка ${r.status}).`);
+    setError(errorText(t, r, {}, t("newTask.failed", { status: r.status })));
   };
 
   return (
     <form onSubmit={(e) => void submit(e)} className="mt-6 space-y-6">
       <div className={`${card} space-y-5 p-5`}>
         <p className="text-sm text-mute">
-          Хранилище: <span className="font-mono text-ink">{repo}</span>
+          {t("newTask.repo")} <span className="font-mono text-ink">{repo}</span>
         </p>
         <label className="block">
-          <span className="text-sm font-medium">Какво да направи агентът</span>
+          <span className="text-sm font-medium">{t("newTask.what")}</span>
           <textarea className={`${input} mt-1.5 min-h-28`} value={text} onChange={(e) => setText(e.target.value)} required maxLength={4000} />
         </label>
         <label className="block">
-          <span className="text-sm font-medium">Вид</span>
+          <span className="text-sm font-medium">{t("newTask.type")}</span>
           <select className={`${input} mt-1.5`} value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-            {TYPES.map((t) => (
-              <option key={t.id} value={t.id}>{t.label}</option>
+            {TYPES.map((x) => (
+              <option key={x} value={x}>{t(`newTask.type.${x}`)}</option>
             ))}
           </select>
         </label>
       </div>
 
       <fieldset className={`${card} p-5`}>
-        <legend className="sr-only">Агент</legend>
-        <p className="text-sm font-medium">Агент</p>
+        <legend className="sr-only">{t("newTask.agent")}</legend>
+        <p className="text-sm font-medium">{t("newTask.agent")}</p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {ordered.map((a) => (
             <label key={a.id} className="flex cursor-pointer gap-3 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 rounded-lg border border-line p-3 transition hover:bg-raised has-[:checked]:border-accent-text has-[:checked]:bg-accent-soft">
@@ -73,9 +68,9 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
                 <span className="block text-sm font-medium">
                   {a.label}
                   {a.needsKey && (hasKey(a.id)
-                    ? <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-normal text-ok">ключът е зададен</span>
-                    : <a href="/keys" className="ml-2 rounded bg-raised px-1.5 py-0.5 text-xs font-normal text-ink underline">задай ключ</a>)}
-                  {a.id.startsWith("claude@") && <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-normal text-ok">абонамент</span>}
+                    ? <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-normal text-ok">{t("newTask.keySet")}</span>
+                    : <a href="/keys" className="ml-2 rounded bg-raised px-1.5 py-0.5 text-xs font-normal text-ink underline">{t("newTask.setKey")}</a>)}
+                  {a.id.startsWith("claude@") && <span className="ml-2 rounded bg-ok-soft px-1.5 py-0.5 text-xs font-normal text-ok">{t("agent.subscription")}</span>}
                 </span>
                 <span className="mt-0.5 block text-xs text-mute">{a.hint}</span>
               </span>
@@ -86,8 +81,8 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
 
       {error && <p role="alert" className="rounded-lg bg-bad-soft px-4 py-3 text-sm text-bad">{error}</p>}
       <div className="flex justify-end gap-2">
-        <button type="button" className={btn.ghost} onClick={() => router.push("/")}>Отказ</button>
-        <button type="submit" className={btn.primary} disabled={busy || text.trim() === ""}>{busy ? "Създавам…" : "Пусни агента"}</button>
+        <button type="button" className={btn.ghost} onClick={() => router.push("/")}>{t("newTask.cancel")}</button>
+        <button type="submit" className={btn.primary} disabled={busy || text.trim() === ""}>{busy ? t("newTask.creating") : t("newTask.run")}</button>
       </div>
     </form>
   );

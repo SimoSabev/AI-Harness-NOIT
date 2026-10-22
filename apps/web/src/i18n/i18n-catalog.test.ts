@@ -20,7 +20,9 @@ describe("i18n catalog (E7е)", () => {
     }
   });
   it("English strings are not Cyrillic; Bulgarian ones are not copied English (except names and codes)", () => {
-    for (const [k, v] of Object.entries(en)) expect(/[\u0400-\u04FF]/.test(v), k).toBe(false);
+    // the language names are endonyms (each language in itself), the same in both catalogs
+    for (const [k, v] of Object.entries(en)) if (!k.startsWith("lang.name.")) expect(/[\u0400-\u04FF]/.test(v), k).toBe(false);
+    expect(en["lang.name.bg"]).toBe(bg["lang.name.bg"]);
     const translated = Object.keys(en).filter((k) => /[\u0400-\u04FF]/.test(bg[k as keyof typeof bg])).length;
     expect(translated / Object.keys(en).length).toBeGreaterThan(0.8);
   });
