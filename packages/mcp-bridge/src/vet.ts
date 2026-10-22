@@ -19,7 +19,7 @@ export function toolDefHashes(tools: readonly ToolDef[]): { name: string; descri
 }
 
 // bidi controls, zero-width characters, word joiners, BOM and the Unicode tag block (ASCII smuggling)
-const INVISIBLE = /[​-‏‪-‮⁠-⁤﻿]|[\u{E0000}-\u{E007F}]/u;
+const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]|[\u{E0000}-\u{E007F}]/u;
 /** Instructions aimed at the model, not descriptions of a tool (the v5 list + close variants). */
 const INSTRUCTIONS: readonly RegExp[] = [
   /\b(ignore|disregard|forget)\s+(all\s+)?(the\s+)?(previous|prior|above|earlier)\b/i,
@@ -34,7 +34,12 @@ function texts(t: ToolDef): string[] {
   const walk = (v: unknown): void => {
     if (typeof v === "string") out.push(v);
     else if (Array.isArray(v)) v.forEach(walk);
-    else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) (out.push(k), walk(x));
+    else if (v && typeof v === "object") {
+      for (const [k, x] of Object.entries(v)) {
+        out.push(k);
+        walk(x);
+      }
+    }
   };
   walk(t.inputSchema);
   return out;
