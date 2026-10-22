@@ -26,6 +26,20 @@ export function childEnv(env: Record<string, string | undefined>): Record<string
   return out;
 }
 
+/** D-309: `pnpm desktop` starts us through pnpm, so npm_execpath is that pnpm (pnpm.exe on Windows, where a bare
+ * `pnpm` is pnpm.cmd and spawn cannot run it without a shell); a JS entry runs under node. */
+export function localSpawn(env: Record<string, string | undefined>): { cmd: string; args: string[] } {
+  const pnpm = env.npm_execpath;
+  if (!pnpm) return { cmd: "pnpm", args: ["local"] };
+  if (/\.[cm]?js$/.test(pnpm)) return { cmd: env.npm_node_execpath ?? "node", args: [pnpm, "local"] };
+  return { cmd: pnpm, args: ["local"] };
+}
+
+/** D-309: on Windows a signal only ends pnpm itself; the web server would keep the port, so the whole tree goes. */
+export function stopCommand(pid: number | undefined, platform: NodeJS.Platform): { cmd: string; args: string[] } | null {
+  return platform === "win32" && pid !== undefined ? { cmd: "taskkill", args: ["/pid", String(pid), "/T", "/F"] } : null;
+}
+
 export function allowedUrl(url: string, base: string): boolean {
   try {
     return new URL(url).origin === new URL(base).origin;

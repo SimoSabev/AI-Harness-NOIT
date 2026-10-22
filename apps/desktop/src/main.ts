@@ -3,7 +3,7 @@ import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, Tray, app, dialog, nativeImage } from "electron";
-import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, localSpawn, loginScript, parseBanner, stopCommand, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
 
 // D-303: the desktop window of the harness (no name yet, D-296). It runs `pnpm local` (the same harness, the same sandbox), shows its steps,
@@ -69,6 +69,12 @@ async function open(b: Banner): Promise<void> {
   }
 }
 
+function stopChild(): void {
+  const tree = stopCommand(child?.pid, process.platform);
+  if (tree) spawn(tree.cmd, tree.args, { stdio: "ignore" }).on("error", () => child?.kill());
+  else child?.kill("SIGINT");
+}
+
 function start(): void {
   win = new BrowserWindow({ width: 1200, height: 820, title: "", icon, webPreferences: SECURE });
   win.on("close", (e) => {
@@ -79,7 +85,8 @@ function start(): void {
   });
   void win.loadURL(LOADING);
   let out = "";
-  child = spawn("pnpm", ["local"], { cwd: repoRoot, env: childEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
+  const local = localSpawn(process.env);
+  child = spawn(local.cmd, local.args, { cwd: repoRoot, env: childEnv(process.env), stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (d: Buffer) => {
     if (banner) return;
     out += d.toString("utf8");
@@ -108,7 +115,7 @@ function start(): void {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "Отвори", click: show },
     { type: "separator" },
-    { label: "Спри и излез", click: () => (child ? child.kill("SIGINT") : app.quit()) },
+    { label: "Спри и излез", click: () => (child ? stopChild() : app.quit()) },
   ]));
   tray.on("click", show);
 }
@@ -118,6 +125,6 @@ else {
   app.on("second-instance", show);
   app.on("activate", show);
   app.on("window-all-closed", () => undefined); // the tray keeps it alive
-  app.on("before-quit", () => child?.kill("SIGINT"));
+  app.on("before-quit", () => child && stopChild());
   void app.whenReady().then(start);
 }

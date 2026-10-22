@@ -1,5 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, localSpawn, loginScript, parseBanner, stopCommand, stepOf } from "./banner.js";
+
+describe("Windows (D-309)", () => {
+  it("pnpm local: the pnpm that started us (npm_execpath), never a bare `pnpm` that spawn cannot find on Windows", () => {
+    expect(localSpawn({ npm_execpath: "C:\\nvm4w\\nodejs\\node_modules\\pnpm\\pnpm.exe" })).toEqual({ cmd: "C:\\nvm4w\\nodejs\\node_modules\\pnpm\\pnpm.exe", args: ["local"] });
+    expect(localSpawn({ npm_execpath: "/usr/lib/pnpm/bin/pnpm.cjs", npm_node_execpath: "/usr/bin/node" })).toEqual({ cmd: "/usr/bin/node", args: ["/usr/lib/pnpm/bin/pnpm.cjs", "local"] });
+    expect(localSpawn({ npm_execpath: "/usr/lib/pnpm/bin/pnpm.cjs" })).toEqual({ cmd: "node", args: ["/usr/lib/pnpm/bin/pnpm.cjs", "local"] });
+    expect(localSpawn({})).toEqual({ cmd: "pnpm", args: ["local"] });
+  });
+  it("Спри и излез: on Windows the whole tree (taskkill /T), elsewhere SIGINT to pnpm local", () => {
+    expect(stopCommand(4242, "win32")).toEqual({ cmd: "taskkill", args: ["/pid", "4242", "/T", "/F"] });
+    expect(stopCommand(4242, "linux")).toBeNull();
+    expect(stopCommand(undefined, "win32")).toBeNull();
+  });
+});
 
 const BANNER = [
   "",

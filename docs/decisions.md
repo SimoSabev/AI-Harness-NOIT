@@ -1502,7 +1502,10 @@ is not recognized“ в @mandat/web). Емулаторът важи и под Li
 Допълнение (22.10.2026): `pnpm local` стигна до [4/4] под Windows и падна на `spawn pnpm ENOENT` (там pnpm е pnpm.cmd).
 `mandat local` вече пуска уеб сървъра с `node <next>/dist/bin/next start -p 3000` в apps/web (webStartSpawn), без pnpm и
 без shell: работи на всяка ОС и Ctrl+C спира самия сървър (през shell kill() би спрял cmd.exe, а сървърът би държал порта).
-Тест: local.test.ts. Остава под Windows (без промяна): apps/desktop пуска `spawn("pnpm", ["local"])`; `mandat doctor`
+Тест: local.test.ts. Десктопът (`pnpm desktop`) падаше по същия начин: сега пуска `pnpm local` с pnpm-а, който го е
+стартирал (npm_execpath; под Windows pnpm.exe, проверено в PowerShell), а „Спри и излез“ под Windows спира цялото дърво с
+`taskkill /pid … /T /F` (сигнал там спира само pnpm и сървърът остава на порта). Тест: apps/desktop/src/banner.test.ts.
+Не е проверено в самия прозорец (Electron) под Windows. Остава под Windows (без промяна): `mandat doctor`
 вика `pnpm -v` без shell; 5 CLI теста падат под Windows и преди тази промяна (verify-log, pnpm --silent, proxy ×2, WSL DrvFs).
 Защо: Симо, 22.10.2026 — `pnpm local` падна на Windows; „направи поправката за Windows постоянна в хранилището“.
 Алтернативи: cross-env в apps/web (нова зависимост, правило 8); WSL за всички (у Симо няма Linux дистрибуция).
