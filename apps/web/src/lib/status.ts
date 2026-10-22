@@ -2,12 +2,12 @@ import { LOCALE, translate } from "../i18n/t";
 import type { Key, Lang } from "../i18n/t";
 
 // D-292: what the person sees — one status word + one sentence per task, never the internal state names.
-export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "key" | "stopped" | "approved" | "closed";
+export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "key" | "stopped" | "approved" | "closed" | "expired";
 export type Tone = "gray" | "blue" | "green" | "red" | "amber";
 export interface Status { key: StatusKey; label: string; tone: Tone; headline: string }
 
 const TONES: Record<StatusKey, Tone> = {
-  queued: "gray", running: "blue", checking: "blue", review: "green", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", closed: "gray",
+  queued: "gray", running: "blue", checking: "blue", review: "green", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", closed: "gray", expired: "gray",
 };
 
 const RUNNING = new Set(["PROVISIONING", "RUNNING", "EXPORTING", "RETRY"]);
@@ -23,6 +23,7 @@ function keyOf(t: { state: string; last_result: string | null; wait_reason: stri
   if (RUNNING.has(t.state)) return "running";
   if (CHECKING.has(t.state)) return "checking";
   if (t.state === "BLOCKED" && t.wait_reason === "stopped") return "stopped";
+  if (t.state === "CLOSED" && t.wait_reason === "expired") return "expired";
   if (t.last_result === "FAILED" || t.state === "BLOCKED") return "failed";
   if (t.approved_by_human && t.last_result === "VERIFIED") return "approved";
   if (t.state === "HELD" && t.wait_reason === "key_rejected") return "key";

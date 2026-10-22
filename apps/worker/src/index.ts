@@ -33,3 +33,4 @@ export { baselineFromRuns, runBaseline } from "./baseline.js";
 export type { BaselineRun } from "./baseline.js";
 export { sessionIdFor, sessionRecorder } from "./online/session-recorder.js";
 export type { RecorderOptions, SessionRecorder, SessionSink } from "./online/session-recorder.js";
+export { HELD_DAYS, closeExpiredHeld, heldDays } from "./online/held-expiry.js";

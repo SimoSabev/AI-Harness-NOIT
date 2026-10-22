@@ -53,6 +53,8 @@ export const bg: Record<Key, string> = {
   "status.approved.headline": "Проверена от Мандат и одобрена от човек. Промяната е готова за сливане.",
   "status.closed.label": "Приключена",
   "status.closed.headline": "Задачата е приключена.",
+  "status.expired.label": "Изтекла",
+  "status.expired.headline": "Никой не реши навреме; задачата е затворена и нищо не е доставено.",
   "group.waiting": "Чака теб",
   "group.active": "В работа",
   "group.done": "Готово",

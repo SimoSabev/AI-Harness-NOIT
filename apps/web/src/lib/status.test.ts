@@ -19,7 +19,12 @@ describe("status (D-292)", () => {
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED" })).key).toBe("closed");
     expect(statusOf(t({ state: "GATED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
     expect(statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "key_rejected" }))).toMatchObject({ key: "key", label: "Key rejected", tone: "red" });
-    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
+    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "closed", "expired"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
+  });
+  it("E8g: a HELD task closed by the sweeper says so (gray, done)", () => {
+    const st = statusOf(t({ state: "CLOSED", wait_reason: "expired" }));
+    expect([st.key, st.tone]).toEqual(["expired", "gray"]);
+    expect(groupOf(st.key)).toBe("done");
   });
   it("groups: Чака теб / В работа / Готово", () => {
     expect(groupOf("review")).toBe("waiting");
@@ -60,6 +65,7 @@ function stateFor(k: string): Partial<Parameters<typeof statusOf>[0]> {
     review: { state: "HELD", last_result: "VERIFIED", wait_reason: "approval", approval_needed: true }, failed: { state: "BLOCKED", last_result: "FAILED" },
     unknown: { state: "HELD", last_result: "UNKNOWN" }, key: { state: "HELD", wait_reason: "key_rejected" }, empty: { state: "HELD", last_result: "VERIFIED", wait_reason: "empty_change" },
     stopped: { state: "BLOCKED", wait_reason: "stopped" }, approved: { state: "DELIVERED", last_result: "VERIFIED", approved_by_human: true }, closed: { state: "CLOSED" },
+    expired: { state: "CLOSED", wait_reason: "expired" },
   };
   return m[k] ?? {};
 }

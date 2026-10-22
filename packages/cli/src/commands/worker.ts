@@ -1,6 +1,6 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, dbUrl, drainHarnessOutbox, openDb, runBaseline, runDaemonOnce } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, openDb, runBaseline, runDaemonOnce } from "@mandat/worker";
 import { repoRoot } from "../paths.js";
 import type { Io } from "../output.js";
 
@@ -69,6 +69,9 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       drain: async () => {
         // E7г (D-314): the baseline at connect runs in the sandbox; MANDAT_BASELINE=0 turns it off
         const baselineRunner = env.MANDAT_BASELINE === "0" ? undefined : (dir: string, policy: Parameters<typeof runBaseline>[1]) => runBaseline(dir, policy, { mandatHome: o.home, repoRoot, env });
+        // E8g: overdue HELD tasks are closed before the outbox drains, so their notification goes out in the same pass
+        const expired = await closeExpiredHeld(db, { now: new Date(), days: heldDays(env) });
+        if (expired.length > 0) io.stderr(`[held] expired: ${expired.join(", ")}\n`);
         const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, ...(baselineRunner ? { baselineRunner } : {}) });
         if (fx.done + fx.failed > 0) io.stderr(`[outbox] harness: ${fx.done} done, ${fx.failed} failed\n`);
       },

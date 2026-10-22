@@ -56,10 +56,10 @@ export async function checkPushEndpoint(raw: string, o: { env?: Record<string, s
 }
 
 // Payload (Ф4): no secrets — task_id, kind, a title ≤ 80 chars, the verdict word, the level.
-export type NotifyKind = "waiting" | "failed" | "merged";
+export type NotifyKind = "waiting" | "failed" | "merged" | "expired";
 const WORD: Record<string, string> = { VERIFIED: "ПРОВЕРЕНО", FAILED: "ПРОВАЛ", UNKNOWN: "НЕИЗВЕСТНО" };
 export function pushPayload(o: { task_id: string; kind: NotifyKind; text: string; result: string | null; level: number | null }): string {
-  const head = o.kind === "waiting" ? "Чака теб" : o.kind === "failed" ? "ПРОВАЛ" : "Слято само";
+  const head = o.kind === "waiting" ? "Чака теб" : o.kind === "failed" ? "ПРОВАЛ" : o.kind === "expired" ? "Изтече (затворена)" : "Слято само";
   const raw = `${head}: ${o.text.replace(/\s+/g, " ").trim()}`;
   const title = [...raw].length > 80 ? `${[...raw].slice(0, 79).join("")}…` : raw;
   return JSON.stringify({ task_id: o.task_id, kind: o.kind, title, verdict: o.result ? (WORD[o.result] ?? o.result) : null, level: o.level });
@@ -118,7 +118,7 @@ export function webPushHandler(d: { db: { query<T = Record<string, unknown>>(t: 
     const vapid = vapidFromEnv(d.env ?? process.env);
     const taskId = String(row.payload.task_id ?? "");
     const kind = String(row.payload.kind ?? "") as NotifyKind;
-    if (!/^t_[a-z0-9_]{1,40}$/.test(taskId) || !["waiting", "failed", "merged"].includes(kind)) throw new Error("web_push: bad payload");
+    if (!/^t_[a-z0-9_]{1,40}$/.test(taskId) || !["waiting", "failed", "merged", "expired"].includes(kind)) throw new Error("web_push: bad payload");
     if (!vapid) {
       d.log?.("[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)");
       return;

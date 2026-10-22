@@ -55,6 +55,8 @@ export const en = {
   "status.approved.headline": "Checked by Mandat and approved by a person. The change is ready to merge.",
   "status.closed.label": "Closed",
   "status.closed.headline": "The task is closed.",
+  "status.expired.label": "Expired",
+  "status.expired.headline": "Nobody decided in time; the task was closed and nothing was delivered.",
   "group.waiting": "Waiting for you",
   "group.active": "In progress",
   "group.done": "Done",
