@@ -305,6 +305,9 @@ importers:
       '@mandat/onboard':
         specifier: workspace:*
         version: link:../../packages/onboard
+      '@mandat/profile':
+        specifier: workspace:*
+        version: link:../../packages/profile
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../../packages/redaction

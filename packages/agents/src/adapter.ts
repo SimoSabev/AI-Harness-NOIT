@@ -8,6 +8,8 @@ export interface AgentRunContext {
   contractFile: "/m/in/contract.txt";
   workdir: "/m/work";
   notesPath: "/m/out/notes.txt";
+  /** v5 E8а: the compiled control layer (Materialized.argv/env) — the files are already under /m/in/harness */
+  harness?: { argv: string[]; env: Record<string, string> };
 }
 export interface AnthropicChannelEnv {
   ANTHROPIC_BASE_URL: "http://egress-gate";
@@ -28,6 +30,13 @@ export interface AgentLaunchSpec {
   argv: string[];
   env: Record<string, string>;
   stdin: "closed" | "pipe";
+  /** public env (never a secret) for the agent container, e.g. CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS */
+  publicEnv?: Record<string, string>;
+}
+/** The value after a flag in an argv (e.g. --settings <file>). */
+export function argAfter(argv: readonly string[], flag: string): string | null {
+  const i = argv.indexOf(flag);
+  return i >= 0 && i + 1 < argv.length ? (argv[i + 1] as string) : null;
 }
 export type AgentEvent =
   | { type: "init"; sessionId: string; model: string; tools: string[]; mcpServers: { name: string; status: string }[]; capabilities: string[] }

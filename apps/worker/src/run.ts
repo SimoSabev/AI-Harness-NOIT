@@ -7,7 +7,9 @@ import { spawnSync } from "node:child_process";
 import {
   MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent, StreamEvent } from "@mandat/contract";
+import type { Contract, ErrorCode, Evidence, GateLogLine, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
+import { compileProfile } from "@mandat/profile";
+import { seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
@@ -41,6 +43,10 @@ export interface RunTaskInput {
   now?: () => Date;
   /** mirror name under <home>/mirrors (default "shop"; the online worker uses "demo-shop") */
   mirror?: string;
+  /** v5 E8а: the approved harness profile of the repo → compiled into /m/in/harness for the agent */
+  profile?: HarnessProfile;
+  /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
+  subjects?: string[];
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
@@ -240,6 +246,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
+    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[] } | null = null;
     const set = (e: Evidence): void => {
       evd.set(e.detector, e);
     };
@@ -269,6 +276,17 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         await w.text("agent-contract.txt", text);
         const c = await runSandbox(sctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "cat > /m/in/contract.txt && chmod 0444 /m/in/contract.txt"], stdin: PassThrough.from([text]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000 });
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
+        // v5 E8а (D-311): the profile's control layer → /m/in/harness (root, read-only for the agent) before the agent
+        if (i.profile) {
+          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : "claude";
+          const base = target === "codex" ? "codex" : "claude";
+          const m = compileProfile(i.profile, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])] });
+          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: m.unsupported };
+          if (target === "codex") {
+            const cp = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/codex-home && cp -R /m/in/harness/codex/. /m/codex-home/ && chmod -R u+w /m/codex-home"], timeoutMs: 60_000 });
+            if (cp.exitCode !== 0) infra("E_DOCKER", "codex home seed failed");
+          }
+        }
         try {
           gate = await startGate(gctx("agent"), { phase: "install", routes: allow.ok ? allow.routes : [] });
         } catch (e) {
@@ -304,11 +322,12 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider === "openai" ? { p: "openai" as const } : {}) }));
         }
         const launch = adapter.launch(
-          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" },
+          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}) },
           viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
+        const denied: string[] = [];
         const streamCtx = createStreamCtx(runId);
         const onStream = i.hooks?.onStream;
         let loginProblem = false;
@@ -344,7 +363,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
             ...(viaProfile && ch.profileName ? { profile: profileVolume("claude", ch.profileName) } : {}),
-            env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}) },
+            env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}) },
             cmd: launch.argv,
             timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
             onStdoutLine: (line) => {
@@ -353,9 +372,12 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
               }
-              if (onStream) {
+              if (onStream || harness) {
                 try {
-                  for (const ev of adapter.toStream(line, streamCtx)) onStream(ev);
+                  for (const ev of adapter.toStream(line, streamCtx)) {
+                    if (ev.kind === "permission" && ev.tool) denied.push(ev.tool.name);
+                    onStream?.(ev);
+                  }
                 } catch {
                   // the live view is best effort; the transcript and the verdict do not depend on it
                 }
@@ -387,6 +409,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         }
         if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
+        if (harness) await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, enforced_by_harness: harness.enforced, unsupported: harness.unsupported });
         await g.setPolicy("closed", []).catch(() => undefined);
         await g.stop();
         gate = undefined;

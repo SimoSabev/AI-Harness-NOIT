@@ -19,7 +19,7 @@ export interface SandboxRun {
   /** run network name or "none"; with a run network the tree's resolv.conf/hosts are mounted (D-011, D-081). */
   network: string;
   tree?: Tree;
-  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" };
+  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY"; extraPublic?: Record<string, string> };
   /** D-295: the subscription profile volume of the agent (buildRunArgs refuses it for any other role) */
   profile?: string;
   user?: "1000:1000" | "0:0";
@@ -48,7 +48,8 @@ export function runSandbox(ctx: SandboxCtx, o: SandboxRun): Promise<DockerRunRes
   const args = buildRunArgs(
     {
       role: o.role, runId: ctx.runId, image: ctx.image, network: o.network, user: o.user ?? "1000:1000", mounts,
-      envNames: env.names.filter((n) => n in secrets), publicEnv: env.publicValues, workdir: "/m/work",
+      // v5 E8а: extra public env (the control layer's limits) never overrides the phase env; buildRunArgs refuses secret-looking values
+      envNames: env.names.filter((n) => n in secrets), publicEnv: { ...(o.env.extraPublic ?? {}), ...env.publicValues }, workdir: "/m/work",
       interactive: o.stdin !== undefined && o.stdin !== "closed", ipv6Sysctl: ctx.ipv6Sysctl,
       ...(o.name !== undefined ? { name: o.name } : {}), ...(o.init ? { init: true } : {}),
     },

@@ -39,6 +39,7 @@ describe("compile for Claude Code (E8а)", () => {
     expect(s.permissions.deny).toEqual(expect.arrayContaining(["Bash(git push *)", "Bash(curl *)", "Edit(infra/**)", "Write(infra/**)"]));
     expect(s.permissions.deny).not.toContain("mcp__stripe");
     expect(s.permissions.ask).toEqual(["mcp__github__create_issue"]);
+    expect(s.permissions.allow).toEqual(["Bash(npx vitest run *)", "Bash(npx vitest run)", "Bash(npx tsc --noEmit *)", "Bash(npx tsc --noEmit)", "mcp__mandat__mandat_status", "mcp__mandat__mandat_verify"]);
     expect(s.hooks.PreToolUse?.[0]).toEqual({ matcher: "Bash", hooks: [{ type: "command", command: "node /opt/mandat/hooks/deny-by-policy.mjs", timeout: 10 }] });
     expect(s.hooks.PostToolUse?.[0]?.hooks[0]?.command).toBe("node /opt/mandat/hooks/typecheck-changed.mjs");
     expect(s.hooks.Stop?.[0]?.hooks[0]?.command).toBe("node /opt/mandat/hooks/require-tests-ran.mjs");

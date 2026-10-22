@@ -59,7 +59,14 @@ Reads the diff and reports problems; never writes.
     {
       "bytes": "{
   "permissions": {
-    "allow": [],
+    "allow": [
+      "Bash(npx vitest run *)",
+      "Bash(npx vitest run)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(npx tsc --noEmit)",
+      "mcp__mandat__mandat_status",
+      "mcp__mandat__mandat_verify"
+    ],
     "deny": [
       "Bash(git push *)",
       "Bash(curl *)",

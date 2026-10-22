@@ -34,6 +34,7 @@
     "@mandat/ledger": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/onboard": "workspace:*",
+    "@mandat/profile": "workspace:*",
     "@mandat/redaction": "workspace:*",
     "@mandat/sandbox": "workspace:*",
     "@mandat/verify": "workspace:*",

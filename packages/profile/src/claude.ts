@@ -12,6 +12,10 @@ export function compileClaude(p: HarnessProfile, ctx: CompileCtx): Materialized 
   const native = rules.filter((r) => RULES[ruleKind(r.tool)].claude === "native");
   const perms = { allow: [] as string[], deny: [] as string[], ask: [] as string[] };
   for (const r of native) perms[r.decision].push(...claudeRule(r.tool));
+  // --permission-mode dontAsk refuses whatever is not pre-approved: the profile's MCP tools and its own commands are
+  const b = p.layers.b.commands;
+  for (const c of [b.test, b.lint, b.typecheck]) if (c && !c.includes("{")) perms.allow.push(`Bash(${c} *)`, `Bash(${c})`);
+  for (const m of p.layers.e.mcp) perms.allow.push(...(m.enabled_tools ? m.enabled_tools.map((t) => `mcp__${m.name}__${t}`) : [`mcp__${m.name}`]));
   const hooks: Record<string, { matcher?: string; hooks: { type: "command"; command: string; timeout: number }[] }[]> = {};
   for (const h of p.layers.d) (hooks[EVENT[h.event]] ??= []).push({ ...(h.matcher ? { matcher: h.matcher } : {}), hooks: [{ type: "command", command: command(h), timeout: 10 }] });
   const settings = {
