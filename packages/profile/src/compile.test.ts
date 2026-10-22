@@ -1,4 +1,5 @@
-import { HarnessProfile, Materialized, demoProfileLayers, sealProfile } from "@mandat/contract";
+import { Materialized, demoProfileLayers, sealProfile } from "@mandat/contract";
+import type { HarnessProfile } from "@mandat/contract";
 import { describe, expect, it } from "vitest";
 import { RULES, claudeRule, compileProfile, ruleKind } from "./index.js";
 
