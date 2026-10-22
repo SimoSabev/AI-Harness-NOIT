@@ -29,6 +29,8 @@ export class FakeDocker implements DockerRunner {
   readonly calls: Call[] = [];
   canary = "";
   token = "";
+  /** what the agent container got on stdin (E8g steering) */
+  agentStdin = "";
   constructor(private readonly o: FakeOpts = {}) {}
 
   async run(args: string[], ro: Parameters<DockerRunner["run"]>[1]): Promise<{ exitCode: number; timedOut: boolean }> {
@@ -67,6 +69,7 @@ export class FakeDocker implements DockerRunner {
     if (cmd[0] === "npm") return { exitCode: this.o.installExit ?? 0, timedOut: false };
     if (cmd[0] === "node" && cmd[1]?.startsWith("/opt/mandat/fakes/")) {
       for (const l of this.o.agentLines?.(ctx) ?? ['{"type":"system","subtype":"init","session_id":"fake","model":"fake","tools":[],"mcp_servers":[]}', '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}']) out(l + "\n");
+      if (ro.stdin !== "closed") for await (const c of ro.stdin as AsyncIterable<Buffer>) this.agentStdin += c.toString("utf8");
       return { exitCode: this.o.agentExit ?? 0, timedOut: false };
     }
     if (cmd[0] === "tar" && cmd.includes("-cf")) {

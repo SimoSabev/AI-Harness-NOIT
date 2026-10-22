@@ -430,3 +430,24 @@ describe("runTask with a harness profile (E8а, D-311)", () => {
     expect(h.files_hash).not.toBe(h0.files_hash);
   });
 });
+
+describe("runTask steering (E8g, AC-8.5)", () => {
+  it("a steerable agent with a steer hook: -i, the task as the first stdin line, pending steers framed; stdin ends at the result", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    let polls = 0;
+    const { r } = await go({ docker, i: { agent: "fake:steer-echo", hooks: { steer: () => Promise.resolve(polls++ === 0 ? [{ text: "use cents", author: "ana" }] : []) } } });
+    expect(r.verdict).not.toBeNull();
+    const agent = docker.calls.find((c) => c.args.some((x) => x.endsWith("steer-echo.mjs")))?.args ?? [];
+    expect(agent).toContain("-i");
+    const lines = docker.agentStdin.trim().split("\n").map((l) => JSON.parse(l) as { message: { content: string } });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]?.message.content).toContain('source="steer">use cents</untrusted>');
+  });
+  it("no steer hook or a non-steerable agent → stdin closed, as before", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    await go({ docker, i: { hooks: { steer: () => Promise.resolve([{ text: "x", author: "a" }]) } } });
+    expect(docker.agentStdin).toBe("");
+    const agent = docker.calls.find((c) => c.args.some((x) => x.endsWith("honest-fix.mjs")))?.args ?? [];
+    expect(agent).not.toContain("-i");
+  });
+});
