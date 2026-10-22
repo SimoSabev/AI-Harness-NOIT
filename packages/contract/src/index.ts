@@ -12,3 +12,4 @@ export * from "./verify.js";
 export * from "./explain.js";
 export { INSTALL_ARGV, LOCKFILE, installCommand, lockAllowlist, pnpmAllowlist, yarnAllowlist } from "./lockfiles.js";
 export type { LockAllowlistResult, PackageManager } from "./lockfiles.js";
+export * from "./workbench.js";
