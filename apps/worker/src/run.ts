@@ -9,7 +9,7 @@ import {
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent } from "@mandat/contract";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
-import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
+import type { AgentAdapter, AgentEvent, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
 import { buildReasons, canaryCheck, decideVerdict, ev, na } from "@mandat/core";
@@ -25,6 +25,8 @@ import type { RunGate, runTestProcedure } from "@mandat/verify";
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
   onCanary?: (value: string) => void;
+  /** D-308: every parsed event of the agent's stream, in order (the session recorder); a throw here is ignored */
+  onAgentEvent?: (e: AgentEvent) => void;
 }
 export interface RunTaskInput {
   home: string;
@@ -345,6 +347,11 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
+                try {
+                  i.hooks?.onAgentEvent?.(e);
+                } catch {
+                  // the recorder must never stop the run (D-308)
+                }
               }
               let row: object;
               try {

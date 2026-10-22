@@ -17,6 +17,8 @@ import { runTask } from "../run.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
 import { loadChannels, profileOfAgent, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { inTransaction } from "./db.js";
+import { recorder, sessionMapper } from "./recorder.js";
+import { workbench } from "./workbench.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 import type { Db } from "./db.js";
 
@@ -167,11 +169,21 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   await bc("RUNNING", seq);
   log(`[daemon] ${t.id}: running ${t.agent}${current ? ` on ${current.label}` : ""}`);
   const t0 = now().getTime();
-  const runOnce = () =>
-    (d.run ?? runTask)({
-      home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
-      ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
-    });
+  // D-308: every attempt records its own session from the agent's stream; recording never changes the outcome.
+  const runOnce = async () => {
+    const rec = recorder(workbench(d.db, t.org_id), t.repo_id, sessionMapper({ taskId: t.id, attempt: t.attempt, agent: t.agent, model: contract.channel.model, account: current?.label ?? profileRef?.label ?? null, now: () => now().getTime() }), log);
+    let o: RunTaskOutput | undefined;
+    try {
+      o = await (d.run ?? runTask)({
+        home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
+        ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
+        hooks: { onCanary: (v) => rec.secret(v), onAgentEvent: (e) => rec.event(e) },
+      });
+      return o;
+    } finally {
+      await rec.close(o !== undefined && o.agentExit === 0);
+    }
+  };
   const usageRow = async (o: RunTaskOutput) => {
     if (current) await d.db.query("insert into public.channel_usage (org_id, channel_id, task_id, attempt, usd, requests, limited) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)", [t.org_id, current.id, t.id, t.attempt, o.verdict?.usage.usd ?? 0, o.verdict?.usage.requests ?? 0, o.limit !== undefined && o.limit !== null]);
   };

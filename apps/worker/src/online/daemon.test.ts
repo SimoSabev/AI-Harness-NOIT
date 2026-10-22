@@ -166,6 +166,25 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     // т. 8.4: ПРОВАЛ → web push through the outbox (sent only by the worker)
     expect((await s.db.query<{ payload: unknown }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload)).toEqual([{ task_id: "t_web_1", kind: "failed" }]);
   });
+  it("D-308: the agent's stream becomes its session and calls (canary hidden); a recorder never changes the task's outcome", async () => {
+    const s = await setup(0);
+    const inner = s.deps.run;
+    s.deps.run = async (i) => {
+      i.hooks?.onCanary?.("CanaryValue0123456789abcdefghijklmnopqrstu");
+      i.hooks?.onAgentEvent?.({ type: "init", sessionId: "x", model: "fake", tools: [], mcpServers: [], capabilities: [] });
+      i.hooks?.onAgentEvent?.({ type: "tool_use", id: "u1", name: "Bash", input: { command: "echo CanaryValue0123456789abcdefghijklmnopqrstu" } });
+      i.hooks?.onAgentEvent?.({ type: "tool_result", toolUseId: "u1", isError: false });
+      i.hooks?.onAgentEvent?.({ type: "tool_use", id: "u2", name: "Edit", input: { file_path: "/m/work/src/cart.ts" } });
+      i.hooks?.onAgentEvent?.({ type: "tool_result", toolUseId: "u2", isError: false });
+      return (inner as NonNullable<DaemonDeps["run"]>)(i);
+    };
+    expect(await runDaemonOnce(s.deps)).toBe("t_web_1");
+    const ss = (await s.db.query<{ id: string; task_id: string; state: string; touching: string[] }>("select id, task_id, state, touching from public.agent_sessions")).rows;
+    expect(ss).toEqual([{ id: "s_web_1_a1", task_id: "t_web_1", state: "done", touching: ["src/cart.ts"] }]);
+    const cs = (await s.db.query<{ tool: string; summary: string }>("select tool, summary from public.tool_calls order by id")).rows;
+    expect(cs).toEqual([{ tool: "Bash", summary: "echo [скрито]" }, { tool: "Edit", summary: "src/cart.ts" }]);
+    expect((await s.db.query<{ state: string }>("select state from public.tasks where id = 't_web_1'")).rows[0]?.state).toBe("HELD");
+  });
   it("contractForTask: allowed_paths/may_change_tests/risk_cap от политиката; непознат тип → грешка", async () => {
     const { parseMandatYml } = await import("@mandat/contract");
     const { readFileSync } = await import("node:fs");
