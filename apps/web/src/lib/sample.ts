@@ -70,7 +70,7 @@ const windows: WindowRow[] = [
   { id: "w8", kind: "log", title: "вратата · всички", url: null, status: "live", repo: null, last_seen_at: ago(0) },
 ];
 const night: NightView = {
-  shift: { id: "n1", starts_at: at(23), ends_at: at(7), budget_usd: 18, spent_usd: 0, status: "planned", rules: { auto_merge: { min_level: 3, max_lines: 80 }, on_fail: "retry_once", same_file: "wait", forbid_tools: ["stripe.*", "postgres.write"] } },
+  shift: { id: "n1", starts_at: at(23), ends_at: at(7), budget_usd: 18, spent_usd: 0, status: "planned", rules: { auto_merge: { min_level: 3, max_lines: 80 }, on_fail: "retry_then_park", retries: 1, same_file: "wait", forbid_tools: ["stripe.*", "postgres.write"] } },
   queue: [
     { position: 0, repo: "shop", text: "Обнови README с новите команди", risk: "low", est_minutes: 40, est_usd: 0.3, status: "queued" },
     { position: 1, repo: "shop", text: "E2E тест за checkout", risk: "low", est_minutes: 90, est_usd: 1.8, status: "queued" },

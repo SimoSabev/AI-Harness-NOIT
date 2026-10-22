@@ -25,7 +25,7 @@ describe("workbench (D-307)", () => {
   });
   it("правила на нощта: разумни граници и забранени инструменти", () => {
     const r = NightRules.parse({ auto_merge: { min_level: 3, max_lines: 80 }, on_fail: "retry_once", same_file: "wait", forbid_tools: ["stripe.*", "postgres.write"] });
-    expect(r.on_fail).toBe("retry_once");
+    expect(r.on_fail).toBe("retry_then_park"); // D-320
     expect(() => NightRules.parse({ ...r, auto_merge: { min_level: 5, max_lines: 80 } })).toThrow();
   });
   it("твърдение от ресърч: препратките са към номера на източници", () => {

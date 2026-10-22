@@ -113,6 +113,12 @@ export const DetectorId = z.enum([
   "D7.ci",
   "POLICY",
   "D11.mutation", // D-300: mutants of the changed lines must be caught by the tests
+  // v5 2.6 (D-341: named like the others, <id>.<what>)
+  "D5.hidden",
+  "D8.static",
+  "D12.ui",
+  "RESEARCH",
+  "REVIEW",
 ]);
 export type DetectorId = z.infer<typeof DetectorId>;
 export const Evidence = z
@@ -236,6 +242,15 @@ export const LedgerKind = z.enum([
   "integrity_mismatch",
   "demo_reset",
   "external_verdict",
+  // v5 2.6
+  "profile_change",
+  "role_change",
+  "tool_permission",
+  "mcp_change",
+  "night_question",
+  "research_run",
+  "conflict",
+  "parked",
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
@@ -259,6 +274,12 @@ export const SecurityEventKind = z.enum([
   "config_path_change",
   "tree_mismatch",
   "redaction_hit",
+  // v5 2.6 (+ config_change for SH2-CX: the seeded agent config changed during the run)
+  "tool_poisoning",
+  "mcp_definition_changed",
+  "ask_denied",
+  "conflict_file",
+  "config_change",
 ]);
 export type SecurityEventKind = z.infer<typeof SecurityEventKind>;
 export const SecurityEvent = z

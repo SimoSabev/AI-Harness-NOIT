@@ -12,7 +12,7 @@ export interface PluginRow { name: string; description: string; kind: "hook" | "
 export interface PermissionCell { subject: string; tool: string; decision: "allow" | "ask" | "deny" }
 export interface WindowRow { id: string; kind: "terminal" | "preview" | "server" | "log"; title: string; url: string | null; status: "live" | "slow" | "idle"; repo: string | null; last_seen_at: string }
 export interface NightView {
-  shift: { id: string; starts_at: string; ends_at: string; budget_usd: number; spent_usd: number; status: string; rules: { auto_merge: { min_level: number; max_lines: number }; on_fail: string; same_file: string; forbid_tools: string[] } } | null;
+  shift: { id: string; starts_at: string; ends_at: string; budget_usd: number; spent_usd: number; status: string; rules: { auto_merge: { min_level: number; max_lines: number }; on_fail: string; retries?: number; same_file: string; forbid_tools: string[] } } | null;
   queue: { position: number; repo: string; text: string; risk: "low" | "medium" | "high"; est_minutes: number; est_usd: number; status: string }[];
   last: { starts_at: string; spent_usd: number; budget_usd: number; merged: number; waiting: number; failed: number; items: { text: string; repo: string; status: string }[] } | null;
 }
