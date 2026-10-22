@@ -35,6 +35,7 @@ export const config = defineConfig({
         "packages/llm-proxy/src/**": loose,
         "packages/channels/src/**": loose,
         "packages/agents/src/**": loose,
+        "packages/profile/src/**": { lines: 90 },
         "apps/worker/src/**": loose,
       },
     },

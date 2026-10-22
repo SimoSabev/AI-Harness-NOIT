@@ -160,7 +160,7 @@ E2e тестовете (`pnpm test:e2e`) търсят браузъра в `MANDA
 | Група | Лиценз | Пакети | Позволени зависимости (prod, транзитивно) |
 | --- | --- | --- | --- |
 | Ядро | Apache-2.0 (`packages/<p>/LICENSE`, `NOTICE`) | contract, core, ledger, export, sandbox, redaction; от E1б–E2: verify, gate-github, mcp | MIT, Apache-2.0, BSD-2/3-Clause, ISC, 0BSD, BlueOak-1.0.0 (без MPL, без GPL) |
-| Харнес | GPL-3.0-or-later (коренът `LICENSE`) | egress-gate, llm-proxy, channels, agents, cli, apps/worker, apps/web, onboard, bench, spikes | ядрото + MPL-2.0 |
+| Харнес | GPL-3.0-or-later (коренът `LICENSE`) | egress-gate, llm-proxy, channels, agents, cli, apps/worker, apps/web, onboard, profile, bench, spikes | ядрото + MPL-2.0 |
 
 Защо така: Apache-2.0 код може да се ползва от GPL-3.0 проект, обратното не може
 ([apache.org/licenses/GPL-compatibility.html](https://www.apache.org/licenses/GPL-compatibility.html);

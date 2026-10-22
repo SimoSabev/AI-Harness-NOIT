@@ -17,3 +17,4 @@ export * from "./agent-stream.js";
 export * from "./profile.js";
 export * from "./roles.js";
 export * from "./research.js";
+export { demoProfileLayers } from "./profile.fixture.js";
