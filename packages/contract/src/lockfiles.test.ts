@@ -155,6 +155,8 @@ describe("lockfiles (D-301)", () => {
     expect(r.ok && r.packages).toBe(2);
     expect(paths(r)).toEqual([
       "/npm/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz", "/npm/@jridgewell/trace-mapping", "/npm/@jridgewell%2ftrace-mapping", "/npm/@jridgewell%2Ftrace-mapping",
+      // yarn 4 asks for a scoped tarball with the slash encoded (seen in the gate log of the docker test)
+      "/npm/@jridgewell%2ftrace-mapping/-/trace-mapping-0.3.31.tgz",
       "/npm/typescript/-/typescript-6.0.3.tgz", "/npm/typescript",
     ]);
     expect(paths(yarnAllowlist(BERRY.replace('resolution: "typescript@npm:6.0.3"', 'resolution: "typescript@https://evil.example/t.tgz"')))).toBe("git_or_url_dep");
@@ -163,7 +165,7 @@ describe("lockfiles (D-301)", () => {
     expect(paths(yarnAllowlist(BERRY.replace("  checksum: 10c0/4a25ff50\n", "")))).toBe("bad_integrity");
     // a binary for another platform: yarn writes no checksum for what it never fetched → no route (the gate refuses it)
     const other = BERRY.replace("  checksum: 10c0/4a25ff50\n", "  conditions: os=android & cpu=arm\n");
-    expect(paths(yarnAllowlist(other))).toEqual(paths(yarnAllowlist(BERRY)).slice(0, 4));
+    expect(paths(yarnAllowlist(other))).toEqual(paths(yarnAllowlist(BERRY)).slice(0, 5));
     expect(paths(yarnAllowlist(BERRY.replace("version: 10\n  cacheKey", "version: 6\n  cacheKey")))).toBe("berry_version");
     expect(paths(yarnAllowlist("__metadata:\n  version: 10\n\"a@npm:1\": [\n"))).toBe("not_v3");
   });
