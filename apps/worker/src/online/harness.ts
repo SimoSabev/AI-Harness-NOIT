@@ -15,6 +15,7 @@ import { PgOutbox } from "./pg-outbox.js";
 import { webPushHandler } from "./push.js";
 import { approvalHandlers } from "./effects.js";
 import { mcpHandlers } from "./mcp.js";
+import { upsertSkills } from "./skills.js";
 import type { McpVetRunner } from "./mcp.js";
 
 // Демо промпт т. 8.2 Поток 1 (стъпки 1–4, 6, 9; стъпка 5 LLM е забранена): connect → scan a clean clone (hooks off)
@@ -71,6 +72,7 @@ export async function scanForProposal(d: HarnessDeps, repoId: string): Promise<s
       const next = (await tx.query<{ v: number }>("select coalesce(max(version), 0) + 1 as v from public.harness_profiles where repo_id = $1::uuid", [repoId])).rows[0]?.v ?? 1;
       const prof = proposeProfile(scan, { repoId, version: next, history: { subjects, diffLines } }).profile;
       await tx.query("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::jsonb, $6)", [r.org_id, repoId, next, JSON.stringify(prof.layers), JSON.stringify(prof.sources), prof.profile_hash]);
+      await upsertSkills(tx, r.org_id, repoId, scan.skills); // E8e: the skills catalog
       const diff = lineDiff(existing[".mandat.yml"] ?? "", p.yaml);
       await appendLedgerOnline(tx, { org_id: r.org_id, kind: "config_change", task_id: null, payload: { proposal_id: id, status: "proposed", yaml_sha256: p.sha256, base_commit: head, added: diff.filter((l) => l.startsWith("+")).length, removed: diff.filter((l) => l.startsWith("-")).length } });
       // E7г (D-314, Q-026 reversed): the baseline runs asynchronously; the proposal is usable before it ends

@@ -10,7 +10,7 @@ export interface FleetRow {
 }
 export interface ToolCallRow { at: string; session_id: string; agent: string; kind: "mcp" | "skill" | "builtin" | "bash" | "mandat"; tool: string; summary: string; decision: "allowed" | "asked" | "denied" | "slow" | "error"; duration_ms: number | null }
 export interface McpRow { name: string; transport: "stdio" | "http"; tools: number; status: "up" | "slow" | "down" | "off"; latency_ms: number | null; egress_hosts: string[]; repos: string[] | null; calls_hour: number }
-export interface SkillRow { name: string; description: string; source: "repo" | "user" | "team" | "builtin"; version: string | null; used_by: number }
+export interface SkillRow { name: string; description: string; source: "repo" | "user" | "team" | "builtin"; version: string | null; used_by: number; blocked_reason?: string | null }
 export interface PluginRow { name: string; description: string; kind: "hook" | "command" | "check" | "notify"; enabled: boolean }
 export interface PermissionCell { subject: string; tool: string; decision: "allow" | "ask" | "deny" }
 export interface WindowRow { id: string; kind: "terminal" | "preview" | "server" | "log"; title: string; url: string | null; status: "live" | "slow" | "idle"; repo: string | null; last_seen_at: string }

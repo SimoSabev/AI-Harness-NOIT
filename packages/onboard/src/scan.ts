@@ -1,3 +1,5 @@
+import { skillsFromView } from "./skills.js";
+import type { RepoSkill } from "./skills.js";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
@@ -38,6 +40,8 @@ export interface ScanResult {
   hasCss: boolean;
   /** E8б: style facts from .editorconfig / prettier / eslint config (file names and indent only) */
   style: string[];
+  /** E8e: the repo's skills (without their text); blocked = an invisible character */
+  skills: Omit<RepoSkill, "text">[];
 }
 
 const LOCKFILES: [string, PackageManager][] = [["pnpm-lock.yaml", "pnpm"], ["package-lock.json", "npm"], ["yarn.lock", "yarn"], ["bun.lockb", "bun"], ["bun.lock", "bun"]];
@@ -139,6 +143,7 @@ export function scanRepo(v: RepoView): ScanResult {
     testDirs: ["tests", "test", "__tests__", "e2e"].filter((d) => dirs.includes(d)),
     hasCss: files.some((f) => /\.(css|scss)$/.test(f)),
     style: styleFacts(v, files),
+    skills: skillsFromView(v).map(({ text: _text, ...rest }) => rest),
   };
 }
 

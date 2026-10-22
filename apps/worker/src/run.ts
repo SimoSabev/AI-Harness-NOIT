@@ -8,7 +8,8 @@ import {
   MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
-import { compileProfile, grantOnce, parseAsks } from "@mandat/profile";
+import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
+import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
 import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarLines, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
@@ -301,8 +302,10 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           const base = target === "codex" ? "codex" : "claude";
           const granted = i.grantOnce ?? [];
           const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
-          const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])] });
-          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: m.unsupported, files: m.files, granted };
+          // E8e (D-354): skills are materialized only when their text has the hash the profile was approved with
+          const sk = skillTexts(prof.layers.e.skills, Object.fromEntries(scanSkills(baseDir).filter((k) => k.blocked === null).map((k) => [k.name, k.text])));
+          const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])], skills: sk.texts });
+          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: [...m.unsupported, ...sk.dropped], files: m.files, granted };
           if (target === "codex") {
             const cp = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/codex-home && cp -R /m/in/harness/codex/. /m/codex-home/ && chmod -R u+w /m/codex-home"], timeoutMs: 60_000 });
             if (cp.exitCode !== 0) infra("E_DOCKER", "codex home seed failed");

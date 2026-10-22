@@ -213,7 +213,14 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-jest → a
         },
       ],
       "plugins": [],
-      "skills": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
     },
     "f": {
       "roles": [
@@ -273,7 +280,7 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-jest → a
       ],
     },
   },
-  "profile_hash": "sha256:67b54248573dc7ee050e5a5030a0cd86bbcec8fd0cf6f708822857861f733fe5",
+  "profile_hash": "sha256:f37b0a1b2230068ef9ff5f2689aefa68c68095c9cf406d4178e4a7ab59b7f395",
   "repo_id": "local",
   "sources": {
     "a.ci.required_checks": "ci",
@@ -521,7 +528,14 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-jest-turbo
         },
       ],
       "plugins": [],
-      "skills": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
     },
     "f": {
       "roles": [
@@ -581,7 +595,7 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-jest-turbo
       ],
     },
   },
-  "profile_hash": "sha256:6799b8bf10665386aabbb999b861a618aeafbdbcd6167bd0747cb3ffdae17214",
+  "profile_hash": "sha256:4ba5610b66a5386d4eac5e719c68eebebd0b92f082f30a55f17e2ac42c26238e",
   "repo_id": "local",
   "sources": {
     "a.ci.required_checks": "ci",
@@ -826,7 +840,14 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-vitest →
         },
       ],
       "plugins": [],
-      "skills": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
     },
     "f": {
       "roles": [
@@ -886,7 +907,7 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-vitest →
       ],
     },
   },
-  "profile_hash": "sha256:09a226cd41554a61068cdf609fb3172eedd21f0465259622b8550f364563e423",
+  "profile_hash": "sha256:f73292500f18d8e3a01beed4d26570b89e812f1871b0fdb10d17790cb96f3fea",
   "repo_id": "local",
   "sources": {
     "a.ci.required_checks": "ci",
@@ -1130,7 +1151,14 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-jest → 
         },
       ],
       "plugins": [],
-      "skills": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
     },
     "f": {
       "roles": [
@@ -1190,7 +1218,7 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-jest → 
       ],
     },
   },
-  "profile_hash": "sha256:32ff7f2b0c107cca356026ee1c81e8e669bc2d4bcc614f2fba3892ff275fd3f1",
+  "profile_hash": "sha256:4b1b79c707715c8270ccf221d2901a73af1e34ee1a80bab5ae1993cd8ffb9ba1",
   "repo_id": "local",
   "sources": {
     "a.ci.required_checks": "ci",
@@ -1435,7 +1463,14 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-vitest �
         },
       ],
       "plugins": [],
-      "skills": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
     },
     "f": {
       "roles": [
@@ -1495,7 +1530,7 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-vitest �
       ],
     },
   },
-  "profile_hash": "sha256:9c978616928d956c46109c21bf951226ca4aa5ef5de3b2df9c56e00bef8cd465",
+  "profile_hash": "sha256:6ca928437b102fa9db06d68a1b1565bb26f309c96546ded0e44075b1209ed522",
   "repo_id": "local",
   "sources": {
     "a.ci.required_checks": "ci",
@@ -1744,7 +1779,14 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-vitest-tu
         },
       ],
       "plugins": [],
-      "skills": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
     },
     "f": {
       "roles": [
@@ -1804,7 +1846,7 @@ exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-vitest-tu
       ],
     },
   },
-  "profile_hash": "sha256:cc195c06e9f8dc865f47c54a379905cd637df3229bdad6e2dcac3f8521525e52",
+  "profile_hash": "sha256:1c5eb7d7c91ebccfce47188004bb236d9a5e95bce7ca52abb9e160d8a0077b45",
   "repo_id": "local",
   "sources": {
     "a.ci.required_checks": "ci",

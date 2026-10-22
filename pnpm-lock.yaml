@@ -557,6 +557,9 @@ importers:
       '@mandat/contract':
         specifier: workspace:*
         version: link:../contract
+      '@mandat/profile':
+        specifier: workspace:*
+        version: link:../profile
       yaml:
         specifier: 2.9.1
         version: 2.9.1

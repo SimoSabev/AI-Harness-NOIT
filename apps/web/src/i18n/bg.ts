@@ -55,6 +55,7 @@ export const bg: Record<Key, string> = {
   "status.closed.headline": "Задачата е приключена.",
   "status.expired.label": "Изтекла",
   "status.expired.headline": "Никой не реши навреме; задачата е затворена и нищо не е доставено.",
+  "tools.skillBlocked": "Блокиран: {reason}",
   "mcp.catalog": "Каталог (точни версии, проверени преди употреба)",
   "mcp.search": "Търси в регистъра",
   "mcp.searchPlaceholder": "напр. github, issues",

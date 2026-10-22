@@ -24,7 +24,7 @@ export async function tools(db: Db, uid: string, org: string): Promise<{ mcp: Mc
               (select count(*)::int from public.tool_calls c where c.org_id = m.org_id and c.kind = 'mcp' and split_part(c.tool, '.', 1) = m.name and c.at > now() - interval '1 hour') as calls_hour
          from public.mcp_servers m where m.org_id = $1::uuid order by calls_hour desc, m.name`, [org])).rows;
     const skills = (await sql.query<SkillRow>(
-      `select k.name, k.description, k.source, k.version, (select count(distinct c.session_id)::int from public.tool_calls c where c.org_id = k.org_id and c.kind = 'skill' and c.tool = k.name and c.at > now() - interval '7 days') as used_by
+      `select k.name, k.description, k.source, k.version, k.blocked_reason, (select count(distinct c.session_id)::int from public.tool_calls c where c.org_id = k.org_id and c.kind = 'skill' and c.tool = k.name and c.at > now() - interval '7 days') as used_by
          from public.skills k where k.org_id = $1::uuid order by used_by desc, k.name`, [org])).rows;
     const plugins = (await sql.query<PluginRow>("select name, description, kind, enabled from public.plugins where org_id = $1::uuid order by name", [org])).rows;
     const permissions = (await sql.query<PermissionCell>("select subject, tool, decision from public.tool_permissions where org_id = $1::uuid order by subject, tool", [org])).rows;

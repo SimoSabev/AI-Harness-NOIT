@@ -57,6 +57,7 @@ export const en = {
   "status.closed.headline": "The task is closed.",
   "status.expired.label": "Expired",
   "status.expired.headline": "Nobody decided in time; the task was closed and nothing was delivered.",
+  "tools.skillBlocked": "Blocked: {reason}",
   "mcp.catalog": "Catalog (exact versions, vetted before use)",
   "mcp.search": "Search the registry",
   "mcp.searchPlaceholder": "e.g. github, issues",

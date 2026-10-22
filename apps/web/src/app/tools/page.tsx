@@ -64,7 +64,7 @@ export default async function ToolsPage() {
         <div className="flex flex-col gap-4">
           <Panel title={tr("tools.skills", { n: d.skills.length })} aside={tr("tools.skillsAside")}>
             <ul className="divide-y divide-line">
-              {d.skills.map((s) => <li key={s.name} className="flex items-center gap-3 px-4 py-2 text-sm"><span className="w-28 truncate font-mono text-xs">{s.name}</span><span className="min-w-0 flex-1 truncate text-xs text-mute">{s.description}</span><span className="text-[11px] text-mute">{tr(`tools.source.${s.source}`)}</span><span className="w-6 text-right font-mono text-xs text-accent-text">{s.used_by}</span></li>)}
+              {d.skills.map((s) => <li key={s.name} className="flex items-center gap-3 px-4 py-2 text-sm"><span className="w-28 truncate font-mono text-xs">{s.name}</span><span className="min-w-0 flex-1 truncate text-xs text-mute">{s.blocked_reason ? <span className="text-bad">{tr("tools.skillBlocked", { reason: s.blocked_reason })}</span> : s.description}</span><span className="text-[11px] text-mute">{tr(`tools.source.${s.source}`)}</span><span className="w-6 text-right font-mono text-xs text-accent-text">{s.used_by}</span></li>)}
               {d.skills.length === 0 && <li className="px-4 py-3 text-sm text-mute">{tr("tools.noSkills")}</li>}
             </ul>
           </Panel>
