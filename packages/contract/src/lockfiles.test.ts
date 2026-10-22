@@ -163,9 +163,10 @@ describe("lockfiles (D-301)", () => {
     expect(paths(yarnAllowlist(BERRY.replace('resolution: "typescript@npm:6.0.3"', 'resolution: "typescript@git+https://github.com/x/y.git#commit=abc"')))).toBe("git_or_url_dep");
     expect(paths(yarnAllowlist(BERRY.replace("#optional!builtin<compat/typescript>::", "#./patches/ts.patch::")))).toBe("git_or_url_dep");
     expect(paths(yarnAllowlist(BERRY.replace("  checksum: 10c0/4a25ff50\n", "")))).toBe("bad_integrity");
-    // a binary for another platform: yarn writes no checksum for what it never fetched → no route (the gate refuses it)
-    const other = BERRY.replace("  checksum: 10c0/4a25ff50\n", "  conditions: os=android & cpu=arm\n");
-    expect(paths(yarnAllowlist(other))).toEqual(paths(yarnAllowlist(BERRY)).slice(0, 5));
+    // a platform binary (`conditions`): yarn 4 writes no checksum for it, even on the platform that fetched it (docker test:
+    // the sandbox's own linux-x64 binaries) → its exact name@version still gets a route (the registry never changes a version)
+    const cond = BERRY.replace("  checksum: 10c0/4a25ff50\n", "  conditions: os=linux & cpu=x64 & libc=glibc\n");
+    expect(paths(yarnAllowlist(cond))).toEqual(paths(yarnAllowlist(BERRY)));
     expect(paths(yarnAllowlist(BERRY.replace("version: 10\n  cacheKey", "version: 6\n  cacheKey")))).toBe("berry_version");
     expect(paths(yarnAllowlist("__metadata:\n  version: 10\n\"a@npm:1\": [\n"))).toBe("not_v3");
   });
