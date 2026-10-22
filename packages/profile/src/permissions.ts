@@ -33,6 +33,15 @@ export function grantOnce(c: readonly ToolRule[], tools: readonly string[]): Too
   return c.map((r) => (r.decision === "ask" && g.has(r.tool) ? { ...r, decision: "allow" as const, reason: "allowed once by a person" } : r));
 }
 
+/** E9а: the night's forbid_tools → deny rules for the subject `night` (an existing night rule for the tool is overridden) */
+export function forbidAtNight(c: readonly ToolRule[], tools: readonly string[]): ToolRule[] {
+  const deny = [...new Set(tools)].filter((t) => ToolPattern.safeParse(t).success);
+  if (deny.length === 0) return [...c];
+  const set = new Set(deny);
+  const kept = c.filter((r) => !(r.subject === "night" && set.has(r.tool)));
+  return [...kept, ...deny.map((tool) => ({ subject: "night", tool, decision: "deny" as const, reason: "forbidden by the night shift" }))];
+}
+
 export interface Ask { tool: string; reason: string }
 /**
  * asks.jsonl is written by the hook inside the sandbox, where the agent can write too: only asks that name an "ask"
