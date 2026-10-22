@@ -56,7 +56,10 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const testCmd = TEST_CMD[framework] as string;
   if (scan.scripts.test && classifyCommand(scan.scripts.test) === "forbidden") needs.push("package.json#scripts.test: forbidden syntax (|, ;, &&, $(, >, curl, wget, sh -c)");
   if (classifyCommand(testCmd) !== "allowed") needs.push("tests.command: not on the allowlist");
-  const globs = [...new Set([...scan.testDirs.map((d) => `${d}/**`), "**/*.spec.ts", "**/*.test.ts", "**/*.spec.js", "**/*.test.js"])];
+  // E8и (D-358): a workspace → test dirs and source dirs per package; install and the test run stay at the root (one report)
+  const ws = scan.monorepo.packages;
+  const testDirs = [...scan.testDirs, ...ws.flatMap((p) => p.testDirs.map((d) => `${p.dir}/${d}`))];
+  const globs = [...new Set([...testDirs.map((d) => `${d}/**`), "**/*.spec.ts", "**/*.test.ts", "**/*.spec.js", "**/*.test.js"])];
   // CI
   const wf = scan.workflows.find((w) => w.testJobs.length > 0) ?? scan.workflows[0] ?? null;
   if (wf) {
@@ -83,7 +86,8 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   for (const f of scan.instructions.filter((x) => x.patterns.length > 0)) warnings.push(`${f.path}: ${f.patterns.join(", ")}`);
   const riskCap: 1 | 3 = riskReasons.length > 0 ? 1 : 3;
   const cap = (n: number) => Math.min(n, riskCap);
-  const src0 = scan.srcDirs.length > 0 ? scan.srcDirs.map((d) => `${d}/**`) : ["**"];
+  const wsSrc = ws.flatMap((p) => p.srcDirs.map((d) => `${p.dir}/${d}/**`));
+  const src0 = wsSrc.length > 0 ? wsSrc : scan.srcDirs.length > 0 ? scan.srcDirs.map((d) => `${d}/**`) : ["**"];
   // E7г risk profile v1 (folder rules): high → protected (a human relaxes it); code → medium; docs → low
   const risk = riskProfile(scan);
   for (const h of risk.high) src[`protected_paths.${h.glob}`] = h.rule;
@@ -92,7 +96,7 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   src["task_types.docs.risk_class"] = "rule:docs";
   const taskTypes: MandatPolicy["task_types"] = {
     bugfix: { allowed_paths: src0, may_change_tests: false, risk_class: bugRisk },
-    feature: { allowed_paths: [...src0, ...scan.testDirs.map((d) => `${d}/**`)].filter((x, i, a) => a.indexOf(x) === i), may_change_tests: true, risk_class: "medium" },
+    feature: { allowed_paths: [...src0, ...(wsSrc.length > 0 ? testDirs.filter((d) => d.includes("/")) : scan.testDirs).map((d) => `${d}/**`)].filter((x, i, a) => a.indexOf(x) === i), may_change_tests: true, risk_class: "medium" },
     docs: { allowed_paths: ["README.md", "docs/**"], may_change_tests: false, risk_class: "low" },
   };
   if (scan.hasCss) taskTypes.css = { allowed_paths: ["**/*.css", "**/*.scss"], may_change_tests: false, risk_class: "low" };
@@ -100,12 +104,12 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   src["risk_classes"] = riskReasons.length > 0 ? (riskReasons.some((r) => r.startsWith("baseline")) ? "baseline" : "ci.yml") : "human";
   const raw = {
     version: 2,
-    runtime: { node: scan.node, package_manager: pm, install: INSTALL[pm] as string },
+    runtime: { node: scan.node, package_manager: pm, install: pm === "yarn" && scan.yarnBerry ? "yarn install --immutable" : (INSTALL[pm] as string) },
     tests: { framework, command: testCmd, env: { CI: "true" }, test_globs: globs, ...(o.baseline?.flaky?.length ? { flaky: [...o.baseline.flaky].sort() } : {}) },
     ci: wf ? { provider: "github_actions", workflow: wf.path, required_checks: wf.testJobs } : null,
     task_types: taskTypes,
     risk_classes: { low: { level_cap: cap(3) }, medium: { level_cap: cap(2) }, high: { level_cap: 1, requires_second_factor: true } },
-    protected_paths: [...new Set([...PROTECTED_BASE, ...scan.configFiles.filter((f) => f !== ".npmrc"), ...risk.high.map((h) => h.glob)])],
+    protected_paths: [...new Set([...PROTECTED_BASE, ...scan.configFiles.filter((f) => f !== ".npmrc"), ...risk.high.map((h) => h.glob), ...(ws.length > 0 ? ws.map((p) => `${p.dir}/package.json`) : [])])],
     protected_json_fields: { "package.json": ["scripts", "overrides", "workspaces", "imports"] },
     config_paths: CONFIG_PATHS,
     budgets: { task_usd: 2, task_minutes: 30 },
@@ -118,7 +122,7 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   if (!parsed.ok) throw new Error(`proposal does not validate: ${parsed.error}`);
   const rc = repoConfigFromPolicy(parsed.policy);
   if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm, pnpm (lockfile v9) or yarn v1 with vitest or jest on node 24 (D-301)`);
-  if (scan.monorepo.tool) needs.push(`monorepo (${scan.monorepo.tool}): the sandbox installs one package, workspaces are not supported yet (D-301)`);
+  if (scan.monorepo.tool && ws.length === 0) needs.push(`monorepo (${scan.monorepo.tool}): no workspace package found (pnpm-workspace.yaml / package.json workspaces); set allowed_paths by hand (D-358)`);
   return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings, suggested_tasks: suggested };
 }
 

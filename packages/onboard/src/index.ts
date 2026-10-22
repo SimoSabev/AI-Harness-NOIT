@@ -3,7 +3,7 @@ export type { CommandClass } from "./commands.js";
 export { dangerousPatterns, findInvisible, stripInvisible } from "./invisible.js";
 export type { InvisibleHit, InvisibleKind } from "./invisible.js";
 export { dirView, scanRepo } from "./scan.js";
-export type { Framework, InstructionFile, PackageManager, RepoView, ScanResult, WorkflowInfo } from "./scan.js";
+export type { Framework, InstructionFile, PackageManager, RepoView, ScanResult, WorkflowInfo, WorkspacePackage } from "./scan.js";
 export { annotate, propose } from "./propose.js";
 export type { Baseline, Proposal, Source, SuggestedTask } from "./propose.js";
 export { riskProfile } from "./risk-profile.js";

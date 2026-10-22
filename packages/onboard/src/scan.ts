@@ -18,6 +18,8 @@ export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 export type Framework = "vitest" | "jest" | "mocha" | "node";
 export type Light = "green" | "yellow" | "red";
 export interface WorkflowInfo { path: string; permissions: "unset" | "read" | "write"; light: Light; testJobs: string[] }
+/** E8и (D-358): a workspace package — a directory with package.json matched by the workspace globs */
+export interface WorkspacePackage { dir: string; name: string; srcDirs: string[]; testDirs: string[] }
 export interface InstructionFile { path: string; invisible: InvisibleHit[]; patterns: string[] }
 export interface ScanResult {
   packageManager: PackageManager | null;
@@ -29,7 +31,9 @@ export interface ScanResult {
   frameworkSource: string | null;
   workflows: WorkflowInfo[];
   docker: boolean;
-  monorepo: { tool: "turbo" | "pnpm-workspaces" | "npm-workspaces" | null; turbo: boolean };
+  monorepo: { tool: "turbo" | "pnpm-workspaces" | "npm-workspaces" | null; turbo: boolean; packages: WorkspacePackage[] };
+  /** E8и: yarn.lock is berry's (`__metadata`), installed with `yarn install --immutable` */
+  yarnBerry: boolean;
   dangerousDirs: string[];
   secretFiles: string[];
   instructions: InstructionFile[];
@@ -82,6 +86,43 @@ function workflow(v: RepoView, p: string): WorkflowInfo {
   return { path: p, permissions, light: writes ? "red" : set ? "green" : "yellow", testJobs };
 }
 
+const SRC_DIRS = ["src", "lib", "app", "packages", "apps"];
+const TEST_DIRS = ["tests", "test", "__tests__", "e2e"];
+/** a workspace glob → RegExp over a directory path: `*` one segment, `**` any depth (no braces, no character classes) */
+function wsGlob(g: string): RegExp {
+  const body = g.replace(/^\.\//, "").replace(/\/+$/, "").split("/").map((seg) => (seg === "**" ? "(?:.+)" : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]"))).join("/");
+  return new RegExp(`^${body}$`);
+}
+/** the workspace globs: pnpm-workspace.yaml `packages:`, else package.json `workspaces` (array, or yarn's {packages}) */
+function workspaceGlobs(v: RepoView, pkg: Record<string, unknown>): string[] {
+  const text = v.read("pnpm-workspace.yaml");
+  if (text !== null) {
+    try {
+      const doc = parseYaml(text) as { packages?: unknown } | null;
+      return Array.isArray(doc?.packages) ? doc.packages.filter((x): x is string => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  const ws = pkg.workspaces;
+  const list = Array.isArray(ws) ? ws : ws !== null && typeof ws === "object" && Array.isArray((ws as { packages?: unknown }).packages) ? (ws as { packages: unknown[] }).packages : [];
+  return list.filter((x): x is string => typeof x === "string");
+}
+function workspacePackages(v: RepoView, files: string[], pkg: Record<string, unknown>): WorkspacePackage[] {
+  const globs = workspaceGlobs(v, pkg);
+  const include = globs.filter((g) => !g.startsWith("!")).map(wsGlob);
+  const exclude = globs.filter((g) => g.startsWith("!")).map((g) => wsGlob(g.slice(1)));
+  const dirs = files.filter((f) => f.endsWith("/package.json")).map((f) => f.slice(0, -"/package.json".length));
+  return dirs
+    .filter((d) => include.some((r) => r.test(d)) && !exclude.some((r) => r.test(d)))
+    .sort()
+    .map((dir) => {
+      const sub = new Set(files.filter((f) => f.startsWith(`${dir}/`)).map((f) => f.slice(dir.length + 1).split("/")).filter((p) => p.length > 1).map((p) => p[0] as string));
+      const name = json(v, `${dir}/package.json`)?.name;
+      return { dir, name: typeof name === "string" ? name : dir, srcDirs: SRC_DIRS.filter((d) => sub.has(d)), testDirs: TEST_DIRS.filter((d) => sub.has(d)) };
+    });
+}
+
 export function scanRepo(v: RepoView): ScanResult {
   const files = [...v.files].sort();
   const has = (p: string) => files.includes(p);
@@ -116,7 +157,7 @@ export function scanRepo(v: RepoView): ScanResult {
   const nodeSource = NODE.test(nvm) ? (has(".nvmrc") ? ".nvmrc" : ".node-version") : engineMajor ? "package.json#engines.node" : "default";
   const workflows = files.filter((f) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f)).map((f) => workflow(v, f));
   const turbo = has("turbo.json");
-  const tool = turbo ? "turbo" : has("pnpm-workspace.yaml") ? "pnpm-workspaces" : Array.isArray(pkg.workspaces) ? "npm-workspaces" : null;
+  const tool = turbo ? "turbo" : has("pnpm-workspace.yaml") ? "pnpm-workspaces" : pkg.workspaces !== undefined && pkg.workspaces !== null ? "npm-workspaces" : null;
   const top = (f: string) => f.split("/")[0] ?? f;
   const dirs = [...new Set(files.filter((f) => f.includes("/")).map(top))];
   const folderTree = [...new Set(files.filter((f) => f.includes("/")).map((f) => f.split("/").slice(0, Math.min(2, f.split("/").length - 1)).join("/")))].sort();
@@ -130,7 +171,8 @@ export function scanRepo(v: RepoView): ScanResult {
     frameworkSource,
     workflows,
     docker: files.some((f) => /(^|\/)(Dockerfile|docker-compose\.ya?ml|compose\.ya?ml)$/.test(f)),
-    monorepo: { tool, turbo },
+    monorepo: { tool, turbo, packages: workspacePackages(v, files, pkg) },
+    yarnBerry: lock?.[1] === "yarn" && /^__metadata:/m.test(v.read("yarn.lock") ?? ""),
     dangerousDirs: DANGEROUS.filter((d) => files.some((f) => f.startsWith(`${d}/`))),
     secretFiles: files.filter((f) => SECRET_NAME.test(f)),
     instructions: files.filter((f) => INSTRUCTIONS.test(f)).map((p) => {
@@ -139,8 +181,8 @@ export function scanRepo(v: RepoView): ScanResult {
     }),
     configFiles: files.filter((f) => CONFIG.test(f)),
     folderTree,
-    srcDirs: ["src", "lib", "app", "packages", "apps"].filter((d) => dirs.includes(d)),
-    testDirs: ["tests", "test", "__tests__", "e2e"].filter((d) => dirs.includes(d)),
+    srcDirs: SRC_DIRS.filter((d) => dirs.includes(d)),
+    testDirs: TEST_DIRS.filter((d) => dirs.includes(d)),
     hasCss: files.some((f) => /\.(css|scss)$/.test(f)),
     style: styleFacts(v, files),
     skills: skillsFromView(v).map(({ text: _text, ...rest }) => rest),

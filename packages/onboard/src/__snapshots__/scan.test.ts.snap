@@ -133,7 +133,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest-turbo → .mand
     "tests.test_globs": "package.json#scripts.test",
   },
   "needs_human": [
-    "monorepo (turbo): the sandbox installs one package, workspaces are not supported yet (D-301)",
+    "monorepo (turbo): no workspace package found (pnpm-workspace.yaml / package.json workspaces); set allowed_paths by hand (D-358)",
   ],
   "risk_cap": 3,
   "warnings": [],
@@ -601,7 +601,7 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest-turbo → .m
     "tests.test_globs": "package.json#scripts.test",
   },
   "needs_human": [
-    "monorepo (turbo): the sandbox installs one package, workspaces are not supported yet (D-301)",
+    "monorepo (turbo): no workspace package found (pnpm-workspace.yaml / package.json workspaces); set allowed_paths by hand (D-358)",
   ],
   "risk_cap": 3,
   "warnings": [],
