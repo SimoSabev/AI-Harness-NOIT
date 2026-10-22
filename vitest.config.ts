@@ -36,6 +36,7 @@ export const config = defineConfig({
         "packages/channels/src/**": loose,
         "packages/agents/src/**": loose,
         "packages/profile/src/**": { lines: 90 },
+        "packages/mcp-bridge/src/**": loose,
         "apps/worker/src/**": loose,
       },
     },
