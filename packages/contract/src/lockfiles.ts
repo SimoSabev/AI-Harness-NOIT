@@ -35,7 +35,8 @@ const BERRY_ENV = [
 export const isBerryLock = (text: string | null): boolean => text !== null && /^__metadata:/m.test(text);
 
 export function installCommand(pm: PackageManager, berry = false): string[] {
-  if (pm === "yarn" && berry) return ["/bin/sh", "-c", `${BERRY_ENV.join(" ")} node /opt/yarn-berry/yarn.js install --immutable`];
+  // the install phase env also carries yarn v1's YARN_* settings, which berry refuses as unknown → unset first
+  if (pm === "yarn" && berry) return ["/bin/sh", "-c", `unset YARN_REGISTRY YARN_DISABLE_SELF_UPDATE_CHECK YARN_CACHE_FOLDER; ${BERRY_ENV.join(" ")} node /opt/yarn-berry/yarn.js install --immutable`];
   if (pm === "bun") return ["/bin/sh", "-c", `${BUN_ENV.join(" ")} ${INSTALL_ARGV.bun.join(" ")}`];
   if (pm !== "yarn") return INSTALL_ARGV[pm];
   const y = INSTALL_ARGV.yarn.join(" ");
