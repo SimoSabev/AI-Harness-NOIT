@@ -10,14 +10,24 @@ export function done() {
   process.exit(0);
 }
 
+let toolN = 0;
+/** D-308: reports a real action of the fake as a stream-json tool_use + tool_result pair (only what it actually does). */
+export function tool(name, input) {
+  const id = `toolu_fake_${toolN++}`;
+  process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input }] } }) + "\n");
+  process.stdout.write(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, is_error: false }] } }) + "\n");
+}
+
 /** Replaces an exact string; if it is missing → stderr + exit 3 (bench marks MISMATCH, D-110). */
 export function replace(file, from, to) {
+  tool("Read", { file_path: `/m/work/${file}` });
   const text = readFileSync(file, "utf8");
   if (!text.includes(from)) {
     process.stderr.write(`fake: pattern not found: ${from}\n`);
     process.exit(3);
   }
   writeFileSync(file, text.replace(from, to));
+  tool("Edit", { file_path: `/m/work/${file}` });
 }
 
 export const THRESHOLD = "const DISCOUNT_THRESHOLD_CENTS = 50000;";
