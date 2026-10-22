@@ -55,6 +55,7 @@ describe("stream → workbench (E7д, AC-6.1/6.2)", () => {
     // the terminal: the stream lines of the run, in order, redacted
     const ln = (await db.query<{ seq: number; kind: string; text: string }>("select l.seq, l.kind, l.text from public.session_lines l join public.agent_sessions s on s.id = l.session_id where s.role = 'lead' order by l.seq")).rows;
     expect(ln[0]?.kind).toBe("init");
+    expect(ln.at(-1)?.kind).toBe("result");
     expect(ln.map((l) => l.seq)).toEqual([...ln.map((l) => l.seq)].sort((a, b) => a - b));
     expect(ln.some((l) => l.kind === "tool_call" && l.text.includes("git push"))).toBe(true);
     for (const l of ln) expect(l.text).not.toContain("mdt_abcdefghijklmnop");

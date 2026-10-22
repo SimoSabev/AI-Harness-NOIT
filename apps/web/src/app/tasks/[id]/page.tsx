@@ -20,7 +20,7 @@ import { sampleOn } from "../../../lib/server/sample-pref";
 import { sessionOf } from "../../../lib/server/workbench";
 import { sessionSample } from "../../../lib/sample";
 import { withSample } from "../../../lib/workbench";
-import { Panel, SampleNote, SessionTree, ToolCalls, Windows } from "../../../components/workbench-parts";
+import { Panel, SampleNote, SessionTree, Terminal, ToolCalls, Windows } from "../../../components/workbench-parts";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const failed = d.evidence.filter((e) => e.status === "fail");
   const checks = d.evidence.filter((e) => e.status !== "n/a");
   const minutes = t.minutes > 0 ? `${t.minutes.toFixed(1)} мин` : null;
-  const sess = withSample(await sessionOf(db(), c.uid, c.org, id), sessionSample(id), (x) => x.sessions.length + x.calls.length === 0, await sampleOn());
+  const sess = withSample(await sessionOf(db(), c.uid, c.org, id), sessionSample(id), (x) => x.sessions.length + x.calls.length + x.lines.length === 0, await sampleOn());
   return (
     <Shell current="task" waiting={c.waiting}>
       <Link href="/" className="text-sm text-mute hover:text-ink">← Задачи</Link>
@@ -107,6 +107,9 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
             <Panel title={`Отворени · ${sess.data.windows.length}`}><div className="p-3"><Windows windows={sess.data.windows} /></div></Panel>
           </div>
           <Panel title="Повиквания на инструменти" aside={`${sess.data.calls.length}`}>{sess.data.calls.length ? <ToolCalls calls={sess.data.calls} /> : <p className="p-4 text-sm text-mute">Още няма повиквания.</p>}</Panel>
+        </div>
+        <div className="mt-4">
+          <Panel title="Терминал (само четене)" aside={`${sess.data.lines.length} реда`}>{sess.data.lines.length ? <Terminal lines={sess.data.lines} /> : <p className="p-4 text-sm text-mute">Агентът още не е писал.</p>}</Panel>
         </div>
       </section>
 

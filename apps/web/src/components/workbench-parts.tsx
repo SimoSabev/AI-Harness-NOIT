@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { FleetRow, ToolCallRow, WindowRow } from "../lib/workbench";
+import type { FleetRow, TerminalLine, ToolCallRow, WindowRow } from "../lib/workbench";
 import { ago } from "../lib/status";
 import { card, label } from "./ui";
 
@@ -127,3 +127,26 @@ export function Panel({ title, aside, children, className = "" }: { title: strin
   );
 }
 export { label };
+
+/**
+ * E7д: the read-only terminal of a task — the agent's stream after redaction, ≤ 50 000 lines. Chunks of 500 lines with
+ * `content-visibility: auto` keep long sessions cheap (the browser skips rendering the chunks out of view).
+ */
+export function Terminal({ lines }: { lines: TerminalLine[] }) {
+  const chunks: TerminalLine[][] = [];
+  for (let i = 0; i < lines.length; i += 500) chunks.push(lines.slice(i, i + 500));
+  return (
+    <div role="log" aria-label="Терминал на агента (само четене)" tabIndex={0} className="max-h-96 overflow-auto bg-raised px-4 py-3 font-mono text-xs leading-5 text-ink">
+      {chunks.map((c) => (
+        <div key={c[0]?.seq ?? 0} style={{ contentVisibility: "auto", containIntrinsicSize: `auto ${c.length * 20}px` }}>
+          {c.map((l) => (
+            <div key={l.seq} className="whitespace-pre-wrap break-words">
+              <span aria-hidden="true" className="mr-2 inline-block w-3 text-mute">{l.mark}</span>
+              {l.text}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}

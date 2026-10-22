@@ -1,4 +1,4 @@
-import type { FleetRow, HomeExtras, McpRow, NightView, PermissionCell, PluginRow, ResearchView, SkillRow, ToolCallRow, WindowRow } from "./workbench";
+import type { TerminalLine, FleetRow, HomeExtras, McpRow, NightView, PermissionCell, PluginRow, ResearchView, SkillRow, ToolCallRow, WindowRow } from "./workbench";
 
 // D-307: the sample that fills a screen while the system does not record that part yet (design H1–H6). Always shown
 // with the "ПРИМЕР" mark; switched off in Настройки. Fixed times relative to now, so it never looks stale.
@@ -111,7 +111,7 @@ const home: HomeExtras = { mcpPerMin: 212, denied24h: 3, costToday: 23.4, confli
 export const SAMPLE = { fleet, mcp, skills, plugins, permissions, calls, windows, night, research, home };
 
 /** The inside of one session (design H4) for a task that has no recorded sessions yet. */
-export function sessionSample(taskId: string): { sessions: (FleetRow & { depth: number })[]; calls: ToolCallRow[]; windows: WindowRow[] } {
+export function sessionSample(taskId: string): { sessions: (FleetRow & { depth: number })[]; calls: ToolCallRow[]; windows: WindowRow[]; lines: TerminalLine[] } {
   const s = (id: string, parent: string | null, agent: string, step: string, state: FleetRow["state"], depth: number) => ({ ...f(id, parent, "shop", agent, "sonnet", "work", parent ? "subagent" : "lead", state, step, parent ? 15 : 62, parent ? 0.04 : 0.31, [], 6), task_id: taskId, depth });
   return {
     sessions: [s("s_x", null, "водещ агент", "пише код", "running", 0), s("s_x_t", "s_x", "тестове", "пише тестове", "running", 1), s("s_x_r", "s_x", "ревю", "чете разликата", "running", 1), s("s_x_s", "s_x", "ресърч", "готов", "done", 1)],
@@ -125,5 +125,11 @@ export function sessionSample(taskId: string): { sessions: (FleetRow & { depth: 
       { at: ago(0), session_id: "s_x", agent: "Мандат", kind: "mandat", tool: "export", summary: "2 файла, дървото съвпада → тестове преди и след", decision: "allowed", duration_ms: null },
     ],
     windows: windows.filter((w) => w.repo === "shop"),
+    lines: [
+      { seq: 0, mark: "▶", text: "[ПРИМЕР] claude-sonnet-5-5" },
+      { seq: 1, mark: "$", text: "[ПРИМЕР] Bash: npx vitest run" },
+      { seq: 2, mark: "←", text: "[ПРИМЕР] Bash [error]" },
+      { seq: 3, mark: "■", text: "[ПРИМЕР] done" },
+    ],
   };
 }

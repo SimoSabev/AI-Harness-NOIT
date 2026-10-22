@@ -6,7 +6,7 @@ import type { Workbench } from "./workbench.js";
 // Leader = one session per run; each subagent = a session with the leader as parent. Beats and the realtime topic
 // `session:<run_id>` are throttled to ≤ 2 per second per session; tool calls are written when their result (or a refusal)
 // arrives, with the decision. A write failure never stops the run (it is logged).
-export type SessionSink = Pick<Workbench, "session" | "beat" | "toolCall" | "end">;
+export type SessionSink = Pick<Workbench, "session" | "beat" | "toolCall" | "end" | "lines">;
 export interface RecorderOptions {
   taskId: string | null;
   repoId: string | null;
@@ -18,6 +18,7 @@ export interface RecorderOptions {
   log?: (line: string) => void;
 }
 const BEAT_MS = 500;
+const MAX_LINES = 50_000;
 
 /** run id → s_<ulid lower>; run:child → s_<14 of the run>_<12 hex of the child> (both fit ^s_[a-z0-9_]{1,40}$). */
 export function sessionIdFor(streamSession: string): string {
@@ -39,6 +40,16 @@ interface S {
   dirty: boolean;
   ended: boolean;
   pending: { kind: NonNullable<StreamEvent["tool"]>["kind"]; name: string; summary: string; at: number }[];
+  /** terminal lines not yet written, and how many this session has */
+  buf: { seq: number; kind: StreamEvent["kind"]; text: string }[];
+  n: number;
+}
+/** One terminal line per event: the redacted text, or the tool and its decision. */
+function lineOf(ev: StreamEvent): string {
+  if (ev.tool) return `${ev.tool.name}${ev.tool.decision ? ` [${ev.tool.decision}]` : ""}${ev.text ? `: ${ev.text}` : ""}`;
+  if (ev.usage) return `tokens in ${ev.usage.input} · out ${ev.usage.output}${ev.usage.usd !== null ? ` · $${ev.usage.usd.toFixed(4)}` : ""}`;
+  if (ev.result) return `${ev.result.ok ? "done" : "failed"}${ev.result.error ? `: ${ev.result.error}` : ""}`;
+  return ev.text ?? "";
 }
 
 export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
@@ -52,6 +63,10 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
   const flush = (s: S, force: boolean) => {
     const t = now();
     if (!s.dirty || (!force && t - s.last < BEAT_MS)) return;
+    if (s.buf.length > 0) {
+      const rows = s.buf.splice(0);
+      run(() => sink.lines(s.id, rows));
+    }
     s.last = t;
     s.dirty = false;
     const beat = { step: s.step.slice(0, 120), ...(s.context !== null ? { context_pct: s.context } : {}), ...(s.usd !== null ? { usd: s.usd } : {}), touching: [...s.touching].slice(0, 200) };
@@ -67,7 +82,7 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
     const id = sessionIdFor(ev.session);
     let s = sessions.get(id);
     if (s) return s;
-    s = { id, run: ev.session.split(":")[0] ?? ev.session, step: "starting", context: null, usd: null, touching: new Set(), last: Number.NEGATIVE_INFINITY, dirty: false, ended: false, pending: [] };
+    s = { id, run: ev.session.split(":")[0] ?? ev.session, step: "starting", context: null, usd: null, touching: new Set(), last: Number.NEGATIVE_INFINITY, dirty: false, ended: false, pending: [], buf: [], n: 0 };
     sessions.set(id, s);
     const parent = ev.parent ? sessionIdFor(ev.parent) : null;
     const created = s;
@@ -88,6 +103,7 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
   };
   const end = (s: S, state: "done" | "failed" | "idle") => {
     if (s.ended) return;
+    s.dirty = true; // the last lines (e.g. the result) go out with the final beat
     flush(s, true);
     for (const c of s.pending.splice(0)) writeCall(s, c, "error");
     s.ended = true;
@@ -96,6 +112,7 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
   return {
     push(ev: StreamEvent): void {
       const s = ensure(ev);
+      if (s.n < MAX_LINES) s.buf.push({ seq: s.n++, kind: ev.kind, text: lineOf(ev) });
       switch (ev.kind) {
         case "init":
           s.step = "started";

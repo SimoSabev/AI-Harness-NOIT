@@ -1,3 +1,4 @@
+import { StreamEventKind } from "@mandat/contract";
 import { AgentBeat, AgentEnd, AgentSessionWrite, McpServerWrite, NightPlan, NightQueueWrite, OpenWindowWrite, PermissionWrite, PluginWrite, ResearchClaimWrite, ResearchQuestionWrite, ResearchSourceWrite, SkillWrite, ToolCallWrite } from "@mandat/contract";
 import type { AgentSessionInput, McpServerInput, NightPlanInput, NightQueueInput, OpenWindowInput, PermissionInput, PluginInput, ResearchClaimInput, ResearchQuestionInput, ResearchSourceInput, SkillInput, ToolCallInput } from "@mandat/contract";
 import type { SqlClient } from "@mandat/ledger";
@@ -28,6 +29,15 @@ export function workbench(db: SqlClient, org: string) {
     async toolCall(input: ToolCallInput): Promise<void> {
       const c = ToolCallWrite.parse(input);
       await db.query("insert into public.tool_calls (org_id, session_id, kind, tool, summary, decision, duration_ms) values ($1, $2, $3, $4, $5, $6, $7)", [org, c.session_id, c.kind, c.tool, c.summary, c.decision, c.duration_ms]);
+    },
+    /** E7д: stream lines of one session (already redacted by the stream builder); seq is unique per session */
+    async lines(sessionId: string, rows: { seq: number; kind: StreamEventKind; text: string }[]): Promise<void> {
+      if (rows.length === 0) return;
+      const r = rows.map((x) => ({ seq: x.seq, kind: StreamEventKind.parse(x.kind), text: x.text.slice(0, 4000) }));
+      await db.query(
+        "insert into public.session_lines (org_id, session_id, seq, kind, text) select $1, $2, x.seq, x.kind, x.text from jsonb_to_recordset($3::jsonb) as x(seq int, kind text, text text) on conflict do nothing",
+        [org, sessionId, JSON.stringify(r)],
+      );
     },
     async mcp(input: McpServerInput): Promise<void> {
       const m = McpServerWrite.parse(input);

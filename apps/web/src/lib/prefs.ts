@@ -21,8 +21,11 @@ export function parseView(v: string | undefined): View {
   return VIEWS.some((x) => x.id === v) ? (v as View) : "map";
 }
 /** D-307: samples fill the screens the system does not record yet; on unless switched off. */
-export function parseSample(v: string | undefined): boolean {
-  return v !== "0";
+/** The labelled sample (D-307): the cookie wins; without it, on in development and off in production (U4, D-332). */
+export function parseSample(v: string | undefined, nodeEnv: string | undefined = process.env.NODE_ENV): boolean {
+  if (v === "0") return false;
+  if (v === "1") return true;
+  return nodeEnv !== "production";
 }
 export function prefCookie(name: "theme" | "view" | "sample", value: string): string {
   return `${name}=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;

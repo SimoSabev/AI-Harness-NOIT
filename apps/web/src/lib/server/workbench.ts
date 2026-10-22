@@ -1,5 +1,5 @@
-import type { FleetRow, HomeExtras, McpRow, NightView, PermissionCell, PluginRow, ResearchView, SkillRow, ToolCallRow, WindowRow } from "../workbench";
-import { conflicts, tree } from "../workbench";
+import type { TerminalLine, FleetRow, HomeExtras, McpRow, NightView, PermissionCell, PluginRow, ResearchView, SkillRow, ToolCallRow, WindowRow } from "../workbench";
+import { conflicts, terminalLines, tree } from "../workbench";
 import { asUser } from "./sql";
 import type { Db } from "./sql";
 
@@ -46,11 +46,20 @@ async function windowsOf(sql: { query: Db["query"] }, org: string, task: string 
       where w.org_id = $1::uuid and ($2::text is null or s.task_id = $2) order by w.kind, w.last_seen_at desc limit 100`, [org, task])).rows;
 }
 
-export async function sessionOf(db: Db, uid: string, org: string, task: string): Promise<{ sessions: (FleetRow & { depth: number })[]; calls: ToolCallRow[]; windows: WindowRow[] }> {
+export async function sessionOf(db: Db, uid: string, org: string, task: string): Promise<{ sessions: (FleetRow & { depth: number })[]; calls: ToolCallRow[]; windows: WindowRow[]; lines: TerminalLine[] }> {
   return asUser(db, uid, async (sql) => ({
     sessions: tree((await sql.query<FleetRow>(`${FLEET} and s.task_id = $2 order by s.started_at`, [org, task])).rows),
     calls: await recentCalls(sql, org, task, 200),
     windows: await windowsOf(sql, org, task),
+    // E7д: the terminal = the lines of the latest leader session of the task (RLS: members of the org)
+    lines: terminalLines(
+      (await sql.query<{ seq: number; kind: string; text: string }>(
+        `select l.seq, l.kind, l.text from public.session_lines l
+          where l.session_id = (select id from public.agent_sessions where org_id = $1::uuid and task_id = $2 and role = 'lead' order by started_at desc limit 1)
+          order by l.seq limit 50000`,
+        [org, task],
+      )).rows,
+    ),
   }));
 }
 
