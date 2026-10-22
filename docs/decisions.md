@@ -1489,3 +1489,16 @@ prefers-reduced-motion. Анимацията на появата е само д�
 Защо: Симо, 22.10.2026: „за сега всичко, което ти си предложил, остава по въпросите“ + уточненията.
 Алтернативи: описани при всяко решение в PRD-то (раздел 5.3).
 Източник: съобщението на Симо в сесията, 22.10.2026. Статус: решено.
+
+## D-309 Скриптовете вървят и под Windows: `shellEmulator: true` в pnpm-workspace.yaml (22.10.2026)
+Решение: pnpm пуска всички package.json скриптове през собствената си POSIX обвивка, не през cmd. Така
+`NEXT_TELEMETRY_DISABLED=1 next build|dev|start` в apps/web работи и в PowerShell/cmd, без cross-env и без нова зависимост.
+Тест: scripts/scripts.test.ts („скриптовете с `VAR=…` вървят и под Windows“) намира скриптовете с `VAR=…` отпред и проверява,
+че `pnpm config get shell-emulator` дава `true`.
+Проверено: тестът е червен без настройката и зелен с нея; `pnpm build` в PowerShell на Windows 11 минава (преди: „'NEXT_TELEMETRY_DISABLED'
+is not recognized“ в @mandat/web). Емулаторът важи и под Linux/WSL; там CI (`pnpm check`) е проверката.
+Не е проверено: под Windows останалата част от `pnpm local` (Docker, пясъчникът) и `pnpm gitleaks` (`"$PWD"`); README
+все още препоръчва WSL.
+Защо: Симо, 22.10.2026 — `pnpm local` падна на Windows; „направи поправката за Windows постоянна в хранилището“.
+Алтернативи: cross-env в apps/web (нова зависимост, правило 8); WSL за всички (у Симо няма Linux дистрибуция).
+Източник: https://pnpm.io/settings#shellemulator (22.10.2026), проверено с pnpm 12.14.0. Статус: решено.

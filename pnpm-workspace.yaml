@@ -5,6 +5,8 @@ packages:
   - "!apps/desktop"
   - "bench"
   - "spikes"
+# D-309: scripts like `NEXT_TELEMETRY_DISABLED=1 next build` run through pnpm's own POSIX shell, so they work under Windows cmd too.
+shellEmulator: true
 # D-036: 3 days (in minutes); applies to transitive dependencies too.
 minimumReleaseAge: 4320
 # D-284: next optionally pulls sharp (libvips is LGPL-3.0); apps/web sets images.unoptimized and never needs it.
