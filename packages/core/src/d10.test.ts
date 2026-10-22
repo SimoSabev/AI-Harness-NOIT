@@ -13,4 +13,14 @@ describe("D10 without the lockfile (D-357)", () => {
     const scripts = Buffer.from(JSON.stringify({ name: "shop", devDependencies: { vitest: "5.0.5" }, dependencies: {}, scripts: { test: "x" } }));
     expect(d10Lockfile({ baseLock: lock, headLock: lock, basePkg: pkg({}), headPkg: scripts }).evidence.status).toBe("n/a");
   });
+
+  it("workspace (E8и): a dependency added in a package's package.json without the lockfile → fail with that path", () => {
+    const sub = (deps: Record<string, string>) => Buffer.from(JSON.stringify({ name: "@shop/cart", dependencies: { "@shop/money": "workspace:*", ...deps } }));
+    const r = d10Lockfile({ baseLock: lock, headLock: lock, basePkg: pkg({}), headPkg: pkg({}), manifests: [{ path: "packages/cart/package.json", base: sub({}), head: sub({ "left-pad": "1.3.0" }) }] });
+    expect(r.evidence).toMatchObject({ status: "fail", signature: "D10:lock_missing:left-pad" });
+    expect(r.evidence.data).toMatchObject({ packages: ["left-pad"], manifests: ["packages/cart/package.json"] });
+    // a new workspace package with its own dependencies is the same
+    expect(d10Lockfile({ baseLock: lock, headLock: lock, manifests: [{ path: "packages/new/package.json", base: null, head: sub({}) }] }).evidence.signature).toBe("D10:lock_missing:@shop/money");
+    expect(d10Lockfile({ baseLock: lock, headLock: lock, manifests: [{ path: "packages/cart/package.json", base: sub({}), head: sub({}) }] }).evidence.status).toBe("n/a");
+  });
 });
