@@ -42,3 +42,19 @@ describe("mandat init (т. 8.2)", () => {
     expect((await cli(["demo", "export-repo", "--out", out])).code).toBe(2);
   });
 });
+
+describe("mandat init --baseline (E7г)", () => {
+  it("prints the baseline and the flaky IDs; 0 tests → a suggested first task", async () => {
+    const { initCommand } = await import("./commands/init.js");
+    const d = mkdtempSync(path.join(os.tmpdir(), "init-bl-"));
+    cpSync(path.join(repoRoot, "fixtures", "demo-shop"), d, { recursive: true, filter: (p) => !p.includes("node_modules") });
+    let out = "";
+    const io = { stdout: (s: string) => (out += s), stderr: () => undefined, env: {}, cwd: process.cwd() };
+    const flaky = "tests/cart.spec.ts > cart > total";
+    await initCommand(io, { repo: d, json: false, baseline: true, runBaseline: () => Promise.resolve({ status: "ok", test_ids_count: 7, skipped: 1, duration_s: 3, report_valid: true, flaky: [flaky] }) });
+    expect(out).toContain(`baseline: ok · 7 tests · 1 skipped · 3 s · flaky 1 (${flaky})`);
+    out = "";
+    await initCommand(io, { repo: d, json: false, baseline: true, runBaseline: () => Promise.resolve({ status: "ok", test_ids_count: 0, skipped: 0, duration_s: 1, report_valid: true, flaky: [] }) });
+    expect(out).toContain("suggested first task (feature): Add tests");
+  });
+});

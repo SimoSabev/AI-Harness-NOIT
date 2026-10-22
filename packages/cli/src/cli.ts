@@ -19,8 +19,8 @@ import { accountsCommand, loginCommand, logoutCommand } from "./commands/account
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
-import { dbUrl, hostConfig, openDb } from "@mandat/worker";
-import { mandatHome } from "./paths.js";
+import { dbUrl, hostConfig, openDb, runBaseline } from "@mandat/worker";
+import { mandatHome, repoRoot } from "./paths.js";
 import type { Io } from "./output.js";
 import path from "node:path";
 
@@ -174,8 +174,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("propose .mandat.yml for a local repo (scanner without AI; never approves): writes .mandat.yml.proposed")
     .requiredOption("--repo <dir>", "repository directory")
     .option("--json", "machine output")
-    .action((o: { repo: string; json?: boolean }) => {
-      code = initCommand(io, { repo: o.repo, json: json(o) });
+    .option("--baseline", "run the tests of the tree twice in the sandbox (Docker) and propose with the baseline (E7г)")
+    .action(async (o: { repo: string; json?: boolean; baseline?: boolean }) => {
+      code = await initCommand(io, { repo: o.repo, json: json(o), baseline: o.baseline === true, runBaseline: (dir, policy) => runBaseline(dir, policy, { mandatHome: home(), repoRoot, env: io.env }) });
     });
   program
     .command("ladder")

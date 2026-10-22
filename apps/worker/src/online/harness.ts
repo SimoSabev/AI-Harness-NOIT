@@ -5,6 +5,8 @@ import { cleanGit } from "@mandat/export";
 import type { GitHubPort } from "@mandat/gate-github";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { dirView, filesPatch, lineDiff, propose, scanRepo } from "@mandat/onboard";
+import type { Baseline } from "@mandat/onboard";
+import type { MandatPolicy } from "@mandat/contract";
 import type { Db } from "./db.js";
 import { inTransaction } from "./db.js";
 import { drainOutbox } from "./outbox.js";
@@ -21,6 +23,8 @@ export interface HarnessDeps {
   gh: GitHubPort;
   ghRepo: string;
   tmpRoot?: string;
+  /** E7г (D-314): runs the base tests twice in the sandbox; absent (no Docker) → the baseline step is skipped */
+  baselineRunner?: (treeDir: string, policy: MandatPolicy) => Promise<Baseline>;
 }
 
 export interface Existing { ".mandat.yml": string | null; "AGENTS.md": string | null; "CLAUDE.md": string | null }
@@ -57,8 +61,43 @@ export async function scanForProposal(d: HarnessDeps, repoId: string): Promise<s
       const id = ins.rows[0]?.id as string;
       const diff = lineDiff(existing[".mandat.yml"] ?? "", p.yaml);
       await appendLedgerOnline(tx, { org_id: r.org_id, kind: "config_change", task_id: null, payload: { proposal_id: id, status: "proposed", yaml_sha256: p.sha256, base_commit: head, added: diff.filter((l) => l.startsWith("+")).length, removed: diff.filter((l) => l.startsWith("-")).length } });
+      // E7г (D-314, Q-026 reversed): the baseline runs asynchronously; the proposal is usable before it ends
+      await tx.query("insert into public.outbox (org_id, kind, idempotency_key, payload) values ($1::uuid, 'baseline', $2, $3::jsonb) on conflict do nothing", [r.org_id, `baseline:${id}`, JSON.stringify({ proposal_id: id })]);
       return id;
     });
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+/** E7г: clone base, run the baseline twice, re-propose with it (flaky IDs, 0 tests → risk cap 1) while still proposed. */
+export async function baselineForProposal(d: HarnessDeps, proposalId: string): Promise<Baseline | null> {
+  if (!d.baselineRunner) return null;
+  const r = (await d.db.query<{ org_id: string; remote_url: string; base_commit: string; status: string; scan: Record<string, unknown> }>(
+    "select hp.org_id::text as org_id, r.remote_url, hp.base_commit, hp.status, hp.scan from public.harness_proposals hp join public.repos r on r.id = hp.repo_id where hp.id = $1::uuid",
+    [proposalId],
+  )).rows[0];
+  if (!r || r.status !== "proposed" || !/^[0-9a-f]{40}$/.test(r.base_commit)) return null;
+  const tmp = mkdtempSync(path.join(d.tmpRoot ?? os.tmpdir(), "mandat-baseline-"));
+  try {
+    const git = cleanGit({ tmpHome: tmp });
+    const clone = path.join(tmp, "clone");
+    const c = await git.run(["clone", "-q", "--no-tags", "--end-of-options", r.remote_url, clone], { cwd: tmp });
+    if (c.code !== 0) throw new Error(`clone failed: ${c.stderr.slice(0, 200)}`);
+    if ((await git.run(["checkout", "-q", "--detach", r.base_commit], { cwd: clone })).code !== 0) throw new Error("base commit missing");
+    const scan = scanRepo(dirView(clone));
+    const first = propose(scan);
+    const baseline = await d.baselineRunner(clone, first.policy);
+    const p = propose(scan, { baseline });
+    await inTransaction(d.db, async (tx) => {
+      const u = await tx.query<{ id: string }>(
+        `update public.harness_proposals set policy_yaml = $2, yaml_sha256 = $3, field_sources = $4::jsonb, risk_cap = $5, warnings = $6::jsonb, needs_human = $7::jsonb, scan = scan || jsonb_build_object('baseline', $8::jsonb, 'suggested_tasks', $9::jsonb)
+         where id = $1::uuid and status = 'proposed' returning id::text as id`,
+        [proposalId, p.yaml, p.sha256, JSON.stringify(p.field_sources), p.risk_cap, JSON.stringify(p.warnings), JSON.stringify(p.needs_human), JSON.stringify(baseline), JSON.stringify(p.suggested_tasks)],
+      );
+      if (u.rows.length > 0) await appendLedgerOnline(tx, { org_id: r.org_id, kind: "config_change", task_id: null, payload: { proposal_id: proposalId, status: "baseline", yaml_sha256: p.sha256, baseline } });
+    });
+    return baseline;
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -91,8 +130,13 @@ export async function deliverHarnessPr(d: HarnessDeps, proposalId: string): Prom
   return { number: pr.number };
 }
 
-export function harnessHandlers(d: HarnessDeps): { harness_scan: EffectHandler; harness_pr: EffectHandler } {
+export function harnessHandlers(d: HarnessDeps): { harness_scan: EffectHandler; harness_pr: EffectHandler; baseline: EffectHandler } {
   return {
+    baseline: async (row) => {
+      const id = String(row.payload.proposal_id ?? "");
+      if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error("baseline without proposal_id");
+      await baselineForProposal(d, id);
+    },
     harness_scan: async (row) => {
       const repo = String(row.payload.repo_id ?? "");
       if (!/^[0-9a-f-]{36}$/.test(repo)) throw new Error("harness_scan without repo_id");

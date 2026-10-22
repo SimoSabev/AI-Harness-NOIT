@@ -29,3 +29,5 @@ export type { Workbench } from "./online/workbench.js";
 export { HARNESS_IN, harnessFilesHash, seedHarness } from "./harness-seed.js";
 export { pgKeyStore } from "./online/keys.js";
 export type { KeyStore } from "./online/keys.js";
+export { baselineFromRuns, runBaseline } from "./baseline.js";
+export type { BaselineRun } from "./baseline.js";

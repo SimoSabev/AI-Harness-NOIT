@@ -1,6 +1,7 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, dbUrl, drainHarnessOutbox, openDb, runDaemonOnce } from "@mandat/worker";
+import { broadcasterFromEnv, dbUrl, drainHarnessOutbox, openDb, runBaseline, runDaemonOnce } from "@mandat/worker";
+import { repoRoot } from "../paths.js";
 import type { Io } from "../output.js";
 
 // Демо промпт т. 5.8 / 8.1 (D-275): `mandat worker` = MANDAT_MODE=worker. Offline: fakeGitHub in memory; online: the
@@ -66,7 +67,9 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       ...(o.signal ? { signal: o.signal } : {}),
       tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n") }),
       drain: async () => {
-        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo });
+        // E7г (D-314): the baseline at connect runs in the sandbox; MANDAT_BASELINE=0 turns it off
+        const baselineRunner = env.MANDAT_BASELINE === "0" ? undefined : (dir: string, policy: Parameters<typeof runBaseline>[1]) => runBaseline(dir, policy, { mandatHome: o.home, repoRoot, env });
+        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, ...(baselineRunner ? { baselineRunner } : {}) });
         if (fx.done + fx.failed > 0) io.stderr(`[outbox] harness: ${fx.done} done, ${fx.failed} failed\n`);
       },
     });
