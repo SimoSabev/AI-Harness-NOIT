@@ -58,3 +58,15 @@ describe("mandat init --baseline (E7г)", () => {
     expect(out).toContain("suggested first task (feature): Add tests");
   });
 });
+
+describe("mandat init --profile (E8б)", () => {
+  it("writes .mandat/profile.proposed.json with 8 layers, unapproved", async () => {
+    const d = mkdtempSync(path.join(os.tmpdir(), "init-prof-"));
+    cpSync(path.join(repoRoot, "fixtures", "demo-shop"), d, { recursive: true, filter: (p) => !p.includes("node_modules") });
+    const r = await cli(["init", "--repo", d, "--profile"]);
+    expect(r.code).toBe(0);
+    const p = JSON.parse(readFileSync(path.join(d, ".mandat", "profile.proposed.json"), "utf8")) as { layers: Record<string, unknown>; approved_by: null };
+    expect(Object.keys(p.layers)).toEqual(["a", "b", "c", "d", "e", "f", "g", "h"]);
+    expect(p.approved_by).toBeNull();
+  });
+});

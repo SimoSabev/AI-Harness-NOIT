@@ -220,6 +220,9 @@ importers:
       '@mandat/onboard':
         specifier: workspace:*
         version: link:../../packages/onboard
+      '@mandat/profile':
+        specifier: workspace:*
+        version: link:../../packages/profile
       '@mandat/worker':
         specifier: workspace:*
         version: link:../worker

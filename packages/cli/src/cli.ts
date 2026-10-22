@@ -177,8 +177,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .requiredOption("--repo <dir>", "repository directory")
     .option("--json", "machine output")
     .option("--baseline", "run the tests of the tree twice in the sandbox (Docker) and propose with the baseline (E7г)")
-    .action(async (o: { repo: string; json?: boolean; baseline?: boolean }) => {
-      code = await initCommand(io, { repo: o.repo, json: json(o), baseline: o.baseline === true, runBaseline: (dir, policy) => runBaseline(dir, policy, { mandatHome: home(), repoRoot, env: io.env }) });
+    .option("--profile", "also write the full harness profile (8 layers) to .mandat/profile.proposed.json (E8б)")
+    .action(async (o: { repo: string; json?: boolean; baseline?: boolean; profile?: boolean }) => {
+      code = await initCommand(io, { repo: o.repo, json: json(o), baseline: o.baseline === true, profile: o.profile === true, runBaseline: (dir, policy) => runBaseline(dir, policy, { mandatHome: home(), repoRoot, env: io.env }) });
     });
   program
     .command("ladder")

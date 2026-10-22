@@ -30,6 +30,16 @@ test("rules: scan → a proposal with sources → approve with a code → draft 
   await page.reload();
   await expect(page.getByText(/draft PR #\d+/)).toBeVisible();
   await expect(page.getByText(/Rules version: 1/)).toBeVisible();
+  // E8b (AC-2.1, AC-2.5): the scan also proposed the full profile — 8 layers with sources, the compiled preview, approve
+  await expect(page.getByRole("heading", { name: "Harness profile (layers A–H)" })).toBeVisible();
+  await page.getByText("C · Permissions (allow, ask, deny)").click();
+  await expect(page.getByText(/bash:git push \*/).first()).toBeVisible();
+  await page.getByText("Preview: what the agent gets").click();
+  await expect(page.getByText("/m/in/harness/claude/settings.json")).toBeVisible();
+  await expect(page.getByText("/m/in/harness/codex/config.toml")).toBeVisible();
+  await page.getByLabel("Authenticator code").fill(totpNow(TOTP));
+  await page.getByRole("button", { name: "Approve this version" }).click();
+  await expect(page.getByText("Approved as version 1.")).toBeVisible();
 });
 
 test("rules: an approver cannot approve", async ({ page }) => {

@@ -17,6 +17,7 @@
     "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
     "@mandat/onboard": "workspace:*",
+    "@mandat/profile": "workspace:*",
     "@mandat/worker": "workspace:*",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.2",

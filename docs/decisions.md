@@ -1738,3 +1738,17 @@ SH2-CX на живо], агенти, скилове; worker-ът копира `/
 с shell знаци → не се пуска), require-tests-ran (блокира веднъж, после `stop_hook_active` пуска), limit-subagents, record-ask.
 Защо: v5 т. 4.1; D-311, D-343. Алтернативи: CLAUDE_CONFIG_DIR = контролният слой (несъвместимо с абонамента, D-343).
 Източник: v5 т. 4.1. Статус: решено; [НП] части — SH2/SH2-CX на живо.
+
+## D-351 Харнес-профилът във версии; одобрение с TOTP; задача без одобрен профил е BLOCKED (22.10.2026)
+Решение: (1) `public.harness_profiles` (version, layers, sources, profile_hash, status proposed|approved|superseded) +
+`repos.profile_id`. Одобрената версия е неизменна (тригер); откатът е НОВА версия със слоевете на старата (историята само
+расте). (2) `private.approve_profile` в една транзакция: approve.rules (с обхват по repo) + TOTP ≤ 2 мин; невидими знаци
+(bidi, zero-width, tag) навсякъде в слоевете → отказ; предишната одобрена → superseded; ledger `profile_change`.
+(3) Сканирането (`scanForProposal`) пише и предложен профил (proposeProfile: 8 слоя без AI; клонингът е с 50 комита за
+конвенциите). (4) Daemon: одобреният профил (с проверен хеш) → `runTask(profile)`; repo, което има профили, но няма използваем
+одобрен (или хешът не съвпада) → BLOCKED `harness_unapproved`; repo отпреди профилите (няма нито един ред) работи както досега.
+(5) UI /harness: слоевете A–H с източниците, преглед на компилирания контролен слой за Claude Code и Codex, одобри/върни с код.
+`mandat init --profile` пише `.mandat/profile.proposed.json`.
+Защо: v5 т. 4.2, AC-2.1/2.5/2.6. Алтернативи: профилът в harness_proposals (смесва .mandat.yml и контролния слой).
+Отворено: „Пробвай“ (демо задача с fake:honest-fix върху неодобрен профил) — следваща стъпка (виж docs/tasks/e8b.md).
+Източник: v5 т. 4.2. Статус: решено.

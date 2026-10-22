@@ -9,6 +9,7 @@ import { KeysBody } from "./keys";
 import type { KeysClient } from "./keys";
 import { board, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
+import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import type { Db } from "./sql";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -210,4 +211,22 @@ export async function patchMemberRole(req: Request, d: ApiDeps, member: string):
   if (!UUID.test(member) || typeof b.role_id !== "string" || b.role_id.length > 64) return json(400, { error: "bad_request" });
   const r = await setMemberRole(d.db, { uid: p.uid, org: p.org, member, roleId: b.role_id });
   return json(r.status, r.body);
+}
+
+// E8b (v5 p. 4.2): the harness profile — approve a proposed version, roll back to an earlier one (both with a fresh TOTP)
+export async function postProfileApprove(req: Request, d: ApiDeps, repoId: string): Promise<Response> {
+  if (!UUID.test(repoId)) return json(404, { error: "unknown_repo" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = ProfileApproveBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await approveProfile(d.db, { uid: p.uid, repoId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+export async function postProfileRollback(req: Request, d: ApiDeps, repoId: string): Promise<Response> {
+  if (!UUID.test(repoId)) return json(404, { error: "unknown_repo" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = ProfileRollbackBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await rollbackProfile(d.db, { uid: p.uid, repoId, body: b.data, secondFactor: d.secondFactor }), d);
 }
