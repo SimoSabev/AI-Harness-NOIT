@@ -5,7 +5,7 @@ export { canaryCheck } from "./canary.js";
 export type { CoreSecurityHint, Detected } from "./canary.js";
 export { ev, na } from "./evidence.js";
 export { anyMatch, firstMatch, globMatch, normalizeOutOfContract } from "./globs.js";
-export { d1 } from "./d1.js";
+export { d1, flakyFrom } from "./d1.js";
 export { d2, onlyFiles } from "./d2.js";
 export type { D2Input } from "./d2.js";
 export { declaredTestCount, parseTestFile, weakenedAssertions } from "./test-ast.js";

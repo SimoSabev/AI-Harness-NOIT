@@ -1,7 +1,7 @@
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { hashJcs } from "./hash.js";
-import { Glob, RepoConfig, TaskType } from "./schemas.js";
+import { Glob, RepoConfig, TaskType, TestId } from "./schemas.js";
 import type { Sha256 } from "./schemas.js";
 
 // `.mandat.yml` v2 minimum (демо промпт т. 5.6; D-265: block contents are the coder's minimum until docs/spec arrives).
@@ -28,6 +28,8 @@ export const MandatPolicy = z
         command: z.string().min(1).max(500),
         env: z.record(EnvName, z.string().max(200)).default({}),
         test_globs: z.array(Glob).min(1),
+        /** E7г / D-314: test IDs that changed status between the two baseline runs; D1 does not count them */
+        flaky: z.array(TestId).max(500).optional(),
       })
       .strict(),
     ci: z
@@ -129,7 +131,7 @@ export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoC
   }
   const config = RepoConfig.parse({
     runtime: { install, node: "24" },
-    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs },
+    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs, ...(p.tests.flaky?.length ? { flaky: p.tests.flaky } : {}) },
     protected_paths: p.protected_paths,
     protected_json_fields: p.protected_json_fields,
     config_paths: p.config_paths,

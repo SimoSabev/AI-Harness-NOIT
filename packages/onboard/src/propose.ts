@@ -2,12 +2,15 @@ import { parseMandatYml, repoConfigFromPolicy, sha256Tag } from "@mandat/contrac
 import type { MandatPolicy } from "@mandat/contract";
 import { stringify } from "yaml";
 import { classifyCommand } from "./commands.js";
+import { riskProfile } from "./risk-profile.js";
 import type { ScanResult } from "./scan.js";
 
 // Демо промпт т. 8.2 (6): the `.mandat.yml` proposal + field_sources. The source is NOT in the YAML (clean for zod);
 // `annotate()` adds `# source: …` comments for the committed file and for `mandat init`.
-export type Source = "lockfile" | `package.json#scripts.${string}` | "ci.yml" | "baseline" | "human";
-export interface Baseline { status: "ok" | "failed" | "error"; test_ids_count: number; skipped: number; duration_s: number; report_valid: boolean }
+export type Source = "lockfile" | `package.json#scripts.${string}` | "ci.yml" | "baseline" | "human" | `rule:${string}`;
+/** E7г / D-314: two runs on base at connect; `flaky` = IDs whose status differed between them */
+export interface Baseline { status: "ok" | "failed" | "error"; test_ids_count: number; skipped: number; duration_s: number; report_valid: boolean; flaky?: string[] }
+export interface SuggestedTask { type: "bugfix" | "feature" | "docs"; title: string; text: string }
 export interface Proposal {
   policy: MandatPolicy;
   yaml: string;
@@ -19,6 +22,8 @@ export interface Proposal {
   /** invisible characters in existing instruction files: the approval is blocked */
   blocked: string[];
   warnings: string[];
+  /** E7г: a first task the human may start (e.g. 0 tests → "add tests") */
+  suggested_tasks: SuggestedTask[];
 }
 
 const INSTALL: Record<string, string> = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts" };
@@ -62,8 +67,16 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   }
   if (o.rulesStrict === false) warnings.push("ruleset: main does not require up-to-date branches (strict=false)");
   // baseline (Ф5 step 4)
+  const suggested: SuggestedTask[] = [];
   if (o.baseline) {
-    if (o.baseline.test_ids_count === 0) riskReasons.push("baseline: 0 tests");
+    if (o.baseline.flaky?.length) {
+      src["tests.flaky"] = "baseline";
+      warnings.push(`baseline: ${o.baseline.flaky.length} flaky test(s); D1 does not count them`);
+    }
+    if (o.baseline.test_ids_count === 0) {
+      riskReasons.push("baseline: 0 tests");
+      suggested.push({ type: "feature", title: "Add tests for the main module", text: "The project has no tests. Add a test file that covers the main behaviour of the most used module; do not change the code under test." });
+    }
     if (o.baseline.status !== "ok") warnings.push(`baseline: ${o.baseline.status}`);
   }
   const blocked = scan.instructions.filter((f) => f.invisible.length > 0).map((f) => `${f.path}: ${f.invisible.length} invisible character(s) (${[...new Set(f.invisible.map((h) => h.codepoint))].slice(0, 3).join(", ")})`);
@@ -71,8 +84,14 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const riskCap: 1 | 3 = riskReasons.length > 0 ? 1 : 3;
   const cap = (n: number) => Math.min(n, riskCap);
   const src0 = scan.srcDirs.length > 0 ? scan.srcDirs.map((d) => `${d}/**`) : ["**"];
+  // E7г risk profile v1 (folder rules): high → protected (a human relaxes it); code → medium; docs → low
+  const risk = riskProfile(scan);
+  for (const h of risk.high) src[`protected_paths.${h.glob}`] = h.rule;
+  const bugRisk = risk.medium.length > 0 ? "medium" : "low";
+  src["task_types.bugfix.risk_class"] = risk.medium.length > 0 ? "rule:src" : "human";
+  src["task_types.docs.risk_class"] = "rule:docs";
   const taskTypes: MandatPolicy["task_types"] = {
-    bugfix: { allowed_paths: src0, may_change_tests: false, risk_class: "low" },
+    bugfix: { allowed_paths: src0, may_change_tests: false, risk_class: bugRisk },
     feature: { allowed_paths: [...src0, ...scan.testDirs.map((d) => `${d}/**`)].filter((x, i, a) => a.indexOf(x) === i), may_change_tests: true, risk_class: "medium" },
     docs: { allowed_paths: ["README.md", "docs/**"], may_change_tests: false, risk_class: "low" },
   };
@@ -82,11 +101,11 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const raw = {
     version: 2,
     runtime: { node: scan.node, package_manager: pm, install: INSTALL[pm] as string },
-    tests: { framework, command: testCmd, env: { CI: "true" }, test_globs: globs },
+    tests: { framework, command: testCmd, env: { CI: "true" }, test_globs: globs, ...(o.baseline?.flaky?.length ? { flaky: [...o.baseline.flaky].sort() } : {}) },
     ci: wf ? { provider: "github_actions", workflow: wf.path, required_checks: wf.testJobs } : null,
     task_types: taskTypes,
     risk_classes: { low: { level_cap: cap(3) }, medium: { level_cap: cap(2) }, high: { level_cap: 1, requires_second_factor: true } },
-    protected_paths: [...new Set([...PROTECTED_BASE, ...scan.configFiles.filter((f) => f !== ".npmrc")])],
+    protected_paths: [...new Set([...PROTECTED_BASE, ...scan.configFiles.filter((f) => f !== ".npmrc"), ...risk.high.map((h) => h.glob)])],
     protected_json_fields: { "package.json": ["scripts", "overrides", "workspaces", "imports"] },
     config_paths: CONFIG_PATHS,
     budgets: { task_usd: 2, task_minutes: 30 },
@@ -100,7 +119,7 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const rc = repoConfigFromPolicy(parsed.policy);
   if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm, pnpm (lockfile v9) or yarn v1 with vitest or jest on node 24 (D-301)`);
   if (scan.monorepo.tool) needs.push(`monorepo (${scan.monorepo.tool}): the sandbox installs one package, workspaces are not supported yet (D-301)`);
-  return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings };
+  return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings, suggested_tasks: suggested };
 }
 
 /** `# source: …` comments on the keys that have a source (the YAML stays valid; comments are ignored by zod). */

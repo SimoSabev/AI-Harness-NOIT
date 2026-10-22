@@ -43,6 +43,8 @@ export const RepoConfig = z.object({
     format: z.enum(["vitest-json", "jest-json"]), // D-301: jest --json has the same shape (testResults[].assertionResults[])
     env: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(200)),
     test_globs: z.array(Glob).min(1),
+    /** E7г / D-314: optional, so contracts without it keep their hash */
+    flaky: z.array(TestId).max(500).optional(),
   }),
   protected_paths: z.array(Glob),
   protected_json_fields: z.record(z.string(), z.array(z.string().min(1))),

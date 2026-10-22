@@ -5,11 +5,14 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest → .mandat.yml
   "field_sources": {
     "ci.required_checks": "ci.yml",
     "ci.workflow": "ci.yml",
+    "protected_paths..github/**": "rule:github",
     "risk_classes": "human",
     "runtime.install": "lockfile",
     "runtime.node": "human",
     "runtime.package_manager": "lockfile",
     "task_types": "human",
+    "task_types.bugfix.risk_class": "rule:src",
+    "task_types.docs.risk_class": "rule:docs",
     "tests.command": "package.json#scripts.test",
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
@@ -44,7 +47,7 @@ task_types:
     allowed_paths:
       - src/**
     may_change_tests: false
-    risk_class: low
+    risk_class: medium
   feature:
     allowed_paths:
       - src/**
@@ -117,11 +120,14 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-jest-turbo → .mand
   "field_sources": {
     "ci.required_checks": "ci.yml",
     "ci.workflow": "ci.yml",
+    "protected_paths..github/**": "rule:github",
     "risk_classes": "human",
     "runtime.install": "lockfile",
     "runtime.node": "human",
     "runtime.package_manager": "lockfile",
     "task_types": "human",
+    "task_types.bugfix.risk_class": "rule:src",
+    "task_types.docs.risk_class": "rule:docs",
     "tests.command": "package.json#scripts.test",
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
@@ -159,7 +165,7 @@ task_types:
       - src/**
       - packages/**
     may_change_tests: false
-    risk_class: low
+    risk_class: medium
   feature:
     allowed_paths:
       - src/**
@@ -235,11 +241,14 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > npm-vitest → .mandat.y
   "field_sources": {
     "ci.required_checks": "ci.yml",
     "ci.workflow": "ci.yml",
+    "protected_paths..github/**": "rule:github",
     "risk_classes": "human",
     "runtime.install": "lockfile",
     "runtime.node": "human",
     "runtime.package_manager": "lockfile",
     "task_types": "human",
+    "task_types.bugfix.risk_class": "rule:src",
+    "task_types.docs.risk_class": "rule:docs",
     "tests.command": "package.json#scripts.test",
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
@@ -274,7 +283,7 @@ task_types:
     allowed_paths:
       - src/**
     may_change_tests: false
-    risk_class: low
+    risk_class: medium
   feature:
     allowed_paths:
       - src/**
@@ -348,11 +357,14 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-jest → .mandat.ym
   "field_sources": {
     "ci.required_checks": "ci.yml",
     "ci.workflow": "ci.yml",
+    "protected_paths..github/**": "rule:github",
     "risk_classes": "human",
     "runtime.install": "lockfile",
     "runtime.node": "human",
     "runtime.package_manager": "lockfile",
     "task_types": "human",
+    "task_types.bugfix.risk_class": "rule:src",
+    "task_types.docs.risk_class": "rule:docs",
     "tests.command": "package.json#scripts.test",
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
@@ -387,7 +399,7 @@ task_types:
     allowed_paths:
       - src/**
     may_change_tests: false
-    risk_class: low
+    risk_class: medium
   feature:
     allowed_paths:
       - src/**
@@ -460,11 +472,14 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest → .mandat.
   "field_sources": {
     "ci.required_checks": "ci.yml",
     "ci.workflow": "ci.yml",
+    "protected_paths..github/**": "rule:github",
     "risk_classes": "human",
     "runtime.install": "lockfile",
     "runtime.node": "human",
     "runtime.package_manager": "lockfile",
     "task_types": "human",
+    "task_types.bugfix.risk_class": "rule:src",
+    "task_types.docs.risk_class": "rule:docs",
     "tests.command": "package.json#scripts.test",
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
@@ -499,7 +514,7 @@ task_types:
     allowed_paths:
       - src/**
     may_change_tests: false
-    risk_class: low
+    risk_class: medium
   feature:
     allowed_paths:
       - src/**
@@ -573,11 +588,14 @@ exports[`скенер без AI: 6 fixtures (т. 8.2) > pnpm-vitest-turbo → .m
   "field_sources": {
     "ci.required_checks": "ci.yml",
     "ci.workflow": "ci.yml",
+    "protected_paths..github/**": "rule:github",
     "risk_classes": "human",
     "runtime.install": "lockfile",
     "runtime.node": "human",
     "runtime.package_manager": "lockfile",
     "task_types": "human",
+    "task_types.bugfix.risk_class": "rule:src",
+    "task_types.docs.risk_class": "rule:docs",
     "tests.command": "package.json#scripts.test",
     "tests.framework": "package.json#scripts.test",
     "tests.test_globs": "package.json#scripts.test",
@@ -615,7 +633,7 @@ task_types:
       - src/**
       - packages/**
     may_change_tests: false
-    risk_class: low
+    risk_class: medium
   feature:
     allowed_paths:
       - src/**

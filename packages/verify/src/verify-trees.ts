@@ -158,7 +158,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const a = A as Extract<TestProcedureResult, { ok: true }>;
   const b = B as Extract<TestProcedureResult, { ok: true }>;
   await i.onReports?.({ raw: a.raw, exit: a.exit }, { raw: b.raw, exit: b.exit });
-  evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report).evidence);
+  evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
   evidence.push(
     b.timedOut
       ? ev("D2.inventory", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" })
