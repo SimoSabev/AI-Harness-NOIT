@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asService, asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 
-// E8в (v5 т. 4.3, D-315/D-349): roles are data. Every check goes through private.has_cap (capabilities + scope), never
+// E8c (v5 p. 4.3, D-315/D-349): roles are data. Every check goes through private.has_cap (capabilities + scope), never
 // through the role name; every change is a ledger row `role_change`.
 type Res = { status: number; body: Record<string, unknown> };
 const err = (status: number, error: string): Res => ({ status, body: { error } });

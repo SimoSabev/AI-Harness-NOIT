@@ -166,7 +166,7 @@ export async function getKeys(req: Request, d: ApiDeps): Promise<Response> {
 export async function postKeys(req: Request, d: ApiDeps): Promise<Response> {
   const p = await post(req, d);
   if (p instanceof Response) return p;
-  // E8в: capability, not the role name
+  // E8c: capability, not the role name
   if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   const b = KeysBody.safeParse(p.body);
@@ -183,7 +183,7 @@ export async function deleteKeys(req: Request, d: ApiDeps): Promise<Response> {
   return json(200, await d.keys.clear());
 }
 
-// E8в (v5 т. 4.3): roles and member roles; every check is a capability (roles.manage / members.manage)
+// E8c (v5 p. 4.3): roles and member roles; every check is a capability (roles.manage / members.manage)
 export async function getRoles(req: Request, d: ApiDeps): Promise<Response> {
   const c = await ctx(req, d);
   if (c instanceof Response) return c;
