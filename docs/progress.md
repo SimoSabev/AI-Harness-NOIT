@@ -23,13 +23,13 @@
 
 | Ред | Фаза | Клон | Зависи от | Статус | Готово, когато | Live части (SKIPPED без Симо) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | E7а живи спайкове + общи договори | phase/e7a-live-spikes | — | В ХОД | 0/— | S0, S1, S2, S-CX, SH2 (live), S-SUB |
-| 2 | E7б GitHub на живо | phase/e7b-github-live | E7а | не е започната | 0/— | L1–L3, external-pr --live |
-| 3 | E7в ключове (envelope, boot токен) | phase/e7c-key-envelope | E7а | не е започната | 0/— | истински ключ |
-| 4 | E7г базова линия, flaky, рисков профил | phase/e7d-baseline | E7а | не е започната | 0/— | — |
-| 5 | E7д сесията на живо | phase/e7e-live-session | E7а | не е започната | 0/— | истински агент |
-| 6 | E7е езиков каталог | phase/e7f-i18n | — | не е започната | 0/— | — |
-| 7 | E7ж първо пускане на чужда машина | phase/e7g-first-run | E7в | не е започната | 0/— | macOS/Windows при Симо |
+| 1 | E7а живи спайкове + общи договори | phase/e7a-live-spikes | — | ГОТОВО (live чака Симо) (docs/reports/E7a.md) | 5/6 | S0, S1, S2, S-CX, SH2 (live), S-SUB |
+| 2 | E7б GitHub на живо | phase/e7b-github-live | E7а | ГОТОВО (live чака Симо) (docs/reports/E7b.md) | 0/3 офлайн-възможни → резервата D-209 готова | L1–L3, external-pr --live |
+| 3 | E7в ключове (envelope, boot токен) | phase/e7c-key-envelope | E7а | ГОТОВО (live чака Симо; safeStorage → E9ж) (docs/reports/E7c.md) | 4/5 | истински ключ |
+| 4 | E7г базова линия, flaky, рисков профил | phase/e7d-baseline | E7а | ГОТОВО (docs/tasks/e7d.md) | 4/4 | — |
+| 5 | E7д сесията на живо | phase/e7e-live-session | E7а | ГОТОВО (live чака Симо) (docs/reports/E7e.md) | 3/3 | истински агент |
+| 6 | E7е езиков каталог | phase/e7f-i18n | — | В ХОД (паралелно) | 0/— | — |
+| 7 | E7ж първо пускане на чужда машина | phase/e7g-first-run | E7в | ГОТОВО (live чака Симо) (docs/reports/E7g.md) | 1/3 | macOS/Windows при Симо |
 | 8 | E8а контролен слой и компилатор | phase/e8a-profile-compiler | E7а (SH2) | не е започната | 0/— | истински агент с deny |
 | 9 | E8б харнес-профил A–H | phase/e8b-profile | E8а, E7г | не е започната | 0/— | — |
 | 10 | E8в роли | phase/e8c-roles | — | не е започната | 0/— | — |
@@ -51,7 +51,7 @@
 | 26 | E11 платформа | phase/e11-* | E10 | не е започната | 0/— | — |
 
 ## Текуща задача
-E7а (phase/e7a-live-spikes): общите договори (т. 2: agent-stream, profile, roles, night, research, evidence/ledger видове), парсерите на потока
-по фикстури, SH2 с fake агенти, docs/spikes/*, docs/setup/local-live-checklist.md. Живите спайкове чакат Симо (чеклистът).
+E7 офлайн частите са готови (E7а–E7д, E7ж; E7е върви паралелно). Следва E8: роли с capabilities (E8в), контролен слой и
+компилатор на профила (E8а), харнес-профил A–H (E8б). Живите части — docs/setup/local-live-checklist.md.
 
 ## Разход API: $0 (v5 бюджет ≤ $25, D-328)
