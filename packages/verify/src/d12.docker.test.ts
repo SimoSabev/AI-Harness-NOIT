@@ -26,7 +26,7 @@ function repo() {
   return { root, remote, repo: r };
 }
 const edit = (r: string, f: string, fn: (s: string) => string) => writeFileSync(path.join(r, f), fn(readFileSync(path.join(r, f), "utf8")));
-type Out = { verdict?: { run_id: string; result: string; reasons: string[]; evidence: { detector: string; status: string; data: { routes?: { route: string; console_errors: string[]; failed_requests: string[]; screenshot: string | null }[] } }[] } };
+type Out = { verdict?: { run_id: string; result: string; reasons: string[]; evidence: { detector: string; status: string; data: { routes?: { route: string; console_errors: string[]; failed_requests: string[]; screenshot: string | null; visual_diff?: number | null; base_screenshot?: string | null }[] } }[] } };
 
 async function verify(f: { remote: string; repo: string }, routes: string[]) {
   let out = "";
@@ -38,7 +38,7 @@ async function verify(f: { remote: string; repo: string }, routes: string[]) {
 }
 
 describe("D12 UI (docker)", () => {
-  it("a clean UI change → VERIFIED, D12 pass, the screenshot in the run directory; a script that throws and a missing route → UNKNOWN, never FAILED", async () => {
+  it("a clean UI change → VERIFIED, D12 pass, before/after in the run directory; a new look → UNKNOWN visual_diff; a script that throws and a missing route → UNKNOWN, never FAILED", async () => {
     const ok = repo();
     edit(ok.repo, "web/public/app.js", (s) => s.replace("Total: ", "Sum: "));
     const a = await verify(ok, ["/"]);
@@ -46,6 +46,19 @@ describe("D12 UI (docker)", () => {
     const shot = path.join(home, "runs", a.v?.run_id ?? "", a.d12?.data.routes?.[0]?.screenshot ?? "-");
     expect(existsSync(shot)).toBe(true);
     expect(readFileSync(shot).subarray(1, 4).toString("latin1")).toBe("PNG");
+    // a changed word is under the visual threshold; the base shot sits next to it
+    const v = a.d12?.data.routes?.[0]?.visual_diff ?? 1;
+    expect(v).toBeGreaterThan(0);
+    expect(v).toBeLessThan(0.01);
+    expect(existsSync(path.join(home, "runs", a.v?.run_id ?? "", a.d12?.data.routes?.[0]?.base_screenshot ?? "-"))).toBe(true);
+
+    const dark = repo();
+    edit(dark.repo, "web/public/style.css", () => "body { font-family: sans-serif; margin: 2rem; background: #222; color: #eee; }\n");
+    const c = await verify(dark, ["/"]);
+    expect([c.v?.result, c.d12?.status]).toEqual(["UNKNOWN", "unknown"]);
+    expect(c.v?.reasons).toContain("D12:visual_diff:/");
+    expect(c.d12?.data.routes?.[0]?.visual_diff ?? 0).toBeGreaterThan(0.5);
+    rmSync(dark.root, { recursive: true, force: true });
 
     const bad = repo();
     edit(bad.repo, "web/public/app.js", (s) => `${s}\nthrow new Error("total broke");\n`);
