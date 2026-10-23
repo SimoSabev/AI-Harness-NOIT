@@ -117,3 +117,4 @@ describe("runAction (simulated tests, no Docker)", () => {
     expect(r.summary).toContain("pull_request");
   });
 });
+
