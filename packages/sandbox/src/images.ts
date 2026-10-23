@@ -3,6 +3,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 export const CLAUDE_CODE_VERSION = "2.1.302";
+/** E9б (D12): the Playwright of the UI image (docker/sandbox-ui/Dockerfile) */
+export const PLAYWRIGHT_VERSION = "1.63.0";
 const ROOT_FILES = ["package.json", "pnpm-workspace.yaml", "tsconfig.base.json", "turbo.json", ".dockerignore", "pnpm-lock.yaml"];
 
 function walk(abs: string): string[] {
@@ -73,3 +75,10 @@ export async function imageTags(repoRoot: string): Promise<{ sandbox: string; ga
     proxy: `mandat-llm-proxy:v${version(repoRoot, "llm-proxy")}-${forPkg("llm-proxy", "llm-proxy")}`,
   };
 }
+
+/** E9б (D12, D-364): the browser image of the UI check — built only on demand (`mandat images build --ui`) */
+export function uiImageTag(repoRoot: string): string {
+  const files = [path.join(repoRoot, "docker", "sandbox-ui", "Dockerfile"), ...walk(path.join(repoRoot, "packages", "verify", "ui-runner"))].filter((f) => existsSync(f));
+  return `mandat-sandbox-ui:pw${PLAYWRIGHT_VERSION}-${contextHash(repoRoot, files)}`;
+}
+
