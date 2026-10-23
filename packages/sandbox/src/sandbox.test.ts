@@ -373,6 +373,10 @@ describe("profile helper containers (D-295)", () => {
     expect(a).toEqual(expect.arrayContaining(["--network", "mandat-upstream", "--user", "1000:1000", "--cap-drop=ALL", "--security-opt=no-new-privileges", "-v", `${vol}:${PROFILE_DIR}`, "-e", `CLAUDE_CONFIG_DIR=${PROFILE_DIR}`]));
     expect(a.slice(a.indexOf("img"))).toEqual(["img", "auth", "login", "--claudeai"]);
     expect(a.join(" ")).not.toMatch(/privileged|docker\.sock|--cap-add|-p /);
+    // D-369: from the web — the same, with pipes instead of a TTY
+    const w = buildProfileArgs("login-web", { image: "img", volume: vol });
+    expect(w.slice(0, 3)).toEqual(["run", "--rm", "-i"]);
+    expect(w.slice(3)).toEqual(a.slice(3));
   });
   it("status: --network none, read-only volume, json; logout: none network; init: root only for chown, no network", () => {
     const s = buildProfileArgs("status", { image: "img", volume: vol });

@@ -210,7 +210,7 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
  * login is interactive (the user's own terminal) and runs the unmodified `claude auth login` — the provider's flow;
  * status reads the volume read-only without network; init is the one root step (chown of the fresh volume).
  */
-export function buildProfileArgs(kind: "init" | "login" | "status" | "logout", o: { image: string; volume: string }): string[] {
+export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status" | "logout", o: { image: string; volume: string }): string[] {
   if (!o.volume.startsWith(PROFILE_PREFIX) || !/^[a-z0-9-]+$/.test(o.volume)) forbid("not a profile volume", { volume: o.volume });
   if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
   const base = ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m", "--pids-limit=256", "--memory=1g", "--label", "mandat.profile=1"];
@@ -220,7 +220,8 @@ export function buildProfileArgs(kind: "init" | "login" | "status" | "logout", o
   }
   if (kind === "status") return ["run", "--rm", "--network", "none", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}:ro`, "--entrypoint", "claude", o.image, "auth", "status", "--json"];
   if (kind === "logout") return ["run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "logout"];
-  return ["run", "--rm", "-it", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "login", "--claudeai"];
+  // D-369: login-web = the same flow with pipes (the web hands the pasted code to stdin), no TTY
+  return ["run", "--rm", kind === "login-web" ? "-i" : "-it", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "login", "--claudeai"];
 }
 
 export interface ProxyRunOptions {
