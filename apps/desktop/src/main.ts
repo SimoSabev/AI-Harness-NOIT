@@ -39,7 +39,7 @@ function show(): void {
 async function waitFor(url: string): Promise<void> {
   for (let i = 0; i < 120; i++) {
     try {
-      // D-368: without a session cookie the pages redirect (to /api/auth/local); any answer below 500 means it is up
+      // D-368: /login of `pnpm local` redirects to the start page; any answer below 500 means it is up
       const r = await fetch(`${url}/login`, { redirect: "manual", signal: AbortSignal.timeout(2000) });
       if (r.status > 0 && r.status < 500) return;
     } catch {

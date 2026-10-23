@@ -2027,8 +2027,9 @@ SHA-тата: `git ls-remote` на github.com/actions/setup-node, actions/checko
 Решение (Симо, 23.10.2026: „не мисля, че за сега ни трябва логин … теглиш, връзваш към своите неща и си ти без да ти е
 нужен профил при нас“): (1) `pnpm local` и `pnpm desktop` нямат вход. Уебът получава `MANDAT_LOCAL_OWNER` (локалният
 собственик, DEMO_OWNER_ID) вместо `MANDAT_DEMO_DEV_AUTH`; `authMode() = "local"`; `currentUser()` връща собственика само при
-loopback Host (`localhost`, `127.0.0.1`, `[::1]`, с или без порт; apps/web/src/lib/server/local-auth.ts). Страница без
-CSRF бисквитка отива на `GET /api/auth/local` (поставя я, 30 дни) и обратно. Няма парола (старата от предишно пускане се
+loopback Host (`localhost`, `127.0.0.1`, `[::1]`, с или без порт; apps/web/src/lib/server/local-auth.ts). CSRF бисквитката
+(double submit) я слага самата страница в браузъра (`LocalCsrf`, 32 случайни байта, 30 дни) — първоначално беше пренасочка
+през `GET /api/auth/local`, но тя губеше дълбоката връзка (проба в браузъра, 23.10.2026). Няма парола (старата от предишно пускане се
 изтрива, `seedLocal` без `password`), няма TOTP, няма „Изход“. (2) Уебът слуша само на 127.0.0.1: `pnpm --filter
 @mandat/web exec next start -p 3000 -H 127.0.0.1` — `next start` по подразбиране е 0.0.0.0 (`next start --help`, Next.js
 16.3.8: „-H, --hostname <hostname> … (default: 0.0.0.0)“; https://nextjs.org/docs/app/api-reference/cli/next, 23.10.2026).
