@@ -3,13 +3,13 @@ import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, Tray, app, dialog, nativeImage } from "electron";
-import { allowedUrl, childEnv, isErrorLine, loginScript, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, parseBanner, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
 import { desktopLang, dt, loadingPage } from "./i18n.js";
 import type { DesktopKey, Lang } from "./i18n.js";
 
 // D-303: the desktop window of the harness (no name yet, D-296). It runs `pnpm local` (the same harness, the same sandbox), shows its steps,
-// signs in with the password it printed (never written anywhere) and keeps the app in the tray. Built only locally.
+// opens the address it printed (no login, D-368) and keeps the app in the tray. Built only locally.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const icon = nativeImage.createFromPath(path.join(repoRoot, "apps/web/public/icon-192.png"));
 const SECURE = { contextIsolation: true, nodeIntegration: false, sandbox: true } as const;
@@ -39,7 +39,9 @@ function show(): void {
 async function waitFor(url: string): Promise<void> {
   for (let i = 0; i < 120; i++) {
     try {
-      if ((await fetch(`${url}/login`, { signal: AbortSignal.timeout(2000) })).ok) return;
+      // D-368: without a session cookie the pages redirect (to /api/auth/local); any answer below 500 means it is up
+      const r = await fetch(`${url}/login`, { redirect: "manual", signal: AbortSignal.timeout(2000) });
+      if (r.status > 0 && r.status < 500) return;
     } catch {
       // not up yet
     }
@@ -52,23 +54,7 @@ async function open(b: Banner): Promise<void> {
   await waitFor(b.url);
   if (!win || win.isDestroyed()) return;
   guard(win, b.url);
-  let signedIn = false;
-  win.webContents.on("did-finish-load", () => {
-    const w = win;
-    if (signedIn || !w || !w.webContents.getURL().startsWith(`${b.url}/login`)) return;
-    signedIn = true;
-    void w.webContents.executeJavaScript(loginScript(b.email, b.password));
-  });
-  await win.loadURL(`${b.url}/login`);
-  if (b.totp) {
-    await dialog.showMessageBox(win, {
-      type: "info",
-      title: t("totp.title"),
-      message: t("totp.message"),
-      detail: `${b.totp.secret}\n\n${b.totp.uri}`,
-      buttons: [t("totp.button")],
-    });
-  }
+  await win.loadURL(`${b.url}/`); // D-368: no login — the local owner, this computer only
 }
 
 function start(): void {
