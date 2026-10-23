@@ -4,7 +4,7 @@ export const CORE_PACKAGES = Object.freeze([
   "@mandat/verify", "@mandat/gate-github", "@mandat/mcp",
 ]);
 export const HARNESS_PACKAGES = Object.freeze([
-  "@mandat/egress-gate", "@mandat/llm-proxy", "@mandat/channels", "@mandat/agents", "@mandat/cli", "@mandat/onboard", "@mandat/profile", "@mandat/mcp-bridge",
+  "@mandat/egress-gate", "@mandat/llm-proxy", "@mandat/channels", "@mandat/agents", "@mandat/cli", "@mandat/onboard", "@mandat/profile", "@mandat/mcp-bridge", "@mandat/review",
   "@mandat/worker", "@mandat/web", "@mandat/bench", "@mandat/desktop", "spikes", "mandat",
 ]);
 /** @param {string} name @returns {"core"|"harness"|null} */
