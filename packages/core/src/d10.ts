@@ -47,3 +47,23 @@ export function d10Lockfile(o: { baseLock: Buffer | null; headLock: Buffer | nul
   if (!r.ok) return { evidence: ev("D10.lockfile", "fail", `lockfile rejected: ${r.reason}`, { reason: r.reason, path: r.path }, { cls: "lockfile", id: r.reason }), security: [] };
   return { evidence: ev("D10.lockfile", "pass", `lockfile ok (${r.packages} packages)`, { packages: r.packages }), security: [] };
 }
+
+/** E9б (D8): the dependencies a change adds or re-specifies (name, spec), across every package.json; local ones are skipped */
+export function addedDependencies(manifests: Manifest[]): { name: string; spec: string }[] {
+  const out: { name: string; spec: string }[] = [];
+  const seen = new Set<string>();
+  for (const m of manifests) {
+    const a = declared(m.base) ?? new Map<string, string>();
+    const b = declared(m.head);
+    if (!b) continue;
+    for (const [k, spec] of b) {
+      if (a.get(k) === spec || /^(workspace|link|file|portal|patch):/.test(spec)) continue;
+      const name = k.split(":")[1] as string;
+      if (seen.has(`${name}@${spec}`)) continue;
+      seen.add(`${name}@${spec}`);
+      out.push({ name, spec });
+    }
+  }
+  return out;
+}
+
