@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import { startControl } from "./commands/local-control.js";
 import type { ControlDeps, Keys } from "./commands/local-control.js";
 import { LoginSessions } from "./commands/login-session.js";
+import { SystemJobs } from "./commands/system-jobs.js";
 import type { LoginProc } from "./commands/login-session.js";
 
 const noLogin = () => new LoginSessions({ prepare: async () => "images_missing", spawn: () => { throw new Error("no"); }, status: async () => ({ loggedIn: false, email: null, plan: null }), timeoutMs: 1000 });
-const base = (): Omit<ControlDeps, "start" | "stop" | "providers" | "accounts"> => ({ login: noLogin(), logout: async () => false });
+const base = (): Omit<ControlDeps, "start" | "stop" | "providers" | "accounts"> => ({ login: noLogin(), logout: async () => false, system: new SystemJobs({ run: () => undefined, org: "o" }) });
 
 // D-293: the keys reach the proxy through `mandat local` only: 127.0.0.1, a bearer token, never echoed, never stored.
 describe("mandat local control (D-293)", () => {
@@ -64,7 +65,7 @@ describe("mandat local control (D-293)", () => {
     const proc: LoginProc = { onOutput: (f) => void (out = f), onExit: (f) => void (exit = f), write: (x) => void written.push(x), kill: () => exit(null) };
     const login = new LoginSessions({ prepare: async () => "ok", spawn: () => proc, status: async () => ({ loggedIn: true, email: "s@example.com", plan: "Max" }), timeoutMs: 60_000 });
     const removed: string[] = [];
-    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login, logout: async (n) => (removed.push(n), true) });
+    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login, logout: async (n) => (removed.push(n), true), system: new SystemJobs({ run: () => undefined, org: "o" }) });
     const call = async (method: string, path: string, body?: unknown) => {
       const r = await fetch(`${c.url}${path}`, { method, headers: { authorization: `Bearer ${c.token}` }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
       return [r.status, await r.json()] as const;
@@ -89,6 +90,27 @@ describe("mandat local control (D-293)", () => {
       expect(await call("POST", "/accounts/logout", { name: "lichno" })).toEqual([200, { removed: true }]);
       expect(removed).toEqual(["lichno"]);
       expect(await call("POST", "/accounts/logout", { name: "../x" })).toEqual([400, { error: "bad_name" }]);
+    } finally {
+      await c.close();
+    }
+  });
+  it("D-370: /system lists the jobs; POST /system/<job> starts one from the closed list; anything else → 404/405", async () => {
+    const argv: (readonly string[])[] = [];
+    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login: noLogin(), logout: async () => false, system: new SystemJobs({ run: (a) => void argv.push(a), org: "o" }) });
+    const call = async (method: string, path: string) => {
+      const r = await fetch(`${c.url}${path}`, { method, headers: { authorization: `Bearer ${c.token}` } });
+      return [r.status, await r.json()] as const;
+    };
+    try {
+      const [st, body] = await call("GET", "/system");
+      expect(st).toBe(200);
+      expect((body as { jobs: { job: string }[] }).jobs.map((j) => j.job)).toEqual(["doctor", "images", "images-ui", "fixtures", "fixtures-force", "stats", "verify-log"]);
+      expect(await call("POST", "/system/doctor")).toEqual([200, expect.objectContaining({ job: "doctor", state: "running" })]);
+      expect(argv).toEqual([["doctor", "--json"]]);
+      expect((await call("POST", "/system/run"))[0]).toBe(404);
+      expect((await call("POST", "/system/..%2Fdoctor"))[0]).toBe(404);
+      expect((await call("DELETE", "/system/doctor"))[0]).toBe(405);
+      expect((await call("POST", "/system"))[0]).toBe(405);
     } finally {
       await c.close();
     }

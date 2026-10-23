@@ -3,7 +3,7 @@ import { readFileSync, readdirSync, statfsSync } from "node:fs";
 import { createServer } from "node:net";
 import path from "node:path";
 import { compareVersions, imageTags } from "@mandat/sandbox";
-import { DEMO_OWNER_ID, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
+import { DEMO_ORG_ID, DEMO_OWNER_ID, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
 import { realDeps } from "../deps.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
@@ -13,6 +13,8 @@ import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
 import { listAccounts, loginDeps, logoutProfile } from "./accounts.js";
 import { LoginSessions } from "./login-session.js";
+import { SystemJobs } from "./system-jobs.js";
+import type { JobRun } from "./system-jobs.js";
 import { slotsFrom, workerCommand } from "./worker.js";
 
 // D-292: `pnpm local` — everything on this machine with one command: Postgres in Docker (shim + migrations, no
@@ -43,6 +45,19 @@ export function localWebArgs(): string[] {
 export function localWebEnv(clean: Record<string, string | undefined>, o: { dbUrl: string; control: { url: string; token: string } }): Record<string, string | undefined> {
   const { MANDAT_DEMO_DEV_AUTH: _dev, ...rest } = clean;
   return { ...rest, MANDAT_DB_URL: o.dbUrl, MANDAT_LOCAL_OWNER: DEMO_OWNER_ID, NEXT_TELEMETRY_DISABLED: "1", MANDAT_LOCAL_CONTROL_URL: o.control.url, MANDAT_LOCAL_CONTROL_TOKEN: o.control.token };
+}
+
+/** D-370: a system job = this CLI again (`node main.js …`) without the API keys in its env (D-293). */
+function cliRun(env: Record<string, string | undefined>): JobRun {
+  return (argv, o) => {
+    const child = spawn(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), ...argv], { cwd: repoRoot, env, stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.setEncoding("utf8").on("data", o.stdout);
+    child.stderr.setEncoding("utf8").on("data", o.stderr);
+    let done = false;
+    const exit = (code: number) => void (done || ((done = true), o.exit(code)));
+    child.on("error", () => exit(127));
+    child.on("close", (code) => exit(code ?? 1));
+  };
 }
 
 export function localBanner(slots: number): string[] {
@@ -218,6 +233,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     accounts: () => listAccounts(deps),
     login: new LoginSessions(loginDeps(deps)),
     logout: (name) => logoutProfile(deps, name),
+    system: new SystemJobs({ run: cliRun({ ...clean, MANDAT_DB_URL: url }), org: DEMO_ORG_ID }),
   });
   const env = localWebEnv(clean, { dbUrl: url, control });
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
