@@ -2,7 +2,7 @@
 // stands for the whole project: base and tree B run the same command, so a failure on B is the change's.
 export interface Check { name: "lint" | "typecheck"; command: string }
 
-export function checksFromCommands(cmds: { lint?: string | undefined; typecheck?: string | undefined }): Check[] {
+export function checksFromCommands(cmds: Partial<Record<string, string | undefined>>): Check[] {
   const sub = (c: string) => c.replace(/\{files\}/g, ".");
   return [...(cmds.lint ? [{ name: "lint" as const, command: sub(cmds.lint) }] : []), ...(cmds.typecheck ? [{ name: "typecheck" as const, command: sub(cmds.typecheck) }] : [])];
 }
