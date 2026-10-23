@@ -11,7 +11,8 @@ describe("uiShotsView", () => {
       { route: "/cart", errors: ["GET /x 404"], after: null, before: null, diff: null },
     ]);
   });
-  it("no D12 evidence, no changeset or a malformed blob → nothing", () => {
+  it("no D12 evidence, no changeset, no screenshot the user may see (viewer) or a malformed blob → nothing", () => {
+    expect(uiShotsView("cs-1", ev({ routes: [{ route: "/", console_errors: [], failed_requests: [], screenshot: "ui/route-0.png" }] }), [])).toEqual([]);
     expect(uiShotsView("cs-1", [], ["route-0.png"])).toEqual([]);
     expect(uiShotsView(null, ev({ routes: [] }), [])).toEqual([]);
     expect(uiShotsView("cs-1", ev({ routes: [{ route: 1 }] }), ["route-0.png"])).toEqual([]);
