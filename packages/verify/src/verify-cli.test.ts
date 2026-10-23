@@ -271,6 +271,17 @@ describe("retry-same-tree (S27)", () => {
   });
 });
 
+describe("mandat-verify D11 test environment (bench B36)", () => {
+  it("a fix that switches on the test runner's env → UNKNOWN D11:test_env:<path>:<line>, never VERIFIED", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", (s) => s.replace("const DISCOUNT_THRESHOLD_CENTS = 50000;", "const DISCOUNT_THRESHOLD_CENTS = process.env.VITEST ? 5000 : 50000;"));
+    const r = await verify(f, ["--external", "--type", "bugfix", "--json"]);
+    const o = JSON.parse(r.out.trim()) as { verdict: { result: string; reasons: string[] } };
+    expect(o.verdict.result).not.toBe("VERIFIED");
+    expect(o.verdict.reasons).toContain("D11:test_env:src/cart.ts:10");
+  });
+});
+
 // v5 E9б (5.2, AC-5.5): D12 — tree B's app in a browser when the change touches a UI path (the simulator: "UI_ERROR" in
 // src → a console error on the first route; "UI_DOWN" → the app never answers)
 describe("mandat-verify D12 (UI)", () => {

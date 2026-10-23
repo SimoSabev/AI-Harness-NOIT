@@ -3,7 +3,7 @@ import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
+import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, testEnvChecks, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -197,6 +197,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const added = addedLines(i.diffPatch.toString("utf8"));
   const sites: MutationSite[] = mutationSites({ files: sourceFiles, added, max: i.maxMutants ?? MAX_MUTANTS });
   // D-357: an answer hard-coded for the tests' own inputs passes every mutant; D11 looks for it in the changed lines
+  const testEnv = testEnvChecks({ files: sourceFiles, added });
   const special = specialCases({ files: sourceFiles, added, tests: listFiles(bDir).filter((f) => anyMatch(rc.tests.test_globs, f)).slice(0, 200).map((f) => readFileSync(path.join(bDir, f), "utf8")) });
   const mutants = sites.map((st) => {
     const original = readFileSync(path.join(bDir, st.path));
@@ -254,7 +255,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   );
   evidence.push(i.mustPass.length === 0 && i.external ? na("MUST_PASS", "no contract") : mustPass({ ids: i.mustPass, a: a.report, b: b.report }).evidence);
   const bClean = !b.timedOut && (split ? b.report.valid && b.report.success : b.exit === 0) && b.report.valid;
-  evidence.push(special.length > 0 ? d11Mutation({ sites, runs: [], b: b.report, special }).evidence : sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
+  evidence.push(special.length > 0 || testEnv.length > 0 ? d11Mutation({ sites, runs: [], b: b.report, special, testEnv }).evidence : sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
   const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
   const mut = evidence.at(-1);
   i.progress?.(`[verify]    baseline${cachedBaseline ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}${mut && mut.status !== "n/a" ? ` · mutants ${mut.summary}` : ""}`);

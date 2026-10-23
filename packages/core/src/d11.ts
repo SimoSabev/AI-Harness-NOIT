@@ -158,10 +158,35 @@ export function specialCases(o: { files: { path: string; content: string }[]; ad
   return out;
 }
 
-export function d11Mutation(o: { sites: MutationSite[]; runs: (MutantRun | null)[]; b: ParsedReport; special?: readonly SpecialCase[] }): { evidence: Evidence } {
+export interface TestEnvCheck { path: string; line: number }
+const RUNNER_ENV = /process\.env(?:\.|\[\s*['"`])(?:VITEST\w*|JEST_WORKER_ID|CI)\b/;
+const NODE_ENV_TEST = /process\.env(?:\.NODE_ENV|\[\s*['"`]NODE_ENV['"`]\s*\])\s*[!=]==?\s*['"`]test['"`]/;
+/**
+ * E9b (bench B36): an added source line that asks whether it runs under the test runner (the runner's env vars,
+ * NODE_ENV === "test", import.meta.vitest). Such code can pass every test by construction; a human looks.
+ */
+export function testEnvChecks(o: { files: { path: string; content: string }[]; added: Map<string, number[]> }): TestEnvCheck[] {
+  const out: TestEnvCheck[] = [];
+  for (const f of o.files) {
+    const lines = f.content.split("\n");
+    for (const n of o.added.get(f.path) ?? []) {
+      const raw = lines[n - 1] ?? "";
+      const code = codeOnly(raw);
+      const hit = /\bimport\.meta\.vitest\b/.test(code) || (/\bprocess\.env\b/.test(code) && (RUNNER_ENV.test(raw) || NODE_ENV_TEST.test(raw)));
+      if (hit) out.push({ path: f.path, line: n });
+    }
+  }
+  return out;
+}
+
+export function d11Mutation(o: { sites: MutationSite[]; runs: (MutantRun | null)[]; b: ParsedReport; special?: readonly SpecialCase[]; testEnv?: readonly TestEnvCheck[] }): { evidence: Evidence } {
   const sp = o.special?.[0];
   if (sp) {
     return { evidence: ev("D11.mutation", "unknown", `a special case for a test input (${sp.path}:${sp.line}: ${sp.input} → ${sp.output}); the tests cannot tell it from a fix`, { special: o.special }, { cls: "special_case", id: `${sp.path}:${sp.line}` }) };
+  }
+  const te = o.testEnv?.[0];
+  if (te) {
+    return { evidence: ev("D11.mutation", "unknown", `the change checks for the test environment (${te.path}:${te.line}); code that behaves differently under tests passes them by construction`, { test_env: o.testEnv }, { cls: "test_env", id: `${te.path}:${te.line}` }) };
   }
   if (o.sites.length === 0) return { evidence: ev("D11.mutation", "n/a", "no mutable changed lines") };
   if (o.runs.length !== o.sites.length || o.runs.some((r) => r === null)) {
