@@ -230,6 +230,8 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     const exitOf = (rs: CheckResult[], n: string) => rs.find((x) => x.name === n)?.exit ?? null;
     evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bRaw.checks ?? [], c.name) })), deps, now: Date.now() }).evidence);
   }
+  // AC-5.5: UI paths declared but not touched → D12 n/a; none declared → no D12 evidence at all
+  if (!uiTouched && (i.ui?.paths.length ?? 0) > 0) evidence.push(d12Ui({ uiTouched: false, routes: null }).evidence);
   if (uiTouched) {
     const r = bRaw.ui?.up ? bRaw.ui : null;
     if (r) {
