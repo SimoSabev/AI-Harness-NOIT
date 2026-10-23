@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { formatStats, readVerdicts, runStats } from "./commands/stats.js";
 
 // Calibration after the first real tasks: how often the judge asks a human (UNKNOWN), why, and what a task costs.
-const v = (result: string, reasons: string[], agent = "claude", usd = 0.4, ms = 300_000, created = "2026-10-23T10:00:00.000Z") => ({ result, reasons, agent, usage: { usd }, timings_ms: { total: ms }, created_at: created });
+const v = (result: "VERIFIED" | "UNKNOWN" | "FAILED", reasons: string[], agent = "claude", usd = 0.4, ms = 300_000, created = "2026-10-23T10:00:00.000Z") => ({ result, reasons, agent, usage: { usd }, timings_ms: { total: ms }, created_at: created });
 
 describe("mandat stats", () => {
   it("shares by result, the top reason classes, mean cost and time, by agent; fake agents apart", () => {

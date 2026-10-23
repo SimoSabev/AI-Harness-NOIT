@@ -4,6 +4,7 @@ import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
 import { applyLocal } from "./commands/apply.js";
 import { ATTACKS, SCENARIOS } from "@mandat/bench";
 import { doctor } from "./commands/doctor.js";
+import { statsCommand } from "./commands/stats.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
 import { runCommand } from "./commands/run.js";
@@ -105,6 +106,18 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
 
   const home = (): string => mandatHome({ home: globals().home, env: io.env });
   const json = (o: { json?: boolean }): boolean => Boolean(o.json ?? globals().json);
+
+  program
+    .command("stats")
+    .description("calibration of the judge on real runs: results, UNKNOWN share, top reasons, cost and time")
+    .option("--all", "count the fake agents too (bench, red team)")
+    .option("--since <days>", "only the last N days")
+    .option("--json", "machine output")
+    .action((o: { all?: boolean; since?: string; json?: boolean }) => {
+      const days = o.since === undefined ? undefined : Number(o.since);
+      if (days !== undefined && !(Number.isFinite(days) && days > 0)) throw new MandatError("E_USAGE", "--since takes a number of days");
+      code = statsCommand(io, { mandatHome: home(), json: json(o), all: Boolean(o.all), ...(days !== undefined ? { sinceDays: days } : {}) });
+    });
 
   program
     .command("doctor")

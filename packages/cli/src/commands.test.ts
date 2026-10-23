@@ -149,6 +149,8 @@ describe("run / bench / redteam / fixtures", () => {
     expect(JSON.parse(j.stdout.trim())).toMatchObject({ error: { code: "E_DOCKER_VERSION" }, exit: 3 });
     expect((await cli(["--home", h, "bench", "--only", "B1"], d)).code).toBe(3);
     expect((await cli(["--home", h, "bench", "--only", "B41"], d)).code).toBe(2);
+    expect(JSON.parse((await cli(["--home", h, "stats", "--json"], d)).stdout.trim())).toMatchObject({ total: 0 });
+    expect((await cli(["--home", h, "stats", "--since", "x"], d)).code).toBe(2);
     expect((await cli(["--home", h, "bench", "--only", "B40"], d)).code).toBe(3); // E9b: B9–B40 are known scenarios
     expect((await cli(["--home", h, "redteam", "--only", "R5"], d)).code).toBe(3);
     expect((await cli(["--home", h, "redteam", "--only", "R99"], d)).code).toBe(2);
