@@ -120,3 +120,10 @@ export const DesktopCommand = z.discriminatedUnion("command", [
   z.object({ command: z.literal("open_task"), task_id: TaskId }).strict(),
 ]);
 export type DesktopCommand = z.infer<typeof DesktopCommand>;
+
+/**
+ * E9g A2: what main reads from the web's existing GET /api/inbox for the tray counter and the "waiting for you"
+ * notifications — only the id and the text of each waiting item; every other field is dropped.
+ */
+export const DesktopInboxSnapshot = z.object({ items: z.array(z.object({ id: TaskId, text: z.string().max(100_000) })).max(500) });
+export type DesktopInboxSnapshot = z.infer<typeof DesktopInboxSnapshot>;

@@ -3,6 +3,7 @@ import {
   DESKTOP_EVENT_CHANNEL,
   DESKTOP_METHOD_NAMES,
   DesktopCommand,
+  DesktopInboxSnapshot,
   LocalGrant,
   LocalPath,
   desktopChannel,
@@ -78,5 +79,11 @@ describe("desktop bridge contract (D-371)", () => {
       expect(DesktopCommand.safeParse(c).success, JSON.stringify(c)).toBe(true);
     for (const c of [{ command: "open_project", index: 10 }, { command: "view", view: "settings/../x" }, { command: "eval", code: "1" }, { command: "new_task", x: 1 }])
       expect(DesktopCommand.safeParse(c).success, JSON.stringify(c)).toBe(false);
+  });
+  it("the inbox snapshot main reads from GET /api/inbox: only id + text of each waiting item are kept (E9g A2)", () => {
+    const r = DesktopInboxSnapshot.safeParse({ items: [{ id: "t_1", text: "fix the cart", state: "HELD", usd: 0.1 }], summary: { x: 1 } });
+    expect(r.success && r.data).toEqual({ items: [{ id: "t_1", text: "fix the cart" }] });
+    for (const bad of [null, {}, { items: "x" }, { items: [{ id: "../x", text: "" }] }, { items: [{ id: "t_1" }] }, { items: Array.from({ length: 501 }, (_, i) => ({ id: `t_${i}`, text: "" })) }])
+      expect(DesktopInboxSnapshot.safeParse(bad).success, JSON.stringify(bad).slice(0, 80)).toBe(false);
   });
 });
