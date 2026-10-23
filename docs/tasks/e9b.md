@@ -20,4 +20,4 @@
 - [x] AC-7.4 — never-lifts.test.ts (64 × 3 × 32 случая)
 - [ ] AC-5.4 — преглед на живо: чака Симо (Q-059, правило 7)
 - [x] AC-5.5 — d12.docker.test.ts + картата (e2e ui-shots.spec.ts); без UI пътища → D12 n/a
-- [ ] bench 40/40 — виж docs/reports/E9b.md
+- [x] bench 40/40 — docker, 0 лъжливо VERIFIED (docs/reports/E9b.md)
