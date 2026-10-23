@@ -36,26 +36,23 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
   );
 }
 
-const TYPES = ["free", "feature", "bugfix", "docs", "css"] as const;
+// No scope to pick: a real agent works without limits ("free", D-360; the judge still runs), the demo agents'
+// scenarios are bug fixes. The narrower types stay in the project's rules (.mandat.yml) and the detailed form.
+const typeFor = (agent: string) => (agent.startsWith("fake") ? "bugfix" : "free");
 
 export function NewTask({ agents, repo, canAct }: { agents: WsAgent[]; repo: string | null; canAct: boolean }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState("");
   const [agent, setAgent] = useState(agents[0]?.id ?? "fake:honest-fix");
-  const [type, setType] = useState<(typeof TYPES)[number]>(agent.startsWith("fake") ? "bugfix" : "free");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pick = (id: string) => {
-    setAgent(id);
-    setType(id.startsWith("fake") ? "bugfix" : "free");
-  };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim() === "") return setError(t("ws.ask"));
     setBusy(true);
     setError(null);
-    const r = await postJson("/api/tasks", { text: text.trim(), type, agent });
+    const r = await postJson("/api/tasks", { text: text.trim(), type: typeFor(agent), agent });
     if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
     setBusy(false);
     setError(errorText(t, r, {}, t("newTask.failed", { status: r.status })));
@@ -72,14 +69,8 @@ export function NewTask({ agents, repo, canAct }: { agents: WsAgent[]; repo: str
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1.5 text-xs text-mute">
             {t("ws.agent")}
-            <select value={agent} onChange={(e) => pick(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
+            <select value={agent} onChange={(e) => setAgent(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
               {agents.map((a) => <option key={a.id} value={a.id} disabled={!a.ready}>{a.label}{a.ready ? "" : ` (${t("newTask.setKey")})`}</option>)}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-xs text-mute">
-            {t("ws.scope")}
-            <select value={type} onChange={(e) => setType(e.target.value as (typeof TYPES)[number])} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
-              {TYPES.map((x) => <option key={x} value={x}>{t(`newTask.type.${x}`)}</option>)}
             </select>
           </label>
           <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy}>{busy ? t("ws.sending") : t("ws.send")}</button>

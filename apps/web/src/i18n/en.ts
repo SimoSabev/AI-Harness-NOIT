@@ -766,7 +766,6 @@ export const en = {
   "ws.askHint": "Write it like to a colleague. The agent works in a locked sandbox; Mandat checks the result before anything reaches your code.",
   "ws.placeholder": "The 10% discount must apply to orders over 50. Fix it and keep the tests.",
   "ws.agent": "Agent",
-  "ws.scope": "Scope",
   "ws.send": "Start",
   "ws.sending": "Starting…",
   "ws.you": "You",
