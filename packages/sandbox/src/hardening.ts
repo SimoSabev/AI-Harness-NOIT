@@ -1,7 +1,8 @@
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 
-export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate" | "mcp";
+// v5 E9б (D-364): "ui-app" runs tree B's dev server, "ui" the browser that visits it — both on the run's internal UI network
+export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate" | "mcp" | "ui-app" | "ui";
 export interface MountSpec {
   kind: "volume" | "bind";
   source: string;
@@ -106,6 +107,7 @@ function checkEnv(envNames: string[], publicEnv: Record<string, string>, role: R
       if (!/^[A-Z_][A-Z0-9_]*$/.test(n) || SECRETS.has(n)) forbid("an MCP sidecar gets only its own declared secrets, never an LLM key", { name: n });
       continue;
     }
+    if (role === "ui-app" || role === "ui") forbid("the UI check gets no secrets (D-364)", { name: n });
     if (!SECRETS.has(n)) forbid(`envNames may only contain secret names (${SECRET_ENV_NAMES.join(", ")})`, { name: n });
   }
   for (const [k, v] of Object.entries(publicEnv)) {

@@ -24,4 +24,6 @@ export const names = {
   gate: (run: string, t: Tree) => `mandat-gate-${run}-${t}`,
   vol: (run: string, t: Tree) => `mandat-vol-${run}-${t}`,
   agent: (run: string) => `mandat-agent-${run}`,
+  uiNet: (run: string) => `mandat-ui-${run}`,
+  uiApp: (run: string) => `mandat-ui-app-${run}`,
 };
