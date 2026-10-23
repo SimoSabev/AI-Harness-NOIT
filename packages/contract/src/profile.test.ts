@@ -26,6 +26,10 @@ describe("harness profile (v5 2.2)", () => {
     const g = ProfileLayerG.parse({ required_detectors: ["D1"], mutants: 3, max_diff_lines: 400, ui_paths: [], definition_of_done: {}, max_subagents: 2, max_depth: 1 });
     expect(g).toMatchObject({ wip_limit: 3, ci_rounds: 2, same_file: "wait", review: "off", hidden_tests_dir: "tests/__hidden__", requires_research: [] });
     expect(() => ProfileLayerG.parse({ ...g, max_depth: 4 })).toThrow();
+    // E9b (D12): the routes a UI check opens are optional (absent → "/"), on the app's own origin only
+    expect(g.ui_routes).toBeUndefined();
+    expect(ProfileLayerG.parse({ ...g, ui_routes: ["/", "/cart"] }).ui_routes).toEqual(["/", "/cart"]);
+    expect(() => ProfileLayerG.parse({ ...g, ui_routes: ["https://evil.example/"] })).toThrow();
   });
   it("hooks are only harness scripts, never a path from the repo", () => {
     const layers = demoProfileLayers();

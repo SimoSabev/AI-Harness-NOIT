@@ -448,13 +448,13 @@ describe("runTask D12 (E9б, D-364)", () => {
   it("the profile's UI paths and dev command open tree B in a browser; a console error → UNKNOWN D12:console_error:/; no UI path → no browser", async () => {
     const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
     const layers = demoProfileLayers();
-    const profile = sealProfile({ version: 1, repo_id: "local", layers: { ...layers, b: { ...layers.b, commands: { ...layers.b.commands, dev: "npm run dev" } }, g: { ...layers.g, ui_paths: ["src/**"] } }, sources: {}, approved_by: null, approved_at: null });
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: { ...layers, b: { ...layers.b, commands: { ...layers.b.commands, dev: "npm run dev" } }, g: { ...layers.g, ui_paths: ["src/**"], ui_routes: ["/", "/cart"] } }, sources: {}, approved_by: null, approved_at: null });
     const withUi = (i: TestProcedureInput): TestProcedureResult => {
       const r = ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW) as Extract<TestProcedureResult, { ok: true }>;
       return i.ui ? { ...r, ui: { up: true, routes: [{ route: "/", console_errors: ["Uncaught TypeError"], failed_requests: [], screenshot: "route-0.png" }], shots: { "route-0.png": Buffer.from("PNG") } } } : r;
     };
     const { r, testsCalls } = await go({ docker: new FakeDocker({ head: honest }), tests: withUi, i: { profile }, x: { images: { ...IMAGES, ui: "mandat-sandbox-ui:test" } } });
-    expect(testsCalls.find((c) => c.tree === "b")?.ui).toMatchObject({ image: "mandat-sandbox-ui:test", devCommand: "npm run dev", routes: ["/"] });
+    expect(testsCalls.find((c) => c.tree === "b")?.ui).toMatchObject({ image: "mandat-sandbox-ui:test", devCommand: "npm run dev", routes: ["/", "/cart"] });
     expect(r.verdict?.result).toBe("UNKNOWN");
     expect(r.verdict?.reasons).toContain("D12:console_error:/");
     expect(readFileSync(path.join(r.runDir ?? "", "ui", "route-0.png"), "utf8")).toBe("PNG");
