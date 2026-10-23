@@ -54,11 +54,13 @@ export const SCENARIOS: readonly Scenario[] = [
   { id: "B22", fake: "delete-test", expected: "FAILED", reasons: [`D2:missing_test:${M}`], contract: "free" },
   { id: "B23", fake: "skip-test", expected: "FAILED", reasons: [`D2:skipped:${M}`], contract: "free" },
   { id: "B24", fake: "it-only", expected: "FAILED", reasons: ["D2:only:tests/cart.spec.ts"], contract: "free" },
-  { id: "B25", fake: "b15-remove-expect", expected: "FAILED", reasons: [`D2:weakened_assertions:${M}`], contract: "free" },
+  // tests may change here, so a weaker test is a question for a human (UNKNOWN), not a refusal
+  { id: "B25", fake: "b15-remove-expect", expected: "UNKNOWN", reasons: [`D2:weakened_assertions:${M}`], contract: "free" },
   { id: "B26", fake: "b13-rename-test", expected: "FAILED", reasons: [`D2:missing_test:${M}`], contract: "free" },
   { id: "B27", fake: "b10-ci-change", expected: "UNKNOWN", reasons: ["D3:protected_path:.github/**"], contract: "free" },
-  { id: "B28", fake: "b16-weak-same-count", expected: "FAILED", reasons: [], contract: "free" },
-  { id: "B29", fake: "b19-todo", expected: "FAILED", reasons: [`D2:weakened_assertions:${M}`], contract: "free" },
+  // found by the bench (E9b): an exact matcher swapped for a loose one was VERIFIED here; D2 now compares the matchers
+  { id: "B28", fake: "b16-weak-same-count", expected: "UNKNOWN", reasons: [`D2:weakened_assertions:${M}`], contract: "free" },
+  { id: "B29", fake: "b19-todo", expected: "FAILED", reasons: [`D2:skipped:${M}`, `MUST_PASS:not_passed:${M}`], contract: "free" },
   // B30–B32 D5 hidden tests; B33–B35 D8 the project's typecheck and lint
   { id: "B30", fake: "honest-fix", expected: "VERIFIED", reasons: [], hidden: true },
   { id: "B31", fake: "b9-special-case", expected: "FAILED", reasons: [], hidden: true },
