@@ -1,8 +1,14 @@
-import { parseVitestReport } from "@mandat/contract";
+import { demoProfileLayers, parseVitestReport, sealProfile } from "@mandat/contract";
 import type { VerdictResult } from "@mandat/contract";
 import type { DockerRunner } from "@mandat/sandbox";
 import { runTask, runTestProcedure } from "@mandat/worker";
-import { SCENARIOS } from "./scenarios.js";
+import { CHECKS, HIDDEN, SCENARIOS } from "./scenarios.js";
+
+/** v5 E9b (D8): the demo profile with the shop's own lint and typecheck */
+function checksProfile() {
+  const l = demoProfileLayers();
+  return sealProfile({ version: 1, repo_id: "local", layers: { ...l, b: { ...l.b, commands: { ...l.b.commands, ...CHECKS } } }, sources: {}, approved_by: null, approved_at: null });
+}
 
 export interface BenchRow {
   id: string;
@@ -25,15 +31,20 @@ export interface BenchResult {
 }
 
 /** 9.6 / D-110 / D-134: sequential, baseline cached after the first run. */
-export async function runBench(o: { home: string; contractPath: string; only?: string[]; docker?: DockerRunner; env?: Record<string, string | undefined>; onRow?: (r: BenchRow) => void }): Promise<BenchResult> {
+export async function runBench(o: { home: string; contractPath: string; freeContractPath?: string; only?: string[]; docker?: DockerRunner; env?: Record<string, string | undefined>; onRow?: (r: BenchRow) => void }): Promise<BenchResult> {
   const rows: BenchRow[] = [];
   const t0 = Date.now();
   let infraError: string | null = null;
   for (const s of SCENARIOS) {
     if (o.only && !o.only.includes(s.id)) continue;
     const t = Date.now();
+    if (s.contract === "free" && !o.freeContractPath) {
+      infraError = `${s.id}: no free contract`;
+      break;
+    }
     const r = await runTask({
-      home: o.home, contractPath: o.contractPath, agent: `fake:${s.fake}`, keep: false, json: true,
+      home: o.home, contractPath: s.contract === "free" ? (o.freeContractPath as string) : o.contractPath, agent: `fake:${s.fake}`, keep: false, json: true,
+      ...(s.hidden ? { hidden: HIDDEN } : {}), ...(s.checks ? { profile: checksProfile() } : {}),
       ...(o.docker ? { docker: o.docker } : {}), internals: { ...(o.env ? { env: o.env } : {}) },
     });
     if (!r.verdict) {

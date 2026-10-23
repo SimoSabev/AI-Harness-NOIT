@@ -6,12 +6,13 @@ import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 
 const contractPath = () => path.join(repoRoot, "contracts", "fix-discount.json");
+const freeContractPath = () => path.join(repoRoot, "contracts", "free-cart.json");
 
 /** 6.13 / D-128 / D-134. */
 export async function benchCommand(io: Io, o: { mandatHome: string; only?: string[]; json: boolean; docker?: DockerRunner }): Promise<number> {
   if (!o.json) io.stdout("ID  fake                  expected  actual    reasons  time\n");
   const r = await runBench({
-    home: o.mandatHome, contractPath: contractPath(), env: io.env, ...(o.only ? { only: o.only } : {}), ...(o.docker ? { docker: o.docker } : {}),
+    home: o.mandatHome, contractPath: contractPath(), freeContractPath: freeContractPath(), env: io.env, ...(o.only ? { only: o.only } : {}), ...(o.docker ? { docker: o.docker } : {}),
     onRow: (row) => {
       if (!o.json) io.stdout(`${row.id}  ${row.fake.padEnd(20)}  ${row.expected.padEnd(8)}  ${row.actual.padEnd(8)}  ${row.reasons_ok ? "ok     " : "MISSING"}  ${fmtDuration(row.ms)}${row.mismatch ? "  MISMATCH" : ""}${row.missing.length ? ` (missing: ${row.missing.join(", ")})` : ""}\n`);
     },
