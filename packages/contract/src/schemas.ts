@@ -254,6 +254,7 @@ export const LedgerKind = z.enum([
   "night_question",
   "night_start", // E9а
   "night_done",
+  "hidden_tests", // E9б (D-362)
   "research_run",
   "conflict",
   "parked",
