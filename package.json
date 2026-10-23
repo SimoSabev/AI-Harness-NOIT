@@ -21,7 +21,7 @@
     "gitleaks": "docker run --rm -v \"$PWD\":/repo ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --config=/repo/.gitleaks.toml --redact --no-banner",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm test:counts && pnpm licenses:check && pnpm no-dotenv",
+    "check": "pnpm build && pnpm lint && pnpm typecheck && pnpm test && pnpm test:counts && pnpm licenses:check && pnpm no-dotenv && node -e \"console.log('CHECK OK')\"",
     "ci:local": "pnpm check && pnpm gitleaks && pnpm mandat images build --ui && pnpm mandat fixtures build && pnpm test:docker && pnpm mandat bench && pnpm mandat redteam",
     "mandat": "node packages/cli/dist/main.js",
     "local": "pnpm build && node packages/cli/dist/main.js local",

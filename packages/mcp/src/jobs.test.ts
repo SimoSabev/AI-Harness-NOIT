@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,7 +11,7 @@ import type { SpawnVerify } from "./jobs.js";
 // т. 7.2–7.3, 7.5 mcp-async / mcp-level-cap / mcp-isolation (same-uid part) / mcp-no-secrets (outputs), with a fake mandat-verify.
 const outcome = (result: string, reasons: string[], level = 1) => JSON.stringify({ verdict: { result, reasons }, effective_level: level, level_reasons: ["external_cap"], ledger: { from: 4, to: 4 }, exit: 0 });
 function repo() {
-  const d = mkdtempSync(path.join(os.tmpdir(), "mandat-job-"));
+  const d = realpathSync(mkdtempSync(path.join(os.tmpdir(), "mandat-job-")));
   execFileSync("git", ["init", "-q", d]);
   writeFileSync(path.join(d, "a.txt"), "1\n");
   return d;

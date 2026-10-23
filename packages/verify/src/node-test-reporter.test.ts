@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,7 @@ const reporter = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 
 describe("node --test reporter (E8и)", () => {
   it("два файла, вложени describe, pass/fail/skip/todo → vitest-json; id-тата са по файл", () => {
-    const root = mkdtempSync(path.join(os.tmpdir(), "mandat-node-test-"));
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "mandat-node-test-"))); // macOS: tmpdir is a symlink
     mkdirSync(path.join(root, "tests"));
     writeFileSync(path.join(root, "tests", "cart.test.mjs"), [
       'import { describe, it } from "node:test";',

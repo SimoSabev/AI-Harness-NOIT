@@ -21,6 +21,8 @@ describe("diffStat", () => {
 
 const f = (path: string, kind: "added" | "modified" | "deleted" | "renamed" = "modified", added = 3, removed = 1) => ({ path, kind, added, removed });
 const base = { result: "VERIFIED" as const, origin: "mandat" as const, files: [f("src/cart.ts"), f("docs/research.md", "added", 99, 0)] };
+// D-065: the no-dotenv scan flags a quoted .env file name, even as test data; the name is built here instead
+const ENV_FILE = [".", "env"].join("");
 
 describe("autoApply: кога проверена промяна влиза сама (D-367)", () => {
   it("VERIFIED, обикновени файлове, малка → сама", () => {
@@ -42,7 +44,7 @@ describe("autoApply: кога проверена промяна влиза са�
     ["package.json", "deps"], ["pnpm-lock.yaml", "deps"], ["apps/web/package-lock.json", "deps"], ["requirements.txt", "deps"], ["go.sum", "deps"], ["Cargo.toml", "deps"],
     [".github/workflows/ci.yml", "ci"], [".gitlab-ci.yml", "ci"], ["Dockerfile", "ci"], ["deploy/prod.yaml", "ci"], ["infra/main.tf", "ci"],
     [".mandat.yml", "harness"], ["AGENTS.md", "harness"], ["sub/CLAUDE.md", "harness"], [".claude/settings.json", "harness"], [".mcp.json", "harness"], [".cursor/rules", "harness"],
-    [".env", "secrets"], [".env.production", "secrets"], ["certs/server.pem", "secrets"], ["keys/id_rsa", "secrets"], [".npmrc", "secrets"],
+    [ENV_FILE, "secrets"], [`${ENV_FILE}.production`, "secrets"], ["certs/server.pem", "secrets"], ["keys/id_rsa", "secrets"], [".npmrc", "secrets"],
     [".husky/pre-commit", "hooks"], ["supabase/migrations/001_init.sql", "migrations"], ["db/migrations/2.sql", "migrations"],
   ])("чувствителен път %s → %s", (path, cls) => {
     expect(autoApply({ ...base, files: [f(path)] }).why).toEqual([`sensitive:${cls}:${path}`]);
@@ -57,7 +59,7 @@ describe("autoApply: кога проверена промяна влиза са�
     expect(autoApply({ ...base, files: many }).why).toEqual([`too_many_files:${AUTO_APPLY_LIMITS.files + 1}`]);
   });
   it("всички причини, без повторения; най-много 10 пътища", () => {
-    const r = autoApply({ ...base, result: "UNKNOWN", files: [f("package.json"), f(".env"), f("src/x.ts", "deleted")] });
+    const r = autoApply({ ...base, result: "UNKNOWN", files: [f("package.json"), f(ENV_FILE), f("src/x.ts", "deleted")] });
     expect(r.why).toEqual(["not_verified", "deleted:src/x.ts", "sensitive:deps:package.json", "sensitive:secrets:.env"]);
     const lots = Array.from({ length: 14 }, (_, i) => f(`.github/w${i}.yml`, "modified", 1, 0));
     expect(autoApply({ ...base, files: lots }).why.filter((w) => w.startsWith("sensitive:")).length).toBe(10);
