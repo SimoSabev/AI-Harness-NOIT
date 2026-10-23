@@ -16,7 +16,7 @@ describe("bench (docker)", () => {
     const r = cli("bench", "--json");
     const j = JSON.parse(r.stdout.trim()) as { pass: number; false_verified: number; false_failed: number; rows: unknown[] };
     expect([r.status, j.pass, j.rows.length, j.false_verified, j.false_failed]).toEqual([0, 40, 40, 0, 0]);
-  });
+  }, 1_800_000); // 40 scenarios take ~13 min
   it("redteam 10/10 (R5, R6, R8, R14, R15–R20)", () => {
     const r = cli("redteam", "--json");
     const j = JSON.parse(r.stdout.trim()) as { pass: number; total: number; rows: { ok: boolean }[] };
