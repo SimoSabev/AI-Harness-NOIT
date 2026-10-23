@@ -11,7 +11,8 @@ export type RunId = z.infer<typeof RunId>;
 // D-226: the E0 local org or a Supabase org uuid.
 export const OrgId = z.union([z.literal("o_local"), z.string().uuid()]);
 export type OrgId = z.infer<typeof OrgId>;
-export const TaskType = z.enum(["bugfix", "feature", "css", "docs"]);
+// D-360: "free" = no scope limits (the whole repo; tests may change), asked for by Simo 23.10.2026
+export const TaskType = z.enum(["bugfix", "feature", "css", "docs", "free"]);
 export type TaskType = z.infer<typeof TaskType>;
 export const Glob = z
   .string()

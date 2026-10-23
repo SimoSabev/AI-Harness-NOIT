@@ -92,6 +92,16 @@ export const MandatPolicy = z
   });
 export type MandatPolicy = z.infer<typeof MandatPolicy>;
 
+/**
+ * D-360: the task type "free" has no scope limits — the whole repo, tests may change. A policy may define it (e.g. a higher
+ * risk class); otherwise this default applies. Protected paths (D3) and every other detector still run: free widens the
+ * scope, it does not switch the judge off; risk "medium" keeps a person in front of a level-3 merge.
+ */
+export const FREE_TASK_TYPE = { allowed_paths: ["**"], may_change_tests: true, risk_class: "medium" } as const satisfies NonNullable<MandatPolicy["task_types"]["free"]>;
+export function taskTypeOf(p: MandatPolicy, type: TaskType): MandatPolicy["task_types"][TaskType] {
+  return p.task_types[type] ?? (type === "free" ? { ...FREE_TASK_TYPE, allowed_paths: [...FREE_TASK_TYPE.allowed_paths] } : undefined);
+}
+
 export type ParsedPolicy = { ok: true; policy: MandatPolicy; config_hash: Sha256 } | { ok: false; error: string };
 
 /**
