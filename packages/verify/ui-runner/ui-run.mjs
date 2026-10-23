@@ -14,7 +14,10 @@ const routes = JSON.parse(process.env.MANDAT_UI_ROUTES ?? '["/"]').slice(0, 5);
 const out = "/m/out/ui";
 mkdirSync(out, { recursive: true });
 
-const deadline = Date.now() + 45_000;
+// D-364: the whole check ≤ 60 s — the app has 30 s to answer, the routes share what is left
+const t0 = Date.now();
+const deadline = t0 + 30_000;
+const budgetEnd = t0 + 60_000;
 let up = false;
 while (Date.now() < deadline) {
   try {
@@ -56,6 +59,11 @@ async function visualDiff(a, b) {
 }
 const results = [];
 for (const [n, route] of routes.entries()) {
+  const left = budgetEnd - Date.now();
+  if (left < 2_000) {
+    results.push({ route, console_errors: ["not visited: the 60 s budget ran out"], failed_requests: [], screenshot: null, visual_diff: null });
+    continue;
+  }
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   const console_errors = [];
   const failed_requests = [];
@@ -64,7 +72,7 @@ for (const [n, route] of routes.entries()) {
   page.on("requestfailed", (r) => failed_requests.push(`${r.method()} ${new URL(r.url()).pathname} ${r.failure()?.errorText ?? ""}`.slice(0, 300)));
   page.on("response", (r) => r.status() >= 400 && failed_requests.push(`${r.request().method()} ${new URL(r.url()).pathname} ${r.status()}`.slice(0, 300)));
   try {
-    await page.goto(new URL(route, base).toString(), { waitUntil: "networkidle", timeout: 15_000 });
+    await page.goto(new URL(route, base).toString(), { waitUntil: "networkidle", timeout: Math.min(15_000, left - 1_000) });
   } catch (e) {
     console_errors.push(`navigation: ${String(e?.message ?? e).slice(0, 200)}`);
   }
