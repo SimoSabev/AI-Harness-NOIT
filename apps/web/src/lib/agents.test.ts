@@ -16,6 +16,10 @@ describe("agents (D-292)", () => {
     for (const agent of AGENT_IDS) expect(CreateTaskBody.safeParse({ type: "bugfix", agent, text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "bugfix", agent: "fake:r8-canary-leak", text: "x" }).success).toBe(false);
   });
+  it("D-360: every task type, the free one too; nothing else", () => {
+    for (const type of ["bugfix", "feature", "css", "docs", "free"]) expect(CreateTaskBody.safeParse({ type, agent: "claude", text: "x" }).success).toBe(true);
+    expect(CreateTaskBody.safeParse({ type: "anything", agent: "claude", text: "x" }).success).toBe(false);
+  });
   it("D-295: claude@<account> is accepted; a bad account name is not", () => {
     expect(CreateTaskBody.safeParse({ type: "bugfix", agent: "claude@work", text: "x" }).success).toBe(true);
     for (const agent of ["claude@", "claude@Work", "claude@a b", "codex@x"]) expect(CreateTaskBody.safeParse({ type: "bugfix", agent, text: "x" }).success).toBe(false);
