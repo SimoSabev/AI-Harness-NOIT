@@ -22,14 +22,15 @@ const after = (reasons: string[], prefix: string): string | null => {
   const r = reasons.find((x) => x.startsWith(prefix));
   return r === undefined ? null : r.slice(prefix.length);
 };
-/** the first reason with a rule decides; the text is fixed per class (the reason's own detail in code style) */
+/** the first class with a rule decides (tests before the contract); the text is fixed per class (the reason's detail in code style) */
 export function proposalFor(reasons: string[]): string {
-  const out = after(reasons, "D4:out_of_contract:");
-  if (out !== null) return `Add ${out} to allowed_paths of this task type, or narrow the task so it stays inside the contract.`;
   const missing = after(reasons, "D2:missing_test:");
   if (missing !== null) return `Restore the test \`${missing}\`, or run the task as a feature that may change tests.`;
   const weak = after(reasons, "D2:weakened_assertions:");
   if (weak !== null) return `Keep the assertions of \`${weak}\`; if the expectation really changed, say so in the task.`;
+  // after the test classes: a deleted test also leaves the contract (tests/**), and restoring it is the advice
+  const out = after(reasons, "D4:out_of_contract:");
+  if (out !== null) return `Add ${out} to allowed_paths of this task type, or narrow the task so it stays inside the contract.`;
   const must = after(reasons, "MUST_PASS:not_passed:");
   if (must !== null) return `The change does not make \`${must}\` pass; describe the expected behaviour more precisely or point to the code.`;
   const lock = after(reasons, "D10:lock_missing:");
