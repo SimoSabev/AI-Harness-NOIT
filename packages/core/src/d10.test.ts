@@ -24,3 +24,15 @@ describe("D10 without the lockfile (D-357)", () => {
     expect(d10Lockfile({ baseLock: lock, headLock: lock, manifests: [{ path: "packages/cart/package.json", base: sub({}), head: sub({}) }] }).evidence.status).toBe("n/a");
   });
 });
+
+describe("addedDependencies (E9б, D8)", () => {
+  it("the dependencies a change adds or re-specifies, across every package.json; removals are not listed", async () => {
+    const { addedDependencies } = await import("./d10.js");
+    const p = (deps: Record<string, string>, dev: Record<string, string> = {}) => Buffer.from(JSON.stringify({ dependencies: deps, devDependencies: dev }));
+    expect(addedDependencies([
+      { path: "package.json", base: p({ a: "1.0.0", gone: "1.0.0" }), head: p({ a: "1.0.0", b: "^2.0.0" }, { c: "3.1.4" }) },
+      { path: "packages/x/package.json", base: null, head: p({ a: "1.1.0" }) },
+    ])).toEqual([{ name: "b", spec: "^2.0.0" }, { name: "c", spec: "3.1.4" }, { name: "a", spec: "1.1.0" }]);
+    expect(addedDependencies([{ path: "package.json", base: p({}), head: p({ w: "workspace:*", l: "link:../l", f: "file:../f" }) }])).toEqual([]);
+  });
+});
