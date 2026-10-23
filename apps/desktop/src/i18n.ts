@@ -11,6 +11,8 @@ export const DESKTOP_EN = {
   "error.exit": "pnpm local exited with {code}",
   "tray.open": "Open",
   "tray.quit": "Stop and quit",
+  "tray.waiting": "{count} waiting for you",
+  "dialog.pickFolder": "Choose a project folder",
 } as const;
 
 export type DesktopKey = keyof typeof DESKTOP_EN;
@@ -24,6 +26,8 @@ export const DESKTOP_BG: Record<DesktopKey, string> = {
   "error.exit": "pnpm local излезе с {code}",
   "tray.open": "Отвори",
   "tray.quit": "Спри и излез",
+  "tray.waiting": "{count} чакат теб",
+  "dialog.pickFolder": "Избери папка на проекта",
 };
 
 const CATALOG: Record<Lang, Record<DesktopKey, string>> = { en: DESKTOP_EN, bg: DESKTOP_BG };

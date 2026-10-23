@@ -1,0 +1,13 @@
+{
+  // D-371: the sandboxed preload is CommonJS and imports nothing; built on its own, then renamed to dist/preload.cjs
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "Bundler",
+    "outDir": "dist-preload",
+    "rootDir": "src",
+    "sourceMap": false
+  },
+  "include": ["src/preload.ts"],
+  "exclude": []
+}

@@ -8,12 +8,17 @@
   "main": "dist/main.js",
   "scripts": {
     "setup": "node node_modules/electron/install.js",
-    "build": "tsc -p tsconfig.json",
-    "start": "electron ."
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.preload.json && node -e \"require('fs').renameSync('dist-preload/preload.js','dist/preload.cjs')\"",
+    "test": "pnpm --dir ../.. exec vitest run apps/desktop/src",
+    "start": "electron .",
+    "smoke": "electron scripts/smoke-bridge.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "electron": "44.9.0",
     "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "@mandat/contract": "link:../../packages/contract"
   }
 }
