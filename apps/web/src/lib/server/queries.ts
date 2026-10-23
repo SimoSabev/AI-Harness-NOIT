@@ -89,6 +89,8 @@ export interface TaskDetail {
   approvals: { decision: string; method: string; decided_at: string }[]; label: { layer: string; label: string } | null;
   /** E8g: what the agent asked for (the cards of a HELD tool_approval task) */
   asks: { id: string; attempt: number; tool: string; reason: string; status: string }[];
+  /** E9b (D12): the screenshot names of the changeset (approver+ by RLS) */
+  shots: string[];
 }
 
 export async function taskDetail(db: Db, uid: string, org: string, role: Role, id: string): Promise<TaskDetail | null> {
@@ -105,7 +107,8 @@ export async function taskDetail(db: Db, uid: string, org: string, role: Role, i
     const approvals = task.changeset_id ? (await sql.query<{ decision: string; method: string; decided_at: string }>("select decision, method, to_char(decided_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') as decided_at from public.approvals where changeset_id = $1::uuid order by decided_at", [task.changeset_id])).rows : [];
     const label = task.verdict_id ? ((await sql.query<{ layer: string; label: string }>("select layer, label from public.failure_labels where verdict_id = $1::uuid order by id desc limit 1", [task.verdict_id])).rows[0] ?? null) : null;
     const asks = (await sql.query<TaskDetail["asks"][number]>("select id::text as id, attempt, tool, reason, status from public.tool_asks where task_id = $1 order by attempt desc, tool limit 50", [id])).rows;
-    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label, asks };
+    const shots = task.changeset_id ? (await sql.query<{ name: string }>("select name from public.changeset_shots where changeset_id = $1::uuid order by name", [task.changeset_id])).rows.map((r) => r.name) : [];
+    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label, asks, shots };
   });
 }
 
@@ -117,4 +120,12 @@ export async function firstRepo(db: Db, uid: string, org: string): Promise<strin
 /** D-305: the org's repositories, for the projects on the start page and in the side bar. */
 export async function repos(db: Db, uid: string, org: string): Promise<{ id: string; full_name: string }[]> {
   return asUser(db, uid, async (sql) => (await sql.query<{ id: string; full_name: string }>("select id::text as id, full_name from public.repos where org_id = $1::uuid order by full_name", [org])).rows);
+}
+
+/** E9b (D12): one screenshot of a changeset as the user (RLS: approver+); null when it is not there or not theirs. */
+export async function changesetShot(db: Db, uid: string, changesetId: string, name: string): Promise<Buffer | null> {
+  return asUser(db, uid, async (sql) => {
+    const r = (await sql.query<{ png: Uint8Array }>("select png from public.changeset_shots where changeset_id = $1::uuid and name = $2", [changesetId, name])).rows[0];
+    return r ? Buffer.from(r.png) : null;
+  });
 }

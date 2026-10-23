@@ -60,6 +60,10 @@ export const CHECK_LABEL: Record<string, Key> = {
   INTEGRITY: "check.INTEGRITY",
   CANARY: "check.CANARY",
   "D11.mutation": "check.D11.mutation",
+  "D5.hidden": "check.D5.hidden",
+  "D8.static": "check.D8.static",
+  "D12.ui": "check.D12.ui",
+  REVIEW: "check.REVIEW",
 };
 export function checkLabel(detector: string, lang: Lang = "en"): string {
   const k = CHECK_LABEL[detector];

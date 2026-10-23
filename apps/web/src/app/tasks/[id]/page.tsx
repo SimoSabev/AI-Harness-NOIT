@@ -25,6 +25,7 @@ import { sessionOf } from "../../../lib/server/workbench";
 import { sessionSample } from "../../../lib/sample";
 import { withSample } from "../../../lib/workbench";
 import { Panel, SampleNote, SessionTree, Terminal, ToolCalls, Windows } from "../../../components/workbench-parts";
+import { uiShotsView } from "../../../lib/ui-shots";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,8 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   const step = stepOf(s.key);
   const failed = d.evidence.filter((e) => e.status === "fail");
   const checks = d.evidence.filter((e) => e.status !== "n/a");
+  // E9b (D12): before/after per route — the screenshots are approver+ (the names come back only for them)
+  const ui = uiShotsView(t.changeset_id, d.evidence, d.shots);
   const minutes = t.minutes > 0 ? tr("task.minutes", { n: tr.num(t.minutes, 1) }) : null;
   const sess = withSample(await sessionOf(db(), c.uid, c.org, id), sessionSample(id), (x) => x.sessions.length + x.calls.length + x.lines.length === 0, await sampleOn());
   return (
@@ -167,6 +170,31 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   {e.status !== "pass" && <p className="mt-0.5 text-sm text-mute">{e.signature ? reasonText(e.signature, tr.lang) : e.summary}</p>}
                 </div>
                 <span className="font-mono text-xs text-mute">{e.detector}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {ui.length > 0 && (
+        <section aria-labelledby="ui-h" className="mt-8">
+          <h2 id="ui-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{tr("task.ui.title")}</h2>
+          <ul className="space-y-4">
+            {ui.map((r) => (
+              <li key={r.route} className={`${card} p-4`}>
+                <p className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                  <span className="font-mono">{r.route}</span>
+                  {r.diff !== null && <span className="text-xs text-mute">{tr("task.ui.diff", { pct: tr.num(r.diff * 100, 1) })}</span>}
+                </p>
+                {r.errors.length > 0 && <ul className="mt-2 list-disc pl-5 font-mono text-xs text-bad">{r.errors.map((x, k) => <li key={k}>{x}</li>)}</ul>}
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {([["before", r.before], ["after", r.after]] as const).map(([k, src]) => (
+                    <figure key={k} className="min-w-0">
+                      {src ? <img src={src} alt={tr(k === "before" ? "task.ui.beforeAlt" : "task.ui.afterAlt", { route: r.route })} loading="lazy" className="w-full rounded-lg border border-line" /> : <p className="rounded-lg border border-dashed border-line p-6 text-center text-xs text-mute">{tr("task.ui.none")}</p>}
+                      <figcaption className="mt-1 text-xs text-mute">{tr(k === "before" ? "task.ui.before" : "task.ui.after")}</figcaption>
+                    </figure>
+                  ))}
+                </div>
               </li>
             ))}
           </ul>

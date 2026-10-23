@@ -7,7 +7,7 @@ import { SubscribeBody, subscribePush } from "./push";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { KeysBody } from "./keys";
 import type { KeysClient } from "./keys";
-import { board, inbox, membership, taskDetail } from "./queries";
+import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import { steerTask } from "./steer";
@@ -77,6 +77,16 @@ export async function getBoard(req: Request, d: ApiDeps): Promise<Response> {
   const iso = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d{1,6})?Z$/;
   if ((since && !iso.test(since)) || (before && !iso.test(before)) || (column && !/^[1-7]$/.test(column))) return json(400, { error: "bad_query" });
   return json(200, await board(d.db, c.uid, c.org, { ...(since ? { since } : {}), ...(before ? { before } : {}), ...(column ? { column: Number(column) as ColumnNo } : {}) }));
+}
+
+/** E9b (D12, D-364): a before/after screenshot — a PNG that is never read as anything else */
+export async function getShot(req: Request, d: ApiDeps, changesetId: string, name: string): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(changesetId) || !/^(base-)?route-[0-4]\.png$/.test(name)) return json(400, { error: "bad_name" });
+  const png = await changesetShot(d.db, c.uid, changesetId, name);
+  if (!png) return json(404, { error: "unknown_shot" });
+  return new Response(new Uint8Array(png), { status: 200, headers: { "content-type": "image/png", "x-content-type-options": "nosniff", "content-security-policy": "default-src 'none'", "cache-control": "private, max-age=300" } });
 }
 
 export async function getTask(req: Request, d: ApiDeps, id: string): Promise<Response> {
