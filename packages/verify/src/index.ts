@@ -10,7 +10,7 @@ export { buildVerifyTree, listFiles, mergePackageJson, snapshot } from "./trees.
 export { RunWriter } from "./run-dir.js";
 export { writeAtomic } from "./fsx.js";
 export { MAX_MUTANTS, VerifyInfraError, verifyTrees } from "./verify-trees.js";
-export type { VerifyTreesInput, VerifyTreesResult } from "./verify-trees.js";
+export type { HiddenTests, VerifyTreesInput, VerifyTreesResult } from "./verify-trees.js";
 export { REF_NAME, mirrorPathFor, pinTrustedRemote, readAtBase, resolveTrustedBase } from "./trusted-base.js";
 export type { BaseUntrusted, TrustedBase } from "./trusted-base.js";
 export { tarOf, workingTreeFiles } from "./worktree.js";

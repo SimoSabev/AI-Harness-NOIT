@@ -25,7 +25,7 @@ import { createRedactor } from "@mandat/redaction";
 import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { RunWriter, VerifyInfraError, acquireRunLock, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
-import type { RunGate, runTestProcedure } from "@mandat/verify";
+import type { HiddenTests, RunGate, runTestProcedure } from "@mandat/verify";
 
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
@@ -54,6 +54,8 @@ export interface RunTaskInput {
   mirror?: string;
   /** v5 E8а: the approved harness profile of the repo → compiled into /m/in/harness for the agent */
   profile?: HarnessProfile;
+  /** v5 E9б (D5): a person's hidden tests, copied into tree B at verification only (never into the agent's volume) */
+  hidden?: HiddenTests | null;
   /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
   subjects?: string[];
   /** E8g: ask rules a person allowed once for this attempt (they become allow in the compiled policy) */
@@ -624,7 +626,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 docker, runId, runDir, mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
                 mirrorPath, baseSha: contract.base_commit, baseDir, diffPatch: diffPatch as Buffer, files: ex.files, rc: contract.repo_config,
                 allowedPaths: contract.allowed_paths, mayChangeTests: contract.may_change_tests, mustPass: contract.must_pass, external: false, tmpRoot,
-                startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
+                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}),
                 onReports: async (a, b) => {
                   w.raw("verify/report-a.json", redactReport(a.raw));
                   w.raw("verify/report-b.json", redactReport(b.raw));
@@ -690,7 +692,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }

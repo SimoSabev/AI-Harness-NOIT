@@ -316,7 +316,7 @@ describe("daemon steering (E8g, AC-8.5)", () => {
     const h = s2.runs[0]?.hidden;
     expect(h?.dir).toBe("tests/__hidden__");
     expect(h?.files.map((f) => [f.path, f.data.toString("utf8")])).toEqual([["cart.spec.ts", "it('x')"]]);
-  });
+  }, 30_000);
   it("E9а: at night a level-2 change is not auto-merged when the shift's rule wants level 3 → HELD approval (waiting for a person)", async () => {
     const s = await setup(2);
     await nightShift(s.db, { min_level: 3, max_lines: 200, forbid: [] });

@@ -222,6 +222,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const steerNote = steersBefore.length > 0 ? ["Notes from a person during an earlier attempt:", ...steersBefore.map((r) => frameUntrusted({ author: "member", association: "member", source: r.kind === "review" ? "pr_comment" : "steer", text: r.text }))].join("\n") : null;
   // E8g (D-356): a "Fix CI" attempt gets the failing checks of the previous round (framed)
   const ciLog = t.retry_reason === "ci" ? await ciNote(d.db, t.id) : null;
+  // E9б (D5, D-362): the repo's latest hidden test set, for tree B at verification only (the agent's volume never has it)
+  const hiddenRow = (await d.db.query<{ files: { path: string; data: string }[] }>("select files from private.hidden_tests where repo_id = $1::uuid order by version desc limit 1", [t.repo_id])).rows[0];
+  const hidden = hiddenRow ? { dir: hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__", files: hiddenRow.files.map((f) => ({ path: f.path, data: Buffer.from(f.data, "base64") })) } : null;
   // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
   const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
   const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
@@ -306,6 +309,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
+        ...(hidden ? { hidden } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
