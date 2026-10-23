@@ -132,7 +132,8 @@ export async function createTask(db: Db, o: { uid: string; org: string; body: z.
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
   const id = `t_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
   const ok = await asService(db, async (sql) => {
-    const repo = (await sql.query<{ id: string }>("select r.id::text as id from public.repos r join public.task_types tt on tt.repo_id = r.id and tt.name = $2 where r.org_id = $1::uuid order by r.created_at limit 1", [o.org, o.body.type])).rows[0];
+    // D-360: "free" needs no task type of the policy (its default scope applies); the other types must be defined
+    const repo = (await sql.query<{ id: string }>("select r.id::text as id from public.repos r where r.org_id = $1::uuid and ($2 = 'free' or exists (select 1 from public.task_types tt where tt.repo_id = r.id and tt.name = $2)) order by r.created_at limit 1", [o.org, o.body.type])).rows[0];
     if (!repo) return false;
     await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, created_by) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7::uuid)", [id, o.org, repo.id, o.body.type, o.body.agent, o.body.text, o.uid]);
     return true;
