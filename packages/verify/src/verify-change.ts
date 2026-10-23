@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { Verdict, effectiveLevel, hashJcs, repoConfigFromPolicy, sha256Tag } from "@mandat/contract";
+import { Verdict, effectiveLevel, hashJcs, repoConfigFromPolicy, sha256Tag, taskTypeOf } from "@mandat/contract";
 import type { ChangedFile, D7Status, ErrorCode, Evidence, MandatPolicy, RepoConfig, Sha256, VerifyOutcome, VerifyRequest } from "@mandat/contract";
 import { buildReasons, decideVerdict, ev, na } from "@mandat/core";
 import { cleanClone, recomputeTreeSha, removeTree } from "@mandat/export";
@@ -143,7 +143,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
     return finish();
   }
   const policy = i.policy.policy;
-  const tt = req.task_type ? policy.task_types[req.task_type] : undefined;
+  const tt = req.task_type ? taskTypeOf(policy, req.task_type) : undefined;
   if (tt) riskCap = policy.risk_classes[tt.risk_class]?.level_cap ?? 1;
   const bridge = repoConfigFromPolicy(policy);
   if (!bridge.ok) {

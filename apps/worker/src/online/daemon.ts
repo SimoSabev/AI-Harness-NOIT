@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract } from "@mandat/contract";
+import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
 import { decideDelivery, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -85,7 +85,7 @@ const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n")
 export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
-  const tt = policy.task_types[t.type];
+  const tt = taskTypeOf(policy, t.type); // D-360: "free" has a default scope
   if (!tt) throw new Error(`task type ${t.type} not in the policy`);
   return sealContract({
     task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: [t.text, note, t.replay ? `[mandat-replay: ${t.replay}]` : null].filter(Boolean).join("\n\n"), base_commit: baseSha, scan_facts_hash: null,
@@ -444,7 +444,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const changesetId = await inTransaction(d.db, async (tx) => {
     const cs = await tx.query<{ id: string }>(
       "insert into public.changesets (org_id, task_id, attempt, base_sha, tree_sha, diff_hash, mode, integrity, effective_level, requires_second_factor, approval_needed, risk_class) values ($1::uuid, $2, $3, $4, $5, $6, 'full', $7, $8, $9, $10, $11) returning id::text as id",
-      [t.org_id, t.id, t.attempt, v.base_sha, v.tree_sha, v.diff_hash, v.integrity, lvl.level, requires2fa, needsHuman, parsed.policy.task_types[t.type]?.risk_class ?? null],
+      [t.org_id, t.id, t.attempt, v.base_sha, v.tree_sha, v.diff_hash, v.integrity, lvl.level, requires2fa, needsHuman, taskTypeOf(parsed.policy, t.type)?.risk_class ?? null],
     );
     const csId = cs.rows[0]?.id as string;
     // E3а: the diff for the card (approver+ by RLS); only the non-redacted patch, which exists only without a secret hit

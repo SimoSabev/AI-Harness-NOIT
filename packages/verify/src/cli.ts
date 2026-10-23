@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseMandatYml, ulid } from "@mandat/contract";
-import type { ChangedFile, ErrorCode, TaskType, VerifyOutcome } from "@mandat/contract";
+import { TaskType, parseMandatYml, ulid } from "@mandat/contract";
+import type { ChangedFile, ErrorCode, VerifyOutcome } from "@mandat/contract";
 import { ev } from "@mandat/core";
 import { exportChangeset } from "@mandat/export";
 import { createRedactor } from "@mandat/redaction";
@@ -40,7 +40,7 @@ export interface VerifyArgs {
   home: string;
 }
 
-const TASK_TYPES = ["bugfix", "feature", "css", "docs"] as const;
+const TASK_TYPES = TaskType.options; // D-360: "free" too
 const ZERO = "0".repeat(40);
 const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
 
