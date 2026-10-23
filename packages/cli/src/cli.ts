@@ -122,8 +122,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("build the local images")
     .command("build")
     .option("--force", "docker build --no-cache even if the tag exists")
-    .action(async (o: { force?: boolean }) => {
-      code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env) });
+    .option("--ui", "also the D12 browser image (Playwright + Chromium, ~2 GB)")
+    .action(async (o: { force?: boolean; ui?: boolean }) => {
+      code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env), ui: Boolean(o.ui) });
     });
 
   program
