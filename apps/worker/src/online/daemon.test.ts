@@ -305,6 +305,18 @@ describe("daemon steering (E8g, AC-8.5)", () => {
     expect(s.runs[0]?.subjects ?? []).not.toContain("night");
     expect(s.runs[0]?.profile?.layers.c.some((r) => r.reason === "forbidden by the night shift")).toBe(false);
   });
+  it("E9б (D5): the repo's latest hidden test set goes to runTask (tree B only); none → no hidden input", async () => {
+    const s = await setup(0);
+    await runDaemonOnce(s.deps);
+    expect(s.runs[0]?.hidden ?? null).toBeNull();
+    const s2 = await setup(0);
+    await s2.db.query("select private.add_hidden_tests($1, $2::jsonb, $3, null, now())", [DEMO_REPO_ID, JSON.stringify([{ path: "old.spec.ts", data: Buffer.from("old").toString("base64") }]), `sha256:${"1".repeat(64)}`]);
+    await s2.db.query("select private.add_hidden_tests($1, $2::jsonb, $3, null, now())", [DEMO_REPO_ID, JSON.stringify([{ path: "cart.spec.ts", data: Buffer.from("it('x')").toString("base64") }]), `sha256:${"2".repeat(64)}`]);
+    await runDaemonOnce(s2.deps);
+    const h = s2.runs[0]?.hidden;
+    expect(h?.dir).toBe("tests/__hidden__");
+    expect(h?.files.map((f) => [f.path, f.data.toString("utf8")])).toEqual([["cart.spec.ts", "it('x')"]]);
+  });
   it("E9а: at night a level-2 change is not auto-merged when the shift's rule wants level 3 → HELD approval (waiting for a person)", async () => {
     const s = await setup(2);
     await nightShift(s.db, { min_level: 3, max_lines: 200, forbid: [] });
