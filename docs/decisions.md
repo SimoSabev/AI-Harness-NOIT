@@ -2087,3 +2087,42 @@ proxy (ключовете са в „Акаунти“), init/contract/anchor/tu
 Не е проверено: страниците в браузър (локалният `pnpm local` на Симо върви със старата версия; нов `next build` би
 презаписал `.next` под него).
 
+
+## D-371 Мостът десктоп ↔ уеб: тесен, типизиран, със zod в двата края (24.10.2026)
+Решение: прозорецът на десктопа и уебът говорят само през `window.harnessDesktop`. Съобщенията са в
+`packages/contract/src/desktop.ts`: 9 метода (уеб → main, отговор `{ok, value} | {ok:false, error{code, message}}`):
+`pickFolder`, `grantsList`, `grant`, `revoke` (`LocalGrant {path, scopes: read|apply|open_editor|terminal, granted_at}`),
+`openInEditor` (vscode|cursor|zed), `applyLocal` (`mandat apply --task <id>`, само fast-forward), `notify`, `badge`,
+`inboxCount`; и един канал main → уеб (`harness:event`) за команди (`DesktopCommand`: меню, клавиши, клик на известие →
+`open_task`). Каналите са `harness:<метод>`; друг канал няма handler.
+Трите слоя: (1) **preload** (`apps/desktop/src/preload.ts` → `dist/preload.cjs`) е sandboxed, затова не внася нищо
+(нито zod, нито contract): пуска само изброените методи, само обикновен JSON обект ≤ 64 KiB, събитието на IPC никога не
+стига до страницата, обектът е замразен; тест държи списъка равен на този в contract. (2) **main** (`bridge-main.ts`)
+отговаря само на страница от локалния адрес (`senderFrame.url`; преди банера — на никого), парсва заявката и **своя**
+отговор с contract, изключение на handler не се препраща (може да носи пътища). (3) **уебът**
+(`apps/web/src/lib/client/desktop.ts`) парсва заявката преди изпращане, отговора и командите след получаване; без мост
+(браузър, PWA) `desktopBridge()` е null и уебът е като досега.
+Прозорецът (D-303 остава): contextIsolation, sandbox, без nodeIntegration, `webSecurity`; нови прозорци — отказ винаги;
+`will-navigate`, `will-frame-navigate`, `will-redirect` извън локалния адрес — отказ; `<webview>` — отказ; уеб
+разрешения — само `clipboard-sanitized-write` от локалната страница; CSP (`DESKTOP_CSP`) заменя каквото прати страницата:
+`default-src 'self'`, без `unsafe-eval`, `object-src/frame-src/frame-ancestors 'none'`, `form-action/base-uri 'self'`,
+`connect-src 'self'`. `script-src` и `style-src` имат `'unsafe-inline'`, защото Next App Router слага flight данните си в
+inline скриптове без nonce [НП: https://nextjs.org/docs/app/guides/content-security-policy — не е отворено днес; с
+истинския UI под CSP-то ще се провери в e2e на А5]. Днес работят `pickFolder`, `notify`, `badge`, `inboxCount`;
+`grants*`, `openInEditor`, `applyLocal` отговарят `not_ready` до А3. Агентът в пясъчника не получава нищо от моста
+(няма нови mount-ове, env или ключове).
+Проверено (24.10.2026, Electron 44.9.0 на macOS): имената и подписите в `node_modules/electron/electron.d.ts`
+(`contextBridge.exposeInMainWorld`, `ipcRenderer.invoke`, `ipcMain.handle`, `senderFrame: WebFrameMain | null`,
+`webRequest.onHeadersReceived`, `setPermissionRequestHandler`, `will-frame-navigate`, `will-redirect`,
+`will-attach-webview`, `app.setBadgeCount`); и на живо — `pnpm --dir apps/desktop smoke`: sandboxed CommonJS preload с
+`exports` се зарежда, мостът има точно изброените методи, страницата няма `require`/`process`, main отказва невалидна
+заявка, `window.open` и външна навигация се отказват, CSP-то заменя това на страницата, inline скрипт върви.
+Че sandboxed preload може да `require` само "electron" и няколко вградени модула [НП: https://www.electronjs.org/docs/latest/tutorial/sandbox —
+не е отворено днес]; затова preload-ът е един файл без импорти.
+`apps/desktop` внася `@mandat/contract` като `link:../../packages/contract` (вътрешен пакет, не нова външна зависимост);
+`pnpm build` в корена строи contract преди `pnpm desktop`. Тестовете на `apps/desktop` вървят в коренния vitest
+(`pnpm test`, значи и в `pnpm check`); поотделно: `pnpm --dir apps/desktop test`.
+Защо: тесен мост е единственото място, където страницата може да стигне до диска и до OS-а; затова е затворен списък,
+описан на едно място (правило 11), и се проверява в трите слоя — ако един слой сгреши, другите два пак отказват.
+Preload без импорти, защото sandbox не позволява bundle-нати зависимости без bundler, а нов bundler е нова зависимост
+(правило 8) за ~100 реда код.

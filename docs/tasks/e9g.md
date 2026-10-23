@@ -19,11 +19,11 @@
 ## А. Десктоп
 
 ### А1. Мост и един UI код
-- [ ] `packages/contract/src/desktop.ts`: zod схеми на съобщенията (команди от менюто, `pickFolder`, `grant`, `openInEditor`,
+- [x] `packages/contract/src/desktop.ts`: zod схеми на съобщенията (команди от менюто, `pickFolder`, `grant`, `openInEditor`,
       `applyLocal`, `notify`, `badge`) + тестове
-- [ ] `apps/desktop/src/preload.ts`: `contextBridge.exposeInMainWorld("harnessDesktop", …)` — само изброените методи; валидация
-- [ ] `apps/web/src/lib/client/desktop.ts`: откриване на моста; без мост уебът е същият като днес (тест: няма разлика в браузър)
-- [ ] CSP за прозореца; тест, че непознат канал/нов прозорец/външна навигация се отказват
+- [x] `apps/desktop/src/preload.ts`: `contextBridge.exposeInMainWorld("harnessDesktop", …)` — само изброените методи; валидация
+- [x] `apps/web/src/lib/client/desktop.ts`: откриване на моста; без мост уебът е същият като днес (тест: няма разлика в браузър)
+- [x] CSP за прозореца; тест, че непознат канал/нов прозорец/външна навигация се отказват (D-371; `pnpm --dir apps/desktop smoke` в истински Electron)
 
 ### А2. Нативно поведение (AC-12.5, AC-12.7)
 - [ ] Менюта: File (New task, Add project, Apply locally), Edit, View (Inbox/Board/Agents/Tools/Night/Research), Window, Help, „Клавиши“
