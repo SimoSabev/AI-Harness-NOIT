@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { HarnessActions } from "../../components/harness-actions";
 import { ProfileActions } from "../../components/profile-actions";
+import { HiddenTestsPanel } from "../../components/hidden-tests-panel";
+import { hiddenSets } from "../../lib/server/hidden";
 import { Live } from "../../components/live";
 import { Shell } from "../../components/shell";
 import { StatusBadge, card } from "../../components/ui";
@@ -31,6 +33,8 @@ export default async function HarnessPage() {
   const v = await harnessView(db(), c.uid, c.org);
   const profiles = new Map<string, ProfileView>();
   for (const r of v.repos) profiles.set(r.id, await profileView(db(), c.uid, c.org, r.id));
+  const hidden = new Map<string, Awaited<ReturnType<typeof hiddenSets>>>();
+  for (const r of v.repos) hidden.set(r.id, await hiddenSets(db(), c.uid, r.id));
   return (
     <Shell current="harness" waiting={c.waiting}>
       <h1 className="font-display text-2xl font-semibold tracking-tight">{t("harness.title")}</h1>
@@ -90,6 +94,7 @@ export default async function HarnessPage() {
               <p className="mt-3 text-sm">{t("harness.noProposal")}</p>
             )}
             <ProfilePanel t={t} repoId={r.id} view={profiles.get(r.id)} canApprove={c.role === "owner"} />
+            <HiddenTestsPanel repoId={r.id} sets={hidden.get(r.id) ?? []} canUpload={c.role === "owner"} />
             {c.role === "owner" ? (
               <div className="mt-5">
                 <HarnessActions repoId={r.id} proposalId={p?.status === "proposed" && p.blocked.length === 0 ? p.id : null} hasProposal={p !== null} />

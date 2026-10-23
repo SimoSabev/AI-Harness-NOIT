@@ -12,6 +12,7 @@ import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./role
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import { steerTask } from "./steer";
 import { answerQuestion, closeQuestion, planNight } from "./night";
+import { uploadHidden } from "./hidden";
 import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
@@ -318,4 +319,12 @@ export async function postNightClose(req: Request, d: ApiDeps, id: string): Prom
   const p = await post(req, d);
   if (p instanceof Response) return p;
   return done(await closeQuestion(d.db, { uid: p.uid, id }), d);
+}
+
+// E9b (D5, D-362): upload a new version of the repo's hidden tests (approve.rules + a fresh TOTP)
+export async function postHiddenTests(req: Request, d: ApiDeps, repoId: string): Promise<Response> {
+  if (!UUID.test(repoId)) return json(404, { error: "unknown_repo" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await uploadHidden(d.db, { uid: p.uid, repoId, body: p.body, secondFactor: d.secondFactor }), d);
 }
