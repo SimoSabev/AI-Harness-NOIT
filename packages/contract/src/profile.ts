@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { UiRoutes } from "./ui.js";
 import { hashJcs } from "./hash.js";
 import { MandatPolicy, PolicyDetector } from "./policy.js";
 import { Glob, Sha256, TaskType } from "./schemas.js";
@@ -100,6 +101,8 @@ export const ProfileLayerG = z
     mutants: z.number().int().min(0).max(10),
     max_diff_lines: z.number().int().min(1).max(100_000),
     ui_paths: z.array(Glob).max(20),
+    /** E9b (D12, D-364): the routes the UI check opens (absent → "/") */
+    ui_routes: UiRoutes.optional(),
     definition_of_done: z.partialRecord(TaskType, z.array(z.string().max(200)).max(20)),
     max_subagents: z.number().int().min(0).max(20),
     max_depth: z.number().int().min(0).max(3),

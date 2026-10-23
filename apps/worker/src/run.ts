@@ -631,7 +631,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (uiPaths.length > 0) {
           const tag = x.images?.ui ?? (await uiImageTag(repoRoot));
           const present = (await dockerText(docker, ["image", "inspect", tag])).exitCode === 0;
-          uiCheck = { paths: uiPaths, devCommand: i.profile?.layers.b.commands.dev ?? null, image: present ? tag : null, routes: ["/"] };
+          uiCheck = { paths: uiPaths, devCommand: i.profile?.layers.b.commands.dev ?? null, image: present ? tag : null, routes: i.profile?.layers.g.ui_routes ?? ["/"] };
         }
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
