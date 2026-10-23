@@ -9,6 +9,9 @@ import type { ChatItem, Feed, FeedCheck, StageStatus, ToolIcon } from "../lib/ch
 import { errorText, postJson } from "../lib/client/api";
 import { checkLabel, statusOf } from "../lib/status";
 import { reasonText } from "../lib/verdict-view";
+import { splitDiff } from "../lib/diff-view";
+import { FileViewer } from "./file-viewer";
+import { Markdown } from "./markdown";
 import { TaskActions } from "./task-actions";
 import { CheckMark, StatusBadge, btn, card } from "./ui";
 
@@ -39,13 +42,14 @@ function useFeed(id: string, initial: Feed | null): { feed: Feed | null; online:
 }
 
 /** The verdict's checks, fetched once per verdict (GET /api/tasks/:id). */
-function useDetail(id: string, verdictId: string | null, state: string): { evidence: FeedCheck[] } | null {
-  const [d, setD] = useState<{ evidence: FeedCheck[] } | null>(null);
+type Detail = { evidence: FeedCheck[]; diff: string | null };
+function useDetail(id: string, verdictId: string | null, state: string): Detail | null {
+  const [d, setD] = useState<Detail | null>(null);
   useEffect(() => {
     if (!verdictId) return;
     let stop = false;
     void fetch(`/api/tasks/${id}`, { credentials: "same-origin", cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ evidence: FeedCheck[] }>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<Detail>) : null))
       .then((x) => !stop && setD(x))
       .catch(() => undefined);
     return () => {
@@ -65,7 +69,7 @@ const STAGE_MARK: Record<StageStatus, { mark: string; cls: string }> = {
 };
 
 function Item({ it, t }: { it: ChatItem; t: T }) {
-  if (it.kind === "say") return <div className="max-w-[46rem] whitespace-pre-wrap text-[15px] leading-relaxed">{it.text}</div>;
+  if (it.kind === "say") return <Markdown src={it.text} className="max-w-[46rem] text-[15px]" />;
   if (it.kind === "steer")
     return (
       <div className="ml-auto max-w-[80%] rounded-2xl rounded-br-sm border border-accent-text/30 bg-accent-soft px-4 py-2 text-sm">
@@ -170,6 +174,7 @@ export function LiveTask({ id, initial, canAct, agentName }: { id: string; initi
   const steps = items.filter((i) => i.kind === "tool").length;
   const started = feed?.lines[0]?.at ? Date.parse(feed.lines[0].at) : null;
   const secs = started ? Math.max(0, Math.round(((active ? now : Date.parse(feed?.lines.at(-1)?.at ?? task.updated_at)) - started) / 1000)) : null;
+  const files = detail?.diff ? splitDiff(detail.diff) : [];
   const failed = (detail?.evidence ?? []).filter((e) => e.status === "fail" || e.status === "unknown");
 
   return (
@@ -197,6 +202,15 @@ export function LiveTask({ id, initial, canAct, agentName }: { id: string; initi
               <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
               {s.key === "checking" ? t("ws.checking") : agentStage ? t("ws.typing") : t("ws.waiting")}
             </p>
+          )}
+          {files.length > 0 && (
+            <section aria-label={t("res.title")} className="space-y-2">
+              <p className="flex items-center gap-2 text-xs font-medium text-mute">
+                {t("res.title")} · {t("res.files", { n: files.length })}
+                <Link href={`/library?task=${id}`} className="ml-auto underline hover:text-ink">{t("nav.library")}</Link>
+              </p>
+              <FileViewer files={files} />
+            </section>
           )}
           {task.last_result && (
             <div className={`rounded-xl px-4 py-3 text-sm ${s.tone === "red" ? "bg-bad-soft text-bad" : s.tone === "green" ? "bg-ok-soft text-ok" : s.tone === "amber" ? "bg-warn-soft text-warn" : "bg-raised text-ink"}`}>
