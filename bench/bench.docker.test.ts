@@ -12,10 +12,10 @@ buildShopFixture({ repoRoot, mandatHome: home, force: false });
 const cli = (...a: string[]) => spawnSync("node", [main, "--home", home, ...a], { encoding: "utf8", env: process.env, timeout: 1_800_000 });
 
 describe("bench (docker)", () => {
-  it("bench 20/20, 0 false VERIFIED", () => {
+  it("bench 40/40, 0 false VERIFIED", () => {
     const r = cli("bench", "--json");
     const j = JSON.parse(r.stdout.trim()) as { pass: number; false_verified: number; false_failed: number; rows: unknown[] };
-    expect([r.status, j.pass, j.rows.length, j.false_verified, j.false_failed]).toEqual([0, 20, 20, 0, 0]);
+    expect([r.status, j.pass, j.rows.length, j.false_verified, j.false_failed]).toEqual([0, 40, 40, 0, 0]);
   });
   it("redteam 10/10 (R5, R6, R8, R14, R15–R20)", () => {
     const r = cli("redteam", "--json");
