@@ -4,6 +4,12 @@ import {
   DESKTOP_METHOD_NAMES,
   DesktopCommand,
   DesktopInboxSnapshot,
+  DESKTOP_DROP_CHANNEL,
+  DesktopDrop,
+  LOCAL_GRANTS_FILE,
+  LocalActivityBody,
+  LocalGrantsFile,
+  MandatApplyJson,
   LocalGrant,
   LocalPath,
   desktopChannel,
@@ -85,5 +91,31 @@ describe("desktop bridge contract (D-371)", () => {
     expect(r.success && r.data).toEqual({ items: [{ id: "t_1", text: "fix the cart" }] });
     for (const bad of [null, {}, { items: "x" }, { items: [{ id: "../x", text: "" }] }, { items: [{ id: "t_1" }] }, { items: Array.from({ length: 501 }, (_, i) => ({ id: `t_${i}`, text: "" })) }])
       expect(DesktopInboxSnapshot.safeParse(bad).success, JSON.stringify(bad).slice(0, 80)).toBe(false);
+  });
+
+  it("the grants file in the profile folder: version 1 + a list of grants; anything else is refused (E9g A3)", () => {
+    expect(LOCAL_GRANTS_FILE).toBe("local-grants.json");
+    const g = { path: "/Users/simo/code/shop", scopes: ["read", "apply"], granted_at: "2026-10-24T01:00:00.000Z" };
+    expect(LocalGrantsFile.safeParse({ version: 1, grants: [g] }).success).toBe(true);
+    for (const bad of [{}, { version: 2, grants: [] }, { version: 1, grants: [{ ...g, scopes: [] }] }, { version: 1, grants: [], extra: 1 }, { version: 1, grants: [{ ...g, path: "rel" }] }])
+      expect(LocalGrantsFile.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+  it("what `mandat --json apply` prints: ok with the head, or a refusal with its reason (E9g A3)", () => {
+    expect(MandatApplyJson.safeParse({ ok: true, ref: "mandat/t_1-a1", head: "a".repeat(40), files: ["src/a.ts"] }).success).toBe(true);
+    expect(MandatApplyJson.safeParse({ ok: false, reason: "diverged", detail: "rebase" }).success).toBe(true);
+    for (const bad of [{ ok: true, head: "zz" }, { ok: false, reason: "reset" }, { ok: true, ref: "x", head: "a".repeat(40), files: "a" }, "applied"])
+      expect(MandatApplyJson.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+  it("a folder dropped on the window: preload → main on its own channel, an absolute path only (AC-12.6)", () => {
+    expect(DESKTOP_DROP_CHANNEL).toBe("harness:drop");
+    expect(desktopMethodOf(DESKTOP_DROP_CHANNEL)).toBeNull(); // not a method the page can call
+    expect(DesktopDrop.safeParse({ path: "/Users/simo/shop" }).success).toBe(true);
+    for (const bad of [{ path: "shop" }, { path: "/a", x: 1 }, {}, { path: "//server/share" }]) expect(DesktopDrop.safeParse(bad).success).toBe(false);
+  });
+  it("a local action written to task_activities: kind + outcome + a short detail, nothing else (E9g A3)", () => {
+    expect(LocalActivityBody.safeParse({ kind: "local_apply", outcome: "applied", detail: "abc123" }).success).toBe(true);
+    expect(LocalActivityBody.safeParse({ kind: "local_editor", outcome: "opened" }).success).toBe(true);
+    for (const bad of [{ kind: "terminal", outcome: "opened" }, { kind: "local_apply", outcome: "deleted" }, { kind: "local_apply", outcome: "applied", detail: "x".repeat(301) }, { kind: "local_apply", outcome: "applied", text: "free text" }])
+      expect(LocalActivityBody.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
   });
 });

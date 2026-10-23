@@ -127,3 +127,32 @@ export type DesktopCommand = z.infer<typeof DesktopCommand>;
  */
 export const DesktopInboxSnapshot = z.object({ items: z.array(z.object({ id: TaskId, text: z.string().max(100_000) })).max(500) });
 export type DesktopInboxSnapshot = z.infer<typeof DesktopInboxSnapshot>;
+
+// E9g A3 (AC-12.6, "local permissions and edits"): the grants, the local apply and the trail of local actions.
+
+/** The file in MANDAT_HOME (the harness profile folder) where main keeps the grants; nothing else reads it. */
+export const LOCAL_GRANTS_FILE = "local-grants.json";
+export const LocalGrantsFile = z.object({ version: z.literal(1), grants: z.array(LocalGrant).max(500) }).strict();
+export type LocalGrantsFile = z.infer<typeof LocalGrantsFile>;
+
+/** What `mandat --json apply --task <id> --repo <path>` prints (packages/cli/src/commands/apply.ts, D-356). */
+export const MandatApplyJson = z.union([
+  z.object({ ok: z.literal(true), ref: z.string().min(1).max(200), head: z.string().regex(/^[0-9a-f]{40,64}$/), files: z.array(z.string().max(4096)).max(100_000) }),
+  z.object({ ok: z.literal(false), reason: z.enum(["no_branch", "not_a_repo", "diverged", "local_changes", "merge_refused"]), detail: z.string().max(2000).optional() }),
+]);
+export type MandatApplyJson = z.infer<typeof MandatApplyJson>;
+
+/** preload → main: a folder dropped on the window (AC-12.6). Not a method: the page cannot send it, only the preload's drop listener. */
+export const DESKTOP_DROP_CHANNEL = "harness:drop";
+export const DesktopDrop = z.object({ path: LocalPath }).strict();
+export type DesktopDrop = z.infer<typeof DesktopDrop>;
+
+/** web → its own API: one local action for task_activities (not the ledger). The server writes the text itself. */
+export const LocalActivityBody = z
+  .object({
+    kind: z.enum(["local_apply", "local_editor"]),
+    outcome: z.enum(["applied", "up_to_date", "refused", "opened", "failed"]),
+    detail: z.string().max(300).optional(),
+  })
+  .strict();
+export type LocalActivityBody = z.infer<typeof LocalActivityBody>;
