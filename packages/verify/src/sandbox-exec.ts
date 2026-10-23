@@ -26,6 +26,8 @@ export interface SandboxRun {
   cmd: string[];
   name?: string;
   init?: boolean;
+  /** D12: the dev server runs detached (`-d`, removed by name afterwards) */
+  detach?: boolean;
   stdin?: "closed" | NodeJS.ReadableStream;
   timeoutMs: number;
   onStdoutLine?(line: string): void;
@@ -51,7 +53,7 @@ export function runSandbox(ctx: SandboxCtx, o: SandboxRun): Promise<DockerRunRes
       // v5 E8а: extra public env (the control layer's limits) never overrides the phase env; buildRunArgs refuses secret-looking values
       envNames: env.names.filter((n) => n in secrets), publicEnv: { ...(o.env.extraPublic ?? {}), ...env.publicValues }, workdir: "/m/work",
       interactive: o.stdin !== undefined && o.stdin !== "closed", ipv6Sysctl: ctx.ipv6Sysctl,
-      ...(o.name !== undefined ? { name: o.name } : {}), ...(o.init ? { init: true } : {}),
+      ...(o.name !== undefined ? { name: o.name } : {}), ...(o.init ? { init: true } : {}), ...(o.detach ? { detach: true } : {}),
     },
     { home: ctx.home, mandatHome: ctx.mandatHome, runDir: ctx.runDir },
   );
