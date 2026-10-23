@@ -64,7 +64,10 @@ export function simRunTests(over?: (i: TestProcedureInput, raw: string) => strin
         writeFileSync(f, m.original);
       }
     });
-    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report, ...(mutants ? { mutants } : {}) });
+    // E9б (D8): lint fails when a source file carries "LINT_ERROR", typecheck when one carries "TYPE_ERROR"
+    const src = walk(path.join(i.treeDir, "src")).map((f) => readFileSync(path.join(i.treeDir, "src", f), "utf8")).join("\n");
+    const checks = i.checks?.map((c) => ({ name: c.name, exit: src.includes(c.name === "lint" ? "LINT_ERROR" : "TYPE_ERROR") ? 1 : 0 }));
+    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report, ...(mutants ? { mutants } : {}), ...(checks ? { checks } : {}) });
   };
 }
 

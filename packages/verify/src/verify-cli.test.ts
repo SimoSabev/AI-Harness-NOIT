@@ -117,6 +117,29 @@ describe("mandat-verify (т. 5.7; verify-cli без Docker, тестовете �
     expect(o.verdict.reasons.some((x) => /^D5:hidden_fail:h[0-9a-f]{8}$/.test(x))).toBe(true);
     expect(o.verdict.reasons.join(" ")).not.toContain(M_TITLE);
   });
+  // v5 E9б (5.2): D8 — the project's lint/typecheck on base and B (the simulator: a "LINT_ERROR" / "TYPE_ERROR" marker in src)
+  const d8Of = async (f: ReturnType<typeof demo>, extra: string[]) => {
+    const r = await verify(f, ["--external", "--type", "bugfix", "--lint", "npm run lint", "--typecheck", "npx tsc --noEmit", "--json", ...extra]);
+    return JSON.parse(r.out.trim()) as { verdict: { result: string; reasons: string[]; evidence: { detector: string; status: string; data: Record<string, unknown> }[] } };
+  };
+  it("D8: честна поправка → VERIFIED, D8 pass; lint грешка в промяната → FAILED D8:lint_fail", async () => {
+    const ok = demo();
+    edit(ok.repo, "src/cart.ts", fixCode);
+    const a = await d8Of(ok, []);
+    expect([a.verdict.result, a.verdict.evidence.find((e) => e.detector === "D8.static")?.status]).toEqual(["VERIFIED", "pass"]);
+    const bad = demo();
+    edit(bad.repo, "src/cart.ts", (s) => `${fixCode(s)}\n// LINT_ERROR\n`);
+    const b = await d8Of(bad, []);
+    expect(b.verdict.result).toBe("FAILED");
+    expect(b.verdict.reasons).toContain("D8:lint_fail:-");
+  });
+  it("D8: typecheck, който е червен още на base, не се брои срещу агента", async () => {
+    const f = demo((dir) => writeFileSync(path.join(dir, "src/money.ts"), `${readFileSync(path.join(dir, "src/money.ts"), "utf8")}\n// TYPE_ERROR\n`));
+    edit(f.repo, "src/cart.ts", fixCode);
+    const r = await d8Of(f, []);
+    expect(r.verdict.result).toBe("VERIFIED");
+    expect(r.verdict.evidence.find((e) => e.detector === "D8.static")?.data).toMatchObject({ skipped: ["typecheck"] });
+  });
   it("--json: един ред = VerifyOutcome + exit", async () => {
     const f = demo();
     edit(f.repo, "src/cart.ts", fixCode);
