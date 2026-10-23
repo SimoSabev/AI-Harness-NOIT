@@ -148,7 +148,8 @@ describe("run / bench / redteam / fixtures", () => {
     const j = await cli(["--home", h, "run", "--contract", path.resolve("contracts/fix-discount.json"), "--agent", "fake:honest-fix", "--json"], d);
     expect(JSON.parse(j.stdout.trim())).toMatchObject({ error: { code: "E_DOCKER_VERSION" }, exit: 3 });
     expect((await cli(["--home", h, "bench", "--only", "B1"], d)).code).toBe(3);
-    expect((await cli(["--home", h, "bench", "--only", "B9"], d)).code).toBe(2);
+    expect((await cli(["--home", h, "bench", "--only", "B41"], d)).code).toBe(2);
+    expect((await cli(["--home", h, "bench", "--only", "B40"], d)).code).toBe(3); // E9b: B9–B40 are known scenarios
     expect((await cli(["--home", h, "redteam", "--only", "R5"], d)).code).toBe(3);
     expect((await cli(["--home", h, "redteam", "--only", "R99"], d)).code).toBe(2);
     expect((await cli(["--home", h, "bench", "--json", "--only", "B1"], d)).stdout).toContain('"exit":3');
