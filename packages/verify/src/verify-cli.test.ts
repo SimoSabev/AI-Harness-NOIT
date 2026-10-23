@@ -12,7 +12,7 @@ import type { TestProcedureInput } from "./test-procedure.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const M = `tests/cart.spec.ts > cart > ${M_TITLE}`;
-const IMAGES = { sandbox: "s:t", gate: "g:t", proxy: "p:t" };
+const IMAGES = { sandbox: "s:t", gate: "g:t", proxy: "p:t", ui: "u:t" };
 
 function demo(mutateBase?: (dir: string) => void): { remote: string; repo: string; home: string; root: string } {
   const root = mkdtempSync(path.join(os.tmpdir(), "mandat-vcli-"));
@@ -268,5 +268,56 @@ describe("retry-same-tree (S27)", () => {
     const r2 = await verify(f, ["--external"]);
     expect(r2.code).toBe(10);
     expect(r2.out).toContain("D1:flaky_history");
+  });
+});
+
+// v5 E9б (5.2, AC-5.5): D12 — tree B's app in a browser when the change touches a UI path (the simulator: "UI_ERROR" in
+// src → a console error on the first route; "UI_DOWN" → the app never answers)
+describe("mandat-verify D12 (UI)", () => {
+  const d12Of = async (f: ReturnType<typeof demo>, extra: string[]) => {
+    const seen: { ui?: TestProcedureInput["ui"] }[] = [];
+    const r = await verify(f, ["--external", "--type", "free", "--json", ...extra], (i, raw) => {
+      if (i.tree === "b") seen.push({ ui: i.ui });
+      return raw;
+    });
+    const o = JSON.parse(r.out.trim()) as { verdict: { run_id: string; result: string; reasons: string[]; evidence: { detector: string; status: string; data: Record<string, unknown> }[] } };
+    return { ...o, seen, d12: o.verdict.evidence.find((e) => e.detector === "D12.ui") };
+  };
+  it("a UI change whose routes render clean → VERIFIED, D12 pass; the screenshots land in the run directory", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const r = await d12Of(f, ["--ui-paths", "src/**", "--dev", "npm run dev", "--ui-route", "/", "--ui-route", "/cart"]);
+    expect(r.seen.at(-1)?.ui).toEqual({ image: "u:t", devCommand: "npm run dev", routes: ["/", "/cart"] });
+    expect([r.verdict.result, r.d12?.status]).toEqual(["VERIFIED", "pass"]);
+    expect(readFileSync(path.join(f.home, "runs", r.verdict.run_id, "ui", "route-0.png"), "utf8")).toBe("PNG");
+  });
+  it("a console error → UNKNOWN D12:console_error:/ (a human looks); never FAILED on its own", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", (s) => `${fixCode(s)}
+// UI_ERROR
+`);
+    const r = await d12Of(f, ["--ui-paths", "src/**", "--dev", "npm run dev"]);
+    expect(r.verdict.result).toBe("UNKNOWN");
+    expect(r.verdict.reasons).toContain("D12:console_error:/");
+  });
+  it("UI paths touched but no dev command, or the app never answers → UNKNOWN D12:not_run", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const a = await d12Of(f, ["--ui-paths", "src/**"]);
+    expect(a.seen.at(-1)?.ui).toBeUndefined();
+    expect(a.verdict.reasons).toContain("D12:not_run:-");
+    const g = demo();
+    edit(g.repo, "src/cart.ts", (s) => `${fixCode(s)}
+// UI_DOWN
+`);
+    expect((await d12Of(g, ["--ui-paths", "src/**", "--dev", "npm run dev"])).verdict.reasons).toContain("D12:not_run:-");
+  });
+  it("a change outside the UI paths → no browser, no D12 evidence", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const r = await d12Of(f, ["--ui-paths", "web/**", "--dev", "npm run dev"]);
+    expect(r.seen.at(-1)?.ui).toBeUndefined();
+    expect(r.d12).toBeUndefined();
+    expect(r.verdict.result).toBe("VERIFIED");
   });
 });

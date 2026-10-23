@@ -67,7 +67,13 @@ export function simRunTests(over?: (i: TestProcedureInput, raw: string) => strin
     // E9б (D8): lint fails when a source file carries "LINT_ERROR", typecheck when one carries "TYPE_ERROR"
     const src = walk(path.join(i.treeDir, "src")).map((f) => readFileSync(path.join(i.treeDir, "src", f), "utf8")).join("\n");
     const checks = i.checks?.map((c) => ({ name: c.name, exit: src.includes(c.name === "lint" ? "LINT_ERROR" : "TYPE_ERROR") ? 1 : 0 }));
-    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report, ...(mutants ? { mutants } : {}), ...(checks ? { checks } : {}) });
+    // E9б (D12): "UI_DOWN" → the app never answered (null); "UI_ERROR" → a console error on the first route
+    const ui = i.ui
+      ? src.includes("UI_DOWN")
+        ? null
+        : { up: true, routes: i.ui.routes.map((route, n) => ({ route, console_errors: n === 0 && src.includes("UI_ERROR") ? ["Uncaught TypeError"] : [], failed_requests: [], screenshot: `route-${n}.png` })), shots: Object.fromEntries(i.ui.routes.map((_, n) => [`route-${n}.png`, Buffer.from("PNG")])) }
+      : undefined;
+    return Promise.resolve({ ok: true, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report, ...(mutants ? { mutants } : {}), ...(checks ? { checks } : {}), ...(ui !== undefined ? { ui } : {}) });
   };
 }
 
