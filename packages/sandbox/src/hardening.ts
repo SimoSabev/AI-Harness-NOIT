@@ -100,7 +100,11 @@ const SPEC_KEYS = new Set([
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SECRET_LOOKING = /mdt_|sk-ant-/;
 
+// E9g A4 (D-374): host-only names — the KEK of the key envelope lives in the harness on the host, never in a container.
+const HOST_ONLY: ReadonlySet<string> = new Set(["MANDAT_KEK"]);
+
 function checkEnv(envNames: string[], publicEnv: Record<string, string>, role: RunRole): void {
+  for (const n of [...envNames, ...Object.keys(publicEnv)]) if (HOST_ONLY.has(n)) forbid("a host-only name never goes into a container (D-374)", { name: n });
   for (const n of envNames) {
     // E8e (D-354): the MCP sidecar carries the secrets its catalog row names — never an LLM key
     if (role === "mcp") {
