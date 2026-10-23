@@ -11,6 +11,7 @@ import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import { steerTask } from "./steer";
+import { localActivity } from "./local-activity";
 import { taskFeed } from "./chat-feed";
 import type { TaskFeed } from "./chat-feed";
 import { answerQuestion, closeQuestion, planNight } from "./night";
@@ -418,6 +419,14 @@ export async function postSteer(req: Request, d: ApiDeps, taskId: string): Promi
   const b = (p.body ?? {}) as { text?: unknown };
   if (typeof b.text !== "string") return json(400, { error: "bad_text" });
   return done(await steerTask(d.db, { uid: p.uid, taskId, text: b.text }), d);
+}
+
+// E9g A3 (D-373): the desktop app's local actions → task_activities (not the ledger)
+export async function postLocalActivity(req: Request, d: ApiDeps, taskId: string): Promise<Response> {
+  if (!/^t_[a-z0-9_]{1,40}$/.test(taskId)) return json(404, { error: "unknown_task" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await localActivity(d.db, { uid: p.uid, taskId, body: p.body }), d);
 }
 
 // E8e (v5 p. 4.5): the MCP catalog — search the official registry, add (exact version), approve (→ vetting by the worker)
