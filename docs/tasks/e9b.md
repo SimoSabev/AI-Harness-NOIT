@@ -1,0 +1,23 @@
+# E9б — съдията на пълна сила: D5, D8, D12, LLM-съветник (v5 т. 5.2)
+- [x] packages/core d5.test.ts (разделяне на отчета, hidden_fail с хеш, not_run, agent_visible false)
+- [x] supabase/tests/hidden_tests.test.sql (TOTP ≤ 2 мин, пътища, версии, дневник, само service чете съдържанието)
+- [x] apps/worker/src/d5.docker.test.ts (агентът не намира скрития тест; специален случай → D5:hidden_fail)
+- [x] web: качване на скрити тестове с TOTP (hidden.test.ts, панелът в /harness)
+- [x] packages/core d8.test.ts; verify checks.test.ts, registry-facts.test.ts; verify-cli D8 (lint/type/зависимост, червен base)
+- [x] packages/core d12.test.ts (грешки, failed request, visual diff > 1%, not_run, n/a)
+- [x] contract ui.test.ts (result.json строго, маршрути на същия origin); profile g.ui_routes
+- [x] sandbox: роли ui-app/ui, образът mandat-sandbox-ui (`images build --ui`)
+- [x] verify test-procedure.test.ts (вътрешна мрежа, dev сървър, браузър със собствен volume, base снимки като root)
+- [x] verify-cli D12 (pass, console_error, not_run, n/a, visual diff с кеш на base)
+- [x] packages/verify/src/d12.docker.test.ts (fixtures/ui-app: чисто → VERIFIED; тъмен фон → visual_diff; throw + 404 → UNKNOWN)
+- [x] supabase/tests/ui_shots.test.sql; daemon.test.ts (снимките с присъдата); web shots.test.ts, ui-shots.test.ts, e2e ui-shots.spec.ts
+- [x] packages/review (фиксиран промпт, рамка, JSON) + never-lifts.test.ts (AC-7.4); run.test.ts (advisory → REVIEW:high)
+- [x] core d11 test_env (B36); contract explain за D5/D8/D11/D12/REVIEW
+- [x] bench B21–B40 (свободен договор, скрити тестове, проверките на проекта, нови измами); scenarios.test.ts
+Готово, когато:
+- [x] AC-7.2 — d5.docker.test.ts
+- [x] AC-7.3 — B1 (D11 pass), B40 (D11:survived)
+- [x] AC-7.4 — never-lifts.test.ts (64 × 3 × 32 случая)
+- [ ] AC-5.4 — преглед на живо: чака Симо (Q-059, правило 7)
+- [x] AC-5.5 — d12.docker.test.ts + картата (e2e ui-shots.spec.ts); без UI пътища → D12 n/a
+- [ ] bench 40/40 — виж docs/reports/E9b.md
