@@ -339,12 +339,15 @@ describe("mandat-verify D12 (UI)", () => {
     expect(again.seenAll.filter((x) => x.tree === "base" && x.ui).length).toBe(0);
     expect(again.verdict.reasons).toContain("D12:visual_diff:/");
   });
-  it("a change outside the UI paths → no browser, no D12 evidence", async () => {
+  it("a change outside the UI paths → no browser, D12 n/a (AC-5.5); no UI paths at all → no D12 evidence", async () => {
     const f = demo();
     edit(f.repo, "src/cart.ts", fixCode);
     const r = await d12Of(f, ["--ui-paths", "web/**", "--dev", "npm run dev"]);
     expect(r.seen.at(-1)?.ui).toBeUndefined();
-    expect(r.d12).toBeUndefined();
+    expect(r.d12?.status).toBe("n/a");
     expect(r.verdict.result).toBe("VERIFIED");
+    const g = demo();
+    edit(g.repo, "src/cart.ts", fixCode);
+    expect((await d12Of(g, [])).d12).toBeUndefined();
   });
 });
