@@ -16,7 +16,7 @@ export { d4 } from "./d4.js";
 export { addedDependencies, d10Lockfile } from "./d10.js";
 export { d5Hidden, hiddenId, splitHidden } from "./d5.js";
 export { DEFAULT_LICENSES, d8Static } from "./d8.js";
-export { d12Ui } from "./d12.js";
+export { VISUAL_DIFF_THRESHOLD, d12Ui } from "./d12.js";
 export type { UiRoute } from "./d12.js";
 export type { D8Check, D8Dependency } from "./d8.js";
 export type { HiddenResult } from "./d5.js";
