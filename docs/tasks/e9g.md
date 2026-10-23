@@ -56,13 +56,14 @@
       D-375; истински pty в Electron smoke на macOS; Linux build и Windows — [НП] за А5
 
 ### А5. Пакет за 3 ОС (AC-12.1 без подписа)
-- [ ] Самостоятелен пакет: харнесът (cli dist + web) влиза в resources и се пуска с Node-а на Electron, не с `pnpm local` от репо
-      (решение с „защо“; Docker остава задължителен)
-- [ ] electron-builder: dmg (arm64 + x64), nsis (x64), AppImage + deb (x64); имена `Harness-<версия>-<ос>-<arch>.<ext>`
-- [ ] electron-updater свързан, но изключен без feed (Q-054: SimoSabev/AI-Harness-NOIT releases)
-- [ ] Локално на тази машина: dmg се строи и стартира; Linux/Windows — CI файл `.github/workflows/desktop-build.yml`
+- [x] Самостоятелен пакет: харнесът (cli dist + web) влиза в resources и се пуска с Node-а на Electron, не с `pnpm local` от репо
+      (решение с „защо“; Docker остава задължителен) (D-376; `pnpm --dir apps/desktop bundle`)
+- [x] electron-builder: dmg (arm64 + x64), nsis (x64), AppImage + deb (x64); имена `Harness-<версия>-<ос>-<arch>.<ext>` (име/appId: Q-063)
+- [x] electron-updater свързан, но изключен без feed (Q-054: SimoSabev/AI-Harness-NOIT releases; `MANDAT_UPDATE_FEED`)
+- [x] Локално на тази машина: dmg се строи и стартира (arm64; x64 само построен); Linux/Windows — CI файл `.github/workflows/desktop-build.yml`
       (само artifacts, без release); `docs/setup/signing.md` (нотаризация, Authenticode — стъпки за Симо)
-- [ ] e2e под Playwright Electron: старт → inbox, меню → нова задача, DnD → „Добави проект“, отказ без право
+- [x] e2e под Playwright Electron: старт → inbox, меню → нова задача, DnD → „Добави проект“, отказ без право
+      (`pnpm --dir apps/desktop e2e`, фалшив харнес; в CI на macOS и Linux)
 
 ## Б. Сайтът (`apps/site`)
 - [ ] Статичен Next (`output: "export"`, без нови зависимости) със **същите токени и шрифтове** като уеба: токените се изнасят

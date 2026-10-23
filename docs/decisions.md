@@ -2302,3 +2302,64 @@ node-pty + xterm.js вървят с Electron без промени по проз
 има своя); следа от изхода вместо от клавишите (шум и тайни в изхода).
 Статус: решено (Linux/Windows — [НП] до А5).
 
+
+## D-376 Самостоятелен пакет на десктопа: харнесът в resources, Node-ът на Electron, electron-builder за 3 ОС (24.10.2026)
+Решение: инсталираното приложение носи целия харнес в `resources/harness` и го пуска със собствения Node на Electron
+(`ELECTRON_RUN_AS_NODE=1`, Electron 44.9.0 = Node 24.22.0, проверено с `process.versions`), не с `pnpm local` от репо.
+Dev (`pnpm desktop`, `app.isPackaged === false`) остава както беше: репото и `pnpm local`.
+- `apps/desktop/src/harness-launch.ts` (чист, с тестове): в пакета — команда `process.execPath`, аргументи
+  `[resources/harness/packages/cli/dist/main.js, "local"]`, `MANDAT_HOME = <userData>/mandat` (ресурсите са само за четене и
+  по-късно подписани), PATH + обичайните места на docker (`/usr/local/bin`, `/opt/homebrew/bin`,
+  `/Applications/Docker.app/Contents/Resources/bin`, `~/.docker/bin`; Linux `/usr/local/bin`, `/snap/bin`), защото приложение,
+  пуснато от Finder, има къс PATH. `mandat apply` минава през същото (`cliSpawn`), без KEK. Docker остава задължителен:
+  проверката е същата (`[1/4] проверка на компютъра` на `mandat local`, D-302) и грешката излиза в диалога на десктопа.
+- `packages/cli`: `mandat local` пуска уеба с `process.execPath <next>/dist/bin/next start -p 3000 -H 127.0.0.1` (cwd
+  apps/web), не с `pnpm --filter @mandat/web exec next start`. Така и пакетът, и `pnpm local` вървят без pnpm по време на
+  работа; `pnpm local` все още прави `pnpm build` първо.
+- Пакетът (`apps/desktop/scripts/bundle-harness.mjs`, чистата част `src/bundle-plan.ts` с тестове) има подредбата на репото:
+  следените от git файлове без `docs/`, `.github/`, `.claude/`, `apps/desktop/` (нужни са за образите — Dockerfile-ите
+  копират контекста, D-078 — за миграциите и за демо фикстурата), `dist/` на всеки workspace пакет, `apps/web/.next` без
+  `cache/`, и production `node_modules` (`pnpm install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted
+  --filter @mandat/cli... --filter @mandat/web...`). В пакета **няма връзки** (symlinks): инсталаторите не ги носят надеждно
+  (electron-builder прави junction-и с абсолютния път на build машината на Windows — видяно в `builder-util/out/fs.js`),
+  а копие би преместило кода и repoRoot (изчислен от `import.meta.url`) би сочил грешно. Затова: `node_modules/@mandat/<x>` е
+  малък пакет-посредник, който `export *` от истинския файл в истинската папка (`workspaceShim`); вложените `@mandat` връзки
+  отпадат (отговаря коренният посредник); `.bin` отпада; външните пакети на Next (`.next/node_modules/pg-<hash>`,
+  `typescript-<hash>`, връзки към store-а на build машината) стават истински копия. Скриптът отказва, ако остане връзка или
+  native addon извън компилатора на Next (`@next/swc-*`, само за `next build`, изтрива се) — така пакетът е еднакъв за всяка
+  ОС/arch. Размер на тази машина: ~420 MB пакет, dmg ~220 MB (arm64 и x64).
+- electron-builder 26.17.0 (`apps/desktop/electron-builder.config.mjs`): dmg arm64 + x64, nsis x64, AppImage + deb x64, имена
+  `Harness-${version}-${os}-${arch}.${ext}` (macOS дава `mac`, Windows `win`), `identity: null` (без подпис, Q-053),
+  `npmRebuild: false` (node-pty е с prebuilds), `asarUnpack` за node-pty, `extraMetadata.productName = "Harness"` (своя
+  userData и свой запис в keychain, отделно от dev; Q-063). Всичко се строи извън репото (`$MANDAT_DESKTOP_OUT`, по
+  подразбиране `<tmp>/mandat-desktop/{harness,release}`), за да не влиза в Docker контекста на репото и в тестовете.
+  Факти от самия пакет (прочетени 24.10.2026): `app-builder-lib/out/util/filter.js` винаги изпуска горния `node_modules` на
+  копирана папка → `node_modules` на пакета е втори запис в `extraResources`; electron-builder не взема зависимостите на
+  `link:` пакет → `zod`, `yaml`, `canonicalize` (зависимостите на `@mandat/contract`) са изрични зависимости на apps/desktop.
+- electron-updater 6.8.10 (`src/updater.ts`): свързан, но **изключен**, докато няма feed: `MANDAT_UPDATE_FEED=github` →
+  GitHub Releases на SimoSabev/AI-Harness-NOIT (Q-054), https URL → generic feed (схема `DesktopUpdateFeedUrl` в contract),
+  иначе модулът изобщо не се зарежда; в dev — никога. Записът `publish` в конфигурацията само пише `app-update.yml`;
+  build-ът е винаги с `--publish never`. [НП] Squirrel.Mac обновява само подписано приложение — до подписа auto-update на
+  macOS не е проверен.
+- CI: `.github/workflows/desktop-build.yml` строи трите ОС (macos-14, windows-2022, ubuntu-24.04) и качва **само workflow
+  artifacts** (`actions/upload-artifact@v7.0.2`, таговете видени с `git ls-remote` 24.10.2026), права `contents: read`,
+  без секрети, `CSC_IDENTITY_AUTO_DISCOVERY=false`. Подписът и нотаризацията: `docs/setup/signing.md` (променливите са
+  прочетени от `app-builder-lib/out/mac/MacTargetHelper.js` и `options/winOptions.d.ts` 26.17.0, 24.10.2026).
+- e2e (`apps/desktop/e2e/desktop.spec.ts`, Playwright 1.63.0 Electron, `pnpm --dir apps/desktop e2e`): срещу собрания,
+  непакетиран app с фалшив харнес (`e2e/fake-harness.mjs`, `MANDAT_DESKTOP_FAKE_HARNESS`, уважава се само при
+  `app.isPackaged === false`): старт → inbox и броячът (бадж 2 на macOS), мостът без require/process, applyLocal и
+  terminalOpen без право → `not_granted`, менюто File → New task → `/tasks/new`, пуснат файл → „Add project“ с пътя и без
+  дадено право. 5/5 на macOS arm64.
+Проверено на тази машина (macOS arm64, Docker 29.5.2): двата dmg-а се строят; пакетът пуснат с Node-а на Electron мина
+целия `mandat local` (образите се строиха от пакета, банерът дойде, `/api/inbox` отговори); Harness.app от
+`release/mac-arm64`, пуснат с PATH `/usr/bin:/bin:/usr/sbin:/sbin`, вдигна харнеса и прозорецът показа inbox-а (заглавие
+„2 waiting“, прочетено през System Events); спиране на харнеса затвори и приложението, и next-server, порт 3000 се освободи.
+[НП] x64 dmg не е пускан (няма Intel Mac); Windows и Linux — само от CI файла, непускан; Linux e2e под xvfb на ubuntu-24.04
+може да иска `--no-sandbox` (user namespaces); node-pty на Linux няма prebuild → терминалът отговаря not_ready (D-375).
+[НП] Истинският Next UI с CSP в Electron е видян само като заглавие на прозореца, не с e2e срещу истинския уеб (иска Docker и база).
+Защо: AC-12.1 иска инсталатор, който работи без репо, pnpm и Node; Node-ът на Electron е същата версия като на харнеса,
+затова няма втори runtime; подредбата на репото пази repoRoot, образите и миграциите без промени по CLI-я; без връзки
+пакетът оцелява в dmg, nsis и AppImage еднакво.
+Алтернативи: Next `output: "standalone"` (сменя build-а на `pnpm local` и пак иска контекста за образите); втори вграден Node
+(двойно по-голямо, още един runtime); архив, разпакетиран при първо пускане (бавно, връзките на Windows пак са проблем).
+Статус: решено (подпис — Q-053; име — Q-063; Linux/Windows — [НП] до първия CI run).
