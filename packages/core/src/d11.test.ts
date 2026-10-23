@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ParsedReport } from "@mandat/contract";
-import { addedLines, applySite, d11Mutation, mutationSites, specialCases } from "./d11.js";
+import { addedLines, applySite, d11Mutation, mutationSites, specialCases, testEnvChecks } from "./d11.js";
 import type { MutantRun } from "./d11.js";
 
 const PATCH = [
@@ -88,5 +88,30 @@ describe("D11 special cases (D-357)", () => {
     const b = { valid: true, total: 1, tests: new Map([["t", "passed" as const]]), error: null } as unknown as ParsedReport;
     const e = d11Mutation({ sites: [{ path: "src/cart.ts", line: 2, col: 15, from: "===", to: "!==" }], runs: [killedRun], b, special: [{ path: "src/cart.ts", line: 2, input: "10000", output: "1000" }] }).evidence;
     expect([e.status, e.signature]).toEqual(["unknown", "D11:special_case:src/cart.ts:2"]);
+  });
+});
+
+// E9b (bench B36): code that behaves differently under the test runner passes every test by construction
+describe("D11 test-environment checks", () => {
+  it("an added source line that reads the runner's env or NODE_ENV === 'test' → a finding; a comment, a string or production checks are not", () => {
+    const src = [
+      "const T = process.env.VITEST ? 5000 : 50000;",
+      "if (process.env.JEST_WORKER_ID !== undefined) x = 1;",
+      "const ci = process.env['CI'];",
+      'if (process.env.NODE_ENV === "test") return 1000;',
+      'if (process.env.NODE_ENV === "production") log();',
+      "// process.env.VITEST is set by vitest",
+      'const s = "process.env.CI";',
+      "if (import.meta.vitest) {}",
+    ].join("\n");
+    expect(testEnvChecks({ files: [{ path: "src/cart.ts", content: src }], added: new Map([["src/cart.ts", [1, 2, 3, 4, 5, 6, 7, 8]]]) }).map((x) => x.line)).toEqual([1, 2, 3, 4, 8]);
+    expect(testEnvChecks({ files: [{ path: "src/cart.ts", content: src }], added: new Map([["src/cart.ts", [5]]]) })).toEqual([]);
+  });
+  it("d11Mutation with a test-env check is UNKNOWN D11:test_env:<path>:<line> (after a special case)", () => {
+    const b = { valid: true, total: 1, tests: new Map([["t", "passed" as const]]), error: null } as unknown as ParsedReport;
+    const e = d11Mutation({ sites: [], runs: [], b, testEnv: [{ path: "src/cart.ts", line: 3 }] }).evidence;
+    expect([e.status, e.signature]).toEqual(["unknown", "D11:test_env:src/cart.ts:3"]);
+    const both = d11Mutation({ sites: [], runs: [], b, special: [{ path: "src/cart.ts", line: 2, input: "1", output: "2" }], testEnv: [{ path: "src/cart.ts", line: 3 }] }).evidence;
+    expect(both.signature).toBe("D11:special_case:src/cart.ts:2");
   });
 });
