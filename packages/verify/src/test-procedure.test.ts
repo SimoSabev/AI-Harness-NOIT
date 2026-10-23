@@ -94,4 +94,14 @@ describe("runTestProcedure (фалшив docker)", () => {
     expect(r.ok).toBe(true);
     expect(calls.some((a) => a.includes("pnpm") && a.includes("--frozen-lockfile"))).toBe(true);
   });
+
+  it("E9б (D8): lint and typecheck run after the tests on the same installed volume, with no network; their exits come back", async () => {
+    const calls: string[][] = [];
+    const d = docker([{ match: (a) => a.join(" ").includes("head -c"), out: report }, { match: (a) => a.join(" ").includes("/bin/sh -c npm run lint"), exit: 1 }, { match: (a) => a.join(" ").includes("/bin/sh -c npx tsc --noEmit"), timedOut: true }], calls);
+    const r = await runTestProcedure({ ...input(d, tree()), startGate: () => Promise.resolve(gate([])), checks: [{ name: "lint", command: "npm run lint" }, { name: "typecheck", command: "npx tsc --noEmit" }] });
+    expect(r.ok && r.checks).toEqual([{ name: "lint", exit: 1 }, { name: "typecheck", exit: null }]);
+    const lint = calls.find((a) => a.join(" ").includes("npm run lint")) ?? [];
+    expect(lint.join(" ")).toContain("--network none");
+  });
 });
+
