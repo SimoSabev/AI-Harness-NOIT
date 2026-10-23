@@ -30,7 +30,7 @@ export interface VerifyCliDeps {
   docker?: DockerRunner;
   images?: { sandbox: string; gate: string; proxy: string };
   repoRoot?: string;
-  verify?: Partial<Pick<VerifyDeps, "runTests" | "startGate" | "recompute" | "ipv6Sysctl" | "infraUser" | "now">>;
+  verify?: Partial<Pick<VerifyDeps, "runTests" | "startGate" | "recompute" | "ipv6Sysctl" | "infraUser" | "now" | "depFacts">>;
 }
 export interface VerifyArgs {
   repo: string;
@@ -162,7 +162,7 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
       runId, runDir, tmpRoot, writer, ladderLevel: null, rulesetStrict: false, d7: "n/a", progress, now,
       ...(host.extraCa ? { extraCa: host.extraCa } : {}),
       ...(deps.verify?.runTests ? { runTests: deps.verify.runTests } : {}), ...(deps.verify?.startGate ? { startGate: deps.verify.startGate } : {}),
-      ...(deps.verify?.recompute ? { recompute: deps.verify.recompute } : {}),
+      ...(deps.verify?.recompute ? { recompute: deps.verify.recompute } : {}), ...(deps.verify?.depFacts ? { depFacts: deps.verify.depFacts } : {}),
     };
     const mode = a.external ? ("external" as const) : ("full" as const);
     const reqBase = { mode, org_id: "o_local" as const, repo: { provider: "local" as const, full_name: null, path: a.repo }, task_type: a.type, agent: "external:mcp-local", level_cap: 1, requested_by: "cli" as const };

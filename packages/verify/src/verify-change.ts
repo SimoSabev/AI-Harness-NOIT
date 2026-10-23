@@ -1,4 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { Verdict, effectiveLevel, hashJcs, repoConfigFromPolicy, sha256Tag, taskTypeOf } from "@mandat/contract";
 import type { ChangedFile, D7Status, ErrorCode, Evidence, MandatPolicy, RepoConfig, Sha256, VerifyOutcome, VerifyRequest } from "@mandat/contract";
@@ -39,6 +40,8 @@ export interface VerifyDeps {
   d7Evidence?: Evidence;
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
+  /** v5 E9б (D8): license and age of new dependencies (default: the npm registry from the host) */
+  depFacts?: (deps: { name: string; spec: string }[]) => Promise<D8Dependency[]>;
   recompute?: typeof recomputeTreeSha;
   progress?: (line: string) => void;
   now?: () => Date;
@@ -201,7 +204,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
       infraUser: deps.infraUser, ipv6Sysctl: deps.ipv6Sysctl, mirrorPath: deps.mirrorPath, baseSha: req.base_sha, baseDir, diffPatch: i.diffPatch,
       files: i.files, rc, allowedPaths: tt ? tt.allowed_paths : ["**"], mayChangeTests, mustPass: [], external, tmpRoot: deps.tmpRoot,
       ...(deps.extraCa ? { extraCa: deps.extraCa } : {}), ...(deps.startGate ? { startGate: deps.startGate } : {}), ...(deps.runTests ? { runTests: deps.runTests } : {}),
-      ...(deps.progress ? { progress: deps.progress } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}),
+      ...(deps.progress ? { progress: deps.progress } : {}), ...(deps.depFacts ? { depFacts: deps.depFacts } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}),
     });
     for (const e of r.evidence) set(e);
     if (!tt) set(na("D4.contract", "no task type"));

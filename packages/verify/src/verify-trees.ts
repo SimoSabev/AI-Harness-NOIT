@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedLines, anyMatch, applySite, d1, d10Lockfile, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
+import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -10,6 +11,7 @@ import type { DockerRunner } from "@mandat/sandbox";
 import type { startRunGate } from "./gate.js";
 import { runTestProcedure } from "./test-procedure.js";
 import type { CheckResult, TestProcedureResult } from "./test-procedure.js";
+import { registryFacts } from "./registry-facts.js";
 import { buildVerifyTree, listFiles, snapshot } from "./trees.js";
 
 // E0 т. 7.8 (moved from apps/worker/src/run.ts, D-205): baseline (cached) → trees H, A, B → D10, D3, D4, D1, D2, MUST_PASS.
@@ -56,6 +58,8 @@ export interface VerifyTreesInput {
   tmpRoot: string;
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
+  /** v5 E9б (D8): license and age of new dependencies (default: the npm registry from the host) */
+  depFacts?: (deps: { name: string; spec: string }[]) => Promise<D8Dependency[]>;
   /** reports a/b are written by the caller (it knows what to redact) */
   onReports?: (a: { raw: string | null; exit: number | null }, b: { raw: string | null; exit: number | null }) => void | Promise<void>;
   onSecurity?: (h: CoreSecurityHint) => void;
@@ -145,6 +149,9 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     removeTree(head.dir);
     return { evidence, cachedBaseline };
   }
+  // D8: the license and age of what the change adds (the lockfile already passed D10)
+  const newDeps = addedDependencies([{ path: "package.json", base: pj(i.baseDir), head: pj(head.dir) }, ...manifests]);
+  const deps = newDeps.length > 0 ? await (i.depFacts ?? ((d) => registryFacts(d)))(newDeps) : [];
   // AST inputs for D2 (D-233, S31), from the head tree before it is removed
   const wa = weakenedAssertions(
     changedTestFiles(i.files, rc).flatMap((p) => {
@@ -196,9 +203,9 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const split = hidden ? splitHidden(bRaw.report, hidden.dir) : null;
   const b = split ? { ...bRaw, report: split.visible } : bRaw;
   await i.onReports?.({ raw: a.raw, exit: a.exit }, { raw: b.raw, exit: b.exit });
-  if (checks.length > 0) {
+  if (checks.length > 0 || deps.length > 0) {
     const exitOf = (rs: CheckResult[], n: string) => rs.find((x) => x.name === n)?.exit ?? null;
-    evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bRaw.checks ?? [], c.name) })), deps: [], now: Date.now() }).evidence);
+    evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bRaw.checks ?? [], c.name) })), deps, now: Date.now() }).evidence);
   }
   if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
