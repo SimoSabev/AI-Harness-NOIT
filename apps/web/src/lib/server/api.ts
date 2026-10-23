@@ -6,7 +6,7 @@ import { SwitchBody, listChannels, switchChannel } from "./channels";
 import { SubscribeBody, subscribePush } from "./push";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { KeysBody } from "./keys";
-import type { KeysClient } from "./keys";
+import type { KeysClient, LoginReply } from "./keys";
 import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
@@ -19,6 +19,8 @@ import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
+import { AccountName, LoginCode } from "@mandat/contract";
+import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
 
@@ -279,6 +281,54 @@ export async function deleteKeys(req: Request, d: ApiDeps): Promise<Response> {
   if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   return json(200, await d.keys.clear());
+}
+
+// D-369: the subscription login from the web (owner with keys.manage). The pasted code goes on to the control endpoint
+// and to the stdin of `claude auth login`; it is never stored, logged or sent back.
+const NameBody = z.object({ name: AccountName }).strict();
+const CodeBody = z.object({ code: LoginCode }).strict();
+const LOGIN_ERRORS = new Set(["bad_name", "bad_code", "not_waiting"]);
+
+async function keysOwner(req: Request, d: ApiDeps, write: boolean): Promise<{ uid: string; body: unknown; keys: KeysClient } | Response> {
+  const p = write ? await post(req, d) : await ctx(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!d.keys) return json(503, { error: "keys_unavailable" });
+  return { uid: p.uid, body: "body" in p ? p.body : null, keys: d.keys };
+}
+const loginReply = (r: LoginReply) => (r.ok ? json(200, r.state) : json(LOGIN_ERRORS.has(r.error) ? 400 : 502, { error: r.error }));
+
+export async function getLogin(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, false);
+  return k instanceof Response ? k : loginReply(await k.keys.login({ kind: "state" }));
+}
+
+export async function postLogin(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  const b = NameBody.safeParse(k.body);
+  return b.success ? loginReply(await k.keys.login({ kind: "start", name: b.data.name })) : json(400, { error: "bad_name" });
+}
+
+export async function postLoginCode(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  const b = CodeBody.safeParse(k.body);
+  return b.success ? loginReply(await k.keys.login({ kind: "code", code: b.data.code })) : json(400, { error: "bad_code" });
+}
+
+export async function deleteLogin(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  return k instanceof Response ? k : loginReply(await k.keys.login({ kind: "cancel" }));
+}
+
+export async function postLogout(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  const b = NameBody.safeParse(k.body);
+  if (!b.success) return json(400, { error: "bad_name" });
+  const removed = await k.keys.logout(b.data.name);
+  return removed === null ? json(502, { error: "control_unavailable" }) : json(200, { removed });
 }
 
 // E8c (v5 p. 4.3): roles and member roles; every check is a capability (roles.manage / members.manage)

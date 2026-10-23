@@ -3,6 +3,7 @@ import { rich } from "../../i18n/rich";
 import { getT } from "../../i18n/server";
 import type { Key } from "../../i18n/t";
 import { pageName } from "../../lib/brand";
+import { AccountLogin, AccountLogout } from "../../components/account-login";
 import { KeysForm } from "../../components/keys-form";
 import { Shell } from "../../components/shell";
 import { StatusBadge, card } from "../../components/ui";
@@ -54,16 +55,26 @@ export default async function KeysPage() {
                   <span className="block text-sm font-medium">{a.name}</span>
                   <span className="block truncate text-xs text-mute">{a.loggedIn ? `${a.email ?? "?"} · ${a.plan ?? t("agent.subscription")}` : t("keys.notSignedIn")}</span>
                 </span>
-                <StatusBadge tone={a.loggedIn ? "green" : "gray"} label={a.loggedIn ? t("keys.ready") : t("keys.notSignedInBadge")} />
+                <span className="flex items-center gap-2">
+                  <StatusBadge tone={a.loggedIn ? "green" : "gray"} label={a.loggedIn ? t("keys.ready") : t("keys.notSignedInBadge")} />
+                  {c.role === "owner" && s.proxy !== "unavailable" && <AccountLogout name={a.name} />}
+                </span>
               </li>
             ))}
           </ul>
         )}
         <div className={`${card} ${accounts.length > 0 ? "mt-3" : ""} p-5 text-sm`}>
           <p className="font-medium">{accounts.length > 0 ? t("keys.addAnother") : t("keys.add")}</p>
-          <p className="mt-1 text-mute">{t("keys.addHint")}</p>
-          <pre className="mt-3 overflow-x-auto rounded-lg bg-raised px-3 py-2 font-mono text-xs">pnpm mandat login --name {t("keys.exampleName")}</pre>
-          <p className="mt-2 text-xs text-mute">{rich(t("keys.nameHint"), { a: <code className="font-mono">{t("keys.exampleName")}</code>, b: <code className="font-mono">{t("keys.exampleName2")}</code>, cmd: <code className="font-mono">pnpm mandat logout --name …</code> })}</p>
+          {s.proxy !== "unavailable" && c.role === "owner" ? (
+            // D-369: from the web in `pnpm local`; the terminal command stays for everything else
+            <AccountLogin suggested={accounts.some((a) => a.name === t("keys.exampleName")) ? t("keys.exampleName2") : t("keys.exampleName")} />
+          ) : (
+            <>
+              <p className="mt-1 text-mute">{t("keys.addHint")}</p>
+              <pre className="mt-3 overflow-x-auto rounded-lg bg-raised px-3 py-2 font-mono text-xs">pnpm mandat login --name {t("keys.exampleName")}</pre>
+              <p className="mt-2 text-xs text-mute">{rich(t("keys.nameHint"), { a: <code className="font-mono">{t("keys.exampleName")}</code>, b: <code className="font-mono">{t("keys.exampleName2")}</code>, cmd: <code className="font-mono">pnpm mandat logout --name …</code> })}</p>
+            </>
+          )}
         </div>
       </section>
       <h2 className="mt-10 mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.api")}</h2>

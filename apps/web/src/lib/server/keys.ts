@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LoginState } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
 // starts the proxy with them. The web server keeps nothing: no database row, no file, no log, no echo.
@@ -9,7 +10,13 @@ export const KeysBody = z.object({
 
 export interface KeysStatus { proxy: "running" | "stopped" | "unavailable"; providers: string[] }
 export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }
+/** D-369: the subscription login of `mandat local` (the code goes to the control endpoint and on to stdin, nowhere else). */
+export type LoginOp = { kind: "state" } | { kind: "start"; name: string } | { kind: "code"; code: string } | { kind: "cancel" };
+export type LoginReply = { ok: true; state: LoginState } | { ok: false; error: string };
+
 export interface KeysClient {
+  login(op: LoginOp): Promise<LoginReply>;
+  logout(name: string): Promise<boolean | null>;
   /** D-295: the subscription accounts of `mandat local` */
   accounts(): Promise<Account[]>;
   status(): Promise<KeysStatus>;
@@ -44,7 +51,33 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const a = Accounts.safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return a.success ? a.data.accounts : [];
   };
+  const send = (method: string, path: string, body?: unknown) =>
+    fetch(`${url}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(30_000),
+      cache: "no-store",
+    });
+  const Err = z.object({ error: z.string().max(40) });
+  const login = async (op: LoginOp): Promise<LoginReply> => {
+    const r = await (op.kind === "state" ? send("GET", "/accounts/login") : op.kind === "cancel" ? send("DELETE", "/accounts/login") : op.kind === "start" ? send("POST", "/accounts/login", { name: op.name }) : send("POST", "/accounts/login/code", { code: op.code })).catch(() => null);
+    const j: unknown = await r?.json().catch(() => null);
+    if (r?.ok) {
+      const s = LoginState.safeParse(j);
+      return s.success ? { ok: true, state: s.data } : { ok: false, error: "control_unavailable" };
+    }
+    const e = Err.safeParse(j);
+    return { ok: false, error: r && r.status === 400 && e.success ? e.data.error : "control_unavailable" };
+  };
+  const logout = async (name: string): Promise<boolean | null> => {
+    const r = await send("POST", "/accounts/logout", { name }).catch(() => null);
+    const j = z.object({ removed: z.boolean() }).safeParse(r?.ok ? await r.json().catch(() => null) : null);
+    return j.success ? j.data.removed : null;
+  };
   return {
+    login,
+    logout,
     accounts,
     status: async () => (await call("GET").catch(() => null)) ?? down,
     set: (k) => call("POST", k).catch(() => null),
