@@ -73,7 +73,7 @@ export function ProjectTiles({ projects, t }: { projects: P[]; t: T }) {
     <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {projects.map((p) => (
         <li key={p.full_name} className={`${card} flex flex-col gap-3 p-4 ${p.health === "bad" ? "border-bad/40" : p.health === "warn" ? "border-warn/40" : ""}`}>
-          <Link href={`/?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2">
+          <Link href={`/overview?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2">
             <span aria-hidden="true" className={`hex inline-block h-3.5 w-4 ${HEALTH[p.health].mark}`} />
             <span className="font-display text-base font-semibold">{p.name}</span>
             <span className="ml-auto truncate font-mono text-[11px] text-mute">{p.full_name}</span>

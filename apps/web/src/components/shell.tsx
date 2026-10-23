@@ -14,9 +14,10 @@ import { btn } from "./ui";
 
 // D-305: the frame of every page — a side bar that stays (sections, the projects with their health, settings, theme),
 // one primary action (+ New task) on top. On a phone the side bar becomes a row of links.
-type Current = "tasks" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research";
+type Current = "tasks" | "overview" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research";
 const NAV: { id: Current; href: string; label: Key }[] = [
   { id: "tasks", href: "/", label: "nav.tasks" },
+  { id: "overview", href: "/overview", label: "nav.overview" },
   { id: "agents", href: "/agents", label: "nav.agents" },
   { id: "board", href: "/board", label: "nav.board" },
   { id: "tools", href: "/tools", label: "nav.tools" },
@@ -42,7 +43,7 @@ async function projects(lang: Lang): Promise<{ name: string; full_name: string; 
   return overview(b.columns.flatMap((c) => c.items), r, new Date(), lang).projects;
 }
 
-export async function Shell({ current, waiting, wide = false, children }: { current: Current; wide?: boolean; waiting: number | null; children: React.ReactNode }) {
+export async function Shell({ current, waiting, wide = false, full = false, children }: { current: Current; wide?: boolean; full?: boolean; waiting: number | null; children: React.ReactNode }) {
   const t = await getT();
   const theme = parseTheme((await cookies()).get("theme")?.value);
   const list = waiting === null ? [] : await projects(t.lang);
@@ -65,7 +66,7 @@ export async function Shell({ current, waiting, wide = false, children }: { curr
                   <span aria-hidden="true" className="hex inline-block h-6 w-7 bg-accent" />
                   {HARNESS || <span className="sr-only">{t("shell.home")}</span>}
                 </Link>
-                <div className="ml-auto lg:hidden"><Link href="/tasks/new" className={btn.primary}>{t("shell.newTask")}</Link></div>
+                <div className="ml-auto lg:hidden"><Link href="/" className={btn.primary}>{t("shell.newTask")}</Link></div>
               </div>
               <nav aria-label={t("nav.main")} className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible">{NAV.map(nav)}</nav>
               {list.length > 0 && (
@@ -74,7 +75,7 @@ export async function Shell({ current, waiting, wide = false, children }: { curr
                   <ul className="space-y-0.5">
                     {list.map((p) => (
                       <li key={p.full_name}>
-                        <Link href={`/?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-raised">
+                        <Link href={`/overview?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-raised">
                           <span aria-hidden="true" className={`hex inline-block h-2.5 w-3 ${HEALTH[p.health].mark}`} />
                           <span className="min-w-0 flex-1 truncate">{p.name}</span>
                           <span className="sr-only">{t(HEALTH[p.health].label)}</span>
@@ -98,10 +99,10 @@ export async function Shell({ current, waiting, wide = false, children }: { curr
         <div className="min-w-0 flex-1">
           {waiting !== null && (
             <div className="sticky top-0 z-10 hidden h-14 items-center justify-end gap-2 border-b border-line bg-canvas/90 px-6 backdrop-blur lg:flex">
-              <Link href="/tasks/new" className={btn.primary}>{t("shell.newTask")}</Link>
+              <Link href="/" className={btn.primary}>{t("shell.newTask")}</Link>
             </div>
           )}
-          <main id="main" tabIndex={-1} className={`mx-auto ${wide ? "max-w-[1400px]" : "max-w-5xl"} px-4 py-8 outline-none lg:px-8`}>
+          <main id="main" tabIndex={-1} className={full ? "flex flex-col px-4 py-4 outline-none lg:h-[calc(100vh-3.5rem)] lg:px-6" : `mx-auto ${wide ? "max-w-[1400px]" : "max-w-5xl"} px-4 py-8 outline-none lg:px-8`}>
             {children}
           </main>
         </div>
