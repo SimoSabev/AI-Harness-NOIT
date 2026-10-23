@@ -145,6 +145,17 @@ describe("runTestProcedure (фалшив docker)", () => {
     expect(j).toContain(`network rm mandat-ui-${run}`);
     expect(j).toContain(`volume rm -f mandat-uiout-${run}`);
   });
+  it("E9б (D12): base screenshots are seeded into the browser's own volume under /m/in/base before it runs", async () => {
+    const calls: string[][] = [];
+    const run = "r_01JABCDEFGHJKMNPQRSTVWXYZ0";
+    const d = docker([{ match: (a) => a.join(" ").includes("/m/out/ui/result.json"), out: JSON.stringify({ up: true, routes: [] }) }, { match: (a) => a.join(" ").includes("head -c"), out: report }], calls);
+    await runTestProcedure({ ...input(d, tree(), { tree: "b" }), startGate: () => Promise.resolve(gate([])), ui: { image: "ui:t", devCommand: "npm run dev", routes: ["/"], baseShots: { "route-0.png": Buffer.from("BASE") } } });
+    const j = calls.map((a) => a.join(" "));
+    const seed = j.findIndex((a) => a.includes(`mandat-uiout-${run}:/m `) && a.includes("mkdir -p /m/in/base && tar -x -C /m/in/base"));
+    expect(seed).toBeGreaterThan(-1);
+    expect(seed).toBeLessThan(j.findIndex((a) => a.includes("mandat.role=ui ")));
+    expect(j[seed]).toContain("--network none");
+  });
   it("E9б (D12): a broken result.json or a network that cannot be made → ui null (D12 says the check did not run); the verdict path goes on", async () => {
     const d1 = docker([{ match: (a) => a.join(" ").includes("/m/out/ui/result.json"), out: "{not json" }, { match: (a) => a.join(" ").includes("head -c"), out: report }], []);
     const r1 = await runTestProcedure({ ...input(d1, tree(), { tree: "b" }), startGate: () => Promise.resolve(gate([])), ui: { image: "ui:t", devCommand: "npm run dev", routes: ["/"] } });
