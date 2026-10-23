@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "setup": "node node_modules/electron/install.js",
+    "setup": "node node_modules/electron/install.js && node scripts/setup-pty.mjs",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.preload.json && node -e \"require('fs').renameSync('dist-preload/preload.js','dist/preload.cjs')\"",
     "test": "pnpm --dir ../.. exec vitest run apps/desktop/src",
     "start": "electron .",
@@ -19,6 +19,7 @@
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "@mandat/contract": "link:../../packages/contract"
+    "@mandat/contract": "link:../../packages/contract",
+    "node-pty": "1.1.0"
   }
 }

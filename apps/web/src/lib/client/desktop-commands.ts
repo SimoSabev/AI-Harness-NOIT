@@ -35,6 +35,11 @@ export function commandAction(cmd: DesktopCommand, ctx: { typing: boolean }): Co
       return { kind: "click", selector: "[data-desktop-apply]" };
     case "shortcuts":
       return { kind: "none" };
+    // E9g A4: the host terminal's events go to its panel (host-terminal.tsx), not to the page
+    case "terminal_output":
+    case "terminal_exit":
+    case "terminal_line":
+      return { kind: "none" };
   }
 }
 

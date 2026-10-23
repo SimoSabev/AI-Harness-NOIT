@@ -35,6 +35,12 @@ describe("commandAction", () => {
     expect(commandAction({ command: "apply_locally" }, idle)).toEqual({ kind: "click", selector: "[data-desktop-apply]" });
     expect(commandAction({ command: "shortcuts" }, idle)).toEqual({ kind: "none" });
   });
+
+  it("the host terminal's events are for its panel only: no navigation, no click (E9g A4)", () => {
+    const id = "term_0123456789abcdef";
+    for (const c of [{ command: "terminal_output", id, data: "x" }, { command: "terminal_exit", id, code: 0 }, { command: "terminal_line", id, task_id: "t_1", line: "ls" }] as const)
+      expect(commandAction(c, idle)).toEqual({ kind: "none" });
+  });
 });
 
 describe("isTyping", () => {

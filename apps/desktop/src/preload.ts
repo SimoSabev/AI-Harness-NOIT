@@ -5,7 +5,7 @@
 // parses every request and answer with zod, and main parses every request and its own answer again.
 
 /** The same order as DESKTOP_METHOD_NAMES in packages/contract (test: preload.test.ts). */
-export const PRELOAD_METHODS = ["pickFolder", "grantsList", "grant", "revoke", "openInEditor", "applyLocal", "notify", "badge", "inboxCount"] as const;
+export const PRELOAD_METHODS = ["pickFolder", "grantsList", "grant", "revoke", "openInEditor", "applyLocal", "notify", "badge", "inboxCount", "terminalOpen", "terminalWrite", "terminalResize", "terminalClose"] as const;
 export type PreloadMethod = (typeof PRELOAD_METHODS)[number];
 export const BRIDGE_KEY = "harnessDesktop";
 const EVENT_CHANNEL = "harness:event";

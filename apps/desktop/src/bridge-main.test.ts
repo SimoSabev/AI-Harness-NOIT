@@ -18,6 +18,10 @@ function handlers(over: Partial<DesktopHandlers> = {}): DesktopHandlers {
     notify: () => Promise.resolve({ ok: true, value: {} }),
     badge: () => Promise.resolve({ ok: true, value: {} }),
     inboxCount: () => Promise.resolve({ ok: true, value: {} }),
+    terminalOpen: nr,
+    terminalWrite: nr,
+    terminalResize: nr,
+    terminalClose: nr,
     ...over,
   };
 }

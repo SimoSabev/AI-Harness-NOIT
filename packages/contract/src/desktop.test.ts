@@ -12,6 +12,7 @@ import {
   MandatApplyJson,
   LocalGrant,
   LocalPath,
+  TerminalId,
   desktopChannel,
   desktopMethodOf,
   parseDesktopRequest,
@@ -21,7 +22,7 @@ import {
 // E9g A1 (D-371): the only messages between the Electron main process and the web UI.
 describe("desktop bridge contract (D-371)", () => {
   it("one channel per method, all under harness:; anything else is not a desktop channel", () => {
-    expect(DESKTOP_METHOD_NAMES).toEqual(["pickFolder", "grantsList", "grant", "revoke", "openInEditor", "applyLocal", "notify", "badge", "inboxCount"]);
+    expect(DESKTOP_METHOD_NAMES).toEqual(["pickFolder", "grantsList", "grant", "revoke", "openInEditor", "applyLocal", "notify", "badge", "inboxCount", "terminalOpen", "terminalWrite", "terminalResize", "terminalClose"]);
     for (const m of DESKTOP_METHOD_NAMES) {
       expect(desktopChannel(m)).toBe(`harness:${m}`);
       expect(desktopMethodOf(desktopChannel(m))).toBe(m);
@@ -117,5 +118,25 @@ describe("desktop bridge contract (D-371)", () => {
     expect(LocalActivityBody.safeParse({ kind: "local_editor", outcome: "opened" }).success).toBe(true);
     for (const bad of [{ kind: "terminal", outcome: "opened" }, { kind: "local_apply", outcome: "deleted" }, { kind: "local_apply", outcome: "applied", detail: "x".repeat(301) }, { kind: "local_apply", outcome: "applied", text: "free text" }])
       expect(LocalActivityBody.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+  it("the host terminal: open in a folder for a task, write, resize, close; output, exit and typed lines come back as commands (E9g A4, AC-12.8)", () => {
+    const id = "term_0123456789abcdef";
+    expect(TerminalId.safeParse(id).success).toBe(true);
+    for (const bad of ["term_1", "term_0123456789ABCDEF", "x_0123456789abcdef", ""]) expect(TerminalId.safeParse(bad).success).toBe(false);
+    expect(parseDesktopRequest("terminalOpen", { task_id: "t_1", path: "/Users/simo/shop", cols: 80, rows: 24 }).ok).toBe(true);
+    for (const bad of [{ task_id: "t_1", path: "shop", cols: 80, rows: 24 }, { task_id: "t_1", path: "/a", cols: 0, rows: 24 }, { task_id: "t_1", path: "/a", cols: 80, rows: 24, shell: "/bin/sh" }, { path: "/a", cols: 80, rows: 24 }])
+      expect(parseDesktopRequest("terminalOpen", bad).ok, JSON.stringify(bad)).toBe(false);
+    expect(parseDesktopResponse("terminalOpen", { ok: true, value: { id } }).ok).toBe(true);
+    expect(parseDesktopRequest("terminalWrite", { id, data: "ls\r" }).ok).toBe(true);
+    expect(parseDesktopRequest("terminalWrite", { id, data: "x".repeat(16_385) }).ok).toBe(false);
+    expect(parseDesktopRequest("terminalResize", { id, cols: 120, rows: 40 }).ok).toBe(true);
+    expect(parseDesktopRequest("terminalResize", { id, cols: 120, rows: 0 }).ok).toBe(false);
+    expect(parseDesktopRequest("terminalClose", { id }).ok).toBe(true);
+    expect(DesktopCommand.safeParse({ command: "terminal_output", id, data: "hi" }).success).toBe(true);
+    expect(DesktopCommand.safeParse({ command: "terminal_output", id, data: "x".repeat(65_537) }).success).toBe(false);
+    expect(DesktopCommand.safeParse({ command: "terminal_exit", id, code: null }).success).toBe(true);
+    expect(DesktopCommand.safeParse({ command: "terminal_line", id, task_id: "t_1", line: "pnpm test" }).success).toBe(true);
+    expect(LocalActivityBody.safeParse({ kind: "local_terminal", outcome: "command", detail: "pnpm test" }).success).toBe(true);
+    expect(LocalActivityBody.safeParse({ kind: "local_terminal", outcome: "opened" }).success).toBe(true);
   });
 });

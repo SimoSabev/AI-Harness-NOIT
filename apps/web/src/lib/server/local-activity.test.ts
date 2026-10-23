@@ -28,6 +28,20 @@ describe("local actions in task_activities (E9g A3)", () => {
       { kind: "local_apply", text: "Applied locally: refused (diverged: rebase)", by_user: U.owner },
     ]);
   });
+  it("host terminal: opened and each typed command, with secrets redacted before they are stored (E9g A4, D-375)", async () => {
+    const before = (await rows()).length;
+    expect(await localActivity(db, { uid: U.owner, taskId: "t_local", body: { kind: "local_terminal", outcome: "opened" } })).toMatchObject({ status: 200 });
+    expect(await localActivity(db, { uid: U.owner, taskId: "t_local", body: { kind: "local_terminal", outcome: "command", detail: "pnpm test" } })).toMatchObject({ status: 200 });
+    const key = `sk-ant-api03-${"q".repeat(8)}${"abcdefghijklmnopqrstuvwxyz0123456789"}`;
+    expect(await localActivity(db, { uid: U.owner, taskId: "t_local", body: { kind: "local_terminal", outcome: "command", detail: `export ANTHROPIC_API_KEY=${key}` } })).toMatchObject({ status: 200 });
+    const got = (await rows()).slice(before);
+    expect(got).toEqual([
+      { kind: "local_terminal", text: "Host terminal: opened", by_user: U.owner },
+      { kind: "local_terminal", text: "Host terminal: command (pnpm test)", by_user: U.owner },
+      { kind: "local_terminal", text: "Host terminal: command (export ANTHROPIC_API_KEY=[REDACTED:anthropic])", by_user: U.owner },
+    ]);
+    expect(JSON.stringify(got)).not.toContain(key);
+  });
   it("a bad body → 400, an unknown task → 404; nothing stored; no ledger row", async () => {
     const before = (await rows()).length;
     expect((await localActivity(db, { uid: U.owner, taskId: "t_local", body: { kind: "terminal", outcome: "opened" } })).status).toBe(400);

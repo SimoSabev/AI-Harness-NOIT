@@ -9,6 +9,7 @@ import { postJson } from "../lib/client/api";
 import { desktopBridge } from "../lib/client/desktop";
 import type { DesktopClient } from "../lib/client/desktop";
 import { EDITOR_STORAGE_KEY, WORKING_COPY_STORAGE_KEY, activityFor, joinLocal, parseEditor, suggestProject } from "../lib/client/local-access";
+import { HostTerminal } from "./host-terminal";
 import { btn, card, input } from "./ui";
 
 // E9g A3 (AC-12.6, D-373): the web half of local access. Everything here runs only in the desktop window (the bridge);
@@ -217,13 +218,14 @@ export function LocalActions({ taskId, repoId, files }: { taskId: string; repoId
   const [grants, setGrants] = useState<LocalGrant[]>([]);
   const [folder, setFolder] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [term, setTerm] = useState(false);
   const m = useMessage();
   const storeKey = `${WORKING_COPY_STORAGE_KEY}.${repoId}`;
   useEffect(() => {
     if (!b) return;
     void b.call("grantsList", {}).then((r) => {
       if (!r.ok) return;
-      const usable = r.value.grants.filter((g) => g.scopes.includes("apply") || g.scopes.includes("open_editor"));
+      const usable = r.value.grants.filter((g) => g.scopes.includes("apply") || g.scopes.includes("open_editor") || g.scopes.includes("terminal"));
       setGrants(usable);
       const saved = readStore(storeKey);
       setFolder(usable.find((g) => g.path === saved)?.path ?? usable[0]?.path ?? "");
@@ -263,13 +265,17 @@ export function LocalActions({ taskId, repoId, files }: { taskId: string; repoId
         <>
           <label className="mt-3 block">
             <span className="text-sm font-medium">{t("localActions.copy")}</span>
-            <select className={`${input} mt-1 font-mono`} value={folder} aria-label={t("localActions.choose")} onChange={(e) => (setFolder(e.target.value), writeStore(storeKey, e.target.value))}>
+            <select className={`${input} mt-1 font-mono`} value={folder} aria-label={t("localActions.choose")} onChange={(e) => (setFolder(e.target.value), setTerm(false), writeStore(storeKey, e.target.value))}>
               {grants.map((g) => <option key={g.path} value={g.path}>{g.path}</option>)}
             </select>
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" data-desktop-apply="" className={btn.secondary} disabled={busy || !grant?.scopes.includes("apply")} onClick={() => void apply()}>{t("localActions.apply")}</button>
+            {grant?.scopes.includes("terminal") && !term && (
+              <button type="button" className={btn.secondary} onClick={() => setTerm(true)}>{t("localActions.terminal")}</button>
+            )}
           </div>
+          {term && grant?.scopes.includes("terminal") && <HostTerminal bridge={b} taskId={taskId} folder={folder} onClose={() => setTerm(false)} />}
           {grant?.scopes.includes("open_editor") && files.length > 0 && (
             <details className="mt-3">
               <summary className="cursor-pointer text-sm text-mute hover:text-ink">{t("localActions.files")}</summary>

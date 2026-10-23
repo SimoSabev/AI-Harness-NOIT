@@ -32,6 +32,11 @@ export const EditorKind = z.enum(["vscode", "cursor", "zed"]);
 export type EditorKind = z.infer<typeof EditorKind>;
 
 const Count = z.number().int().min(0).max(99_999);
+/** E9g A4: one host terminal session in main (D-375). */
+export const TerminalId = z.string().regex(/^term_[0-9a-f]{16}$/);
+export type TerminalId = z.infer<typeof TerminalId>;
+const TermCols = z.number().int().min(2).max(500);
+const TermRows = z.number().int().min(2).max(300);
 const Empty = z.object({}).strict();
 
 /** Each method: what the web sends and what main answers (the value inside the envelope). */
@@ -55,6 +60,13 @@ export const DESKTOP_METHODS = {
   badge: { request: z.object({ count: Count }).strict(), response: Empty },
   /** "waiting for you" in the tray */
   inboxCount: { request: z.object({ count: Count }).strict(), response: Empty },
+  // E9g A4 (AC-12.8, D-375): a terminal on the host, in a granted folder with the `terminal` scope — NOT the sandbox.
+  // Main starts the person's shell there (node-pty); output, exit and each typed line come back as DesktopCommand.
+  terminalOpen: { request: z.object({ task_id: TaskId, path: LocalPath, cols: TermCols, rows: TermRows }).strict(), response: z.object({ id: TerminalId }).strict() },
+  /** keystrokes as the terminal emulator produced them */
+  terminalWrite: { request: z.object({ id: TerminalId, data: z.string().min(1).max(16_384) }).strict(), response: Empty },
+  terminalResize: { request: z.object({ id: TerminalId, cols: TermCols, rows: TermRows }).strict(), response: Empty },
+  terminalClose: { request: z.object({ id: TerminalId }).strict(), response: Empty },
 } as const;
 
 export type DesktopMethod = keyof typeof DESKTOP_METHODS;
@@ -118,6 +130,10 @@ export const DesktopCommand = z.discriminatedUnion("command", [
   z.object({ command: z.literal("view"), view: DesktopView }).strict(),
   z.object({ command: z.literal("open_project"), index: z.number().int().min(1).max(9) }).strict(),
   z.object({ command: z.literal("open_task"), task_id: TaskId }).strict(),
+  // E9g A4 (AC-12.8): the host terminal's output, its end, and each line the person typed (→ task_activities)
+  z.object({ command: z.literal("terminal_output"), id: TerminalId, data: z.string().max(65_536) }).strict(),
+  z.object({ command: z.literal("terminal_exit"), id: TerminalId, code: z.number().int().nullable() }).strict(),
+  z.object({ command: z.literal("terminal_line"), id: TerminalId, task_id: TaskId, line: z.string().min(1).max(2000) }).strict(),
 ]);
 export type DesktopCommand = z.infer<typeof DesktopCommand>;
 
@@ -150,8 +166,8 @@ export type DesktopDrop = z.infer<typeof DesktopDrop>;
 /** web → its own API: one local action for task_activities (not the ledger). The server writes the text itself. */
 export const LocalActivityBody = z
   .object({
-    kind: z.enum(["local_apply", "local_editor"]),
-    outcome: z.enum(["applied", "up_to_date", "refused", "opened", "failed"]),
+    kind: z.enum(["local_apply", "local_editor", "local_terminal"]),
+    outcome: z.enum(["applied", "up_to_date", "refused", "opened", "failed", "command"]),
     detail: z.string().max(300).optional(),
   })
   .strict();

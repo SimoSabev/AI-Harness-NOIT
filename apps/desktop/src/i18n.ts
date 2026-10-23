@@ -60,6 +60,9 @@ export const DESKTOP_EN = {
   "refuse.cancelled": "Not granted.",
   "refuse.editor": "The editor could not be opened.",
   "refuse.broken": "The local access file could not be read, so nothing is granted. Grant the folders again.",
+  "refuse.terminal_unavailable": "The terminal is not available in this build of the desktop app.",
+  "refuse.terminal_limit": "Too many terminals are open. Close one first.",
+  "refuse.terminal_unknown": "This terminal is closed.",
 } as const;
 
 export type DesktopKey = keyof typeof DESKTOP_EN;
@@ -122,6 +125,9 @@ export const DESKTOP_BG: Record<DesktopKey, string> = {
   "refuse.cancelled": "Не е разрешено.",
   "refuse.editor": "Редакторът не се отвори.",
   "refuse.broken": "Файлът с локалния достъп не се прочете, затова нищо не е разрешено. Дай папките отново.",
+  "refuse.terminal_unavailable": "Терминалът не е наличен в тази версия на десктоп приложението.",
+  "refuse.terminal_limit": "Отворени са твърде много терминали. Затвори един първо.",
+  "refuse.terminal_unknown": "Този терминал е затворен.",
 };
 
 const CATALOG: Record<Lang, Record<DesktopKey, string>> = { en: DESKTOP_EN, bg: DESKTOP_BG };

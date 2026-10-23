@@ -1,4 +1,8 @@
 # D-303: its own small workspace, so `pnpm install` at the repo root never downloads Electron.
 packages: []
+# E9g A4 (D-375): node-pty's own scripts are not run; its prebuilt binaries are used and `pnpm run setup` makes
+# spawn-helper executable (scripts/setup-pty.mjs). Linux has no prebuild: [НП] build in A5.
+allowBuilds:
+  node-pty: false
 # same rule as the root (D-036): 3 days
 minimumReleaseAge: 4320

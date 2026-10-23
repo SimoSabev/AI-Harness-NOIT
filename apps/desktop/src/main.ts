@@ -14,9 +14,12 @@ import type { DesktopHandlers } from "./bridge-main.js";
 import { desktopLang, dt, loadingPage } from "./i18n.js";
 import { grantsFile } from "./grant-store.js";
 import { createInboxWatcher, notificationFor } from "./inbox-watch.js";
-import { folderArgs } from "./local-access.js";
+import { authorize, folderArgs } from "./local-access.js";
 import { harnessEnv, resolveDesktopKek } from "./kek-keychain.js";
-import { localHandlers } from "./local-handlers.js";
+import { authorizeUse, localHandlers } from "./local-handlers.js";
+import type { LocalDeps } from "./local-handlers.js";
+import { ptyEnv, shellArgs, shellFor, terminalSessions } from "./terminal-sessions.js";
+import type { SpawnPty } from "./terminal-sessions.js";
 import { appMenu, toTemplate, trayMenu, trayState } from "./menu.js";
 import type { MenuAction } from "./menu.js";
 import { QUICK_ENTRY, shortcutsText } from "./shortcuts.js";
@@ -49,6 +52,8 @@ const INBOX_POLL_MS = 15_000;
 /** D-303 + D-371: new windows denied, navigation only to the local address, a CSP, no web permissions but copy. */
 function lockDown(w: BrowserWindow): void {
   attachGuards(w.webContents, () => base);
+  // E9g A4 (D-375): a full load of the page (reload, not an in-app route change) leaves no host terminal behind
+  w.webContents.on("did-navigate", () => terms?.closeAll());
   const ses = w.webContents.session;
   ses.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: withCsp(details.url, details.responseHeaders, base) }));
   ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(allowPermission(permission, details.requestingUrl, base)));
@@ -72,8 +77,8 @@ function runNode(argv: string[]): Promise<{ code: number; stdout: string }> {
 }
 
 /** E9g A3: grants (native confirm), revoke, open in editor, apply locally — the checks are in local-handlers.ts. */
-function local(): ReturnType<typeof localHandlers> {
-  return localHandlers({
+function localDeps(): LocalDeps {
+  return {
     lang,
     env: {
       platform: process.platform,
@@ -98,7 +103,40 @@ function local(): ReturnType<typeof localHandlers> {
     runNode,
     cliMain: path.join(repoRoot, "packages/cli/dist/main.js"),
     now: () => new Date(),
+    // E9g A4 (D-375): a revoked `terminal` scope closes the host terminals in that folder at once
+    onRevoked: (left) => {
+      const env = localDeps().env;
+      terms?.closeWhere((cwd) => !authorize(cwd, "terminal", left, env).ok);
+    },
+  };
+}
+function local(): ReturnType<typeof localHandlers> {
+  return localHandlers(localDeps());
+}
+
+/** E9g A4 (AC-12.8, D-375): node-pty, loaded on first use; null when this build has none (it is native, rule 8). */
+let ptyLoader: Promise<SpawnPty | null> | null = null;
+function loadPty(): Promise<SpawnPty | null> {
+  ptyLoader ??= import("node-pty").then(
+    (m): SpawnPty =>
+      (o) =>
+        m.spawn(shellFor(process.env, process.platform), shellArgs(process.platform), { name: "xterm-256color", cols: o.cols, rows: o.rows, cwd: o.cwd, env: ptyEnv(process.env) }),
+    () => null,
+  );
+  return ptyLoader;
+}
+let terms: ReturnType<typeof terminalSessions> | null = null;
+function terminals(): ReturnType<typeof terminalSessions> {
+  terms ??= terminalSessions({
+    lang,
+    authorize: (p) => authorizeUse(localDeps(), p, "terminal"),
+    loadPty,
+    // not toWeb: terminal output must not bring the window to the front
+    send: (cmd) => {
+      if (win && !win.isDestroyed() && base) sendCommand(win.webContents, cmd);
+    },
   });
+  return terms;
 }
 
 /** E9g A3 (AC-12.6): a dropped folder, "Open with" or a second start with a path → the "Add project" screen. Nothing is granted here. */
@@ -120,6 +158,10 @@ const handlers: DesktopHandlers = {
   revoke: (req) => local().revoke(req),
   openInEditor: (req) => local().openInEditor(req),
   applyLocal: (req) => local().applyLocal(req),
+  terminalOpen: (req) => terminals().handlers.terminalOpen(req),
+  terminalWrite: (req) => terminals().handlers.terminalWrite(req),
+  terminalResize: (req) => terminals().handlers.terminalResize(req),
+  terminalClose: (req) => terminals().handlers.terminalClose(req),
   notify: (req) => {
     notifyNative(req.title, req.body, req.task_id);
     return Promise.resolve({ ok: true, value: {} });
@@ -288,7 +330,10 @@ else {
   });
   app.on("activate", show);
   app.on("window-all-closed", () => undefined); // the tray keeps it alive
-  app.on("before-quit", () => child?.kill("SIGINT"));
+  app.on("before-quit", () => {
+    terms?.closeAll();
+    child?.kill("SIGINT");
+  });
   app.on("will-quit", () => globalShortcut.unregisterAll());
   void app.whenReady().then(async () => {
     registerBridge(ipcMain, handlers, () => base);

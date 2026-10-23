@@ -24,6 +24,8 @@ export interface LocalDeps {
   /** packages/cli/dist/main.js */
   cliMain: string;
   now: () => Date;
+  /** E9g A4 (D-375): after a revoke, with the grants left (main closes the host terminals outside them) */
+  onRevoked?: (grants: LocalGrant[]) => void;
 }
 
 type LocalMethods = Pick<DesktopHandlers, "grantsList" | "grant" | "revoke" | "openInEditor" | "applyLocal">;
@@ -36,15 +38,18 @@ export function confirmText(lang: Lang, p: string, scopes: readonly LocalScope[]
 
 const no = (code: DesktopError["code"], lang: Lang, key: DesktopKey): DesktopResult<never> => ({ ok: false, error: { code, message: dt(lang, key) } });
 
+/** Every use: the real path inside a granted folder with the scope (from the grants file, read now), or the refusal. */
+export function authorizeUse(d: Pick<LocalDeps, "file" | "env" | "lang">, p: string, scope: LocalScope): { ok: true; path: string } | { ok: false; res: DesktopResult<never> } {
+  const g = loadGrants(d.file);
+  if (g.broken) return { ok: false, res: no("not_granted", d.lang, "refuse.broken") };
+  const r = authorize(p, scope, g.grants, d.env);
+  if (r.ok) return { ok: true, path: r.path };
+  return { ok: false, res: no(r.reason === "missing" ? "failed" : "not_granted", d.lang, `refuse.${r.reason}`) };
+}
+
 export function localHandlers(d: LocalDeps): LocalMethods {
   const read = (): { grants: LocalGrant[]; broken: boolean } => loadGrants(d.file);
-  const use = (p: string, scope: LocalScope): { ok: true; path: string } | { ok: false; res: DesktopResult<never> } => {
-    const g = read();
-    if (g.broken) return { ok: false, res: no("not_granted", d.lang, "refuse.broken") };
-    const r = authorize(p, scope, g.grants, d.env);
-    if (r.ok) return { ok: true, path: r.path };
-    return { ok: false, res: no(r.reason === "missing" ? "failed" : "not_granted", d.lang, `refuse.${r.reason}`) };
-  };
+  const use = (p: string, scope: LocalScope) => authorizeUse(d, p, scope);
   return {
     grantsList: () => Promise.resolve({ ok: true, value: { grants: read().grants } }),
     grant: async (req) => {
@@ -60,6 +65,7 @@ export function localHandlers(d: LocalDeps): LocalMethods {
       const g = read();
       const left = removeGrant(g.grants, req.path, req.scopes);
       if (!g.broken) saveGrants(d.file, left);
+      d.onRevoked?.(left);
       return Promise.resolve({ ok: true, value: { grants: left } });
     },
     openInEditor: async (req) => {

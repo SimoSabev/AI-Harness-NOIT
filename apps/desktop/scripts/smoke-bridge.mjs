@@ -10,7 +10,9 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, app, globalShortcut, ipcMain, safeStorage } from "electron";
 import { registerBridge, registerDrop } from "../dist/bridge-main.js";
 import { grantsFile } from "../dist/grant-store.js";
-import { localHandlers } from "../dist/local-handlers.js";
+import { authorizeUse, localHandlers } from "../dist/local-handlers.js";
+import { ptyEnv, shellArgs, shellFor, terminalSessions } from "../dist/terminal-sessions.js";
+import { sendCommand } from "../dist/bridge-main.js";
 import { allowPermission, attachGuards, withCsp } from "../dist/window-guard.js";
 import { appMenu, toTemplate, trayMenu } from "../dist/menu.js";
 import { QUICK_ENTRY } from "../dist/shortcuts.js";
@@ -47,10 +49,18 @@ async function run() {
     cliMain: "/nonexistent/main.js",
     now: () => new Date(),
   });
-  registerBridge(ipcMain, { pickFolder: () => ok({ path: null }), grantsList: lh.grantsList, grant: lh.grant, revoke: lh.revoke, openInEditor: lh.openInEditor, applyLocal: lh.applyLocal, notify: () => ok({}), badge: () => ok({}), inboxCount: () => ok({}) }, () => base);
+  // E9g A4 (D-375): the real host terminal (node-pty) behind the same grant check as main
+  let win = null;
+  const ts = terminalSessions({
+    lang: "en",
+    authorize: (p) => authorizeUse({ lang: "en", file: grantsFile(home), env: { platform: process.platform, home: os.homedir(), mandatHome: home, realpath: (q) => realpathSync.native(q), isDirectory: (q) => { try { return statSync(q).isDirectory(); } catch { return false; } } } }, p, "terminal"),
+    loadPty: () => import("node-pty").then((m) => (o) => m.spawn(shellFor(process.env, process.platform), shellArgs(process.platform), { name: "xterm-256color", cols: o.cols, rows: o.rows, cwd: o.cwd, env: ptyEnv(process.env) }), () => null),
+    send: (c) => win && sendCommand(win.webContents, c),
+  });
+  registerBridge(ipcMain, { pickFolder: () => ok({ path: null }), grantsList: lh.grantsList, grant: lh.grant, revoke: lh.revoke, openInEditor: lh.openInEditor, applyLocal: lh.applyLocal, notify: () => ok({}), badge: () => ok({}), inboxCount: () => ok({}), ...ts.handlers }, () => base);
   const dropped = [];
   registerDrop(ipcMain, () => base, (p) => dropped.push(p));
-  const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(dist, "preload.cjs") } });
+  win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(dist, "preload.cjs") } });
   attachGuards(win.webContents, () => base);
   let csp = null;
   win.webContents.session.webRequest.onHeadersReceived((d, cb) => {
@@ -67,19 +77,36 @@ async function run() {
       keys: b ? Object.keys(b).sort().join(",") : "",
       require: typeof window.require, process: typeof window.process, inline: window.inlineRan === true,
       badge: await b.badge({ count: 2 }), grants: await b.grantsList({}), bad: await b.badge({ count: -1 }), notPlain: await b.badge("x"),
-      grant: await b.grant({ path: ${JSON.stringify(project)}, scopes: ["read"] }), root: await b.grant({ path: "/", scopes: ["read"] }),
+      termNo: await b.terminalOpen({ task_id: "t_1", path: ${JSON.stringify(project)}, cols: 80, rows: 24 }),
+      grant: await b.grant({ path: ${JSON.stringify(project)}, scopes: ["read", "terminal"] }), root: await b.grant({ path: "/", scopes: ["read"] }),
+      term: await (async () => {
+        const got = { out: "", lines: [], exit: null };
+        const off = b.onCommand((c) => { if (c.command === "terminal_output") got.out += c.data; if (c.command === "terminal_line") got.lines.push(c.line); if (c.command === "terminal_exit") got.exit = c.code; });
+        const o = await b.terminalOpen({ task_id: "t_1", path: ${JSON.stringify(project)}, cols: 80, rows: 24 });
+        if (!o.ok) return { open: o };
+        await b.terminalWrite({ id: o.value.id, data: "echo SMOKE_$((40+2)); pwd\\r" });
+        for (let i = 0; i < 100 && !got.out.includes("SMOKE_42"); i += 1) await new Promise((r) => setTimeout(r, 100));
+        await b.terminalWrite({ id: o.value.id, data: "exit\\r" });
+        for (let i = 0; i < 50 && got.exit === null; i += 1) await new Promise((r) => setTimeout(r, 100));
+        off();
+        return { open: o, ...got };
+      })(),
       apply: await b.applyLocal({ task_id: "t_1", path: ${JSON.stringify(project)} }),
       drop: (() => { const dt = new DataTransfer(); dt.items.add(new File(["x"], "x.txt")); const e = new DragEvent("drop", { dataTransfer: dt, cancelable: true, bubbles: true }); document.body.dispatchEvent(e); return e.defaultPrevented; })(),
       open: window.open("https://example.com/") === null,
     };
   })()`);
-  check("bridge has exactly the listed methods", r.keys === "applyLocal,badge,grant,grantsList,inboxCount,notify,onCommand,openInEditor,pickFolder,revoke,version");
+  check("bridge has exactly the listed methods", r.keys === "applyLocal,badge,grant,grantsList,inboxCount,notify,onCommand,openInEditor,pickFolder,revoke,terminalClose,terminalOpen,terminalResize,terminalWrite,version");
   check("no require/process in the page", r.require === "undefined" && r.process === "undefined");
   check("inline scripts run under the CSP", r.inline);
   check("a valid call answers", r.badge.ok === true);
   check("nothing is granted at first", r.grants.ok === true && r.grants.value.grants.length === 0);
   check("a project folder is granted (real path stored)", r.grant.ok === true && r.grant.value.grant.path === realpathSync.native(project));
   check('"/" is refused', r.root.ok === false && r.root.error.code === "denied");
+  check("a host terminal without the terminal scope is refused", r.termNo.ok === false && r.termNo.error.code === "not_granted");
+  check("the host terminal runs the shell in the granted folder (node-pty)", r.term.open?.ok === true && r.term.out.includes("SMOKE_42") && r.term.out.includes(realpathSync.native(project)));
+  check("the typed lines come back for task_activities", JSON.stringify(r.term.lines) === JSON.stringify(["echo SMOKE_$((40+2)); pwd", "exit"]));
+  check("the shell's exit is reported", r.term.exit === 0);
   check("apply without the apply scope is refused", r.apply.ok === false && r.apply.error.code === "not_granted");
   check("the preload's drop listener is installed (webUtils in the sandbox)", r.drop === true);
   check("a synthetic File (no local path) sends nothing", dropped.length === 0);
