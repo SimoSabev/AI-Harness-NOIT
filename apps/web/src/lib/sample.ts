@@ -81,8 +81,10 @@ const night: NightView = {
   ],
   last: { starts_at: ago(19 * 60), spent_usd: 14.1, budget_usd: 18, merged: 9, waiting: 2, failed: 1, items: [
     { text: "Health endpoint с версията", repo: "api-gateway", status: "merged" }, { text: "Закръгляне на сумите", repo: "billing", status: "merged" },
-    { text: "Пагинация · 1 мутант оцеля", repo: "mobile-api", status: "waiting" }, { text: "Кеш на ембедингите", repo: "ml-pipeline", status: "failed" },
-  ] },
+    { text: "Пагинация · 1 мутант оцеля", repo: "mobile-api", status: "waiting" }, { text: "Кеш на ембедингите", repo: "ml-pipeline", status: "parked" },
+  ], parked: 1 },
+  questions: [{ id: "00000000-0000-4000-8000-0000000000q1", task_id: "t_sample_park", text: "Кеш на ембедингите", what_stopped: "FAILED after 2 attempt(s): `D4:out_of_contract:infra/**`", tried: ["attempt 1: FAILED", "attempt 2: FAILED"], proposal: "Add infra/** to allowed_paths of this task type, or narrow the task so it stays inside the contract.", status: "open", answer: null }],
+  repos: [],
 };
 const research: ResearchView = {
   questions: [

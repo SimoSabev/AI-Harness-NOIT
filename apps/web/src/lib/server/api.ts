@@ -301,7 +301,7 @@ export async function postApplyComments(req: Request, d: ApiDeps, id: string): P
   return done(await applyComments(d.db, { uid: p.uid, taskId: id, text: b.text }), d);
 }
 
-// E9а (v5 5.1 (2)): plan the night; answer or close a parked task's question in the morning
+// E9a (v5 5.1 (2)): plan the night; answer or close a parked task's question in the morning
 export async function postNightPlan(req: Request, d: ApiDeps): Promise<Response> {
   const p = await post(req, d);
   if (p instanceof Response) return p;

@@ -17,7 +17,11 @@ export interface WindowRow { id: string; kind: "terminal" | "preview" | "server"
 export interface NightView {
   shift: { id: string; starts_at: string; ends_at: string; budget_usd: number; spent_usd: number; status: string; rules: { auto_merge: { min_level: number; max_lines: number }; on_fail: string; retries?: number; same_file: string; forbid_tools: string[] } } | null;
   queue: { position: number; repo: string; text: string; risk: "low" | "medium" | "high"; est_minutes: number; est_usd: number; status: string }[];
-  last: { starts_at: string; spent_usd: number; budget_usd: number; merged: number; waiting: number; failed: number; items: { text: string; repo: string; status: string }[] } | null;
+  last: { starts_at: string; spent_usd: number; budget_usd: number; merged: number; waiting: number; failed: number; parked: number; items: { text: string; repo: string; status: string }[] } | null;
+  /** E9a: the questions of parked tasks (the running shift's, else the last one's) */
+  questions: { id: string; task_id: string; text: string; what_stopped: string; tried: string[]; proposal: string; status: "open" | "answered" | "closed"; answer: string | null }[];
+  /** E9a: the org's repos for the plan form */
+  repos: { id: string; name: string }[];
 }
 export interface ResearchView {
   questions: { id: string; question: string; status: string; created_at: string; claims: number }[];

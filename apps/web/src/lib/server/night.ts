@@ -5,7 +5,7 @@ import { hasCap } from "./roles";
 import { asService } from "./sql";
 import type { Db, Sql } from "./sql";
 
-// v5 E9а (5.1 (2), D-320): a person plans the night (queue, rules, budget); in the morning a parked task's question is
+// v5 E9a (5.1 (2), D-320): a person plans the night (queue, rules, budget); in the morning a parked task's question is
 // answered ("Answer and continue": a new attempt with the answer as a person's note, framed by the worker like a steer)
 // or closed. All of it needs night.manage; the worker runs the shift.
 export const NightPlanBody = NightPlan.extend({ queue: z.array(NightQueueWrite.extend({ type: TaskType.default("bugfix") })).min(1).max(50) })

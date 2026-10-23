@@ -82,9 +82,13 @@ export async function nightView(db: Db, uid: string, org: string): Promise<Night
     let last: NightView["last"] = null;
     if (lastRow) {
       const items = (await sql.query<{ text: string; repo: string; status: string }>("select q.text, r.full_name as repo, q.status from public.night_queue q join public.repos r on r.id = q.repo_id where q.shift_id = $1::uuid order by q.position", [lastRow.id])).rows;
-      last = { starts_at: lastRow.starts_at, spent_usd: lastRow.spent_usd, budget_usd: lastRow.budget_usd, merged: items.filter((i) => i.status === "merged").length, waiting: items.filter((i) => i.status === "waiting").length, failed: items.filter((i) => i.status === "failed").length, items };
+      last = { starts_at: lastRow.starts_at, spent_usd: lastRow.spent_usd, budget_usd: lastRow.budget_usd, merged: items.filter((i) => i.status === "merged").length, waiting: items.filter((i) => i.status === "waiting").length, failed: items.filter((i) => i.status === "failed").length, parked: items.filter((i) => i.status === "parked").length, items };
     }
-    return { shift, queue, last };
+    // E9a: the questions of the running shift, else of the last one; the repos for the plan form
+    const qShift = shift?.status === "running" ? shift.id : lastRow?.id;
+    const questions = qShift ? (await sql.query<NightView["questions"][number]>("select q.id::text as id, q.task_id, t.text, q.what_stopped, q.tried, q.proposal, q.status, q.answer from public.night_questions q join public.tasks t on t.id = q.task_id where q.shift_id = $1::uuid order by q.created_at", [qShift])).rows : [];
+    const repos = (await sql.query<NightView["repos"][number]>("select id::text as id, full_name as name from public.repos where org_id = $1::uuid order by created_at", [org])).rows;
+    return { shift, queue, last, questions, repos };
   });
 }
 

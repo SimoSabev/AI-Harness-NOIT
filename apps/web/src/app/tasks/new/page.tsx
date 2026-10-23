@@ -16,7 +16,10 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: pageName((await getT())("newTask.title")) };
 }
 
-export default async function NewTaskPage() {
+export default async function NewTaskPage({ searchParams }: { searchParams: Promise<{ text?: string | string[] }> }) {
+  // E9a: "Make a task" from a night question prefills the text
+  const q = (await searchParams).text;
+  const prefill = typeof q === "string" ? q.slice(0, 4000) : undefined;
   const c = await pageCtx();
   const t = await getT();
   const repo = await firstRepo(db(), c.uid, c.org);
@@ -32,7 +35,7 @@ export default async function NewTaskPage() {
       ) : !repo ? (
         <p className={`${card} mt-6 p-5 text-sm`}>{rich(t("common.noRepo"), { cmd: <code className="font-mono">pnpm local</code> })}</p>
       ) : (
-        <NewTaskForm repo={repo} ready={{ anthropic: k.includes("anthropic"), openai: k.includes("openai") }} accounts={accounts} />
+        <NewTaskForm repo={repo} {...(prefill ? { initialText: prefill } : {})} ready={{ anthropic: k.includes("anthropic"), openai: k.includes("openai") }} accounts={accounts} />
       )}
     </Shell>
   );

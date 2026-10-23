@@ -9,10 +9,10 @@ import { btn, card, input } from "./ui";
 const TYPES = ["free", "feature", "bugfix", "docs", "css"] as const;
 
 // D-292: the one form of the minimal harness. Demo agents first: they work without any key.
-export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { anthropic: boolean; openai: boolean }; accounts: { name: string; agent: string; email: string | null; plan: string | null }[] }) {
+export function NewTaskForm({ repo, ready, accounts, initialText }: { repo: string; ready: { anthropic: boolean; openai: boolean }; accounts: { name: string; agent: string; email: string | null; plan: string | null }[]; initialText?: string }) {
   const router = useRouter();
   const t = useT();
-  const [text, setText] = useState(() => t("newTask.example"));
+  const [text, setText] = useState(() => initialText ?? t("newTask.example"));
   // D-295: the first signed-in subscription account is the default agent (like in other harnesses)
   const [agent, setAgent] = useState<string>(accounts[0]?.agent ?? "fake:delete-test");
   // The type picks the contract's scope from .mandat.yml (paths, tests). A real agent starts without limits (D-360:
