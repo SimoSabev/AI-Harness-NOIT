@@ -14,8 +14,10 @@ export interface LoginProc {
 }
 
 export interface LoginDeps {
-  /** image present, upstream network, the profile volume created and owned by the agent user */
-  prepare(name: string): Promise<"ok" | "images_missing" | "failed">;
+  /** image present, upstream network, the profile volume owned by the agent user ("created" = it did not exist before) */
+  prepare(name: string): Promise<"ok" | "created" | "images_missing" | "failed">;
+  /** removes the profile volume of a new account whose login did not finish */
+  discard(name: string): Promise<void>;
   spawn(name: string): LoginProc;
   status(name: string): Promise<ProfileStatus>;
   timeoutMs: number;
@@ -29,6 +31,9 @@ export class LoginSessions {
   private proc: LoginProc | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private gen = 0;
+  /** this login made the profile volume, so an unfinished login removes it again (no empty "not signed in" account) */
+  private created = false;
+  private exited: Promise<void> = Promise.resolve();
 
   constructor(private readonly d: LoginDeps) {}
 
@@ -40,6 +45,7 @@ export class LoginSessions {
     const name = AccountName.parse(rawName);
     if (active(this.current)) return { state: "failed", name, reason: "busy" };
     const gen = ++this.gen;
+    this.created = false;
     this.current = { state: "starting", name };
     void this.run(gen, name);
     return this.current;
@@ -62,7 +68,8 @@ export class LoginSessions {
   private async run(gen: number, name: string): Promise<void> {
     const ready = await this.d.prepare(name).catch(() => "failed" as const);
     if (gen !== this.gen || this.current.state !== "starting") return;
-    if (ready !== "ok") return this.fail(ready === "images_missing" ? "images_missing" : "start_failed");
+    if (ready !== "ok" && ready !== "created") return this.fail(ready === "images_missing" ? "images_missing" : "start_failed");
+    this.created = ready === "created";
     let proc: LoginProc;
     try {
       proc = this.d.spawn(name);
@@ -70,6 +77,8 @@ export class LoginSessions {
       return this.fail("start_failed");
     }
     this.proc = proc;
+    let exited: () => void = () => undefined;
+    this.exited = new Promise((r) => (exited = r));
     this.timer = setTimeout(() => gen === this.gen && this.fail("timeout"), this.d.timeoutMs);
     this.timer.unref?.();
     let out = "";
@@ -82,6 +91,7 @@ export class LoginSessions {
       } else if (this.current.state === "checking" && /invalid code/i.test(out)) this.fail("invalid_code");
     });
     proc.onExit(() => {
+      exited();
       if (gen !== this.gen || !active(this.current)) return;
       this.stopTimer();
       this.proc = null;
@@ -89,7 +99,10 @@ export class LoginSessions {
       this.current = { state: "checking", name };
       void this.d.status(name).then(
         (s) => {
-          if (gen === this.gen) this.current = s.loggedIn ? { state: "done", name, email: s.email, plan: s.plan } : { state: "failed", name, reason: "not_logged_in" };
+          if (gen !== this.gen) return;
+          if (!s.loggedIn) return this.fail("not_logged_in");
+          this.created = false;
+          this.current = { state: "done", name, email: s.email, plan: s.plan };
         },
         () => gen === this.gen && this.fail("not_logged_in"),
       );
@@ -103,6 +116,11 @@ export class LoginSessions {
     const p = this.proc;
     this.proc = null;
     p?.kill();
+    if (this.created) {
+      this.created = false;
+      const name = this.current.name;
+      void (p ? this.exited : Promise.resolve()).then(() => this.d.discard(name)).catch(() => undefined);
+    }
   }
 
   private stopTimer(): void {

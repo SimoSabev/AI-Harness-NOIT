@@ -5,7 +5,7 @@ import { LoginSessions } from "./commands/login-session.js";
 import { SystemJobs } from "./commands/system-jobs.js";
 import type { LoginProc } from "./commands/login-session.js";
 
-const noLogin = () => new LoginSessions({ prepare: async () => "images_missing", spawn: () => { throw new Error("no"); }, status: async () => ({ loggedIn: false, email: null, plan: null }), timeoutMs: 1000 });
+const noLogin = () => new LoginSessions({ prepare: async () => "images_missing", discard: async () => undefined, spawn: () => { throw new Error("no"); }, status: async () => ({ loggedIn: false, email: null, plan: null }), timeoutMs: 1000 });
 const base = (): Omit<ControlDeps, "start" | "stop" | "providers" | "accounts"> => ({ login: noLogin(), logout: async () => false, system: new SystemJobs({ run: () => undefined, org: "o" }) });
 
 // D-293: the keys reach the proxy through `mandat local` only: 127.0.0.1, a bearer token, never echoed, never stored.
@@ -63,7 +63,7 @@ describe("mandat local control (D-293)", () => {
     let out: (s: string) => void = () => undefined;
     let exit: (c: number | null) => void = () => undefined;
     const proc: LoginProc = { onOutput: (f) => void (out = f), onExit: (f) => void (exit = f), write: (x) => void written.push(x), kill: () => exit(null) };
-    const login = new LoginSessions({ prepare: async () => "ok", spawn: () => proc, status: async () => ({ loggedIn: true, email: "s@example.com", plan: "Max" }), timeoutMs: 60_000 });
+    const login = new LoginSessions({ prepare: async () => "ok", discard: async () => undefined, spawn: () => proc, status: async () => ({ loggedIn: true, email: "s@example.com", plan: "Max" }), timeoutMs: 60_000 });
     const removed: string[] = [];
     const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login, logout: async (n) => (removed.push(n), true), system: new SystemJobs({ run: () => undefined, org: "o" }) });
     const call = async (method: string, path: string, body?: unknown) => {

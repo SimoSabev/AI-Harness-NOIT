@@ -66,14 +66,15 @@ export async function accountsCommand(io: Io, deps: CliDeps, o: { json: boolean 
 }
 
 /** Image present, upstream network, the profile volume created and owned by the agent user (terminal and web login). */
-export async function prepareProfile(deps: CliDeps, name: string): Promise<{ ok: true; image: string; volume: string } | { ok: false; reason: "images_missing" | "failed"; image: string }> {
+export async function prepareProfile(deps: CliDeps, name: string): Promise<{ ok: true; image: string; volume: string; created: boolean } | { ok: false; reason: "images_missing" | "failed"; image: string }> {
   const volume = profileVolume("claude", name);
   const image = (await imageTags(repoRoot)).sandbox;
   if ((await dockerText(deps.docker, ["image", "inspect", image])).exitCode !== 0) return { ok: false, reason: "images_missing", image };
   await ensureUpstreamNetwork(deps.docker);
+  const created = (await dockerText(deps.docker, ["volume", "inspect", volume])).exitCode !== 0;
   if ((await dockerText(deps.docker, ["volume", "create", "--label", "mandat.profile=1", volume])).exitCode !== 0) return { ok: false, reason: "failed", image };
   if ((await dockerText(deps.docker, buildProfileArgs("init", { image, volume }), 60_000)).exitCode !== 0) return { ok: false, reason: "failed", image };
-  return { ok: true, image, volume };
+  return { ok: true, image, volume, created };
 }
 
 async function profileStatus(deps: CliDeps, name: string): Promise<ProfileStatus> {
@@ -88,8 +89,9 @@ export function loginDeps(deps: CliDeps): LoginDeps {
     prepare: async (name) => {
       const p = await prepareProfile(deps, name);
       image = p.image;
-      return p.ok ? "ok" : p.reason;
+      return p.ok ? (p.created ? "created" : "ok") : p.reason;
     },
+    discard: async (name) => void (await dockerText(deps.docker, ["volume", "rm", profileVolume("claude", name)], 60_000)),
     spawn: (name): LoginProc => {
       const child = spawn("docker", buildProfileArgs("login-web", { image, volume: profileVolume("claude", name) }), { stdio: ["pipe", "pipe", "pipe"] });
       child.stdout.setEncoding("utf8");

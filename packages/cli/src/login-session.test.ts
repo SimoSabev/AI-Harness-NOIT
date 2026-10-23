@@ -24,11 +24,13 @@ function fakeProc() {
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
-function setup(o: { prepare?: "ok" | "images_missing" | "failed"; loggedIn?: boolean; timeoutMs?: number } = {}) {
+function setup(o: { prepare?: "ok" | "created" | "images_missing" | "failed"; loggedIn?: boolean; timeoutMs?: number } = {}) {
   const p = fakeProc();
   const spawned: string[] = [];
+  const discarded: string[] = [];
   const s = new LoginSessions({
     prepare: async () => o.prepare ?? "ok",
+    discard: async (name) => void discarded.push(name),
     spawn: (name) => {
       spawned.push(name);
       return p.proc;
@@ -36,7 +38,7 @@ function setup(o: { prepare?: "ok" | "images_missing" | "failed"; loggedIn?: boo
     status: async () => ({ loggedIn: o.loggedIn ?? true, email: "s@example.com", plan: "Max" }),
     timeoutMs: o.timeoutMs ?? 60_000,
   });
-  return { s, p, spawned };
+  return { s, p, spawned, discarded };
 }
 
 describe("LoginSessions (D-369)", () => {
@@ -114,5 +116,39 @@ describe("LoginSessions (D-369)", () => {
     await new Promise((r) => setTimeout(r, 40));
     expect(s.state()).toEqual({ state: "failed", name: "lichno", reason: "timeout" });
     expect(p.killed()).toBe(true);
+  });
+  it("a new account whose login does not finish is removed again; an existing one (re-login) and a finished one stay", async () => {
+    const a = setup({ prepare: "created" });
+    await a.s.start("probe");
+    await tick();
+    a.p.emit(`visit: ${URL}\n`);
+    a.s.cancel();
+    await tick();
+    expect(a.discarded).toEqual(["probe"]);
+    const b = setup({ prepare: "ok" });
+    await b.s.start("lichno");
+    await tick();
+    b.s.cancel();
+    await tick();
+    expect(b.discarded).toEqual([]);
+    const c = setup({ prepare: "created", loggedIn: true });
+    await c.s.start("new");
+    await tick();
+    c.p.emit(`visit: ${URL}\n`);
+    c.s.submit("AbC-12_3#xYz");
+    c.p.exit(0);
+    await tick();
+    expect(c.s.state().state).toBe("done");
+    expect(c.discarded).toEqual([]);
+    const d = setup({ prepare: "created", loggedIn: false });
+    await d.s.start("new");
+    await tick();
+    d.p.emit(`visit: ${URL}\n`);
+    d.s.submit("AbC-12_3#xYz");
+    d.p.exit(1);
+    await tick();
+    await tick();
+    expect(d.s.state()).toMatchObject({ state: "failed", reason: "not_logged_in" });
+    expect(d.discarded).toEqual(["new"]);
   });
 });
