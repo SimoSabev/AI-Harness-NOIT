@@ -28,3 +28,20 @@ describe("test-ast: weakened_assertions (D-233)", () => {
     expect(declaredTestCount(wrap(`  [1, 2].forEach((n) => it(\`n\${n}\`, () => {}));`), f)).toBe(null);
   });
 });
+
+// E9b (bench B28): the same number of expects, but an exact matcher swapped for a loose one passes for almost any value
+describe("test-ast: a weaker matcher (bench B28)", () => {
+  const t = (line: string) => wrap(`  it("applies 10% over 50", () => {\n    ${line}\n  });`);
+  it("toBe/toEqual/toStrictEqual/toMatchObject → toBeGreaterThan/toBeTruthy/toBeDefined/.not → unknown (a human looks)", () => {
+    for (const weak of ["expect(discountCents(10000)).toBeGreaterThan(0);", "expect(discountCents(10000)).toBeTruthy();", "expect(discountCents(10000)).toBeDefined();", "expect(discountCents(10000)).not.toBe(0);"]) {
+      expect(weakenedAssertions([{ path: f, base: t("expect(discountCents(10000)).toBe(1000);"), head: t(weak) }])).toEqual([{ id: "tests/cart.spec.ts > cart > applies 10% over 50", level: "unknown", base: 1, head: 1 }]);
+    }
+    expect(weakenedAssertions([{ path: f, base: t("expect(totals()).toEqual({ a: 1 });"), head: t("expect(totals()).toBeTruthy();") }])).toHaveLength(1);
+  });
+  it("an exact matcher kept (another value, toBe → toEqual) or a loose one made exact is not weaker", () => {
+    expect(weakenedAssertions([{ path: f, base: t("expect(discountCents(10000)).toBe(1000);"), head: t("expect(discountCents(10000)).toBe(1001);") }])).toEqual([]);
+    expect(weakenedAssertions([{ path: f, base: t("expect(discountCents(10000)).toBe(1000);"), head: t("expect(discountCents(10000)).toEqual(1000);") }])).toEqual([]);
+    expect(weakenedAssertions([{ path: f, base: t("expect(discountCents(10000)).toBeGreaterThan(0);"), head: t("expect(discountCents(10000)).toBe(1000);") }])).toEqual([]);
+  });
+});
+
