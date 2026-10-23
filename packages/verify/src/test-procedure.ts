@@ -36,7 +36,7 @@ export interface TestProcedureInput {
   /** v5 E9б (D8): the project's lint and typecheck, run last on the same installed volume with no network */
   checks?: { name: "lint" | "typecheck"; command: string }[];
   /** v5 E9б (D12, D-364): tree B's dev server and a browser on the run's own internal network; last, after everything else */
-  ui?: { image: string; devCommand: string; routes: string[] };
+  ui?: { image: string; devCommand: string; routes: string[]; baseShots?: Record<string, Buffer> };
 }
 export interface UiResult extends UiRunResult { shots: Record<string, Buffer> }
 export interface CheckResult { name: "lint" | "typecheck"; exit: number | null }
@@ -66,6 +66,19 @@ async function runUiCheck(ctx: SandboxCtx, i: TestProcedureInput & { ui: NonNull
       cmd: ["/bin/sh", "-c", i.ui.devCommand], timeoutMs: 60_000,
     });
     if (started.exitCode !== 0) return null;
+    // the base screenshots (route-N.png) for the visual diff, in the browser's own volume
+    const base = Object.entries(i.ui.baseShots ?? {}).filter(([n]) => /^route-[0-4]\.png$/.test(n));
+    if (base.length > 0) {
+      const dir = mkdtempSync(path.join(path.dirname(i.treeDir), "uibase-"));
+      try {
+        for (const [n, b] of base) writeFileSync(path.join(dir, n), b);
+        const chunks: Buffer[] = [];
+        for await (const c of packTree(dir)) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c as string));
+        await runSandbox(ctx, { role: "seed", volume: out, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/in/base && tar -x -C /m/in/base"], stdin: Readable.from([Buffer.concat(chunks)]), timeoutMs: 60_000 });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
     const browse = await runSandbox({ ...ctx, image: i.ui.image }, {
       role: "ui", volume: out, network: net, env: { phase: "none", extraPublic: { MANDAT_UI_URL: `http://${app}:${UI_PORT}`, MANDAT_UI_ROUTES: JSON.stringify(i.ui.routes) } },
       cmd: ["node", "/opt/mandat/ui/ui-run.mjs"], timeoutMs: 180_000,

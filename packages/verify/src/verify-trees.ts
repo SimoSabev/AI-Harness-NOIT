@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
@@ -128,6 +128,24 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
       writeFileSync(checksFile, JSON.stringify(baseChecks));
     }
   }
+  // D12: only a change that touches a UI path; without a dev command or the browser image the check cannot run (unknown)
+  const uiTouched = i.ui !== undefined && i.ui.paths.length > 0 && i.files.some((f) => anyMatch(i.ui?.paths ?? [], f.path));
+  const uiCheck = uiTouched && i.ui?.devCommand && i.ui.image ? { image: i.ui.image, devCommand: i.ui.devCommand, routes: i.ui.routes } : null;
+  // D-364: the base screenshots for the visual diff, once per base commit and UI settings (a base that does not come up → none)
+  const baseShots: Record<string, Buffer> = {};
+  if (uiCheck) {
+    const dir = path.join(i.mandatHome, "cache", "ui", `${i.baseSha}-${hashJcs(uiCheck).slice("sha256:".length, "sha256:".length + 16)}`);
+    if (!existsSync(path.join(dir, "done"))) {
+      const bu = await runTests({ ...testsInput("base", i.baseDir), testsCommand: "true", ui: uiCheck });
+      if (!bu.ok) infra(bu.code, `base UI: ${bu.code}`);
+      rmSync(dir, { recursive: true, force: true });
+      mkdirSync(dir, { recursive: true });
+      const r = (bu as Extract<TestProcedureResult, { ok: true }>).ui;
+      if (r?.up) for (const [n, data] of Object.entries(r.shots)) writeFileSync(path.join(dir, n), data);
+      writeFileSync(path.join(dir, "done"), "");
+    }
+    for (const n of readdirSync(dir)) if (/^route-[0-4]\.png$/.test(n)) baseShots[n] = readFileSync(path.join(dir, n));
+  }
   // 2) trees H, A, B
   const head = await cleanClone({ mirrorPath: i.mirrorPath, baseSha: i.baseSha, tmpRoot: i.tmpRoot, name: "h" });
   if (i.diffPatch.length > 0) {
@@ -197,9 +215,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const A = await runTests(testsInput("a", aDir));
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
   if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
-  // D12: only a change that touches a UI path; without a dev command or the browser image the check cannot run (unknown)
-  const uiTouched = i.ui !== undefined && i.ui.paths.length > 0 && i.files.some((f) => anyMatch(i.ui?.paths ?? [], f.path));
-  const ui = uiTouched && i.ui?.devCommand && i.ui.image ? { image: i.ui.image, devCommand: i.ui.devCommand, routes: i.ui.routes } : null;
+  const ui = uiCheck ? { ...uiCheck, baseShots } : null;
   const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}), ...(checks.length > 0 ? { checks } : {}), ...(ui ? { ui } : {}) });
   i.onGateLog?.("b", path.join(i.runDir, "gate", "b", "log", "events.jsonl"));
   if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
@@ -218,8 +234,13 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     if (r) {
       mkdirSync(path.join(i.runDir, "ui"), { recursive: true });
       for (const [name, data] of Object.entries(r.shots)) writeFileSync(path.join(i.runDir, "ui", name), data);
+      for (const [name, data] of Object.entries(baseShots)) writeFileSync(path.join(i.runDir, "ui", `base-${name}`), data);
     }
-    evidence.push(d12Ui({ uiTouched, routes: r ? r.routes.map((x) => ({ ...x, screenshot: x.screenshot !== null && r.shots[x.screenshot] ? `ui/${x.screenshot}` : null })) : null }).evidence);
+    const routes = r?.routes.map((x) => {
+      const base = x.screenshot !== null && baseShots[x.screenshot] ? `ui/base-${x.screenshot}` : null;
+      return { ...x, screenshot: x.screenshot !== null && r.shots[x.screenshot] ? `ui/${x.screenshot}` : null, visual_diff: base ? (x.visual_diff ?? null) : null, base_screenshot: base };
+    });
+    evidence.push(d12Ui({ uiTouched, routes: routes ?? null }).evidence);
   }
   if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);

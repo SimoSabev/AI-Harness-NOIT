@@ -9,6 +9,8 @@ export const UiRouteResult = z
     console_errors: z.array(Line).max(50),
     failed_requests: z.array(Line).max(50),
     screenshot: z.string().regex(/^route-[0-4]\.png$/).nullable(),
+    /** D-364: share of pixels that differ from the base screenshot; null = no base screenshot */
+    visual_diff: z.number().min(0).max(1).nullable().optional(),
   })
   .strict();
 export type UiRouteResult = z.infer<typeof UiRouteResult>;

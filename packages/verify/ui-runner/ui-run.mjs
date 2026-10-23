@@ -1,8 +1,10 @@
 // v5 E9б (D12): runs in the mandat-sandbox-ui container on the verification's internal network (no internet). Waits for
 // tree B's app at MANDAT_UI_URL, visits each route of MANDAT_UI_ROUTES (JSON, ≤ 5), records console errors and failed
-// requests, takes a screenshot, and writes /m/out/ui/result.json. Chromium's own sandbox is off: the container is the
+// requests, takes a screenshot, compares it with the base screenshot in /m/in/base (when there is one; D-364: share of
+// pixels that differ by more than 16 in any channel, drawn on a canvas in the browser itself), and writes /m/out/ui/result.json. Chromium's own sandbox is off: the container is the
 // sandbox (no capabilities, read-only root, no network out).
-import { mkdirSync, writeFileSync } from "node:fs";
+/* global Image -- the visual diff runs inside the page (page.evaluate) */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire("/opt/mandat/ui/");
@@ -31,6 +33,27 @@ if (!up) {
   process.exit(0);
 }
 const browser = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+const dataUrl = (file) => `data:image/png;base64,${readFileSync(file).toString("base64")}`;
+async function visualDiff(a, b) {
+  const page = await browser.newPage();
+  try {
+    return await page.evaluate(async ([x, y]) => {
+      const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
+      const [p, q] = await Promise.all([load(x), load(y)]);
+      if (p.width !== q.width || p.height !== q.height) return 1;
+      const px = (img) => { const c = document.createElement("canvas"); c.width = img.width; c.height = img.height; const g = c.getContext("2d"); g.drawImage(img, 0, 0); return g.getImageData(0, 0, img.width, img.height).data; };
+      const m = px(p);
+      const n = px(q);
+      let diff = 0;
+      for (let k = 0; k < m.length; k += 4) if (Math.abs(m[k] - n[k]) > 16 || Math.abs(m[k + 1] - n[k + 1]) > 16 || Math.abs(m[k + 2] - n[k + 2]) > 16) diff++;
+      return diff / (m.length / 4);
+    }, [a, b]);
+  } catch {
+    return null;
+  } finally {
+    await page.close();
+  }
+}
 const results = [];
 for (const [n, route] of routes.entries()) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -47,8 +70,10 @@ for (const [n, route] of routes.entries()) {
   }
   const shot = `route-${n}.png`;
   await page.screenshot({ path: `${out}/${shot}`, fullPage: false }).catch(() => undefined);
-  results.push({ route, console_errors, failed_requests, screenshot: shot });
   await page.close();
+  const base = `/m/in/base/${shot}`;
+  const visual_diff = existsSync(base) && existsSync(`${out}/${shot}`) ? await visualDiff(dataUrl(base), dataUrl(`${out}/${shot}`)) : null;
+  results.push({ route, console_errors, failed_requests, screenshot: shot, visual_diff });
 }
 await browser.close();
 writeFileSync(`${out}/result.json`, JSON.stringify({ up: true, routes: results }));

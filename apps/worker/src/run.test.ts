@@ -454,7 +454,7 @@ describe("runTask D12 (E9б, D-364)", () => {
       return i.ui ? { ...r, ui: { up: true, routes: [{ route: "/", console_errors: ["Uncaught TypeError"], failed_requests: [], screenshot: "route-0.png" }], shots: { "route-0.png": Buffer.from("PNG") } } } : r;
     };
     const { r, testsCalls } = await go({ docker: new FakeDocker({ head: honest }), tests: withUi, i: { profile }, x: { images: { ...IMAGES, ui: "mandat-sandbox-ui:test" } } });
-    expect(testsCalls.find((c) => c.tree === "b")?.ui).toEqual({ image: "mandat-sandbox-ui:test", devCommand: "npm run dev", routes: ["/"] });
+    expect(testsCalls.find((c) => c.tree === "b")?.ui).toMatchObject({ image: "mandat-sandbox-ui:test", devCommand: "npm run dev", routes: ["/"] });
     expect(r.verdict?.result).toBe("UNKNOWN");
     expect(r.verdict?.reasons).toContain("D12:console_error:/");
     expect(readFileSync(path.join(r.runDir ?? "", "ui", "route-0.png"), "utf8")).toBe("PNG");
