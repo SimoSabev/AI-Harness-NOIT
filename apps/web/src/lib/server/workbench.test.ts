@@ -48,6 +48,15 @@ describe("workbench reads (D-307)", () => {
     const r = await researchView(db, U.viewer, DEMO_ORG_ID);
     expect(r.current?.claims).toHaveLength(1);
   });
+  it("E9а: the night view — the org's repos for the plan, the questions of the last shift, its parked count", async () => {
+    const shift = (await db.query<{ id: string }>("insert into public.night_shifts (org_id, starts_at, ends_at, budget_usd, rules, status, spent_usd) values ($1, now() - interval '10 hours', now() - interval '2 hours', 5, '{}', 'done', 1.5) returning id::text as id", [DEMO_ORG_ID])).rows[0]?.id as string;
+    await db.query("insert into public.night_queue (org_id, shift_id, repo_id, position, text, risk, est_minutes, est_usd, status, task_id) values ($1, $2::uuid, $3, 0, 'parked one', 'low', 10, 1, 'parked', 't_seed_bugfix')", [DEMO_ORG_ID, shift, DEMO_REPO_ID]);
+    await db.query("insert into public.night_questions (org_id, shift_id, task_id, what_stopped, tried, proposal) values ($1, $2::uuid, 't_seed_bugfix', 'FAILED after 2 attempt(s): `x`', '[\"attempt 1: FAILED\"]', 'Add y')", [DEMO_ORG_ID, shift]);
+    const n = await nightView(db, U.viewer, DEMO_ORG_ID);
+    expect(n.repos.map((r) => r.id)).toContain(DEMO_REPO_ID);
+    expect(n.last?.parked).toBe(1);
+    expect(n.questions).toEqual([expect.objectContaining({ task_id: "t_seed_bugfix", what_stopped: "FAILED after 2 attempt(s): `x`", tried: ["attempt 1: FAILED"], proposal: "Add y", status: "open", answer: null })]);
+  });
   it("чужд потребител не вижда нищо", async () => {
     const stranger = "e0000000-0000-4000-8000-000000000002";
     await db.query("insert into auth.users (id, email) values ($1, 'y@other.invalid')", [stranger]);

@@ -11,6 +11,7 @@ import { board, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import { steerTask } from "./steer";
+import { answerQuestion, closeQuestion, planNight } from "./night";
 import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
@@ -298,4 +299,23 @@ export async function postApplyComments(req: Request, d: ApiDeps, id: string): P
   const b = (p.body ?? {}) as { text?: unknown };
   if (typeof b.text !== "string") return json(400, { error: "bad_text" });
   return done(await applyComments(d.db, { uid: p.uid, taskId: id, text: b.text }), d);
+}
+
+// E9а (v5 5.1 (2)): plan the night; answer or close a parked task's question in the morning
+export async function postNightPlan(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await planNight(d.db, { uid: p.uid, org: p.org, body: p.body }), d);
+}
+export async function postNightAnswer(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = (p.body ?? {}) as { answer?: unknown };
+  if (typeof b.answer !== "string") return json(400, { error: "bad_answer" });
+  return done(await answerQuestion(d.db, { uid: p.uid, id, answer: b.answer }), d);
+}
+export async function postNightClose(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await closeQuestion(d.db, { uid: p.uid, id }), d);
 }
