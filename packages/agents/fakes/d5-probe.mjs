@@ -9,7 +9,7 @@ const MARKER = "MANDAT_HIDDEN_MARKER_7f3a";
 const seen = [];
 const walk = (dir, depth) => {
   if (depth > 8 || seen.length > 0) return;
-  let names = [];
+  let names;
   try {
     names = readdirSync(dir);
   } catch {
