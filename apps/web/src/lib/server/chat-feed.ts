@@ -21,7 +21,8 @@ export async function taskFeed(db: Db, uid: string, org: string, id: string, aft
       [org, id],
     )).rows[0];
     const steers = (await sql.query<SteerLine>(`select text, ${TS("created_at")} as at from public.task_activities where task_id = $1 and kind = 'steer' order by id limit 200`, [id])).rows;
-    if (!lead) return { task, session: null, lines: [], touching: [], context_pct: null, steers };
+    const notes = (await sql.query<TaskFeed["notes"][number]>("select kind, text from public.task_activities where task_id = $1 and kind in ('needs_you', 'auto_applied', 'applied') order by id limit 20", [id])).rows;
+    if (!lead) return { task, session: null, lines: [], touching: [], context_pct: null, steers, notes };
     const lines = (await sql.query<StreamLine>(
       `select seq, kind, text, ${TS("at")} as at from public.session_lines where session_id = $1 and seq > $2 order by seq limit ${MAX_LINES}`,
       [lead.id, after],
@@ -30,6 +31,6 @@ export async function taskFeed(db: Db, uid: string, org: string, id: string, aft
       "select distinct p as path from public.agent_sessions s, unnest(s.touching) p where s.id = $1 or s.parent_id = $1 order by 1 limit 500",
       [lead.id],
     )).rows.map((r) => r.path);
-    return { task, session: lead.id, lines, touching, context_pct: lead.context_pct === null ? null : Number(lead.context_pct), steers };
+    return { task, session: lead.id, lines, touching, context_pct: lead.context_pct === null ? null : Number(lead.context_pct), steers, notes };
   });
 }

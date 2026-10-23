@@ -7,7 +7,7 @@ export interface SteerLine { text: string; at: string }
 export interface FeedTask {
   id: string; text: string; agent: string; state: string; last_result: string | null; wait_reason: string | null; approval_needed: boolean;
   approved_by_human: boolean; steerable?: boolean; usd: number; updated_at: string; verdict_id: string | null; reasons: string[];
-  changeset_id: string | null; head_sha: string | null; requires_second_factor: boolean;
+  changeset_id: string | null; head_sha: string | null; requires_second_factor: boolean; delivered?: string | null;
 }
 /** One live update of a task (GET /api/tasks/:id/stream, event "feed"). */
 export interface Feed {
@@ -18,6 +18,8 @@ export interface Feed {
   touching: string[];
   context_pct: number | null;
   steers: SteerLine[];
+  /** D-367: why a person is asked ("needs_you") or that it went in by itself ("auto_applied", "applied") */
+  notes: { kind: "needs_you" | "auto_applied" | "applied"; text: string }[];
 }
 export interface FeedCheck { detector: string; status: string; summary: string; signature: string | null }
 
@@ -124,6 +126,24 @@ export function stagesOf(t: { state: string; last_result: string | null }): { ke
   if (at !== undefined) return done(at);
   if (t.state === "BLOCKED") return ORDER.map((key, i) => ({ key, status: i === 0 ? "fail" : "todo" }));
   return ORDER.map((key) => ({ key, status: "done" }));
+}
+
+/** D-367: Mandat's reasons to ask a person (task_activities "needs_you", comma-separated codes) → catalog keys. */
+export type WhyKey = "why.not_verified" | "why.external" | "why.empty" | "why.deleted" | "why.renamed" | "why.too_big" | "why.too_many_files" | "why.night" | "why.apply_failed" | "why.other"
+  | "why.sensitive.deps" | "why.sensitive.ci" | "why.sensitive.harness" | "why.sensitive.secrets" | "why.sensitive.hooks" | "why.sensitive.migrations";
+const SIMPLE = new Set(["not_verified", "external", "empty", "night"]);
+const SENS = new Set(["deps", "ci", "harness", "secrets", "hooks", "migrations"]);
+export function whyOf(text: string): { key: WhyKey; path: string | null; n: number | null }[] {
+  return text.split(", ").filter((x) => x.trim() !== "").map((code) => {
+    const [head = "", ...rest] = code.split(":");
+    const tail = rest.join(":");
+    if (SIMPLE.has(head)) return { key: `why.${head}` as WhyKey, path: null, n: null };
+    if (head === "deleted" || head === "renamed") return { key: `why.${head}` as WhyKey, path: tail, n: null };
+    if (head === "too_big" || head === "too_many_files") return { key: `why.${head}` as WhyKey, path: null, n: Number(tail) };
+    if (head === "apply_failed") return { key: "why.apply_failed", path: null, n: null };
+    if (head === "sensitive" && SENS.has(rest[0] ?? "")) return { key: `why.sensitive.${rest[0]}` as WhyKey, path: rest.slice(1).join(":"), n: null };
+    return { key: "why.other", path: null, n: null };
+  });
 }
 
 export type ToolIcon = "read" | "edit" | "run" | "search" | "plug" | "tool";

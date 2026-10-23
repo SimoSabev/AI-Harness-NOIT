@@ -13,6 +13,7 @@ describe("taskFeed: новото по задача за чата на живо",
       await sql.query("insert into public.agent_sessions (id, org_id, task_id, parent_id, agent, model, role, state, step, touching) values ('s_sub', $1, 't_seed_docs', 's_lead', 'claude', 'm', 'subagent', 'running', 'Read', '{docs/a.md}')", [DEMO_ORG_ID]);
       await sql.query("insert into public.session_lines (org_id, session_id, seq, kind, text) values ($1, 's_old', 0, 'text', 'стар опит'), ($1, 's_lead', 0, 'init', 'start'), ($1, 's_lead', 1, 'text', 'Ще опиша кода.'), ($1, 's_lead', 2, 'tool_call', 'Read: README.md')", [DEMO_ORG_ID]);
       await sql.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_seed_docs', 'steer', 'пиши кратко')", [DEMO_ORG_ID]);
+      await sql.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_seed_docs', 'needs_you', 'sensitive:deps:package.json'), ($1, 't_seed_docs', 'tool', 'edit x')", [DEMO_ORG_ID]);
     });
   });
   afterAll(async () => db.end());
@@ -27,6 +28,7 @@ describe("taskFeed: новото по задача за чата на живо",
     expect(f?.touching).toEqual(["README.md", "docs/a.md", "src/cart.ts"]);
     expect(f?.context_pct).toBe(18);
     expect(f?.steers.map((s) => s.text)).toEqual(["пиши кратко"]);
+    expect(f?.notes).toEqual([{ kind: "needs_you", text: "sensitive:deps:package.json" }]);
   });
   it("само след курсора", async () => {
     const f = await taskFeed(db, U.approver, DEMO_ORG_ID, "t_seed_docs", 1);

@@ -137,7 +137,7 @@ export async function streamTask(req: Request, d: ApiDeps, id: string, o: { inte
       const send = (f: TaskFeed) => {
         // a retry starts a new leader session: the client drops its lines and takes this one from the start
         if (f.session !== session) after = -1;
-        const now = JSON.stringify([f.task.state, f.task.last_result, f.task.wait_reason, f.task.approval_needed, f.task.approved_by_human, f.task.steerable, f.task.usd, f.touching.length, f.context_pct, f.steers.length, f.session]);
+        const now = JSON.stringify([f.task.state, f.task.last_result, f.task.wait_reason, f.task.approval_needed, f.task.approved_by_human, f.task.steerable, f.task.usd, f.touching.length, f.context_pct, f.steers.length, f.notes.length, f.session]);
         if (f.lines.length === 0 && now === sig) return;
         sig = now;
         session = f.session;

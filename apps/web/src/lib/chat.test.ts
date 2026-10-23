@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatItems, stagesOf, toolIcon, usageOf } from "./chat";
+import { chatItems, stagesOf, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -92,5 +92,25 @@ describe("toolIcon", () => {
     expect(toolIcon("Glob")).toBe("search");
     expect(toolIcon("mcp__mandat__mandat_verify")).toBe("plug");
     expect(toolIcon("Whatever")).toBe("tool");
+  });
+});
+
+describe("whyOf: защо Мандат пита (D-367)", () => {
+  it("кодове → ключ на текста и пътя", () => {
+    expect(whyOf("sensitive:deps:package.json, deleted:src/a.ts, too_big:420, not_verified")).toEqual([
+      { key: "why.sensitive.deps", path: "package.json", n: null },
+      { key: "why.deleted", path: "src/a.ts", n: null },
+      { key: "why.too_big", path: null, n: 420 },
+      { key: "why.not_verified", path: null, n: null },
+    ]);
+    expect(whyOf("apply_failed:not_fast_forward")).toEqual([{ key: "why.apply_failed", path: null, n: null }]);
+    expect(whyOf("night, external, renamed:b.ts, too_many_files:20, empty")).toEqual([
+      { key: "why.night", path: null, n: null }, { key: "why.external", path: null, n: null }, { key: "why.renamed", path: "b.ts", n: null },
+      { key: "why.too_many_files", path: null, n: 20 }, { key: "why.empty", path: null, n: null },
+    ]);
+  });
+  it("непознат код → общият текст", () => {
+    expect(whyOf("weird:thing")).toEqual([{ key: "why.other", path: null, n: null }]);
+    expect(whyOf("")).toEqual([]);
   });
 });

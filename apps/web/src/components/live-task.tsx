@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../i18n/client";
 import type { T } from "../i18n/t";
-import { chatItems, stagesOf, toolIcon, usageOf } from "../lib/chat";
+import { chatItems, stagesOf, toolIcon, usageOf, whyOf } from "../lib/chat";
 import type { ChatItem, Feed, FeedCheck, StageStatus, ToolIcon } from "../lib/chat";
 import { errorText, postJson } from "../lib/client/api";
 import { checkLabel, statusOf } from "../lib/status";
@@ -175,6 +175,10 @@ export function LiveTask({ id, initial, canAct, agentName }: { id: string; initi
   const started = feed?.lines[0]?.at ? Date.parse(feed.lines[0].at) : null;
   const secs = started ? Math.max(0, Math.round(((active ? now : Date.parse(feed?.lines.at(-1)?.at ?? task.updated_at)) - started) / 1000)) : null;
   const files = detail?.diff ? splitDiff(detail.diff) : [];
+  const notes = feed?.notes ?? [];
+  const ask = [...notes].reverse().find((n) => n.kind === "needs_you");
+  const appliedNote = [...notes].reverse().find((n) => n.kind === "auto_applied" || n.kind === "applied");
+  const waitingYou = s.key === "review" || s.key === "unknown";
   const failed = (detail?.evidence ?? []).filter((e) => e.status === "fail" || e.status === "unknown");
 
   return (
@@ -216,6 +220,17 @@ export function LiveTask({ id, initial, canAct, agentName }: { id: string; initi
             <div className={`rounded-xl px-4 py-3 text-sm ${s.tone === "red" ? "bg-bad-soft text-bad" : s.tone === "green" ? "bg-ok-soft text-ok" : s.tone === "amber" ? "bg-warn-soft text-warn" : "bg-raised text-ink"}`}>
               <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">{t("ws.verdict")} · {task.last_result}</p>
               <p className="mt-1 font-medium">{s.headline}</p>
+              {appliedNote && <p className="mt-1 font-mono text-xs">{t("ws.applied", { range: appliedNote.text })}</p>}
+              {waitingYou && ask && (
+                <div className="mt-2">
+                  <p className="font-medium">{t("why.title")}</p>
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                    {whyOf(ask.text).map((w, k) => (
+                      <li key={k}>{t(w.key, { n: w.n ?? 0 })}{w.path && <> · <code className="font-mono text-xs">{w.path}</code></>}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {(failed.length > 0 || task.reasons.length > 0) && (
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {failed.length > 0 ? failed.map((e, k) => <li key={k}>{e.signature ? reasonText(e.signature, t.lang) : e.summary}</li>) : task.reasons.map((r) => <li key={r}>{reasonText(r, t.lang)}</li>)}
