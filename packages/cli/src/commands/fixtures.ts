@@ -9,7 +9,7 @@ export function fixturesBuild(io: Io, o: { mandatHome: string; force: boolean; n
   const name = o.name ?? "shop";
   if (!(name in FIXTURES)) throw new MandatError("E_USAGE", `unknown fixture: ${name} (shop, demo-shop)`);
   const r = buildFixture({ repoRoot, mandatHome: o.mandatHome, force: o.force, name: name as FixtureName });
-  io.stdout(`base_commit ${r.sha}${r.state === "unchanged" ? " (unchanged)" : r.state === "recreated" ? " (recreated)" : ""}\n`);
+  io.stdout(`base_commit ${r.sha}${r.state === "unchanged" ? " (unchanged)" : r.state === "advanced" ? " (advanced: Mandat applied changes on top)" : r.state === "recreated" ? " (recreated)" : ""}\n`);
   if (name !== "shop") io.stdout(`mirror ${r.mirror}\n`);
   return 0;
 }
