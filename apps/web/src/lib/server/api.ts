@@ -19,7 +19,7 @@ import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
-import { AccountName, LoginCode } from "@mandat/contract";
+import { AccountName, LoginCode, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -289,10 +289,10 @@ const NameBody = z.object({ name: AccountName }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 const LOGIN_ERRORS = new Set(["bad_name", "bad_code", "not_waiting"]);
 
-async function keysOwner(req: Request, d: ApiDeps, write: boolean): Promise<{ uid: string; body: unknown; keys: KeysClient } | Response> {
+async function keysOwner(req: Request, d: ApiDeps, write: boolean, cap: "accounts.manage" | "tools.manage" = "accounts.manage"): Promise<{ uid: string; body: unknown; keys: KeysClient } | Response> {
   const p = write ? await post(req, d) : await ctx(req, d);
   if (p instanceof Response) return p;
-  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!(await hasCap(d.db, p.uid, p.org, cap))) return json(403, { error: "not_an_owner" });
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   return { uid: p.uid, body: "body" in p ? p.body : null, keys: d.keys };
 }
@@ -320,6 +320,23 @@ export async function postLoginCode(req: Request, d: ApiDeps): Promise<Response>
 export async function deleteLogin(req: Request, d: ApiDeps): Promise<Response> {
   const k = await keysOwner(req, d, true);
   return k instanceof Response ? k : loginReply(await k.keys.login({ kind: "cancel" }));
+}
+
+// D-370: the CLI commands from the web (page System): a closed list, run by the control endpoint of `mandat local`
+export async function getSystem(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, false, "tools.manage");
+  if (k instanceof Response) return k;
+  const jobs = await k.keys.jobs();
+  return jobs ? json(200, { jobs }) : json(502, { error: "control_unavailable" });
+}
+
+export async function postSystemJob(req: Request, d: ApiDeps, job: string): Promise<Response> {
+  const k = await keysOwner(req, d, true, "tools.manage");
+  if (k instanceof Response) return k;
+  const j = SystemJob.safeParse(job);
+  if (!j.success) return json(404, { error: "unknown_job" });
+  const s = await k.keys.runJob(j.data);
+  return s ? json(200, s) : json(502, { error: "control_unavailable" });
 }
 
 export async function postLogout(req: Request, d: ApiDeps): Promise<Response> {

@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deleteKeys, deleteLogin, getKeys, getLogin, postKeys, postLogin, postLoginCode, postLogout, postRetry } from "./api";
+import { deleteKeys, deleteLogin, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postRetry, postSystemJob } from "./api";
 import type { ApiDeps } from "./api";
 import { RateLimiter } from "./guard";
 import { controlKeys } from "./keys";
@@ -24,7 +24,10 @@ const fake: KeysClient = {
     return { ok: true, state: { state: "idle" } };
   },
   logout: async (name) => (calls.push({ kind: "logout", name }), true),
+  jobs: async () => [job("doctor")],
+  runJob: async (j) => (calls.push({ kind: "job", j }), { ...job(j), state: "running" }),
 };
+const job = (j: "doctor" | "images" | "images-ui" | "fixtures" | "fixtures-force" | "stats" | "verify-log") => ({ job: j, state: "idle" as const, started_at: null, finished_at: null, exit: null, lines: [], result: null });
 const calls: unknown[] = [];
 const deps = (keys: KeysClient | null): ApiDeps => ({ db, user: () => Promise.resolve(who), secondFactor: () => Promise.resolve(null), createLimiter: new RateLimiter(10, 60_000), ...(keys ? { keys } : {}) });
 const csrf = "c".repeat(43);
@@ -83,6 +86,24 @@ describe("API /api/accounts (D-369: subscription login from the web)", () => {
     }
     who = U.owner;
     expect((await postLogin(req("POST", { name: "lichno" }), deps(null))).status).toBe(503);
+  });
+});
+
+describe("API /api/system (D-370: the CLI commands from the web)", () => {
+  it("owner: list and start a job from the closed list; unknown job → 404; approver/viewer → 403; no control → 503", async () => {
+    who = U.owner;
+    calls.length = 0;
+    expect(await (await getSystem(req("GET"), deps(fake))).json()).toEqual({ jobs: [job("doctor")] });
+    expect(await (await postSystemJob(req("POST"), deps(fake), "images")).json()).toMatchObject({ job: "images", state: "running" });
+    expect((await postSystemJob(req("POST"), deps(fake), "rm -rf")).status).toBe(404);
+    expect(calls).toEqual([{ kind: "job", j: "images" }]);
+    for (const u of [U.approver, U.viewer]) {
+      who = u;
+      expect((await getSystem(req("GET"), deps(fake))).status).toBe(403);
+      expect((await postSystemJob(req("POST"), deps(fake), "doctor")).status).toBe(403);
+    }
+    who = U.owner;
+    expect((await postSystemJob(req("POST"), deps(null), "doctor")).status).toBe(503);
   });
 });
 

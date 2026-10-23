@@ -14,7 +14,7 @@ import { btn } from "./ui";
 
 // D-305: the frame of every page — a side bar that stays (sections, the projects with their health, settings, theme),
 // one primary action (+ New task) on top. On a phone the side bar becomes a row of links.
-type Current = "tasks" | "overview" | "library" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research";
+type Current = "tasks" | "overview" | "library" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research" | "system";
 const NAV: { id: Current; href: string; label: Key }[] = [
   { id: "tasks", href: "/", label: "nav.tasks" },
   { id: "overview", href: "/overview", label: "nav.overview" },
@@ -26,6 +26,7 @@ const NAV: { id: Current; href: string; label: Key }[] = [
   { id: "research", href: "/research", label: "nav.research" },
   { id: "harness", href: "/harness", label: "nav.harness" },
   { id: "keys", href: "/keys", label: "nav.keys" },
+  { id: "system", href: "/system", label: "nav.system" },
   { id: "settings", href: "/settings", label: "nav.settings" },
 ];
 export const HEALTH: Record<Health, { mark: string; text: string; label: Key }> = {

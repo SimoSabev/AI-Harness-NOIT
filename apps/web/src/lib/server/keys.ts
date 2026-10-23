@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { LoginState } from "@mandat/contract";
+import { JobState, LoginState } from "@mandat/contract";
+import type { SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
 // starts the proxy with them. The web server keeps nothing: no database row, no file, no log, no echo.
@@ -17,6 +18,9 @@ export type LoginReply = { ok: true; state: LoginState } | { ok: false; error: s
 export interface KeysClient {
   login(op: LoginOp): Promise<LoginReply>;
   logout(name: string): Promise<boolean | null>;
+  /** D-370: the CLI commands of `mandat local` (page System); null = the control endpoint did not answer */
+  jobs(): Promise<JobState[] | null>;
+  runJob(job: SystemJob): Promise<JobState | null>;
   /** D-295: the subscription accounts of `mandat local` */
   accounts(): Promise<Account[]>;
   status(): Promise<KeysStatus>;
@@ -75,9 +79,21 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const j = z.object({ removed: z.boolean() }).safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data.removed : null;
   };
+  const jobs = async (): Promise<JobState[] | null> => {
+    const r = await send("GET", "/system").catch(() => null);
+    const j = z.object({ jobs: z.array(JobState) }).safeParse(r?.ok ? await r.json().catch(() => null) : null);
+    return j.success ? j.data.jobs : null;
+  };
+  const runJob = async (job: SystemJob): Promise<JobState | null> => {
+    const r = await send("POST", `/system/${job}`).catch(() => null);
+    const j = JobState.safeParse(r?.ok ? await r.json().catch(() => null) : null);
+    return j.success ? j.data : null;
+  };
   return {
     login,
     logout,
+    jobs,
+    runJob,
     accounts,
     status: async () => (await call("GET").catch(() => null)) ?? down,
     set: (k) => call("POST", k).catch(() => null),
