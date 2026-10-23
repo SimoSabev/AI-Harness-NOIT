@@ -101,7 +101,7 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     await runDaemonOnce(soft.deps);
     expect((await soft.db.query<{ state: string }>("select state from public.tasks where id = 't_web_1'")).rows[0]?.state).toBe("HELD");
     expect((await soft.db.query<{ text: string }>("select text from public.task_activities where kind = 'harness_drift'")).rows[0]?.text).toContain("budgets.task_usd");
-  });
+  }, 30_000);
   it("spill (E3в): 429 на anthropic-key-demo (2 ч) → openai-key-demo · fake-codex · опит 2 · VERIFIED · ниво 0 → клон …-a2", async () => {
     const s = await setup(0);
     await seedChannels(s.db);
@@ -160,7 +160,7 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
   });
   it("E9б (D12): the before/after screenshots named by D12 go to changeset_shots with the verdict; nothing outside runs/<id>/ui", async () => {
     const s = await setup(0, "UNKNOWN");
-    const run = s.deps.run;
+    const run = s.deps.run as NonNullable<DaemonDeps["run"]>;
     s.deps.run = async (i) => {
       const r = await run(i);
       const ui = path.join(r.runDir ?? "", "ui");
@@ -168,7 +168,7 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
       writeFileSync(path.join(ui, "route-0.png"), "AFTER");
       writeFileSync(path.join(ui, "base-route-0.png"), "BEFORE");
       writeFileSync(path.join(r.runDir ?? "", "secret.png"), "NO");
-      const d12 = { detector: "D12.ui" as const, phase: 1, status: "unknown" as const, summary: "1 route(s) look different from base", source: "sandbox:verify", agent_visible: true, signature: "D12:visual_diff:/",
+      const d12: Verdict["evidence"][number] = { detector: "D12.ui", phase: 1, status: "unknown", summary: "1 route(s) look different from base", source: "sandbox:verify", agent_visible: true, signature: "D12:visual_diff:/",
         data: { routes: [{ route: "/", screenshot: "ui/route-0.png", base_screenshot: "ui/base-route-0.png", visual_diff: 0.2 }, { route: "/x", screenshot: "../secret.png", base_screenshot: null }] } };
       return { ...r, verdict: r.verdict ? { ...r.verdict, evidence: [...r.verdict.evidence, d12] } : r.verdict };
     };

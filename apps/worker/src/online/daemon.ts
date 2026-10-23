@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
@@ -460,6 +460,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     for (const e of v.evidence) {
       await tx.query("insert into public.evidence (org_id, verdict_id, detector, phase, status, summary, data, source, signature) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9)", [t.org_id, vr.rows[0]?.id, e.detector, e.phase, e.status, e.summary, JSON.stringify(e.data), e.source, e.signature ?? null]);
     }
+    // E9б (D12, D-364): the before/after screenshots for the card — only names D12 gave, only from runs/<id>/ui
+    for (const [name, file] of uiShots(v.evidence, out.runDir)) await tx.query("insert into public.changeset_shots (changeset_id, org_id, name, png) values ($1::uuid, $2::uuid, $3, $4)", [csId, t.org_id, name, readFileSync(file)]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "verdict", task_id: t.id, payload: { run_id: v.run_id, result: v.result, reasons: v.reasons, verdict_hash: hashJcs(v) } });
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "gated", task_id: t.id, payload: { action: action.kind, level: lvl.level, reasons: lvl.reasons } });
     const state = v.result === "FAILED" ? "BLOCKED" : action.kind === "pr_then_auto_merge" ? "GATED" : "HELD";
@@ -581,4 +583,21 @@ export async function runDaemonOnce(d: DaemonDeps): Promise<string | null> {
   const id = await claimNext(d.db);
   if (id) await processTask(d, id);
   return id;
+}
+
+/** D12 screenshot files of a verdict: `ui/route-N.png` / `ui/base-route-N.png` that exist in the run's ui directory, ≤ 5 MB. */
+export function uiShots(evidence: Verdict["evidence"], runDir: string | null | undefined): [string, string][] {
+  if (!runDir) return [];
+  const d12 = evidence.find((e) => e.detector === "D12.ui");
+  const routes = (d12?.data as { routes?: { screenshot?: unknown; base_screenshot?: unknown }[] } | undefined)?.routes ?? [];
+  const out = new Map<string, string>();
+  for (const r of routes.slice(0, 5)) {
+    for (const s of [r.screenshot, r.base_screenshot]) {
+      const m = typeof s === "string" ? /^ui\/((?:base-)?route-[0-4]\.png)$/.exec(s) : null;
+      if (!m) continue;
+      const file = path.join(runDir, "ui", m[1] as string);
+      if (existsSync(file) && lstatSync(file).isFile() && lstatSync(file).size <= 5 * 1024 * 1024) out.set(m[1] as string, file);
+    }
+  }
+  return [...out.entries()];
 }
