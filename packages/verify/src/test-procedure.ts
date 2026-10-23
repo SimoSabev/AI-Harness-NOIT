@@ -74,7 +74,7 @@ async function runUiCheck(ctx: SandboxCtx, i: TestProcedureInput & { ui: NonNull
         for (const [n, b] of base) writeFileSync(path.join(dir, n), b);
         const chunks: Buffer[] = [];
         for await (const c of packTree(dir)) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c as string));
-        await runSandbox(ctx, { role: "seed", volume: out, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/in/base && tar -x -C /m/in/base"], stdin: Readable.from([Buffer.concat(chunks)]), timeoutMs: 60_000 });
+        await runSandbox(ctx, { role: "seed", user: "0:0", volume: out, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/in/base && tar -x -C /m/in/base && chmod -R a+rX /m/in/base"], stdin: Readable.from([Buffer.concat(chunks)]), timeoutMs: 60_000 });
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
