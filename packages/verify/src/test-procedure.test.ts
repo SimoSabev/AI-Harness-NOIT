@@ -155,6 +155,8 @@ describe("runTestProcedure (фалшив docker)", () => {
     expect(seed).toBeGreaterThan(-1);
     expect(seed).toBeLessThan(j.findIndex((a) => a.includes("mandat.role=ui ")));
     expect(j[seed]).toContain("--network none");
+    // /m/in is root's in the sandbox image (the agent never writes it): the seed is the one root step, as for /m/in elsewhere
+    expect(j[seed]).toContain("--user 0:0");
   });
   it("E9б (D12): a broken result.json or a network that cannot be made → ui null (D12 says the check did not run); the verdict path goes on", async () => {
     const d1 = docker([{ match: (a) => a.join(" ").includes("/m/out/ui/result.json"), out: "{not json" }, { match: (a) => a.join(" ").includes("head -c"), out: report }], []);
