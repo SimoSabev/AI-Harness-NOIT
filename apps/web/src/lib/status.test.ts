@@ -46,7 +46,7 @@ describe("status (D-292)", () => {
     expect(groupOf("stopped")).toBe("done");
   });
   it("every detector the verdict writes has a plain label", () => {
-    for (const d of ["D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "D10.lockfile", "MUST_PASS", "EXPORT", "INTEGRITY", "CANARY"]) expect(CHECK_LABEL[d]).toBeTruthy();
+    for (const d of ["D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "D10.lockfile", "MUST_PASS", "EXPORT", "INTEGRITY", "CANARY", "D11.mutation", "D5.hidden", "D8.static", "D12.ui", "REVIEW"]) expect(CHECK_LABEL[d]).toBeTruthy();
     expect(checkLabel("D2.inventory")).toBe("No test was deleted, skipped or weakened");
     expect(checkLabel("D2.inventory", "bg")).toBe("Никой тест не е изтрит, прескочен или отслабен");
     expect(checkLabel("D7.ci", "bg")).toBe("CI проверките");
