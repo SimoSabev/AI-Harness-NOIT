@@ -15,7 +15,11 @@ import { desktopLang, dt, loadingPage } from "./i18n.js";
 import { grantsFile } from "./grant-store.js";
 import { createInboxWatcher, notificationFor } from "./inbox-watch.js";
 import { authorize, folderArgs } from "./local-access.js";
+import { cliSpawn, harnessLayout, harnessSpawn } from "./harness-launch.js";
+import type { LaunchInput } from "./harness-launch.js";
 import { harnessEnv, resolveDesktopKek } from "./kek-keychain.js";
+import { updateFeed } from "./updater.js";
+import type { UpdateFeed } from "./updater.js";
 import { authorizeUse, localHandlers } from "./local-handlers.js";
 import type { LocalDeps } from "./local-handlers.js";
 import { ptyEnv, shellArgs, shellFor, terminalSessions } from "./terminal-sessions.js";
@@ -30,7 +34,19 @@ import { allowPermission, attachGuards, withCsp } from "./window-guard.js";
 // opens the address it printed (no login, D-368) and keeps the app in the tray. Built only locally.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
-const icon = nativeImage.createFromPath(path.join(repoRoot, "apps/web/public/icon-192.png"));
+// E9g A5 (D-376): dev → the repo and `pnpm local`; the installed app → resources/harness run by Electron's own Node.
+const launch: LaunchInput = {
+  packaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  repoRoot,
+  execPath: process.execPath,
+  userData: app.getPath("userData"),
+  platform: process.platform,
+  home: os.homedir(),
+  env: process.env,
+};
+const layout = harnessLayout(launch);
+const icon = nativeImage.createFromPath(layout.icon);
 // D-371: the preload (dist/preload.cjs, compiled on its own) is the only way from the page to main.
 const SECURE = { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, preload: path.join(here, "preload.cjs") } as const;
 // E7f: the language is chosen once the app is ready (app.getLocale() needs it): MANDAT_LANG, else the system locale.
@@ -61,13 +77,15 @@ function lockDown(w: BrowserWindow): void {
 }
 
 /** E9g A3 (D-373): the harness profile folder — the same MANDAT_HOME `pnpm local` uses (packages/cli/src/paths.ts). */
-const mandatHome = path.resolve(process.env.MANDAT_HOME ?? path.join(repoRoot, ".mandat"));
+const mandatHome = layout.mandatHome;
 const APPLY_TIMEOUT_MS = 120_000;
 
-/** `node <argv>` without a shell and without API keys in its env (childEnv), with a time limit. */
+/** The CLI with `argv` without a shell and without API keys in its env (childEnv), with a time limit. */
 function runNode(argv: string[]): Promise<{ code: number; stdout: string }> {
   return new Promise((resolve) => {
-    const c = spawn("node", argv, { cwd: repoRoot, env: childEnv(process.env), stdio: ["ignore", "pipe", "ignore"], shell: false });
+    // runNode gets [cliMain, ...args] (local-handlers.ts); cliSpawn puts cliMain back in front with the right Node
+    const s = cliSpawn(launch, layout, argv[0] === layout.cliMain ? argv.slice(1) : argv, childEnv(process.env));
+    const c = spawn(s.command, s.args, { cwd: s.cwd, env: s.env, stdio: ["ignore", "pipe", "ignore"], shell: false });
     let out = "";
     const timer = setTimeout(() => c.kill("SIGTERM"), APPLY_TIMEOUT_MS);
     c.stdout.setEncoding("utf8").on("data", (d: string) => void (out = (out + d).slice(-200_000)));
@@ -101,7 +119,7 @@ function localDeps(): LocalDeps {
     },
     openExternal: (url) => shell.openExternal(url),
     runNode,
-    cliMain: path.join(repoRoot, "packages/cli/dist/main.js"),
+    cliMain: layout.cliMain,
     now: () => new Date(),
     // E9g A4 (D-375): a revoked `terminal` scope closes the host terminals in that folder at once
     onRevoked: (left) => {
@@ -284,7 +302,13 @@ function start(kek: Buffer | null): void {
   });
   void win.loadURL(loadingPage(lang));
   let out = "";
-  child = spawn("pnpm", ["local"], { cwd: repoRoot, env: { ...harnessEnv(process.env, kek), MANDAT_LANG: lang }, stdio: ["ignore", "pipe", "pipe"] });
+  const run = harnessSpawn(launch, layout, { ...harnessEnv(process.env, kek), MANDAT_LANG: lang });
+  child = spawn(run.command, run.args, { cwd: run.cwd, env: run.env, stdio: ["ignore", "pipe", "pipe"], shell: false });
+  child.on("error", (e) => {
+    child = null;
+    dialog.showErrorBox(t("error.start"), e.message);
+    app.quit();
+  });
   child.stdout?.on("data", (d: Buffer) => {
     if (banner) return;
     out += d.toString("utf8");
@@ -317,6 +341,19 @@ function start(kek: Buffer | null): void {
   globalShortcut.register(QUICK_ENTRY, () => toWeb({ command: "new_task" }));
 }
 
+/** E9g A5 (D-376, Q-054): electron-updater only when a feed is configured; otherwise it is never loaded. */
+async function checkUpdates(feed: UpdateFeed): Promise<void> {
+  const m = (await import("electron-updater")) as unknown as { autoUpdater?: AutoUpdaterLike; default?: { autoUpdater: AutoUpdaterLike } };
+  const updater = m.autoUpdater ?? m.default?.autoUpdater;
+  if (!updater) return;
+  updater.setFeedURL(feed);
+  await updater.checkForUpdatesAndNotify();
+}
+interface AutoUpdaterLike {
+  setFeedURL(feed: UpdateFeed): void;
+  checkForUpdatesAndNotify(): Promise<unknown>;
+}
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", (_e, argv) => {
@@ -341,5 +378,7 @@ else {
     // E9g A4 (D-374): the KEK of the key envelope from the OS keychain; without one, `pnpm local` keeps its 0600 file.
     const kek = await resolveDesktopKek({ keychain: safeStorage, platform: process.platform, mandatHome }).catch(() => null);
     start(kek?.source === "keychain" ? kek.kek : null);
+    const feed = updateFeed(process.env, app.isPackaged);
+    if (feed) void checkUpdates(feed).catch(() => undefined);
   });
 }
