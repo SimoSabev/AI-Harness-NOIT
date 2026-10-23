@@ -41,6 +41,8 @@ export interface VerifyArgs {
   home: string;
   /** v5 E9б (D5): a directory of a person's hidden tests (copied into tree B only) */
   hidden: string | null;
+  /** v5 E9б (D8): the project's lint and typecheck commands */
+  checks: { name: "lint" | "typecheck"; command: string }[];
 }
 
 const TASK_TYPES = TaskType.options; // D-360: "free" too
@@ -49,6 +51,7 @@ const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathn
 
 export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args: VerifyArgs } | { ok: false; error: string } {
   const a: Partial<VerifyArgs> & { external: boolean; json: boolean } = { external: false, json: false };
+  const checks: VerifyArgs["checks"] = [];
   for (let k = 0; k < argv.length; k++) {
     const f = argv[k];
     const val = () => {
@@ -67,6 +70,7 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
       else if (f === "--external") a.external = true;
       else if (f === "--json") a.json = true;
       else if (f === "--hidden") a.hidden = path.resolve(io.cwd, val());
+      else if (f === "--lint" || f === "--typecheck") checks.push({ name: f === "--lint" ? "lint" : "typecheck", command: val() });
       else return { ok: false, error: `unknown argument ${f ?? ""}` };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
@@ -74,7 +78,7 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
   }
   if (!a.repo) return { ok: false, error: "--repo is required" };
   const home = a.home ?? io.env.MANDAT_HOME ?? path.join(os.homedir(), ".mandat");
-  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null } };
+  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null, checks } };
 }
 
 const REASON_LABEL: Record<string, string> = {
@@ -119,7 +123,7 @@ export const exitFor = (r: string): 0 | 10 | 20 => (r === "VERIFIED" ? 0 : r ===
 export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCliDeps = {}): Promise<number> {
   const parsed = parseVerifyArgs(argv, io);
   if (!parsed.ok) {
-    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir>] [--json] [--home <dir>]\n`);
+    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir>] [--lint <cmd>] [--typecheck <cmd>] [--json] [--home <dir>]\n`);
     return 2;
   }
   const a = parsed.args;
@@ -201,7 +205,7 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     await writer.text("export/changeset.json", ex);
     writer.raw("export/diff.patch", diffPatch);
     const out = await verifyChange({
-      req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps, ...(a.hidden ? { hidden: readHidden(a.hidden) } : {}),
+      req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps, ...(a.hidden ? { hidden: readHidden(a.hidden) } : {}), ...(a.checks.length > 0 ? { checks: a.checks } : {}),
     });
     await writer.text("verdict.json", out.verdict);
     return report(out, base);

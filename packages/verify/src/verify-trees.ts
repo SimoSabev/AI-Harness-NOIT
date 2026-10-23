@@ -2,14 +2,14 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedLines, anyMatch, applySite, d1, d10Lockfile, d5Hidden, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
+import { addedLines, anyMatch, applySite, d1, d10Lockfile, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
 import type { DockerRunner } from "@mandat/sandbox";
 import type { startRunGate } from "./gate.js";
 import { runTestProcedure } from "./test-procedure.js";
-import type { TestProcedureResult } from "./test-procedure.js";
+import type { CheckResult, TestProcedureResult } from "./test-procedure.js";
 import { buildVerifyTree, listFiles, snapshot } from "./trees.js";
 
 // E0 т. 7.8 (moved from apps/worker/src/run.ts, D-205): baseline (cached) → trees H, A, B → D10, D3, D4, D1, D2, MUST_PASS.
@@ -47,6 +47,8 @@ export interface VerifyTreesInput {
   rc: RepoConfig;
   /** v5 E9б (D5): a person's hidden tests, copied into tree B only (never into the agent's tree) */
   hidden?: HiddenTests | null;
+  /** v5 E9б (D8): the project's lint and typecheck commands (from the profile or the caller) */
+  checks?: { name: "lint" | "typecheck"; command: string }[];
   allowedPaths: string[];
   mayChangeTests: boolean;
   mustPass: string[];
@@ -105,6 +107,20 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     writeFileSync(cacheFile, okB.raw as string);
   }
   const bl = baseline as ParsedReport;
+  // D8: the checks on base (cached per base and commands; a cached baseline without them runs base for the checks only)
+  const checks = i.checks ?? [];
+  let baseChecks: CheckResult[] = [];
+  if (checks.length > 0) {
+    const checksFile = path.join(i.mandatHome, "cache", "checks", `${i.baseSha}-${hashJcs(checks).slice("sha256:".length)}.json`);
+    if (existsSync(checksFile)) baseChecks = JSON.parse(readFileSync(checksFile, "utf8")) as CheckResult[];
+    else {
+      const bc = await runTests({ ...testsInput("base", i.baseDir), testsCommand: "true", checks });
+      if (!bc.ok) infra(bc.code, `base checks: ${bc.code}`);
+      baseChecks = (bc as Extract<TestProcedureResult, { ok: true }>).checks ?? [];
+      mkdirSync(path.dirname(checksFile), { recursive: true });
+      writeFileSync(checksFile, JSON.stringify(baseChecks));
+    }
+  }
   // 2) trees H, A, B
   const head = await cleanClone({ mirrorPath: i.mirrorPath, baseSha: i.baseSha, tmpRoot: i.tmpRoot, name: "h" });
   if (i.diffPatch.length > 0) {
@@ -171,7 +187,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const A = await runTests(testsInput("a", aDir));
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
   if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
-  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}) });
+  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}), ...(checks.length > 0 ? { checks } : {}) });
   i.onGateLog?.("b", path.join(i.runDir, "gate", "b", "log", "events.jsonl"));
   if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
   const a = A as Extract<TestProcedureResult, { ok: true }>;
@@ -180,6 +196,10 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const split = hidden ? splitHidden(bRaw.report, hidden.dir) : null;
   const b = split ? { ...bRaw, report: split.visible } : bRaw;
   await i.onReports?.({ raw: a.raw, exit: a.exit }, { raw: b.raw, exit: b.exit });
+  if (checks.length > 0) {
+    const exitOf = (rs: CheckResult[], n: string) => rs.find((x) => x.name === n)?.exit ?? null;
+    evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bRaw.checks ?? [], c.name) })), deps: [], now: Date.now() }).evidence);
+  }
   if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
   evidence.push(

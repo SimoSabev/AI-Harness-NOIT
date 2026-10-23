@@ -617,6 +617,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         await dockerText(docker, ["volume", "rm", "-f", vol], 60_000);
 
         // ---------- VERIFY (7.8)
+        // E9б (D8): the approved profile's lint and typecheck commands (layer B), when it has them
+        const cmds = i.profile?.layers.b.commands ?? {};
+        const profileChecks = [...(cmds.lint ? [{ name: "lint" as const, command: cmds.lint }] : []), ...(cmds.typecheck ? [{ name: "typecheck" as const, command: cmds.typecheck }] : [])];
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
           await timed("verify", async () => {
@@ -626,7 +629,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 docker, runId, runDir, mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
                 mirrorPath, baseSha: contract.base_commit, baseDir, diffPatch: diffPatch as Buffer, files: ex.files, rc: contract.repo_config,
                 allowedPaths: contract.allowed_paths, mayChangeTests: contract.may_change_tests, mustPass: contract.must_pass, external: false, tmpRoot,
-                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}),
+                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(profileChecks.length > 0 ? { checks: profileChecks } : {}),
                 onReports: async (a, b) => {
                   w.raw("verify/report-a.json", redactReport(a.raw));
                   w.raw("verify/report-b.json", redactReport(b.raw));
@@ -692,7 +695,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["D5.hidden", "AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "D8.static", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }

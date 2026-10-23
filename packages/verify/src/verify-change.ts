@@ -89,6 +89,8 @@ export interface VerifyChangeInput {
   preVerdict?: Evidence;
   /** v5 E9б (D5): a person's hidden tests for tree B */
   hidden?: HiddenTests | null;
+  /** v5 E9б (D8): lint and typecheck commands */
+  checks?: { name: "lint" | "typecheck"; command: string }[];
 }
 
 export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome> {
@@ -109,8 +111,10 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
   const finish = (): VerifyOutcome => {
     const evidence = EVIDENCE_ORDER.map((d) => evd.get(d) ?? na(d));
     // D5 only when hidden tests ran (verdicts without them keep their evidence list)
-    const d5 = evd.get("D5.hidden");
-    if (d5) evidence.push(d5);
+    for (const d of ["D5.hidden", "D8.static"] as const) {
+      const e = evd.get(d);
+      if (e) evidence.push(e);
+    }
     const infraEv = evd.get("INFRA");
     if (infraEv) evidence.push(infraEv);
     const result = decideVerdict(evidence);
@@ -159,7 +163,8 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
   }
   // D5 exists when a person gave hidden tests; without them a policy that requires D5 is FAILED INFRA:detector_missing
   const hasHidden = (i.hidden?.files.length ?? 0) > 0;
-  const missing = policy.harness.required_detectors.filter((d) => (MISSING_DETECTORS as readonly string[]).includes(d) && !(d === "D5" && hasHidden));
+  const hasChecks = (i.checks?.length ?? 0) > 0;
+  const missing = policy.harness.required_detectors.filter((d) => (MISSING_DETECTORS as readonly string[]).includes(d) && !(d === "D5" && hasHidden) && !(d === "D8" && hasChecks));
   if (missing.length > 0) {
     set(ev("POLICY", "pass", "policy loaded from base"));
     set(ev("INFRA", "fail", `required detector missing: ${missing.join(", ")}`, { missing }, { cls: "detector_missing", id: missing[0] ?? "-" }));
@@ -196,7 +201,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
       infraUser: deps.infraUser, ipv6Sysctl: deps.ipv6Sysctl, mirrorPath: deps.mirrorPath, baseSha: req.base_sha, baseDir, diffPatch: i.diffPatch,
       files: i.files, rc, allowedPaths: tt ? tt.allowed_paths : ["**"], mayChangeTests, mustPass: [], external, tmpRoot: deps.tmpRoot,
       ...(deps.extraCa ? { extraCa: deps.extraCa } : {}), ...(deps.startGate ? { startGate: deps.startGate } : {}), ...(deps.runTests ? { runTests: deps.runTests } : {}),
-      ...(deps.progress ? { progress: deps.progress } : {}), ...(i.hidden ? { hidden: i.hidden } : {}),
+      ...(deps.progress ? { progress: deps.progress } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}),
     });
     for (const e of r.evidence) set(e);
     if (!tt) set(na("D4.contract", "no task type"));
