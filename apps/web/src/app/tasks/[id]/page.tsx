@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DiffView } from "../../../components/diff-view";
+import { LocalActions } from "../../../components/local-access";
 import { Live } from "../../../components/live";
 import { Shell } from "../../../components/shell";
 import { TaskActions } from "../../../components/task-actions";
@@ -205,6 +206,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         <section aria-labelledby="diff-h" className="mt-8">
           <h2 id="diff-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{tr("task.change")}</h2>
           <DiffView files={splitDiff(d.diff)} t={tr} />
+          <LocalActions taskId={t.id} repoId={t.repo_id} files={splitDiff(d.diff).map((f) => f.path)} />
         </section>
       )}
 

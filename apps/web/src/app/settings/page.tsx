@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { LocalAccessLink } from "../../components/local-access";
 import { Shell } from "../../components/shell";
 import { LangChoice, SampleChoice, ThemeChoice, ViewChoice } from "../../components/theme-switch";
 import { card } from "../../components/ui";
@@ -50,6 +51,7 @@ export default async function SettingsPage() {
         <p className="mt-1 mb-3 text-sm text-mute">{t("settings.rolesHint")}</p>
         <Link href="/settings/roles" className="text-sm text-accent underline-offset-4 hover:underline">{t("settings.rolesLink")}</Link>
       </section>
+      <LocalAccessLink />
       <section aria-labelledby="s-term" className={`${card} mt-4 p-5`}>
         <h2 id="s-term" className="font-display text-base font-semibold">{t("settings.terminal")}</h2>
         <p className="mt-1 text-sm text-mute">{rich(t("settings.terminalHint"), { cmd: <code className="font-mono text-ink">pnpm mandat tui</code> })}</p>
