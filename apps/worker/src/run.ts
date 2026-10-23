@@ -24,10 +24,10 @@ import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha }
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { RunWriter, VerifyInfraError, acquireRunLock, checksFromCommands, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
-import type { HiddenTests, RunGate, runTestProcedure } from "@mandat/verify";
+import type { HiddenTests, RunGate, UiCheck, runTestProcedure } from "@mandat/verify";
 
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
@@ -82,7 +82,7 @@ export interface RunInternals {
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
   recompute?: typeof recomputeTreeSha;
-  images?: { sandbox: string; gate: string; proxy: string };
+  images?: { sandbox: string; gate: string; proxy: string; ui?: string };
   gitVersion?: () => string | null;
   /** E9б: the advisor's model call (through llm-proxy; none configured → the advisor is skipped) */
   reviewCall?: ReviewCall;
@@ -625,6 +625,14 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         // ---------- VERIFY (7.8)
         // E9б (D8): the approved profile's lint and typecheck commands (layer B), when it has them
         const profileChecks = checksFromCommands(i.profile?.layers.b.commands ?? {});
+        // E9б (D12, D-364): the profile's UI paths; the browser image is opt-in (missing → D12 unknown: not run)
+        const uiPaths = i.profile?.layers.g.ui_paths ?? [];
+        let uiCheck: UiCheck | null = null;
+        if (uiPaths.length > 0) {
+          const tag = x.images?.ui ?? (await uiImageTag(repoRoot));
+          const present = (await dockerText(docker, ["image", "inspect", tag])).exitCode === 0;
+          uiCheck = { paths: uiPaths, devCommand: i.profile?.layers.b.commands.dev ?? null, image: present ? tag : null, routes: ["/"] };
+        }
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
           await timed("verify", async () => {
@@ -634,7 +642,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 docker, runId, runDir, mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
                 mirrorPath, baseSha: contract.base_commit, baseDir, diffPatch: diffPatch as Buffer, files: ex.files, rc: contract.repo_config,
                 allowedPaths: contract.allowed_paths, mayChangeTests: contract.may_change_tests, mustPass: contract.must_pass, external: false, tmpRoot,
-                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(profileChecks.length > 0 ? { checks: profileChecks } : {}),
+                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(profileChecks.length > 0 ? { checks: profileChecks } : {}), ...(uiCheck ? { ui: uiCheck } : {}),
                 onReports: async (a, b) => {
                   w.raw("verify/report-a.json", redactReport(a.raw));
                   w.raw("verify/report-b.json", redactReport(b.raw));
@@ -705,7 +713,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["D5.hidden", "D8.static", "REVIEW", "AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "D8.static", "D12.ui", "REVIEW", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }
