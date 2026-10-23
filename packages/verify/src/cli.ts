@@ -1,7 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { TaskType, parseMandatYml, ulid } from "@mandat/contract";
+import { MandatError, TaskType, parseMandatYml, ulid } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, VerifyOutcome } from "@mandat/contract";
 import { ev } from "@mandat/core";
 import { exportChangeset } from "@mandat/export";
@@ -14,6 +14,7 @@ import { RunWriter } from "./run-dir.js";
 import { readAtBase, resolveTrustedBase } from "./trusted-base.js";
 import { verifyChange } from "./verify-change.js";
 import type { PolicyInput, VerifyDeps } from "./verify-change.js";
+import type { HiddenTests } from "./verify-trees.js";
 import { tarOf, workingTreeFiles } from "./worktree.js";
 
 // Демо промпт т. 5.7: `mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--json] [--home <dir>]`.
@@ -38,6 +39,8 @@ export interface VerifyArgs {
   external: boolean;
   json: boolean;
   home: string;
+  /** v5 E9б (D5): a directory of a person's hidden tests (copied into tree B only) */
+  hidden: string | null;
 }
 
 const TASK_TYPES = TaskType.options; // D-360: "free" too
@@ -63,6 +66,7 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
       } else if (f === "--home") a.home = path.resolve(io.cwd, val());
       else if (f === "--external") a.external = true;
       else if (f === "--json") a.json = true;
+      else if (f === "--hidden") a.hidden = path.resolve(io.cwd, val());
       else return { ok: false, error: `unknown argument ${f ?? ""}` };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
@@ -70,7 +74,7 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
   }
   if (!a.repo) return { ok: false, error: "--repo is required" };
   const home = a.home ?? io.env.MANDAT_HOME ?? path.join(os.homedir(), ".mandat");
-  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home } };
+  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null } };
 }
 
 const REASON_LABEL: Record<string, string> = {
@@ -89,12 +93,33 @@ export function formatOutcome(o: VerifyOutcome, base: { sha: string; remote: str
   return lines.join("\n") + "\n";
 }
 
+/** D5: the hidden test files of a directory (≤ 200 files, ≤ 5 MB in all; no symlinks); copied into tree B as tests/__hidden__/… */
+export function readHidden(dir: string): HiddenTests {
+  const files: HiddenTests["files"] = [];
+  let bytes = 0;
+  const walk = (rel: string) => {
+    for (const n of readdirSync(path.join(dir, rel)).sort()) {
+      const r = rel ? `${rel}/${n}` : n;
+      const st = lstatSync(path.join(dir, r));
+      if (st.isSymbolicLink()) continue;
+      if (st.isDirectory()) walk(r);
+      else if (st.isFile()) {
+        bytes += st.size;
+        if (files.length >= 200 || bytes > 5 * 1024 * 1024) throw new MandatError("E_USAGE", "hidden tests: at most 200 files and 5 MB");
+        files.push({ path: r, data: readFileSync(path.join(dir, r)) });
+      }
+    }
+  };
+  walk("");
+  return { dir: "tests/__hidden__", files };
+}
+
 export const exitFor = (r: string): 0 | 10 | 20 => (r === "VERIFIED" ? 0 : r === "UNKNOWN" ? 10 : 20);
 
 export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCliDeps = {}): Promise<number> {
   const parsed = parseVerifyArgs(argv, io);
   if (!parsed.ok) {
-    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--json] [--home <dir>]\n`);
+    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir>] [--json] [--home <dir>]\n`);
     return 2;
   }
   const a = parsed.args;
@@ -176,7 +201,7 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     await writer.text("export/changeset.json", ex);
     writer.raw("export/diff.patch", diffPatch);
     const out = await verifyChange({
-      req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps,
+      req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps, ...(a.hidden ? { hidden: readHidden(a.hidden) } : {}),
     });
     await writer.text("verdict.json", out.verdict);
     return report(out, base);

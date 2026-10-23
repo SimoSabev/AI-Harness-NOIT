@@ -14,6 +14,8 @@ export { d3, d3CoveredPaths } from "./d3.js";
 export type { FileSnapshot } from "./d3.js";
 export { d4 } from "./d4.js";
 export { d10Lockfile } from "./d10.js";
+export { d5Hidden, hiddenId, splitHidden } from "./d5.js";
+export type { HiddenResult } from "./d5.js";
 export type { Manifest } from "./d10.js";
 export { mustPass } from "./must-pass.js";
 export { buildReasons, decideVerdict } from "./verdict.js";

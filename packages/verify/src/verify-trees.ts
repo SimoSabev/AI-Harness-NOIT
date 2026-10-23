@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedLines, anyMatch, applySite, d1, d10Lockfile, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
+import { addedLines, anyMatch, applySite, d1, d10Lockfile, d5Hidden, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -26,6 +26,8 @@ const infra = (code: ErrorCode, message: string): never => {
   throw new VerifyInfraError(code, message);
 };
 
+export interface HiddenTests { dir: string; files: { path: string; data: Buffer }[] }
+
 export interface VerifyTreesInput {
   docker: DockerRunner;
   runId: string;
@@ -43,6 +45,8 @@ export interface VerifyTreesInput {
   diffPatch: Buffer;
   files: ChangedFile[];
   rc: RepoConfig;
+  /** v5 E9б (D5): a person's hidden tests, copied into tree B only (never into the agent's tree) */
+  hidden?: HiddenTests | null;
   allowedPaths: string[];
   mayChangeTests: boolean;
   mustPass: string[];
@@ -154,6 +158,16 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     const original = readFileSync(path.join(bDir, st.path));
     return { path: st.path, original, mutated: Buffer.from(applySite(original.toString("utf8"), st), "utf8") };
   });
+  // D5: the hidden tests go into tree B after the D11 inputs are read (they never shape a mutant or a special case)
+  const hidden = i.hidden && i.hidden.files.length > 0 ? i.hidden : null;
+  if (hidden) {
+    for (const f of hidden.files) {
+      const rel = path.posix.normalize(`${hidden.dir}/${f.path}`);
+      if (rel.startsWith("..") || path.posix.isAbsolute(rel)) infra("E_DOCKER", "bad hidden test path");
+      mkdirSync(path.dirname(path.join(bDir, rel)), { recursive: true });
+      writeFileSync(path.join(bDir, rel), f.data);
+    }
+  }
   const A = await runTests(testsInput("a", aDir));
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
   if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
@@ -161,8 +175,12 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   i.onGateLog?.("b", path.join(i.runDir, "gate", "b", "log", "events.jsonl"));
   if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
   const a = A as Extract<TestProcedureResult, { ok: true }>;
-  const b = B as Extract<TestProcedureResult, { ok: true }>;
+  const bRaw = B as Extract<TestProcedureResult, { ok: true }>;
+  // D5: the hidden tests are judged on their own; every other detector sees tree B without them
+  const split = hidden ? splitHidden(bRaw.report, hidden.dir) : null;
+  const b = split ? { ...bRaw, report: split.visible } : bRaw;
   await i.onReports?.({ raw: a.raw, exit: a.exit }, { raw: b.raw, exit: b.exit });
+  if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
   evidence.push(
     b.timedOut
@@ -173,7 +191,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
         }).evidence,
   );
   evidence.push(i.mustPass.length === 0 && i.external ? na("MUST_PASS", "no contract") : mustPass({ ids: i.mustPass, a: a.report, b: b.report }).evidence);
-  const bClean = !b.timedOut && b.exit === 0 && b.report.valid;
+  const bClean = !b.timedOut && (split ? b.report.valid && b.report.success : b.exit === 0) && b.report.valid;
   evidence.push(special.length > 0 ? d11Mutation({ sites, runs: [], b: b.report, special }).evidence : sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
   const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
   const mut = evidence.at(-1);
