@@ -40,8 +40,8 @@
 | 15 | E8з threat model, redteam 10, bench 20 | phase/e8h-redteam | E8а, E8д | ГОТОВО (прегледът чака Симо) (docs/reports/E8h.md) | 2/3 | — |
 | 16 | E8и monorepo/berry/bun | phase/e8i-runners | E7г | ГОТОВО (docs/reports/E8i.md) | 2/2 | — |
 | 17 | E8к спайк RS | phase/e8k-spike-research | — | ГОТОВО (живите числа чакат Симо) (docs/reports/E8k.md) | 1/2 | ключове за доставчици |
-| 18 | E9а нощна смяна | phase/e9a-night-shift | E8е, E8г | в работа | 0/— | нощна смяна у Симо |
-| 19 | E9б D5/D8/D12/съветник | phase/e9b-judge-full | E8б | не е започната | 0/— | — |
+| 18 | E9а нощна смяна | phase/e9a-night-shift | E8е, E8г | ГОТОВО (live чака Симо) (docs/reports/E9a.md) | 1/2 | нощна смяна у Симо |
+| 19 | E9б D5/D8/D12/съветник | phase/e9b-judge-full | E8б | в работа (D5) | 0/— | — |
 | 20 | E9в Gemini, local, роли по модел, Codex профил | phase/e9c-agents-2 | E8а | не е започната | 0/— | ключове/вход |
 | 21 | E9г ресърч услуга | phase/e9d-research | E8д, E8к | не е започната | 0/— | ключове; златен набор |
 | 22 | E9д учене | phase/e9e-learning | E9а | не е започната | 0/— | — |
@@ -51,8 +51,8 @@
 | 26 | E11 платформа | phase/e11-* | E10 | не е започната | 0/— | — |
 
 ## Текуща задача
-E7 (офлайн) и E8а–E8к са готови (E8з: прегледът на threat-model.md чака Симо; E8к: живите числа чакат ключове).
-В работа: E9а (нощна смяна) — правилата, тикът, правилата на нощта в daemon-а и push-ът са готови; остават /night UI,
-docker тестът с паркиране и e2e. Живите части — docs/setup/local-live-checklist.md.
+E7, E8 и E9а са готови (живите части — docs/setup/local-live-checklist.md). D-360: вид задача „Без ограничения“ (free).
+В работа: E9б — D5 скрити тестове (детекторът, `mandat verify --hidden`, таблиците с TOTP са готови; остават качването от
+UI и подаването им от worker-а), после D8, D12, LLM-съветник.
 
 ## Разход API: $0 (v5 бюджет ≤ $25, D-328)
