@@ -176,6 +176,14 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(c).toMatchObject({ allowed_paths: ["src/**"], may_change_tests: false, risk_cap: 3, agent: "claude" });
     expect(() => contractForTask({ id: "t_x", type: "css", text: "x", agent: "claude" }, p.policy, "a".repeat(40))).toThrow(/task type/);
   });
+  it("D-360: a free task without a policy entry → the whole repo, tests may change, the medium risk cap", async () => {
+    const { parseMandatYml } = await import("@mandat/contract");
+    const { readFileSync } = await import("node:fs");
+    const p = parseMandatYml(readFileSync(path.join(repoRoot, "fixtures/demo-shop/.mandat.yml"), "utf8"));
+    if (!p.ok) throw new Error(p.error);
+    const c = contractForTask({ id: "t_x", type: "free", text: "x", agent: "claude" }, p.policy, "a".repeat(40));
+    expect(c).toMatchObject({ type: "free", allowed_paths: ["**"], may_change_tests: true, risk_cap: p.policy.risk_classes.medium?.level_cap });
+  });
 });
 
 const insertProfile = async (db: Awaited<ReturnType<typeof setup>>["db"], status: "proposed" | "approved") => {
