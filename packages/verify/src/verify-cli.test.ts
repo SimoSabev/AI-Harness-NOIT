@@ -140,6 +140,29 @@ describe("mandat-verify (т. 5.7; verify-cli без Docker, тестовете �
     expect(r.verdict.result).toBe("VERIFIED");
     expect(r.verdict.evidence.find((e) => e.detector === "D8.static")?.data).toMatchObject({ skipped: ["typecheck"] });
   });
+  it("D8: нова зависимост с лиценз извън allowlist → UNKNOWN D8:dependency:<име> (фактите от registry-то на хоста)", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    edit(f.repo, "package.json", (s) => { const j = JSON.parse(s) as { dependencies?: Record<string, string> }; j.dependencies = { ...(j.dependencies ?? {}), "left-pad": "1.3.0" }; return JSON.stringify(j, null, 2); });
+    edit(f.repo, "package-lock.json", (s) => {
+      const j = JSON.parse(s) as { packages: Record<string, Record<string, unknown>> };
+      const root = j.packages[""] as { dependencies?: Record<string, string> };
+      root.dependencies = { ...(root.dependencies ?? {}), "left-pad": "1.3.0" };
+      j.packages["node_modules/left-pad"] = { version: "1.3.0", resolved: "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz", integrity: `sha512-${"A".repeat(86)}==`, license: "WTFPL" };
+      return JSON.stringify(j, null, 2);
+    });
+    let asked: string[] = [];
+    let out = "";
+    const io = { stdout: (x: string) => (out += x), stderr: () => undefined, env: {}, cwd: f.repo };
+    const code = await mandatVerify(["--repo", f.repo, "--remote", `file://${f.remote}`, "--home", f.home, "--external", "--type", "free", "--json"], io, {
+      docker: okDocker, images: IMAGES,
+      verify: { runTests: simRunTests(), ipv6Sysctl: true, infraUser: "1000:1000", depFacts: (deps) => { asked = deps.map((d) => `${d.name}@${d.spec}`); return Promise.resolve(deps.map((d) => ({ name: d.name, version: d.spec, license: "GPL-3.0-only", published_at: "2020-01-01T00:00:00Z" }))); } },
+    });
+    const o = JSON.parse(out.trim()) as { verdict: { result: string; reasons: string[] } };
+    expect(asked).toEqual(["left-pad@1.3.0"]);
+    expect([code, o.verdict.result]).toEqual([10, "UNKNOWN"]);
+    expect(o.verdict.reasons).toContain("D8:dependency:left-pad");
+  });
   it("--json: един ред = VerifyOutcome + exit", async () => {
     const f = demo();
     edit(f.repo, "src/cart.ts", fixCode);
