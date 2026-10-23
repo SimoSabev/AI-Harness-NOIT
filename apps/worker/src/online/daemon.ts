@@ -309,7 +309,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
-        ...(hidden ? { hidden } : {}),
+        ...(hidden ? { hidden } : {}), ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),

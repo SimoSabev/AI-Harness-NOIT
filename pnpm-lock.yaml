@@ -317,6 +317,9 @@ importers:
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../../packages/redaction
+      '@mandat/review':
+        specifier: workspace:*
+        version: link:../../packages/review
       '@mandat/sandbox':
         specifier: workspace:*
         version: link:../../packages/sandbox

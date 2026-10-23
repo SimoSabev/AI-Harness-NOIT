@@ -1,4 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { reviewChange } from "@mandat/review";
+import type { ReviewCall } from "@mandat/review";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -56,6 +58,8 @@ export interface RunTaskInput {
   profile?: HarnessProfile;
   /** v5 E9б (D5): a person's hidden tests, copied into tree B at verification only (never into the agent's volume) */
   hidden?: HiddenTests | null;
+  /** v5 E9б (AC-5.5): the LLM advisor (profile G.review); off by default */
+  review?: "off" | "advisory";
   /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
   subjects?: string[];
   /** E8g: ask rules a person allowed once for this attempt (they become allow in the compiled policy) */
@@ -80,6 +84,8 @@ export interface RunInternals {
   recompute?: typeof recomputeTreeSha;
   images?: { sandbox: string; gate: string; proxy: string };
   gitVersion?: () => string | null;
+  /** E9б: the advisor's model call (through llm-proxy; none configured → the advisor is skipped) */
+  reviewCall?: ReviewCall;
   healthz?: (port: number) => Promise<boolean>;
   channel?: Channel;
   usagePollMs?: number;
@@ -692,9 +698,14 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       aliases.push(`infra:${infraCode.replace(/^E_/, "").toLowerCase()}`);
       set(ev("INFRA", "unknown", `infra: ${infraCode}`, {}, { cls: infraCode.replace(/^E_/, ""), id: "-" }));
     }
+    // E9б (AC-5.5): the advisor reads the verified change; it can only make a human look (REVIEW unknown), never lift
+    const reviewed = diffPatch as Buffer | null; // assigned inside the export step's closure
+    if (i.review === "advisory" && x.reviewCall && reviewed && reviewed.length > 0 && !evd.has("INFRA") && evd.get("EXPORT")?.status === "pass") {
+      set(await reviewChange({ diff: reviewed.toString("utf8"), task: contract.text, call: x.reviewCall }));
+    }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["D5.hidden", "D8.static", "AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "D8.static", "REVIEW", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }
