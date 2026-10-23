@@ -11,6 +11,8 @@ import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
 import { steerTask } from "./steer";
+import { taskFeed } from "./chat-feed";
+import type { TaskFeed } from "./chat-feed";
 import { answerQuestion, closeQuestion, planNight } from "./night";
 import { uploadHidden } from "./hidden";
 import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
@@ -94,6 +96,85 @@ export async function getTask(req: Request, d: ApiDeps, id: string): Promise<Res
   if (c instanceof Response) return c;
   const t = await taskDetail(d.db, c.uid, c.org, c.role, id);
   return t ? json(200, t) : json(404, { error: "unknown_task" });
+}
+
+/**
+ * The workspace chat, live: Server-Sent Events of one task. The first event carries everything after the cursor (`after`
+ * or Last-Event-ID `<session>:<seq>`), later ones only what changed. The stream ends after `maxMs`; EventSource reconnects
+ * with Last-Event-ID, so nothing is lost. The database is read as the user on every tick (RLS).
+ */
+export async function streamTask(req: Request, d: ApiDeps, id: string, o: { intervalMs?: number; maxMs?: number } = {}): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  const q = new URL(req.url).searchParams.get("after");
+  if (q !== null && !/^-?\d{1,5}$/.test(q)) return json(400, { error: "bad_query" });
+  const last = /^(s_[a-z0-9_]{1,40}):(-?\d{1,5})$/.exec(req.headers.get("last-event-id") ?? "");
+  let session: string | null = last?.[1] ?? null;
+  let after = last ? Number(last[2]) : q !== null ? Number(q) : -1;
+  const first = await taskFeed(d.db, c.uid, c.org, id, after);
+  if (!first) return json(404, { error: "unknown_task" });
+  const intervalMs = o.intervalMs ?? 700;
+  const maxMs = o.maxMs ?? 5 * 60_000;
+  const enc = new TextEncoder();
+  let sig = "";
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const body = new ReadableStream<Uint8Array>({
+    start(ctl) {
+      const started = Date.now();
+      let pinged = started;
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        if (timer) clearTimeout(timer);
+        try {
+          ctl.close();
+        } catch {
+          // already closed by the client
+        }
+      };
+      req.signal.addEventListener("abort", close);
+      const send = (f: TaskFeed) => {
+        // a retry starts a new leader session: the client drops its lines and takes this one from the start
+        if (f.session !== session) after = -1;
+        const now = JSON.stringify([f.task.state, f.task.last_result, f.task.wait_reason, f.task.approval_needed, f.task.approved_by_human, f.task.steerable, f.task.usd, f.touching.length, f.context_pct, f.steers.length, f.session]);
+        if (f.lines.length === 0 && now === sig) return;
+        sig = now;
+        session = f.session;
+        after = f.lines.at(-1)?.seq ?? after;
+        ctl.enqueue(enc.encode(`event: feed\nid: ${session ?? "none"}:${after}\ndata: ${JSON.stringify(f)}\n\n`));
+      };
+      const tick = async () => {
+        if (closed) return;
+        if (Date.now() - started >= maxMs) return close();
+        try {
+          let f = await taskFeed(d.db, c.uid, c.org, id, after);
+          if (f && f.session !== session && after !== -1) f = await taskFeed(d.db, c.uid, c.org, id, -1);
+          if (!f) return close();
+          send(f);
+          if (Date.now() - pinged >= 15_000) {
+            pinged = Date.now();
+            ctl.enqueue(enc.encode(": ping\n\n"));
+          }
+        } catch {
+          return close();
+        }
+        timer = setTimeout(() => void tick(), intervalMs);
+      };
+      if (first.session !== session && session !== null) {
+        session = null;
+        after = -1;
+        timer = setTimeout(() => void tick(), 0);
+        return;
+      }
+      send(first);
+      timer = setTimeout(() => void tick(), intervalMs);
+    },
+    cancel() {
+      if (timer) clearTimeout(timer);
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store, no-transform", "x-accel-buffering": "no" } });
 }
 
 export async function postTask(req: Request, d: ApiDeps): Promise<Response> {

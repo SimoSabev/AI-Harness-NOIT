@@ -47,6 +47,10 @@ export async function membership(db: Db, uid: string): Promise<{ org_id: string;
 async function tasks(sql: Sql, org: string, extra = "", params: unknown[] = []): Promise<TaskRow[]> {
   return (await sql.query<TaskRow>(`${TASKS} ${extra}`, [org, ...params])).rows;
 }
+/** One task inside a caller's transaction (the workspace feed). */
+export async function taskRow(sql: Sql, org: string, id: string): Promise<TaskRow | null> {
+  return (await tasks(sql, org, "and t.id = $2", [id]))[0] ?? null;
+}
 
 export interface Inbox { items: TaskRow[]; summary: Summary }
 export async function inbox(db: Db, uid: string, org: string, now: Date = new Date()): Promise<Inbox> {
