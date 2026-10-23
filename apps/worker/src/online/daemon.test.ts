@@ -22,7 +22,7 @@ const verdict = (result: "VERIFIED" | "FAILED" | "UNKNOWN", base: string) =>
     usage: { usd: 0.12, input_tokens: 1, output_tokens: 1, requests: 1 }, timings_ms: { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 }, created_at: "2026-10-20T00:00:00.000Z",
   });
 
-async function setup(level: number, result: "VERIFIED" | "FAILED" | "UNKNOWN" = "VERIFIED") {
+async function setup(level: number, result: "VERIFIED" | "FAILED" | "UNKNOWN" = "VERIFIED", patchOf?: (mirror: string) => Buffer) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-daemon-"));
   const fx = buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" });
   const db = await pgliteDb();
@@ -31,6 +31,7 @@ async function setup(level: number, result: "VERIFIED" | "FAILED" | "UNKNOWN" = 
   if (level > 0) await db.query("insert into public.ladder_state (org_id, repo_id, task_type, agent, level) values ($1, $2, 'bugfix', 'fake:honest-fix', $3)", [DEMO_ORG_ID, DEMO_REPO_ID, level]);
   await db.query("insert into public.tasks (id, org_id, repo_id, type, agent, text) values ('t_web_1', $1, $2, 'bugfix', 'fake:honest-fix', 'Fix the discount')", [DEMO_ORG_ID, DEMO_REPO_ID]);
   const gh = fakeGitHub({ repos: { "mandat-demo/shop": {} } });
+  const patch = patchOf ? patchOf(fx.mirror) : Buffer.from("diff --git a/src/cart.ts b/src/cart.ts\n");
   const events: { topic: string; payload: Record<string, unknown> }[] = [];
   const runs: RunTaskInput[] = [];
   const deps: DaemonDeps = {
@@ -40,7 +41,7 @@ async function setup(level: number, result: "VERIFIED" | "FAILED" | "UNKNOWN" = 
       runs.push(i);
       const runDir = path.join(home, "runs", "r1");
       mkdirSync(path.join(runDir, "export"), { recursive: true });
-      writeFileSync(path.join(runDir, "export", "diff.patch"), "diff --git a/src/cart.ts b/src/cart.ts\n");
+      writeFileSync(path.join(runDir, "export", "diff.patch"), patch);
       return Promise.resolve({ verdict: verdict(result, fx.sha), exit: 0, runDir, ledger: { from: 1, to: 3 }, agentExit: 0 });
     },
   };
@@ -446,5 +447,81 @@ describe("daemon and a moved base (E8f, AC-4.5)", () => {
     expect((await s.db.query("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "base_moved" });
     expect((await s.db.query("select kind, text from public.task_activities where task_id = 't_web_1'")).rows).toEqual([{ kind: "base_moved", text: "src/cart.ts" }]);
     expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge|forcePush)/.test(c))).toEqual([]);
+  });
+});
+
+// D-367: a verified safe change in a local project goes into main by itself; a person is asked only with a reason
+const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@x" };
+function realPatch(edit: (w: string) => void) {
+  return (mirror: string): Buffer => {
+    const w = path.join(mkdtempSync(path.join(os.tmpdir(), "mandat-agent-")), "w");
+    execFileSync("git", ["clone", "-q", mirror, w], { env: gitEnv });
+    edit(w);
+    execFileSync("git", ["add", "-A"], { cwd: w, env: gitEnv });
+    return execFileSync("git", ["diff", "--cached", "--binary"], { cwd: w, env: gitEnv });
+  };
+}
+const fixPatch = realPatch((w) => execFileSync("git", ["apply"], { cwd: w, env: gitEnv, input: readFileSync(path.join(repoRoot, "demo/recordings/scene1-task1.patch")) }));
+
+describe("daemon auto-apply (D-367)", () => {
+  it("VERIFIED и безопасна промяна → main се мести напред сам, CLOSED, доставка merge, стълбата получава успех, без „чака те“", async () => {
+    const s = await setup(0, "VERIFIED", fixPatch);
+    await runDaemonOnce(s.deps);
+    const t = (await s.db.query<{ state: string; outcome_decided: boolean }>("select state, outcome_decided from public.tasks where id = 't_web_1'")).rows[0];
+    expect(t).toMatchObject({ state: "CLOSED", outcome_decided: true });
+    const cs = (await s.db.query<{ approval_needed: boolean; requires_second_factor: boolean }>("select approval_needed, requires_second_factor from public.changesets")).rows[0];
+    expect(cs).toEqual({ approval_needed: false, requires_second_factor: false });
+    const main = execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "main"], { env: gitEnv, encoding: "utf8" }).trim();
+    const branch = execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "mandat/t_web_1-a1"], { env: gitEnv, encoding: "utf8" }).trim();
+    expect(main).toBe(branch);
+    expect((await s.db.query<{ kind: string }>("select kind from public.deliveries order by created_at, id")).rows.map((r) => r.kind)).toEqual(["branch_only", "merge"]);
+    expect((await s.db.query<{ input: string }>("select input from public.ladder_events")).rows).toEqual([{ input: "success" }]);
+    expect((await s.db.query<{ kind: string; text: string }>("select kind, text from public.task_activities where kind in ('auto_applied', 'needs_you')")).rows).toEqual([{ kind: "auto_applied", text: `main ${s.fx.sha.slice(0, 12)} → ${main.slice(0, 12)}` }]);
+    const pushes = (await s.db.query<{ payload: { kind: string } }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload.kind);
+    expect(pushes).toEqual(["merged"]);
+  });
+  it("рисков път (package.json) → HELD approval с причината; main не мърда", async () => {
+    const s = await setup(0, "VERIFIED", realPatch((w) => writeFileSync(path.join(w, "package.json"), `${readFileSync(path.join(w, "package.json"), "utf8")}\n`)));
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks")).rows[0]).toEqual({ state: "HELD", wait_reason: "approval" });
+    expect((await s.db.query<{ text: string }>("select text from public.task_activities where kind = 'needs_you'")).rows).toEqual([{ text: "sensitive:deps:package.json" }]);
+    expect(execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "main"], { env: gitEnv, encoding: "utf8" }).trim()).toBe(s.fx.sha);
+  });
+  it("UNKNOWN → пита (not_verified); FAILED → нито пита, нито прилага", async () => {
+    const u = await setup(0, "UNKNOWN", fixPatch);
+    await runDaemonOnce(u.deps);
+    expect((await u.db.query<{ text: string }>("select text from public.task_activities where kind = 'needs_you'")).rows).toEqual([{ text: "not_verified" }]);
+    const f = await setup(0, "FAILED", fixPatch);
+    await runDaemonOnce(f.deps);
+    expect((await f.db.query("select 1 from public.task_activities where kind in ('needs_you', 'auto_applied')")).rows).toHaveLength(0);
+    expect(execFileSync("git", ["--git-dir", f.fx.mirror, "rev-parse", "main"], { env: gitEnv, encoding: "utf8" }).trim()).toBe(f.fx.sha);
+  });
+  it("промяна, която не се прилага → обратно на човека (apply_failed), с „чака те“", async () => {
+    const s = await setup(0, "VERIFIED");
+    await runDaemonOnce(s.deps);
+    const t = (await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks")).rows[0];
+    expect(t).toEqual({ state: "HELD", wait_reason: "approval" });
+    expect((await s.db.query<{ approval_needed: boolean }>("select approval_needed from public.changesets")).rows[0]?.approval_needed).toBe(true);
+    expect((await s.db.query<{ text: string }>("select text from public.task_activities where kind = 'needs_you'")).rows[0]?.text).toMatch(/^apply_failed:/);
+    expect((await s.db.query<{ payload: { kind: string } }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload.kind)).toEqual(["waiting"]);
+  });
+});
+
+describe("approval of a local task (D-367)", () => {
+  it("одобрението на човек слива клона в main, затваря задачата и дава успех на стълбата; повторно — без ефект", async () => {
+    const { approvalHandlers } = await import("./effects.js");
+    const s = await setup(0, "VERIFIED", realPatch((w) => writeFileSync(path.join(w, "package.json"), `${readFileSync(path.join(w, "package.json"), "utf8")}\n`)));
+    await runDaemonOnce(s.deps);
+    const cs = (await s.db.query<{ id: string; head_sha: string }>("select id::text as id, head_sha from public.changesets")).rows[0];
+    if (!cs) throw new Error("no changeset");
+    const h = approvalHandlers(s.deps);
+    const row = { id: 1, org_id: DEMO_ORG_ID, kind: "approval_check", idempotency_key: "k", attempts: 0, payload: { changeset_id: cs.id, head_sha: cs.head_sha } };
+    await h.approval_check(row as never);
+    const branch = execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "mandat/t_web_1-a1"], { env: gitEnv, encoding: "utf8" }).trim();
+    expect(execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "main"], { env: gitEnv, encoding: "utf8" }).trim()).toBe(branch);
+    expect((await s.db.query<{ state: string }>("select state from public.tasks")).rows[0]?.state).toBe("CLOSED");
+    expect((await s.db.query<{ input: string }>("select input from public.ladder_events")).rows).toEqual([{ input: "success" }]);
+    await h.approval_check(row as never);
+    expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(1);
   });
 });
