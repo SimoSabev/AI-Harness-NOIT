@@ -158,6 +158,10 @@ export type WeakenedAssertion = { id: string; level: "fail" | "unknown"; base: n
  * D2:weakened_assertions [О]: a test (same static name in base and head) whose head body has fewer assertions, or lost an
  * assertion line without gaining one. Merging several expects into one toEqual({...}) with as many fields → unknown.
  */
+/** E9b (bench B28): an exact matcher (not negated) — the value must be this one, not just "something" */
+const EXACT = /\.(?:toBe|toEqual|toStrictEqual|toMatchObject|toHaveBeenCalledWith|toHaveProperty|toThrow(?:Error)?)\(\s*[^)\s]/;
+const exact = (lines: string[]) => lines.filter((l) => EXACT.test(l) && !/\.not\./.test(l)).length;
+
 export function weakenedAssertions(files: { path: string; base: string; head: string }[]): WeakenedAssertion[] {
   const out: WeakenedAssertion[] = [];
   for (const f of files) {
@@ -174,6 +178,15 @@ export function weakenedAssertions(files: { path: string; base: string; head: st
       const added = ht.assertionLines.filter((l) => !bt.assertionLines.includes(l));
       const fewer = ht.assertions < bt.assertions;
       const lost = removed.length > 0 && added.length === 0;
+      // the same count, but fewer exact matchers among the changed lines → a weaker test (a heuristic: a human looks);
+      // only direct expect lines on both sides (an expect moved into a helper is counted by the helper, D-267)
+      const direct = (ls: string[]) => ls.length > 0 && ls.every((l) => /\bexpect\s*\(/.test(l));
+      // compared as a share: a helper's one line stands for several (the line set is de-duplicated)
+      const looser = !fewer && !lost && direct(added) && direct(removed) && exact(added) * removed.length < exact(removed) * added.length;
+      if (looser) {
+        out.push({ id: `${f.path} > ${k}`, level: "unknown", base: bt.assertions, head: ht.assertions });
+        continue;
+      }
       if (!fewer && !lost) continue;
       const mergedInto = fewer && ht.mergedLiteral >= bt.assertions - ht.assertions + 1;
       out.push({ id: `${f.path} > ${k}`, level: mergedInto ? "unknown" : "fail", base: bt.assertions, head: ht.assertions });
