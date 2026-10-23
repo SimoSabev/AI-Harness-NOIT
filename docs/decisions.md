@@ -1989,3 +1989,16 @@ toHaveProperty/toThrow със стойност, без `.not`) сред пром
 тестовете там може законно да се преработват; изтрит/прескочен must-pass тест е FAILED чрез MUST_PASS.
 Защо: v5 т. 5.2 „bench 40/40 с 0 лъжливо VERIFIED“; bench-ът е там, за да хваща точно такива дупки.
 Източник: v5 т. 5, т. 5.2. Статус: решено.
+## D-366 mandat verify като GitHub Action (23.10.2026)
+Решение: (1) `action.yml` в корена (composite): Node 24.22.0 (actions/setup-node по SHA 949feb24…, v7.1.0), сглобява само
+`@mandat/cli...` и `@mandat/verify...`, строи образите (`--ui` само при `ui-paths`), пуска `packages/verify/dist/action-main.js`.
+(2) Доверен base: `origin/<GITHUB_BASE_REF>` от checkout-а на workflow-а (actions/checkout с fetch-depth: 0) се копира в bare
+хранилище в `$RUNNER_TEMP` (само този клон, HEAD към него) и се дава като `file://` remote — Mandat не вижда токен; refs на PR-а
+не влизат. (3) Входове: type (празно = строгите правила), fail-on FAILED|UNKNOWN, lint, typecheck, ui-paths, dev, ui-routes;
+винаги `--external` (агентът не е бил в нашия пясъчник → ниво ≤ 1). (4) Изход: job summary с причините с думи (explain),
+анотации error/warning/notice (екранирани по workflow commands), outputs result/level/reasons; exit 0/1 по fail-on, 2 = не върви.
+SHA-тата: `git ls-remote` на github.com/actions/setup-node, actions/checkout (23.10.2026).
+Защо: стратегическо — най-силната част на Мандат е независимата присъда; Action-ът работи с всеки агент, без смяна на процеса.
+Правило 3 (без публикуване): файлът е в репото; публикуване в Marketplace — само ако Симо реши.
+Източник: https://docs.github.com/actions/creating-actions/creating-a-composite-action (23.10.2026). Статус: решено; първото
+пускане на истински runner чака Симо (чеклист 24).
