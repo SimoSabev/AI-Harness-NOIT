@@ -43,3 +43,51 @@ export const LoginState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("failed"), name: AccountName, reason: LoginFailure }).strict(),
 ]);
 export type LoginState = z.infer<typeof LoginState>;
+
+// D-370: the CLI commands of `mandat local` from the web (page System) — a closed list, one run per kind at a time.
+export const SystemJob = z.enum(["doctor", "images", "images-ui", "fixtures", "fixtures-force", "stats", "verify-log"]);
+export type SystemJob = z.infer<typeof SystemJob>;
+
+/** The argv of each job (`mandat …`); several steps run one after another. `verify-log` checks the local org's ledger. */
+export const SYSTEM_JOB_ARGV: Record<SystemJob, readonly (readonly string[])[]> = {
+  doctor: [["doctor", "--json"]],
+  images: [["images", "build"]],
+  "images-ui": [["images", "build", "--ui"]],
+  fixtures: [["fixtures", "build"], ["fixtures", "build", "--name", "demo-shop"]],
+  "fixtures-force": [["fixtures", "build", "--force"], ["fixtures", "build", "--name", "demo-shop", "--force"]],
+  stats: [["stats", "--json"]],
+  "verify-log": [["verify-log", "--org", "{org}", "--json"]],
+};
+
+export const JOB_LINES = 200;
+export const JobState = z.object({
+  job: SystemJob,
+  state: z.enum(["idle", "running", "ok", "failed"]),
+  started_at: z.string().datetime().nullable(),
+  finished_at: z.string().datetime().nullable(),
+  exit: z.number().int().nullable(),
+  /** the last lines of the output, without terminal escapes */
+  lines: z.array(z.string().max(500)).max(JOB_LINES),
+  /** the parsed JSON of a `--json` command (doctor, stats, verify-log) */
+  result: z.unknown(),
+}).strict();
+export type JobState = z.infer<typeof JobState>;
+
+/** Output lines for the web: \r and \n split, ANSI escapes and other control characters dropped, long lines cut. */
+export function jobLines(chunk: string): string[] {
+  const ESC = String.fromCharCode(27);
+  let s = chunk.split(`${ESC}[`).map((part, i) => (i === 0 ? part : part.replace(/^[0-9;?]*[A-Za-z]/, ""))).join("");
+  s = [...s].filter((c) => c === "\n" || c === "\r" || c === "\t" || c.charCodeAt(0) >= 32).join("");
+  return s.split(/[\r\n]+/).map((l) => l.trimEnd()).filter((l) => l.trim() !== "").map((l) => (l.length > 500 ? `${l.slice(0, 499)}…` : l));
+}
+
+export const DoctorReport = z.object({ checks: z.array(z.object({ name: z.string(), ok: z.boolean(), detail: z.string() }).passthrough()), exit: z.number().int() }).passthrough();
+export const StatsReport = z.object({
+  total: z.number(),
+  byResult: z.object({ VERIFIED: z.number(), UNKNOWN: z.number(), FAILED: z.number() }),
+  unknownShare: z.number(),
+  topReasons: z.array(z.object({ cls: z.string(), n: z.number() })),
+  meanUsd: z.number(),
+  meanMinutes: z.number(),
+}).passthrough();
+export const LedgerReport = z.object({ ok: z.boolean(), count: z.number().optional(), firstBadSeq: z.number().nullable().optional(), code: z.string().optional() }).passthrough();

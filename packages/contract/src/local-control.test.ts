@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AccountName, LoginCode, LoginState, findLoginUrl } from "./local-control.js";
+import { AccountName, DoctorReport, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
 
 // D-369: the subscription login from the web — what crosses between `mandat local` and the web server.
 const URL_LINE =
@@ -36,5 +36,25 @@ describe("local control: subscription login (D-369)", () => {
     expect(LoginState.safeParse({ state: "done", name: "lichno", email: "s@example.com", plan: "Max" }).success).toBe(true);
     expect(LoginState.safeParse({ state: "failed", name: "lichno", reason: "invalid_code" }).success).toBe(true);
     expect(LoginState.safeParse({ state: "failed", name: "lichno", reason: "whatever" }).success).toBe(false);
+  });
+});
+
+describe("local control: system jobs (D-370)", () => {
+  it("a closed list of jobs, each a fixed mandat argv; nothing from the web reaches the argv except the local org", () => {
+    expect(SystemJob.options).toEqual(["doctor", "images", "images-ui", "fixtures", "fixtures-force", "stats", "verify-log"]);
+    expect(SYSTEM_JOB_ARGV.fixtures).toEqual([["fixtures", "build"], ["fixtures", "build", "--name", "demo-shop"]]);
+    expect(SystemJob.safeParse("run").success).toBe(false);
+  });
+  it("jobLines: docker progress (\\r), colours and other control characters out; long lines cut", () => {
+    expect(jobLines("\x1b[1m#5 [2/7] RUN apt-get\x1b[0m\r#5 0.31 ok\n\n  done  \n")).toEqual(["#5 [2/7] RUN apt-get", "#5 0.31 ok", "  done"]);
+    expect(jobLines("a\x07b\x00c")).toEqual(["abc"]);
+    expect(jobLines("x".repeat(600))[0]).toHaveLength(500);
+  });
+  it("JobState and the reports the page reads", () => {
+    expect(JobState.safeParse({ job: "doctor", state: "ok", started_at: "2026-10-23T20:00:00.000Z", finished_at: "2026-10-23T20:00:02.000Z", exit: 0, lines: [], result: { checks: [], exit: 0 } }).success).toBe(true);
+    expect(JobState.safeParse({ job: "doctor", state: "ok", started_at: null, finished_at: null, exit: 0, lines: Array(201).fill("x"), result: null }).success).toBe(false);
+    expect(DoctorReport.safeParse({ checks: [{ name: "node", ok: false, detail: "26.4.0" }], exit: 3 }).success).toBe(true);
+    expect(StatsReport.safeParse({ total: 3, byResult: { VERIFIED: 3, UNKNOWN: 0, FAILED: 0 }, unknownShare: 0, topReasons: [], meanUsd: 0, meanMinutes: 0.5, byAgent: {} }).success).toBe(true);
+    expect(LedgerReport.safeParse({ ok: true, count: 12, lastHash: "sha256:x" }).success).toBe(true);
   });
 });
