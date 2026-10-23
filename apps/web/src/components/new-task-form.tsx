@@ -6,7 +6,7 @@ import { AGENTS, agentHint, agentLabel } from "../lib/agents";
 import { errorText, postJson } from "../lib/client/api";
 import { btn, card, input } from "./ui";
 
-const TYPES = ["bugfix", "feature", "docs", "css"] as const;
+const TYPES = ["free", "feature", "bugfix", "docs", "css"] as const;
 
 // D-292: the one form of the minimal harness. Demo agents first: they work without any key.
 export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { anthropic: boolean; openai: boolean }; accounts: { name: string; agent: string; email: string | null; plan: string | null }[] }) {
@@ -15,9 +15,9 @@ export function NewTaskForm({ repo, ready, accounts }: { repo: string; ready: { 
   const [text, setText] = useState(() => t("newTask.example"));
   // D-295: the first signed-in subscription account is the default agent (like in other harnesses)
   const [agent, setAgent] = useState<string>(accounts[0]?.agent ?? "fake:delete-test");
-  // The type picks the contract's scope from .mandat.yml (paths, tests). A real agent starts with the widest one
-  // (feature: code and tests); the demo agents' scenarios are bug fixes.
-  const [type, setType] = useState<(typeof TYPES)[number]>(accounts.length > 0 ? "feature" : "bugfix");
+  // The type picks the contract's scope from .mandat.yml (paths, tests). A real agent starts without limits (D-360:
+  // "free" — the whole repo, tests may change; the judge still runs); the demo agents' scenarios are bug fixes.
+  const [type, setType] = useState<(typeof TYPES)[number]>(accounts.length > 0 ? "free" : "bugfix");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ordered: { id: string; label: string; hint: string; needsKey: boolean }[] = [

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { ACCOUNT_AGENT, AGENT_IDS } from "../agents";
 import { z } from "zod";
-import { jcs, sha256Tag } from "@mandat/contract";
+import { TaskType, jcs, sha256Tag } from "@mandat/contract";
 import { asService, asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 
@@ -20,7 +20,7 @@ export const ApproveBody = z.object({
 export type ApproveBody = z.infer<typeof ApproveBody>;
 
 export const CreateTaskBody = z.object({
-  type: z.enum(["bugfix", "feature", "css", "docs"]),
+  type: TaskType, // D-360: "free" too
   agent: z.union([z.enum(AGENT_IDS), z.string().regex(ACCOUNT_AGENT)]),
   text: z.string().min(1).max(4000),
 }).strict();

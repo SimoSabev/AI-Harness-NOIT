@@ -7,7 +7,7 @@ import { errorText, postJson } from "../lib/client/api";
 import { btn, card, input } from "./ui";
 
 const ERR: Record<string, Key> = { last_role_manager: "roles.lastManager", name_taken: "roles.nameTaken", bad_role: "roles.badRole" };
-const TYPES = ["bugfix", "feature", "css", "docs"] as const;
+const TYPES = ["bugfix", "feature", "css", "docs", "free"] as const;
 
 // E8c: create a role (capabilities + scope) and change the role of a member; every change is a ledger row on the server.
 export function RolesManager({ capabilities, dangerous, roles, members }: { capabilities: string[]; dangerous: string[]; roles: { id: string; name: string }[]; members: { user_id: string; email: string | null; role_id: string }[] }) {

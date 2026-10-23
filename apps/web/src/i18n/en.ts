@@ -348,6 +348,8 @@ export const en = {
   "newTask.type.feature": "New feature",
   "newTask.type.docs": "Documentation",
   "newTask.type.css": "Styles",
+  "newTask.type.free": "No limits",
+  "newTask.scope.free": "The whole repo; tests may change. The verdict is still computed and merging stays at the medium risk cap.",
   "newTask.scopeChange": "The paths are in the project's rules (.mandat.yml) — change them.",
   "newTask.scope.css": "Styles only (*.css, *.scss).",
   "newTask.scope.docs": "Documentation only (README.md, docs/**).",

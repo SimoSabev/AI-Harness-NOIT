@@ -335,6 +335,8 @@ export const bg: Record<Key, string> = {
   "newTask.type.feature": "Нова функция",
   "newTask.type.docs": "Документация",
   "newTask.type.css": "Стилове",
+  "newTask.type.free": "Без ограничения",
+  "newTask.scope.free": "Цялото хранилище; тестовете може да се променят. Присъдата пак се изчислява и сливането е най-много до средния риск.",
   "newTask.scopeChange": "Пътищата са в правилата на проекта (.mandat.yml) — промени ги.",
   "newTask.scope.css": "Само стиловете (*.css, *.scss).",
   "newTask.scope.docs": "Само документацията (README.md, docs/**).",
