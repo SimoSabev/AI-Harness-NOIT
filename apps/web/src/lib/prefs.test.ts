@@ -29,7 +29,7 @@ describe("prefs (D-305)", () => {
     expect(LANG_CHOICES.map((l) => l.id)).toEqual(["en", "bg"]);
   });
   it("светлата тема и „като системата“ при светла система са едни и същи стойности", () => {
-    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/globals.css"), "utf8");
+    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/tokens.css"), "utf8");
     const block = (sel: string) => {
       const i = css.indexOf(sel);
       const body = css.slice(css.indexOf("{", i) + 1, css.indexOf("}", i));
