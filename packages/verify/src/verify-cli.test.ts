@@ -93,6 +93,30 @@ describe("mandat-verify (т. 5.7; verify-cli без Docker, тестовете �
     expect(r.code).toBe(20);
     expect(r.out).toContain(`D2:weakened:${M}`);
   });
+  // v5 E9б (5.2): D5 — a person's hidden tests, copied into tree B only; the agent never has them
+  const hiddenDir = () => {
+    const d = mkdtempSync(path.join(os.tmpdir(), "mandat-hidden-"));
+    writeFileSync(path.join(d, "cart.spec.ts"), `import { describe, expect, it } from "vitest";\nimport { discountCents } from "../../src/cart";\ndescribe("hidden", () => {\n  it("${M_TITLE}", () => {\n    expect(discountCents(10000)).toBe(1000);\n  });\n});\n`);
+    return d;
+  };
+  it("D5: --hidden с честна поправка → VERIFIED, D5 pass; скритите тестове не влизат в D2", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const r = await verify(f, ["--external", "--type", "bugfix", "--hidden", hiddenDir(), "--json"]);
+    const o = JSON.parse(r.out.trim()) as { verdict: { result: string; evidence: { detector: string; status: string; agent_visible: boolean }[] } };
+    expect(o.verdict.result).toBe("VERIFIED");
+    expect(o.verdict.evidence.find((e) => e.detector === "D5.hidden")).toMatchObject({ status: "pass", agent_visible: false });
+    expect(o.verdict.evidence.find((e) => e.detector === "D2.inventory")?.status).toBe("pass");
+  });
+  it("D5: промяна, която не поправя бъга (видимите тестове не се пипат) → FAILED D5:hidden_fail:<хеш>, без името на теста", async () => {
+    const f = demo();
+    edit(f.repo, "README.md", (s) => `${s}\nA note.\n`);
+    const r = await verify(f, ["--external", "--hidden", hiddenDir(), "--json"]);
+    const o = JSON.parse(r.out.trim()) as { verdict: { result: string; reasons: string[] } };
+    expect(o.verdict.result).toBe("FAILED");
+    expect(o.verdict.reasons.some((x) => /^D5:hidden_fail:h[0-9a-f]{8}$/.test(x))).toBe(true);
+    expect(o.verdict.reasons.join(" ")).not.toContain(M_TITLE);
+  });
   it("--json: един ред = VerifyOutcome + exit", async () => {
     const f = demo();
     edit(f.repo, "src/cart.ts", fixCode);
