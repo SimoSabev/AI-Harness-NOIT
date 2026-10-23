@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { LOCAL_DB, dbRunArgs, localDbUrl, localPreflight, pendingMigrations, retryWithoutApt, totpLines } from "./commands/local.js";
+import { DEMO_OWNER_ID } from "@mandat/worker";
+import { LOCAL_DB, dbRunArgs, localBanner, localDbUrl, localPreflight, localWebArgs, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -20,11 +21,21 @@ describe("mandat local (D-292)", () => {
   });
 });
 
-describe("totpLines (D-297)", () => {
-  it("ключът и otpauth адресът за приложение за кодове", () => {
-    const l = totpLines("ti@mandat.local", "ABCDEFGHIJKLMNOP");
-    expect(l.join("\n")).toContain("Ключ:    ABCDEFGHIJKLMNOP");
-    expect(l.join("\n")).toContain("otpauth://totp/Mandat:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Mandat&algorithm=SHA1&digits=6&period=30");
+describe("без вход (D-368)", () => {
+  it("уебът слуша само на 127.0.0.1 (next start по подразбиране е 0.0.0.0)", () => {
+    expect(localWebArgs()).toEqual(["--filter", "@mandat/web", "exec", "next", "start", "-p", "3000", "-H", "127.0.0.1"]);
+  });
+  it("env на уеба: локалният собственик, без демо входа и без API ключове", () => {
+    const e = localWebEnv({ PATH: "/bin", MANDAT_DEMO_DEV_AUTH: "1" }, { dbUrl: "postgresql://x", control: { url: "http://127.0.0.1:1", token: "t" } });
+    expect(e.MANDAT_LOCAL_OWNER).toBe(DEMO_OWNER_ID);
+    expect(e.MANDAT_DEMO_DEV_AUTH).toBeUndefined();
+    expect(e).toMatchObject({ PATH: "/bin", MANDAT_DB_URL: "postgresql://x", MANDAT_LOCAL_CONTROL_URL: "http://127.0.0.1:1", MANDAT_LOCAL_CONTROL_TOKEN: "t", NEXT_TELEMETRY_DISABLED: "1" });
+  });
+  it("банерът: адресът, без имейл, парола и TOTP", () => {
+    const b = localBanner(2).join("\n");
+    expect(b).toContain("  Отвори:  http://localhost:3000");
+    expect(b).toContain("без вход");
+    expect(b).not.toMatch(/Имейл|Парола|Ключ:|otpauth/);
   });
 });
 
