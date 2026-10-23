@@ -21,3 +21,4 @@ export { demoProfileLayers } from "./profile.fixture.js";
 export * from "./research-golden.js";
 export * from "./ui.js";
 export * from "./local-control.js";
+export * from "./desktop.js";
