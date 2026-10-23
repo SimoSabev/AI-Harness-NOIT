@@ -102,6 +102,19 @@ describe("runTask (fake docker)", () => {
     expect(testsCalls.find((c) => c.mutants)?.mutants?.[0]?.mutated.toString("utf8")).toContain("const DISCOUNT_THRESHOLD_CENTS = 0;");
   });
 
+  it("E9б: the LLM advisor — off by default (never called); advisory with a high finding → UNKNOWN REVIEW:high:<path>", async () => {
+    let calls = 0;
+    const reviewCall = () => {
+      calls++;
+      return Promise.resolve(JSON.stringify({ findings: [{ severity: "high", path: "src/cart.ts", line: 10, text: "a special case" }] }));
+    };
+    const off = await go({ docker: new FakeDocker({ head: honest }), x: { reviewCall } });
+    expect([off.r.verdict?.result, calls, det(off.r, "REVIEW")]).toEqual(["VERIFIED", 0, undefined]);
+    const on = await go({ docker: new FakeDocker({ head: honest }), x: { reviewCall }, i: { review: "advisory" } });
+    expect(on.r.verdict?.result).toBe("UNKNOWN");
+    expect(on.r.verdict?.reasons).toContain("REVIEW:high:src/cart.ts");
+    expect(calls).toBe(1);
+  });
   it("честна поправка → VERIFIED, 3 реда в дневника, verify-log ok", async () => {
     const { r, ledgerLines, events } = await go({ docker: new FakeDocker({ head: honest }) });
     expect(r.verdict?.result).toBe("VERIFIED");
