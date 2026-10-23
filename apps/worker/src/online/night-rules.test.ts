@@ -28,6 +28,8 @@ describe("night rules (E9а)", () => {
   it("предложение по клас — детерминистично, без текст от агента", () => {
     expect(proposalFor(["D4:out_of_contract:infra/**"])).toBe("Add infra/** to allowed_paths of this task type, or narrow the task so it stays inside the contract.");
     expect(proposalFor(["D2:missing_test:tests/cart.spec.ts > cart > adds"])).toContain("tests/cart.spec.ts > cart > adds");
+    // a deleted test also leaves the contract (D4 tests/**): restoring the test is the advice, not widening the contract
+    expect(proposalFor(["D4:out_of_contract:tests/**", "D2:missing_test:tests/cart.spec.ts > cart > adds"])).toMatch(/^Restore the test `/);
     expect(proposalFor(["D10:lock_missing:left-pad"])).toContain("left-pad");
     expect(proposalFor(["INFRA:INSTALL_BASE:-"])).toContain("mandat doctor");
     expect(proposalFor(["something:new"])).toBe("Read the verdict on the card and decide; Mandat has no rule for this reason yet.");
