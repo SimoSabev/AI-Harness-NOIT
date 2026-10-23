@@ -9,6 +9,8 @@ export const PRELOAD_METHODS = ["pickFolder", "grantsList", "grant", "revoke", "
 export type PreloadMethod = (typeof PRELOAD_METHODS)[number];
 export const BRIDGE_KEY = "harnessDesktop";
 const EVENT_CHANNEL = "harness:event";
+/** DESKTOP_DROP_CHANNEL in packages/contract (test: preload.test.ts) */
+const DROP_CHANNEL = "harness:drop";
 const MAX_PAYLOAD = 64 * 1024;
 const MAX_DEPTH = 16;
 
@@ -20,7 +22,41 @@ export interface IpcRendererLike {
 
 interface ElectronPreload {
   contextBridge: { exposeInMainWorld(key: string, api: unknown): void };
-  ipcRenderer: IpcRendererLike;
+  ipcRenderer: IpcRendererLike & { send?: (channel: string, payload: unknown) => void };
+  /** Electron's webUtils.getPathForFile: the local path of a dropped File (E9g A3) */
+  webUtils?: { getPathForFile(file: unknown): string };
+}
+
+/** The part of a DragEvent the drop handling needs. */
+export interface DropEventLike {
+  defaultPrevented: boolean;
+  dataTransfer: { types: ArrayLike<string>; files: ArrayLike<unknown> } | null;
+  preventDefault(): void;
+}
+
+const hasFiles = (e: DropEventLike): boolean => e.dataTransfer !== null && Array.from(e.dataTransfer.types).includes("Files");
+
+/** E9g A3 (AC-12.6): let files be dropped on the window, unless the page's own drop zone took the event. */
+export function handleDragOver(e: DropEventLike): void {
+  if (!e.defaultPrevented && hasFiles(e)) e.preventDefault();
+}
+
+/**
+ * E9g A3 (AC-12.6): a folder dropped on the window (and not taken by the page) → its path to main, which shows the
+ * "Add project" screen. The page never sees the path from here, and nothing is granted by a drop.
+ */
+export function handleDrop(e: DropEventLike, getPath: (file: unknown) => string, send: (channel: string, payload: unknown) => void): boolean {
+  if (e.defaultPrevented || !hasFiles(e) || !e.dataTransfer || e.dataTransfer.files.length === 0) return false;
+  e.preventDefault(); // otherwise Chromium would navigate to file:// (the guard refuses it anyway)
+  let p: unknown;
+  try {
+    p = getPath(e.dataTransfer.files[0]);
+  } catch {
+    return false;
+  }
+  if (typeof p !== "string" || p === "") return false;
+  send(DROP_CHANNEL, { path: p });
+  return true;
 }
 
 export type HarnessDesktopApi = { readonly [M in PreloadMethod]: (payload: unknown) => Promise<unknown> } & {
@@ -85,5 +121,13 @@ export function installHarnessDesktop(electron: ElectronPreload): void {
 // In the window only: the sandboxed preload gets `require` from Electron's wrapper; in tests there is no window.
 if ((globalThis as { window?: unknown }).window !== undefined && typeof require === "function") {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- "electron" is the one module a sandboxed preload may load
-  installHarnessDesktop(require("electron") as ElectronPreload);
+  const electron = require("electron") as ElectronPreload;
+  installHarnessDesktop(electron);
+  const { webUtils, ipcRenderer } = electron;
+  if (webUtils && typeof ipcRenderer.send === "function") {
+    const send = ipcRenderer.send.bind(ipcRenderer);
+    const w = (globalThis as unknown as { window: { addEventListener(type: string, l: (e: DropEventLike) => void): void } }).window;
+    w.addEventListener("dragover", handleDragOver);
+    w.addEventListener("drop", (e) => void handleDrop(e, (f) => webUtils.getPathForFile(f), send));
+  }
 }

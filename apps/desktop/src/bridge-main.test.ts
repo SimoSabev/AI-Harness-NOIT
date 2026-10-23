@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { DESKTOP_EVENT_CHANNEL, DESKTOP_METHOD_NAMES, desktopChannel } from "@mandat/contract";
-import { commandFor, dispatch, notReady, registerBridge, sendCommand } from "./bridge-main.js";
+import { DESKTOP_DROP_CHANNEL, DESKTOP_EVENT_CHANNEL, DESKTOP_METHOD_NAMES, desktopChannel } from "@mandat/contract";
+import { commandFor, dispatch, notReady, registerBridge, registerDrop, sendCommand } from "./bridge-main.js";
 import type { DesktopHandlers, InvokeEvent } from "./bridge-main.js";
 
 const BASE = "http://127.0.0.1:3000";
@@ -73,5 +73,34 @@ describe("desktop bridge, main side (D-371)", () => {
     expect(send).toHaveBeenCalledTimes(1);
     expect(commandFor("t_9")).toEqual({ command: "open_task", task_id: "t_9" });
     expect(commandFor(undefined)).toEqual({ command: "view", view: "inbox" });
+  });
+});
+
+// E9g A3 (AC-12.6): a folder dropped on the window arrives from the preload on its own channel; main accepts it only
+// from the local page and only as an absolute path, and then only shows "Add project" (nothing is granted).
+describe("drop channel (AC-12.6)", () => {
+  function setup(base: string | null = BASE) {
+    const listeners = new Map<string, (e: InvokeEvent, p: unknown) => void>();
+    const got: string[] = [];
+    registerDrop({ on: (ch, l) => void listeners.set(ch, l) }, () => base, (p) => got.push(p));
+    return { fire: (e: InvokeEvent, p: unknown) => listeners.get(DESKTOP_DROP_CHANNEL)?.(e, p), got, listeners };
+  }
+  it("from the local page, an absolute path → onPath", () => {
+    const s = setup();
+    s.fire(local, { path: "/Users/simo/shop" });
+    expect(s.got).toEqual(["/Users/simo/shop"]);
+    expect([...s.listeners.keys()]).toEqual([DESKTOP_DROP_CHANNEL]);
+  });
+  it("another origin, no page yet, or a bad payload → ignored", () => {
+    const s = setup();
+    s.fire({ senderFrame: { url: "https://evil.test/" } }, { path: "/a" });
+    s.fire({ senderFrame: null }, { path: "/a" });
+    s.fire(local, { path: "relative" });
+    s.fire(local, { path: "/a", extra: 1 });
+    s.fire(local, "x");
+    expect(s.got).toEqual([]);
+    const n = setup(null);
+    n.fire(local, { path: "/a" });
+    expect(n.got).toEqual([]);
   });
 });

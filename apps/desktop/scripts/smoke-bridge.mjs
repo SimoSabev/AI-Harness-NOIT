@@ -2,11 +2,15 @@
 // A local page in a locked window with the real preload: the bridge is there with only the listed methods, main parses
 // requests, the page has no require/process, window.open and outside navigation are refused, the CSP replaces the page's.
 // Exit 0 when every check holds. Not part of `pnpm check` (needs the Electron binary and a display).
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, app, globalShortcut, ipcMain } from "electron";
-import { notReady, registerBridge } from "../dist/bridge-main.js";
+import { registerBridge, registerDrop } from "../dist/bridge-main.js";
+import { grantsFile } from "../dist/grant-store.js";
+import { localHandlers } from "../dist/local-handlers.js";
 import { allowPermission, attachGuards, withCsp } from "../dist/window-guard.js";
 import { appMenu, toTemplate, trayMenu } from "../dist/menu.js";
 import { QUICK_ENTRY } from "../dist/shortcuts.js";
@@ -28,8 +32,24 @@ async function run() {
   const address = srv.address();
   const base = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`;
   const ok = (value) => Promise.resolve({ ok: true, value });
-  const nr = () => Promise.resolve(notReady());
-  registerBridge(ipcMain, { pickFolder: () => ok({ path: null }), grantsList: nr, grant: nr, revoke: nr, openInEditor: nr, applyLocal: nr, notify: () => ok({}), badge: () => ok({}), inboxCount: () => ok({}) }, () => base);
+  // E9g A3: the real local-access handlers on a temp profile; the native box is answered "Allow" by the script
+  const tmp = realpathSync(mkdtempSync(path.join(os.tmpdir(), "mandat-smoke-")));
+  const project = path.join(tmp, "shop");
+  mkdirSync(project);
+  const home = path.join(tmp, "profile");
+  const lh = localHandlers({
+    lang: "en",
+    env: { platform: process.platform, home: os.homedir(), mandatHome: home, realpath: (p) => realpathSync.native(p), isDirectory: (p) => { try { return statSync(p).isDirectory(); } catch { return false; } } },
+    file: grantsFile(home),
+    confirm: () => Promise.resolve(true),
+    openExternal: () => Promise.resolve(),
+    runNode: () => Promise.resolve({ code: 1, stdout: "" }),
+    cliMain: "/nonexistent/main.js",
+    now: () => new Date(),
+  });
+  registerBridge(ipcMain, { pickFolder: () => ok({ path: null }), grantsList: lh.grantsList, grant: lh.grant, revoke: lh.revoke, openInEditor: lh.openInEditor, applyLocal: lh.applyLocal, notify: () => ok({}), badge: () => ok({}), inboxCount: () => ok({}) }, () => base);
+  const dropped = [];
+  registerDrop(ipcMain, () => base, (p) => dropped.push(p));
   const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(dist, "preload.cjs") } });
   attachGuards(win.webContents, () => base);
   let csp = null;
@@ -47,6 +67,9 @@ async function run() {
       keys: b ? Object.keys(b).sort().join(",") : "",
       require: typeof window.require, process: typeof window.process, inline: window.inlineRan === true,
       badge: await b.badge({ count: 2 }), grants: await b.grantsList({}), bad: await b.badge({ count: -1 }), notPlain: await b.badge("x"),
+      grant: await b.grant({ path: ${JSON.stringify(project)}, scopes: ["read"] }), root: await b.grant({ path: "/", scopes: ["read"] }),
+      apply: await b.applyLocal({ task_id: "t_1", path: ${JSON.stringify(project)} }),
+      drop: (() => { const dt = new DataTransfer(); dt.items.add(new File(["x"], "x.txt")); const e = new DragEvent("drop", { dataTransfer: dt, cancelable: true, bubbles: true }); document.body.dispatchEvent(e); return e.defaultPrevented; })(),
       open: window.open("https://example.com/") === null,
     };
   })()`);
@@ -54,7 +77,12 @@ async function run() {
   check("no require/process in the page", r.require === "undefined" && r.process === "undefined");
   check("inline scripts run under the CSP", r.inline);
   check("a valid call answers", r.badge.ok === true);
-  check("A3 methods answer not_ready", r.grants.ok === false && r.grants.error.code === "not_ready");
+  check("nothing is granted at first", r.grants.ok === true && r.grants.value.grants.length === 0);
+  check("a project folder is granted (real path stored)", r.grant.ok === true && r.grant.value.grant.path === realpathSync.native(project));
+  check('"/" is refused', r.root.ok === false && r.root.error.code === "denied");
+  check("apply without the apply scope is refused", r.apply.ok === false && r.apply.error.code === "not_granted");
+  check("the preload's drop listener is installed (webUtils in the sandbox)", r.drop === true);
+  check("a synthetic File (no local path) sends nothing", dropped.length === 0);
   check("main refuses an invalid request", r.bad.ok === false && r.bad.error.code === "invalid_request");
   check("the preload refuses a non-object", r.notPlain.ok === false && r.notPlain.error.code === "invalid_request");
   check("window.open is denied", r.open);
@@ -63,6 +91,7 @@ async function run() {
   await new Promise((res) => setTimeout(res, 800));
   check("outside navigation is refused", win.webContents.getURL().startsWith(base));
   srv.close();
+  rmSync(tmp, { recursive: true, force: true });
   // E9g A2: the menus build in real Electron (roles and accelerators accepted) and the quick entry registers
   const noop = () => undefined;
   let menusOk = true;

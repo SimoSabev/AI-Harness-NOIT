@@ -1,4 +1,4 @@
-import { DESKTOP_EVENT_CHANNEL, DESKTOP_METHOD_NAMES, DesktopCommand, desktopChannel, desktopMethodOf, parseDesktopRequest, parseDesktopResponse } from "@mandat/contract";
+import { DESKTOP_DROP_CHANNEL, DESKTOP_EVENT_CHANNEL, DESKTOP_METHOD_NAMES, DesktopCommand, DesktopDrop, desktopChannel, desktopMethodOf, parseDesktopRequest, parseDesktopResponse } from "@mandat/contract";
 import type { DesktopErrorCode, DesktopMethod, DesktopRequest, DesktopResult, DesktopValue } from "@mandat/contract";
 import { allowedUrl } from "./banner.js";
 
@@ -67,4 +67,19 @@ export function sendCommand(target: CommandTarget, cmd: unknown): boolean {
 /** A click on a notification: its task card, else the inbox. */
 export function commandFor(taskId: string | undefined): DesktopCommand {
   return taskId ? { command: "open_task", task_id: taskId } : { command: "view", view: "inbox" };
+}
+
+export interface IpcMainOnLike {
+  on(channel: string, listener: (event: InvokeEvent, payload: unknown) => void): void;
+}
+
+/** E9g A3 (AC-12.6): the preload's drop channel. Only the local page, only an absolute path; onPath only shows "Add project". */
+export function registerDrop(ipc: IpcMainOnLike, base: () => string | null, onPath: (path: string) => void): void {
+  ipc.on(DESKTOP_DROP_CHANNEL, (event, payload) => {
+    const b = base();
+    const from = event.senderFrame?.url;
+    if (!b || !from || !allowedUrl(from, b)) return;
+    const d = DesktopDrop.safeParse(payload);
+    if (d.success) onPath(d.data.path);
+  });
 }

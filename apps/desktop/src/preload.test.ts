@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DESKTOP_EVENT_CHANNEL, DESKTOP_METHOD_NAMES, desktopChannel } from "@mandat/contract";
-import { BRIDGE_KEY, PRELOAD_METHODS, createHarnessDesktop, installHarnessDesktop } from "./preload.js";
+import { DESKTOP_DROP_CHANNEL } from "@mandat/contract";
+import { BRIDGE_KEY, PRELOAD_METHODS, createHarnessDesktop, handleDragOver, handleDrop, installHarnessDesktop } from "./preload.js";
 import type { IpcRendererLike } from "./preload.js";
 
 function fakeIpc() {
@@ -73,5 +74,36 @@ describe("desktop preload (D-371)", () => {
     expect(expose).toHaveBeenCalledTimes(1);
     expect(expose.mock.calls[0]?.[0]).toBe("harnessDesktop");
     expect(Object.isFrozen(expose.mock.calls[0]?.[1])).toBe(true);
+  });
+
+  // AC-12.6: a folder dropped on the window → its path goes to main on the drop channel (never to the page);
+  // a drop the page handles itself (its own upload zone) is left alone.
+  const dropEvent = (o: { prevented?: boolean; types?: string[]; files?: unknown[] } = {}) => {
+    const e = { defaultPrevented: o.prevented ?? false, dataTransfer: { types: o.types ?? ["Files"], files: o.files ?? [{ name: "shop" }] }, preventDefault: vi.fn(() => void (e.defaultPrevented = true)) };
+    return e;
+  };
+  it("drop: a file/folder drop the page did not take → preventDefault + the path to main", () => {
+    const send = vi.fn();
+    const e = dropEvent();
+    expect(handleDrop(e, () => "/Users/simo/shop", send)).toBe(true);
+    expect(e.preventDefault).toHaveBeenCalled();
+    expect(send).toHaveBeenCalledWith(DESKTOP_DROP_CHANNEL, { path: "/Users/simo/shop" });
+  });
+  it("drop: handled by the page, not files, no path, or getPath throws → nothing is sent", () => {
+    const send = vi.fn();
+    expect(handleDrop(dropEvent({ prevented: true }), () => "/a", send)).toBe(false);
+    expect(handleDrop(dropEvent({ types: ["text/plain"] }), () => "/a", send)).toBe(false);
+    expect(handleDrop(dropEvent({ files: [] }), () => "/a", send)).toBe(false);
+    expect(handleDrop(dropEvent(), () => "", send)).toBe(false);
+    expect(handleDrop(dropEvent(), () => { throw new Error("x"); }, send)).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+  });
+  it("dragover: files → allowed (preventDefault), unless the page already decided", () => {
+    const e = dropEvent();
+    handleDragOver(e);
+    expect(e.preventDefault).toHaveBeenCalled();
+    const t = dropEvent({ types: ["text/plain"] });
+    handleDragOver(t);
+    expect(t.preventDefault).not.toHaveBeenCalled();
   });
 });

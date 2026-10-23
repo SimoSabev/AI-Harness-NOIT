@@ -1,15 +1,21 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
+import { realpathSync, statSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage, shell } from "electron";
+import { LocalPath } from "@mandat/contract";
 import type { DesktopCommand } from "@mandat/contract";
 import { childEnv, isErrorLine, parseBanner, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
-import { commandFor, notReady, registerBridge, sendCommand } from "./bridge-main.js";
+import { commandFor, registerBridge, registerDrop, sendCommand } from "./bridge-main.js";
 import type { DesktopHandlers } from "./bridge-main.js";
 import { desktopLang, dt, loadingPage } from "./i18n.js";
+import { grantsFile } from "./grant-store.js";
 import { createInboxWatcher, notificationFor } from "./inbox-watch.js";
+import { folderArgs } from "./local-access.js";
+import { localHandlers } from "./local-handlers.js";
 import { appMenu, toTemplate, trayMenu, trayState } from "./menu.js";
 import type { MenuAction } from "./menu.js";
 import { QUICK_ENTRY, shortcutsText } from "./shortcuts.js";
@@ -48,18 +54,71 @@ function lockDown(w: BrowserWindow): void {
   ses.setPermissionCheckHandler((_wc, permission, origin) => allowPermission(permission, origin, base));
 }
 
-/** E9g A1: what the bridge does today; grants, the editor and apply come with A3 (until then: not_ready). */
+/** E9g A3 (D-373): the harness profile folder — the same MANDAT_HOME `pnpm local` uses (packages/cli/src/paths.ts). */
+const mandatHome = path.resolve(process.env.MANDAT_HOME ?? path.join(repoRoot, ".mandat"));
+const APPLY_TIMEOUT_MS = 120_000;
+
+/** `node <argv>` without a shell and without API keys in its env (childEnv), with a time limit. */
+function runNode(argv: string[]): Promise<{ code: number; stdout: string }> {
+  return new Promise((resolve) => {
+    const c = spawn("node", argv, { cwd: repoRoot, env: childEnv(process.env), stdio: ["ignore", "pipe", "ignore"], shell: false });
+    let out = "";
+    const timer = setTimeout(() => c.kill("SIGTERM"), APPLY_TIMEOUT_MS);
+    c.stdout.setEncoding("utf8").on("data", (d: string) => void (out = (out + d).slice(-200_000)));
+    c.on("error", () => (clearTimeout(timer), resolve({ code: 127, stdout: "" })));
+    c.on("close", (code) => (clearTimeout(timer), resolve({ code: code ?? 1, stdout: out })));
+  });
+}
+
+/** E9g A3: grants (native confirm), revoke, open in editor, apply locally — the checks are in local-handlers.ts. */
+function local(): ReturnType<typeof localHandlers> {
+  return localHandlers({
+    lang,
+    env: {
+      platform: process.platform,
+      home: os.homedir(),
+      mandatHome,
+      realpath: (p) => realpathSync.native(p),
+      isDirectory: (p) => {
+        try {
+          return statSync(p).isDirectory();
+        } catch {
+          return false;
+        }
+      },
+    },
+    file: grantsFile(mandatHome),
+    confirm: async (title, detail) => {
+      const opts = { type: "question" as const, message: title, detail, buttons: [t("grant.allow"), t("grant.cancel")], defaultId: 1, cancelId: 1, noLink: true };
+      const r = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+      return r.response === 0;
+    },
+    openExternal: (url) => shell.openExternal(url),
+    runNode,
+    cliMain: path.join(repoRoot, "packages/cli/dist/main.js"),
+    now: () => new Date(),
+  });
+}
+
+/** E9g A3 (AC-12.6): a dropped folder, "Open with" or a second start with a path → the "Add project" screen. Nothing is granted here. */
+let pendingAdd: string | null = null;
+function addProject(p: string): void {
+  if (!LocalPath.safeParse(p).success) return;
+  if (base && win && !win.isDestroyed()) toWeb({ command: "add_project", path: p });
+  else pendingAdd = p;
+}
+
 const handlers: DesktopHandlers = {
   pickFolder: async () => {
     const opts = { title: t("dialog.pickFolder"), properties: ["openDirectory" as const] };
     const r = win && !win.isDestroyed() ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
     return { ok: true, value: { path: r.canceled ? null : (r.filePaths[0] ?? null) } };
   },
-  grantsList: () => Promise.resolve(notReady()),
-  grant: () => Promise.resolve(notReady()),
-  revoke: () => Promise.resolve(notReady()),
-  openInEditor: () => Promise.resolve(notReady()),
-  applyLocal: () => Promise.resolve(notReady()),
+  grantsList: (req) => local().grantsList(req),
+  grant: (req) => local().grant(req),
+  revoke: (req) => local().revoke(req),
+  openInEditor: (req) => local().openInEditor(req),
+  applyLocal: (req) => local().applyLocal(req),
   notify: (req) => {
     notifyNative(req.title, req.body, req.task_id);
     return Promise.resolve({ ok: true, value: {} });
@@ -162,6 +221,12 @@ async function open(b: Banner): Promise<void> {
   await win.loadURL(`${b.url}/`); // D-368: no login — the local owner, this computer only
   void watcher.tick();
   setInterval(() => void watcher.tick(), INBOX_POLL_MS).unref();
+  for (const p of folderArgs(process.argv, process.platform, [app.getAppPath()])) addProject(p);
+  if (pendingAdd) {
+    const p = pendingAdd;
+    pendingAdd = null;
+    addProject(p);
+  }
 }
 
 function start(): void {
@@ -211,13 +276,22 @@ function start(): void {
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on("second-instance", show);
+  app.on("second-instance", (_e, argv) => {
+    show();
+    for (const p of folderArgs(argv, process.platform, [app.getAppPath()])) addProject(p);
+  });
+  // macOS: a folder dropped on the dock icon or "Open with" (before ready too, so it is registered here)
+  app.on("open-file", (e, p) => {
+    e.preventDefault();
+    addProject(p);
+  });
   app.on("activate", show);
   app.on("window-all-closed", () => undefined); // the tray keeps it alive
   app.on("before-quit", () => child?.kill("SIGINT"));
   app.on("will-quit", () => globalShortcut.unregisterAll());
   void app.whenReady().then(() => {
     registerBridge(ipcMain, handlers, () => base);
+    registerDrop(ipcMain, () => base, addProject);
     start();
   });
 }
