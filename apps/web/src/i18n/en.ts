@@ -383,6 +383,7 @@ export const en = {
   "login.title": "Sign in",
   "login.titleNamed": "Sign in to {name}",
   "login.tagline": "AI agents that cannot lie about the tests.",
+  "login.localOnly": "No sign-in is needed: open {url} on the computer where the harness runs.",
   "login.notSetUp": "Sign-in is not set up. Start the harness with {cmd}.",
   "login.email": "Email",
   "login.password": "Password",

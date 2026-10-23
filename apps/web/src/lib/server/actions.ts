@@ -31,10 +31,17 @@ export const FailureLabelBody = z.object({
 }).strict();
 
 export type Result = { status: number; body: Record<string, unknown>; broadcast?: { org: string; task: string } };
-/** Returns when the user's fresh second factor was verified (null = not verified). */
-export type SecondFactor = (o: { uid: string; code: string; factorId: string | undefined }) => Promise<Date | null>;
+/** Returns when the user's fresh second factor was verified (null = not verified); `local` = D-368, no code asked. */
+export type SecondFactor = ((o: { uid: string; code: string; factorId: string | undefined }) => Promise<Date | null>) & { readonly local?: true };
 
 const err = (status: number, error: string): Result => ({ status, body: { error } });
+
+/** The second factor of an action: a fresh TOTP code, or (D-368, `pnpm local`) the local presence without one. */
+export async function factorAt(sf: SecondFactor, o: { uid: string; code?: string | undefined; factorId?: string | undefined }): Promise<{ at: Date; method: "totp" | "local" } | Result> {
+  if (!sf.local && !o.code) return err(403, "second_factor_required");
+  const at = await sf({ uid: o.uid, code: o.code ?? "", factorId: o.factorId });
+  return at ? { at, method: sf.local ? "local" : "totp" } : err(403, "second_factor_invalid");
+}
 
 async function canAct(db: Db, uid: string, org: string): Promise<boolean> {
   return asUser(db, uid, async (sql) => (await sql.query<{ ok: boolean }>("select private.authorize('approver', $1::uuid) as ok", [org])).rows[0]?.ok === true);
@@ -53,13 +60,13 @@ export async function approve(db: Db, o: { uid: string; changesetId: string; bod
   const cs = (await asService(db, (sql) => sql.query<{ org_id: string; task_id: string; requires_second_factor: boolean }>("select org_id::text as org_id, task_id, requires_second_factor from public.changesets where id = $1::uuid", [o.changesetId]))).rows[0];
   if (!cs) return err(404, "unknown_changeset");
   if (!(await canAct(db, o.uid, cs.org_id))) return err(403, "not_an_approver");
-  let method: "tap" | "totp" = "tap";
+  let method: "tap" | "totp" | "local" = "tap";
   let mfaAt: Date | null = null;
   if (cs.requires_second_factor && o.body.decision === "approved") {
-    if (!o.body.code) return err(403, "second_factor_required");
-    mfaAt = await o.secondFactor({ uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
-    if (!mfaAt) return err(403, "second_factor_invalid");
-    method = "totp";
+    const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+    if (!("at" in f)) return f;
+    mfaAt = f.at;
+    method = f.method;
   }
   try {
     const id = await asService(db, async (sql) => {

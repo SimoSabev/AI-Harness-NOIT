@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { HarnessProfile } from "@mandat/contract";
 import { compileProfile } from "@mandat/profile";
+import { factorAt } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { hasCap } from "./roles";
 import { asService, asUser } from "./sql";
@@ -47,9 +48,9 @@ export async function approveProfile(db: Db, o: { uid: string; repoId: string; b
   const row = (await asService(db, (sql) => sql.query<{ repo_id: string; status: string }>("select repo_id::text as repo_id, status from public.harness_profiles where id = $1::uuid", [o.body.profile_id]))).rows[0];
   if (!row || row.repo_id !== o.repoId) return err(404, "unknown_profile");
   if (row.status !== "proposed") return err(409, "not_proposed");
-  if (!o.body.code) return err(403, "second_factor_required");
-  const mfaAt = await o.secondFactor({ uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
-  if (!mfaAt) return err(403, "second_factor_invalid");
+  const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+  if (!("at" in f)) return f;
+  const mfaAt = f.at;
   try {
     const v = await asService(db, async (sql) => (await sql.query<{ v: number }>("select private.approve_profile($1::uuid, $2::uuid, $3::timestamptz) as v", [o.body.profile_id, o.uid, mfaAt.toISOString()])).rows[0]?.v);
     return { status: 200, body: { version: v } };
@@ -65,9 +66,9 @@ export async function rollbackProfile(db: Db, o: { uid: string; repoId: string; 
   const org = await orgOf(db, o.repoId);
   if (!org) return err(404, "unknown_repo");
   if (!(await hasCap(db, o.uid, org, "approve.rules", { repo: o.repoId }))) return err(403, "not_an_owner");
-  if (!o.body.code) return err(403, "second_factor_required");
-  const mfaAt = await o.secondFactor({ uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
-  if (!mfaAt) return err(403, "second_factor_invalid");
+  const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+  if (!("at" in f)) return f;
+  const mfaAt = f.at;
   try {
     const v = await asService(db, async (sql) => (await sql.query<{ v: number }>("select private.rollback_profile($1::uuid, $2, $3::uuid, $4::timestamptz) as v", [o.repoId, o.body.version, o.uid, mfaAt.toISOString()])).rows[0]?.v);
     return { status: 200, body: { version: v } };

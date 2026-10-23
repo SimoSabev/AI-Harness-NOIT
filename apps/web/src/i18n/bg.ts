@@ -369,6 +369,7 @@ export const bg: Record<Key, string> = {
   "login.title": "Вход",
   "login.titleNamed": "Вход в {name}",
   "login.tagline": "AI агенти, които не могат да излъжат за тестовете.",
+  "login.localOnly": "Не е нужен вход: отвори {url} на компютъра, където работи харнесът.",
   "login.notSetUp": "Входът не е настроен. Пусни харнеса с {cmd}.",
   "login.email": "Имейл",
   "login.password": "Парола",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseMandatYml, sha256Tag } from "@mandat/contract";
 import { classifyCommand, findInvisible, generateHarnessFiles } from "@mandat/onboard";
+import { factorAt } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
@@ -40,14 +41,14 @@ export async function approveHarness(db: Db, o: { uid: string; repoId: string; b
   if (!(await isOwner(db, o.uid, hp.org_id))) return err(403, "not_an_owner");
   if (hp.status !== "proposed") return err(409, "not_proposed");
   if (hp.blocked.length > 0) return err(409, "blocked_invisible_characters");
-  if (!o.body.code) return err(403, "second_factor_required");
   const yaml = o.body.edited_yaml ?? hp.policy_yaml;
   if (findInvisible(yaml).length > 0) return err(400, "yaml_invisible_characters");
   const parsed = parseMandatYml(yaml);
   if (!parsed.ok) return err(400, "bad_yaml");
   if (classifyCommand(parsed.policy.tests.command) === "forbidden" || classifyCommand(parsed.policy.runtime.install) === "forbidden") return err(400, "forbidden_command");
-  const mfaAt = await o.secondFactor({ uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
-  if (!mfaAt) return err(403, "second_factor_invalid");
+  const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+  if (!("at" in f)) return f;
+  const mfaAt = f.at;
   const sha = sha256Tag(yaml);
   const existing: Existing = hp.scan.existing ?? { ".mandat.yml": null, "AGENTS.md": null, "CLAUDE.md": null };
   const files = o.body.generate

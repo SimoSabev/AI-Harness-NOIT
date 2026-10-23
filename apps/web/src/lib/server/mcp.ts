@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { McpServerRef, jcs, sha256Tag } from "@mandat/contract";
 import { listRegistry, refFromRegistry } from "@mandat/mcp-bridge/registry";
+import { factorAt } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { hasCap } from "./roles";
 import { asService, asUser } from "./sql";
@@ -79,9 +80,9 @@ export async function approveMcpServer(db: Db, o: { uid: string; id: string; bod
   if (s.vet_status === "vetting" || s.vet_status === "approved") return err(409, "already_approved");
   let mfaAt: Date | null = null;
   if (reachesOut(s)) {
-    if (!o.body.code) return err(403, "second_factor_required");
-    mfaAt = await o.secondFactor({ uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
-    if (!mfaAt) return err(403, "second_factor_invalid");
+    const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+    if (!("at" in f)) return f;
+    mfaAt = f.at;
   }
   await asService(db, async (sql) => {
     await sql.query("update public.mcp_servers set vet_status = 'vetting', approved_by = $2::uuid, mfa_verified_at = $3::timestamptz, updated_at = now() where id = $1::uuid", [o.id, o.uid, mfaAt?.toISOString() ?? null]);

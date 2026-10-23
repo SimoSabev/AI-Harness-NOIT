@@ -6,7 +6,7 @@ import { HARNESS } from "../lib/brand";
 import { overview } from "../lib/overview";
 import type { Health } from "../lib/overview";
 import { parseTheme } from "../lib/prefs";
-import { currentUser } from "../lib/server/auth";
+import { authMode, currentUser } from "../lib/server/auth";
 import { db } from "../lib/server/db";
 import { board, membership, repos } from "../lib/server/queries";
 import { ThemeToggle } from "./theme-switch";
@@ -90,9 +90,11 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
               )}
               <div className="mt-auto hidden items-center gap-1 border-t border-line px-2 py-2 lg:flex">
                 <ThemeToggle value={theme} />
-                <form action="/api/auth/logout" method="post" className="ml-auto">
-                  <button className={btn.ghost} type="submit">{t("shell.logout")}</button>
-                </form>
+                {authMode() !== "local" && (
+                  <form action="/api/auth/logout" method="post" className="ml-auto">
+                    <button className={btn.ghost} type="submit">{t("shell.logout")}</button>
+                  </form>
+                )}
               </div>
             </div>
           </aside>

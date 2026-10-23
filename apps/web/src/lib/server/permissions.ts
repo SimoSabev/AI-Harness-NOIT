@@ -3,6 +3,7 @@ import { ProfileLayers, Subject, ToolPattern, jcs, profileHash, sha256Tag } from
 import type { ToolRule } from "@mandat/contract";
 import { applyPermissions, opensDangerous } from "@mandat/profile";
 import type { Decision, PermissionRow } from "@mandat/profile";
+import { factorAt } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { hasCap } from "./roles";
 import { asService } from "./sql";
@@ -57,12 +58,6 @@ async function applyRows(sql: Sql, o: { uid: string; org: string; profiles: read
   return n;
 }
 
-async function factor(o: { uid: string; code?: string | undefined; factor_id?: string | undefined; secondFactor: SecondFactor }): Promise<Date | Result> {
-  if (!o.code) return err(403, "second_factor_required");
-  const at = await o.secondFactor({ uid: o.uid, code: o.code, factorId: o.factor_id });
-  return at ?? err(403, "second_factor_invalid");
-}
-
 export async function decideAsk(db: Db, o: { uid: string; taskId: string; body: z.infer<typeof AskDecisionBody>; secondFactor: SecondFactor }): Promise<Result> {
   const t = (await asService(db, (sql) => sql.query<{ org_id: string; repo_id: string; type: string; state: string; wait_reason: string | null; attempt: number }>("select org_id::text as org_id, repo_id::text as repo_id, type, state, wait_reason, attempt from public.tasks where id = $1", [o.taskId]))).rows[0];
   if (!t) return err(404, "unknown_task");
@@ -80,9 +75,9 @@ export async function decideAsk(db: Db, o: { uid: string; taskId: string; body: 
     if (subjects.length === 0) return err(409, "rule_gone");
     rows = subjects.map((subject) => ({ subject, tool: ask.tool, decision: "allow" as const }));
     if (dangerous(profiles, rows)) {
-      const f = await factor({ uid: o.uid, code: o.body.code, factor_id: o.body.factor_id, secondFactor: o.secondFactor });
-      if (!(f instanceof Date)) return f;
-      mfaAt = f;
+      const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+      if (!("at" in f)) return f;
+      mfaAt = f.at;
     }
   }
   try {
@@ -119,9 +114,9 @@ export async function setPermission(db: Db, o: { uid: string; org: string; body:
   const before = (await asService(db, (sql) => sql.query<{ decision: Decision }>("select decision from public.tool_permissions where org_id = $1::uuid and subject = $2 and tool = $3", [o.org, row.subject, row.tool]))).rows[0]?.decision ?? null;
   let mfaAt: Date | null = null;
   if (dangerous(profiles, [row]) || (profiles.length === 0 && opensDangerous(row.tool, before, row.decision))) {
-    const f = await factor({ uid: o.uid, code: o.body.code, factor_id: o.body.factor_id, secondFactor: o.secondFactor });
-    if (!(f instanceof Date)) return f;
-    mfaAt = f;
+    const f = await factorAt(o.secondFactor, { uid: o.uid, code: o.body.code, factorId: o.body.factor_id });
+    if (!("at" in f)) return f;
+    mfaAt = f.at;
   }
   try {
     const versions = await asService(db, async (sql) => {

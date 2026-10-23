@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { jcs, sha256Tag } from "@mandat/contract";
+import { factorAt } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { hasCap } from "./roles";
 import { asService, asUser } from "./sql";
@@ -25,9 +26,9 @@ export async function uploadHidden(db: Db, o: { uid: string; repoId: string; bod
   if (!(await hasCap(db, o.uid, org, "approve.rules", { repo: o.repoId }))) return err(403, "not_allowed");
   const b = HiddenUploadBody.safeParse(o.body);
   if (!b.success) return err(400, "bad_hidden_tests");
-  if (!b.data.code) return err(403, "second_factor_required");
-  const mfaAt = await o.secondFactor({ uid: o.uid, code: b.data.code, factorId: b.data.factor_id });
-  if (!mfaAt) return err(403, "second_factor_invalid");
+  const f = await factorAt(o.secondFactor, { uid: o.uid, code: b.data.code, factorId: b.data.factor_id });
+  if (!("at" in f)) return f;
+  const mfaAt = f.at;
   const files = [...b.data.files].sort((x, y) => (x.path < y.path ? -1 : 1)).map((f) => ({ path: f.path, data: Buffer.from(f.content, "utf8").toString("base64") }));
   const hash = sha256Tag(jcs(files));
   try {

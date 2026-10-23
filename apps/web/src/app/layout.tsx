@@ -3,8 +3,10 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { LangProvider } from "../i18n/client";
 import { getLang, getT } from "../i18n/server";
+import { SecondFactorProvider } from "../components/second-factor";
 import { HARNESS } from "../lib/brand";
 import { parseTheme } from "../lib/prefs";
+import { authMode } from "../lib/server/auth";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -20,7 +22,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={lang} data-theme={theme}>
       <body className="min-h-screen">
-        <LangProvider lang={lang}>{children}</LangProvider>
+        <LangProvider lang={lang}>
+          <SecondFactorProvider needsCode={authMode() !== "local"}>{children}</SecondFactorProvider>
+        </LangProvider>
       </body>
     </html>
   );

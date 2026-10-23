@@ -1,7 +1,9 @@
 import "server-only";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { authMode, currentUser } from "./auth";
 import { db } from "./db";
+import { CSRF_COOKIE } from "./guard";
 import { inbox, membership } from "./queries";
 import type { Role } from "./queries";
 
@@ -11,6 +13,8 @@ export interface PageCtx { uid: string; org: string; role: Role; waiting: number
 export async function pageCtx(): Promise<PageCtx> {
   const uid = await currentUser();
   if (!uid) redirect("/login");
+  // D-368: no login form in `pnpm local` — the CSRF cookie the login used to set comes from /api/auth/local
+  if (authMode() === "local" && !(await cookies()).get(CSRF_COOKIE)) redirect("/api/auth/local");
   const m = await membership(db(), uid);
   if (!m) redirect("/login?e=no_org");
   const ib = await inbox(db(), uid, m.org_id);

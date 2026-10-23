@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
 import type { StatusKey } from "../lib/status";
+import { useNeedsCode } from "./second-factor";
 import { btn, input } from "./ui";
 
 // D-292: the decision for the status the task is in. Approve/reject is one click + confirm (a fresh TOTP code only
@@ -11,6 +12,7 @@ import { btn, input } from "./ui";
 export function TaskActions(p: { taskId: string; status: StatusKey; canAct: boolean; changesetId: string | null; headSha: string | null; twoFactor: boolean }) {
   const router = useRouter();
   const t = useT();
+  const needsCode = useNeedsCode() && p.twoFactor;
   const [confirm, setConfirm] = useState<null | "approved" | "rejected">(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
     router.refresh();
   };
   const decide = (decision: "approved" | "rejected") =>
-    run(`/api/changesets/${p.changesetId}/approve`, { head_sha: p.headSha, decision, client: "web", ...(decision === "approved" && p.twoFactor ? { code } : {}) });
+    run(`/api/changesets/${p.changesetId}/approve`, { head_sha: p.headSha, decision, client: "web", ...(decision === "approved" && needsCode ? { code } : {}) });
 
   const canDecide = p.status === "review" && p.changesetId !== null && p.headSha !== null;
   const canRetry = p.status === "failed" || p.status === "unknown" || p.status === "empty" || p.status === "key" || p.status === "base";
@@ -56,7 +58,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
       {confirm && (
         <form className="rounded-lg border border-line bg-raised p-4" onSubmit={(e) => (e.preventDefault(), void decide(confirm))}>
           <p className="text-sm font-medium">{confirm === "approved" ? t("actions.confirmApprove") : t("actions.confirmReject")}</p>
-          {confirm === "approved" && p.twoFactor && (
+          {confirm === "approved" && needsCode && (
             <label className="mt-3 block max-w-xs">
               <span className="text-sm">{t("actions.code")}</span>
               <input className={`${input} mt-1 font-mono tracking-widest`} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} required value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
