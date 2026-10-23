@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { startControl } from "./commands/local-control.js";
-import type { Keys } from "./commands/local-control.js";
+import type { ControlDeps, Keys } from "./commands/local-control.js";
+import { LoginSessions } from "./commands/login-session.js";
+import type { LoginProc } from "./commands/login-session.js";
+
+const noLogin = () => new LoginSessions({ prepare: async () => "images_missing", spawn: () => { throw new Error("no"); }, status: async () => ({ loggedIn: false, email: null, plan: null }), timeoutMs: 1000 });
+const base = (): Omit<ControlDeps, "start" | "stop" | "providers" | "accounts"> => ({ login: noLogin(), logout: async () => false });
 
 // D-293: the keys reach the proxy through `mandat local` only: 127.0.0.1, a bearer token, never echoed, never stored.
 describe("mandat local control (D-293)", () => {
@@ -19,6 +24,7 @@ describe("mandat local control (D-293)", () => {
       },
       providers: async () => providers,
       accounts: async () => [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }],
+      ...base(),
     });
     try {
       expect(await (await fetch(`${c.url}/accounts`, { headers: { authorization: `Bearer ${c.token}` } })).json()).toEqual({ accounts: [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }] });
@@ -42,10 +48,47 @@ describe("mandat local control (D-293)", () => {
     }
   });
   it("a failed proxy start → 502 proxy_start_failed", async () => {
-    const c = await startControl({ start: async () => false, stop: async () => undefined, providers: async () => null, accounts: async () => [] });
+    const c = await startControl({ start: async () => false, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base() });
     try {
       const r = await fetch(`${c.url}/keys`, { method: "POST", headers: { authorization: `Bearer ${c.token}` }, body: JSON.stringify({ anthropic: "a".repeat(40) }) });
       expect([r.status, await r.json()]).toEqual([502, { error: "proxy_start_failed" }]);
+    } finally {
+      await c.close();
+    }
+  });
+  it("D-369: the subscription login — start, Anthropic's address, the code to stdin only, done; logout; bad input → 400", async () => {
+    const URL = "https://claude.com/cai/oauth/authorize?code=true&code_challenge=x&code_challenge_method=S256&state=y";
+    const written: string[] = [];
+    let out: (s: string) => void = () => undefined;
+    let exit: (c: number | null) => void = () => undefined;
+    const proc: LoginProc = { onOutput: (f) => void (out = f), onExit: (f) => void (exit = f), write: (x) => void written.push(x), kill: () => exit(null) };
+    const login = new LoginSessions({ prepare: async () => "ok", spawn: () => proc, status: async () => ({ loggedIn: true, email: "s@example.com", plan: "Max" }), timeoutMs: 60_000 });
+    const removed: string[] = [];
+    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login, logout: async (n) => (removed.push(n), true) });
+    const call = async (method: string, path: string, body?: unknown) => {
+      const r = await fetch(`${c.url}${path}`, { method, headers: { authorization: `Bearer ${c.token}` }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+      return [r.status, await r.json()] as const;
+    };
+    try {
+      expect(await call("GET", "/accounts/login")).toEqual([200, { state: "idle" }]);
+      expect(await call("POST", "/accounts/login", { name: "Bad Name" })).toEqual([400, { error: "bad_name" }]);
+      expect(await call("POST", "/accounts/login", { name: "lichno" })).toEqual([200, { state: "starting", name: "lichno" }]);
+      await new Promise((r) => setTimeout(r, 10));
+      out(`visit: ${URL}\nPaste code here if prompted > `);
+      expect(await call("GET", "/accounts/login")).toEqual([200, { state: "waiting_code", name: "lichno", url: URL }]);
+      expect(await call("POST", "/accounts/login/code", { code: "no" })).toEqual([400, { error: "bad_code" }]);
+      const code = "AbC-12_3#xYz";
+      const [st, body] = await call("POST", "/accounts/login/code", { code });
+      expect([st, body]).toEqual([200, { state: "checking", name: "lichno" }]);
+      expect(JSON.stringify(body)).not.toContain(code);
+      expect(written).toEqual([`${code}\n`]);
+      exit(0);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(await call("GET", "/accounts/login")).toEqual([200, { state: "done", name: "lichno", email: "s@example.com", plan: "Max" }]);
+      expect(await call("DELETE", "/accounts/login")).toEqual([200, { state: "done", name: "lichno", email: "s@example.com", plan: "Max" }]);
+      expect(await call("POST", "/accounts/logout", { name: "lichno" })).toEqual([200, { removed: true }]);
+      expect(removed).toEqual(["lichno"]);
+      expect(await call("POST", "/accounts/logout", { name: "../x" })).toEqual([400, { error: "bad_name" }]);
     } finally {
       await c.close();
     }

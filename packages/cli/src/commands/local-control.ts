@@ -2,6 +2,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { AccountName, LoginCode } from "@mandat/contract";
+import type { LoginState } from "@mandat/contract";
 
 // D-293: the web UI of `mandat local` hands API keys to the proxy through this control endpoint: 127.0.0.1 only,
 // a random bearer token known to the web server alone, the key only in memory on its way to `docker run` env.
@@ -16,6 +18,9 @@ export interface ControlDeps {
   providers(): Promise<string[] | null>;
   /** D-295: the subscription accounts (from `claude auth status`; no token) */
   accounts(): Promise<{ name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }[]>;
+  /** D-369: the subscription login from the web (login-session.ts) */
+  login: { state(): LoginState; start(name: string): Promise<LoginState>; submit(code: string): LoginState | null; cancel(): LoginState };
+  logout(name: string): Promise<boolean>;
 }
 
 const MAX_BODY = 4096;
@@ -36,6 +41,40 @@ function readBody(req: IncomingMessage): Promise<string | null> {
   });
 }
 
+async function readJson(req: IncomingMessage): Promise<unknown> {
+  const raw = await readBody(req);
+  try {
+    return raw === null ? null : JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+const NameBody = z.object({ name: AccountName }).strict();
+const CodeBody = z.object({ code: LoginCode }).strict();
+
+/** D-369: /accounts/login (GET state, POST start, DELETE cancel), /accounts/login/code, /accounts/logout. The code is never echoed. */
+async function accountsRoute(url: string, method: string, body: () => Promise<unknown>, d: ControlDeps): Promise<[number, unknown]> {
+  if (url === "/accounts/login") {
+    if (method === "GET") return [200, d.login.state()];
+    if (method === "DELETE") return [200, d.login.cancel()];
+    if (method !== "POST") return [405, { error: "method" }];
+    const b = NameBody.safeParse(await body());
+    return b.success ? [200, await d.login.start(b.data.name)] : [400, { error: "bad_name" }];
+  }
+  if (method !== "POST") return url === "/accounts/login/code" || url === "/accounts/logout" ? [405, { error: "method" }] : [404, { error: "not_found" }];
+  if (url === "/accounts/login/code") {
+    const b = CodeBody.safeParse(await body());
+    const s = b.success ? d.login.submit(b.data.code) : null;
+    return s ? [200, s] : [400, { error: b.success ? "not_waiting" : "bad_code" }];
+  }
+  if (url === "/accounts/logout") {
+    const b = NameBody.safeParse(await body());
+    return b.success ? [200, { removed: await d.logout(b.data.name) }] : [400, { error: "bad_name" }];
+  }
+  return [404, { error: "not_found" }];
+}
+
 export async function startControl(d: ControlDeps): Promise<{ url: string; token: string; close(): Promise<void> }> {
   const token = randomBytes(32).toString("hex");
   const want = Buffer.from(`Bearer ${token}`);
@@ -52,6 +91,10 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
     if (got.length !== want.length || !timingSafeEqual(got, want)) return send(401, { error: "unauthorized" });
     if (req.url === "/accounts" && req.method === "GET") {
       void d.accounts().then((accounts) => send(200, { accounts }), () => send(500, { error: "internal" }));
+      return;
+    }
+    if (req.url?.startsWith("/accounts/")) {
+      void accountsRoute(req.url, req.method ?? "GET", () => readJson(req), d).then(([code, body]) => send(code, body), () => send(500, { error: "internal" }));
       return;
     }
     if (req.url !== "/keys") return send(404, { error: "not_found" });

@@ -11,7 +11,8 @@ import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
 import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
-import { listAccounts } from "./accounts.js";
+import { listAccounts, loginDeps, logoutProfile } from "./accounts.js";
+import { LoginSessions } from "./login-session.js";
 import { slotsFrom, workerCommand } from "./worker.js";
 
 // D-292: `pnpm local` — everything on this machine with one command: Postgres in Docker (shim + migrations, no
@@ -215,6 +216,8 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     stop: async () => void (await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort })),
     providers: () => proxyProviders(deps),
     accounts: () => listAccounts(deps),
+    login: new LoginSessions(loginDeps(deps)),
+    logout: (name) => logoutProfile(deps, name),
   });
   const env = localWebEnv(clean, { dbUrl: url, control });
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
