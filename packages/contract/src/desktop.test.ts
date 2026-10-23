@@ -6,6 +6,7 @@ import {
   DesktopInboxSnapshot,
   DESKTOP_DROP_CHANNEL,
   DesktopDrop,
+  DesktopUpdateFeedUrl,
   LOCAL_GRANTS_FILE,
   LocalActivityBody,
   LocalGrantsFile,
@@ -138,5 +139,14 @@ describe("desktop bridge contract (D-371)", () => {
     expect(DesktopCommand.safeParse({ command: "terminal_line", id, task_id: "t_1", line: "pnpm test" }).success).toBe(true);
     expect(LocalActivityBody.safeParse({ kind: "local_terminal", outcome: "command", detail: "pnpm test" }).success).toBe(true);
     expect(LocalActivityBody.safeParse({ kind: "local_terminal", outcome: "opened" }).success).toBe(true);
+  });
+});
+
+describe("auto-update feed URL (E9g A5, D-376)", () => {
+  it("only https, at most 2048 characters", () => {
+    expect(DesktopUpdateFeedUrl.safeParse("https://dl.example.org/harness").success).toBe(true);
+    expect(DesktopUpdateFeedUrl.safeParse("http://dl.example.org/harness").success).toBe(false);
+    expect(DesktopUpdateFeedUrl.safeParse("file:///tmp/x").success).toBe(false);
+    expect(DesktopUpdateFeedUrl.safeParse(`https://x.org/${"a".repeat(2050)}`).success).toBe(false);
   });
 });

@@ -172,3 +172,6 @@ export const LocalActivityBody = z
   })
   .strict();
 export type LocalActivityBody = z.infer<typeof LocalActivityBody>;
+
+/** E9g A5 (D-376): a generic auto-update feed (MANDAT_UPDATE_FEED); only https. Unset → no update check at all. */
+export const DesktopUpdateFeedUrl = z.url({ protocol: /^https$/ }).max(2048);
