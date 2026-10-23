@@ -3,7 +3,7 @@ import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
+import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -28,6 +28,7 @@ const infra = (code: ErrorCode, message: string): never => {
   throw new VerifyInfraError(code, message);
 };
 
+export interface UiCheck { paths: string[]; devCommand: string | null; image: string | null; routes: string[] }
 export interface HiddenTests { dir: string; files: { path: string; data: Buffer }[] }
 
 export interface VerifyTreesInput {
@@ -51,6 +52,8 @@ export interface VerifyTreesInput {
   hidden?: HiddenTests | null;
   /** v5 E9б (D8): the project's lint and typecheck commands (from the profile or the caller) */
   checks?: { name: "lint" | "typecheck"; command: string }[];
+  /** v5 E9б (D12, D-364): when the change touches `paths`, tree B's app (the dev command) is opened in a browser */
+  ui?: UiCheck;
   allowedPaths: string[];
   mayChangeTests: boolean;
   mustPass: string[];
@@ -194,7 +197,10 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const A = await runTests(testsInput("a", aDir));
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
   if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
-  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}), ...(checks.length > 0 ? { checks } : {}) });
+  // D12: only a change that touches a UI path; without a dev command or the browser image the check cannot run (unknown)
+  const uiTouched = i.ui !== undefined && i.ui.paths.length > 0 && i.files.some((f) => anyMatch(i.ui?.paths ?? [], f.path));
+  const ui = uiTouched && i.ui?.devCommand && i.ui.image ? { image: i.ui.image, devCommand: i.ui.devCommand, routes: i.ui.routes } : null;
+  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}), ...(checks.length > 0 ? { checks } : {}), ...(ui ? { ui } : {}) });
   i.onGateLog?.("b", path.join(i.runDir, "gate", "b", "log", "events.jsonl"));
   if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
   const a = A as Extract<TestProcedureResult, { ok: true }>;
@@ -206,6 +212,14 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   if (checks.length > 0 || deps.length > 0) {
     const exitOf = (rs: CheckResult[], n: string) => rs.find((x) => x.name === n)?.exit ?? null;
     evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bRaw.checks ?? [], c.name) })), deps, now: Date.now() }).evidence);
+  }
+  if (uiTouched) {
+    const r = bRaw.ui?.up ? bRaw.ui : null;
+    if (r) {
+      mkdirSync(path.join(i.runDir, "ui"), { recursive: true });
+      for (const [name, data] of Object.entries(r.shots)) writeFileSync(path.join(i.runDir, "ui", name), data);
+    }
+    evidence.push(d12Ui({ uiTouched, routes: r ? r.routes.map((x) => ({ ...x, screenshot: x.screenshot !== null && r.shots[x.screenshot] ? `ui/${x.screenshot}` : null })) : null }).evidence);
   }
   if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);

@@ -10,7 +10,7 @@ import type { startRunGate } from "./gate.js";
 import type { RunWriter } from "./run-dir.js";
 import type { runTestProcedure } from "./test-procedure.js";
 import { VerifyInfraError, verifyTrees } from "./verify-trees.js";
-import type { HiddenTests } from "./verify-trees.js";
+import type { HiddenTests, UiCheck } from "./verify-trees.js";
 
 // Демо промпт т. 3.1 / 3.3 / 5.7 (D-205, D-206): the single verification contract.
 
@@ -94,6 +94,8 @@ export interface VerifyChangeInput {
   hidden?: HiddenTests | null;
   /** v5 E9б (D8): lint and typecheck commands */
   checks?: { name: "lint" | "typecheck"; command: string }[];
+  /** v5 E9б (D12): the UI check (paths, dev command, browser image, routes) */
+  ui?: UiCheck;
 }
 
 export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome> {
@@ -114,7 +116,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
   const finish = (): VerifyOutcome => {
     const evidence = EVIDENCE_ORDER.map((d) => evd.get(d) ?? na(d));
     // D5 only when hidden tests ran (verdicts without them keep their evidence list)
-    for (const d of ["D5.hidden", "D8.static"] as const) {
+    for (const d of ["D5.hidden", "D8.static", "D12.ui"] as const) {
       const e = evd.get(d);
       if (e) evidence.push(e);
     }
@@ -204,7 +206,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
       infraUser: deps.infraUser, ipv6Sysctl: deps.ipv6Sysctl, mirrorPath: deps.mirrorPath, baseSha: req.base_sha, baseDir, diffPatch: i.diffPatch,
       files: i.files, rc, allowedPaths: tt ? tt.allowed_paths : ["**"], mayChangeTests, mustPass: [], external, tmpRoot: deps.tmpRoot,
       ...(deps.extraCa ? { extraCa: deps.extraCa } : {}), ...(deps.startGate ? { startGate: deps.startGate } : {}), ...(deps.runTests ? { runTests: deps.runTests } : {}),
-      ...(deps.progress ? { progress: deps.progress } : {}), ...(deps.depFacts ? { depFacts: deps.depFacts } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}),
+      ...(deps.progress ? { progress: deps.progress } : {}), ...(deps.depFacts ? { depFacts: deps.depFacts } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}), ...(i.ui ? { ui: i.ui } : {}),
     });
     for (const e of r.evidence) set(e);
     if (!tt) set(na("D4.contract", "no task type"));

@@ -1,12 +1,12 @@
 import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { MandatError, TaskType, parseMandatYml, ulid } from "@mandat/contract";
+import { MandatError, TaskType, UiRoutes, parseMandatYml, ulid } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, VerifyOutcome } from "@mandat/contract";
 import { ev } from "@mandat/core";
 import { exportChangeset } from "@mandat/export";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner } from "@mandat/sandbox";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { hostConfig, infraUserFor } from "./host.js";
 import { acquireRunLock } from "./lock.js";
@@ -28,7 +28,7 @@ export interface VerifyIo {
 }
 export interface VerifyCliDeps {
   docker?: DockerRunner;
-  images?: { sandbox: string; gate: string; proxy: string };
+  images?: { sandbox: string; gate: string; proxy: string; ui?: string };
   repoRoot?: string;
   verify?: Partial<Pick<VerifyDeps, "runTests" | "startGate" | "recompute" | "ipv6Sysctl" | "infraUser" | "now" | "depFacts">>;
 }
@@ -43,6 +43,8 @@ export interface VerifyArgs {
   hidden: string | null;
   /** v5 E9б (D8): the project's lint and typecheck commands */
   checks: { name: "lint" | "typecheck"; command: string }[];
+  /** v5 E9б (D12): UI path globs, the dev command and the routes to open (default "/") */
+  ui: { paths: string[]; devCommand: string | null; routes: string[] } | null;
 }
 
 const TASK_TYPES = TaskType.options; // D-360: "free" too
@@ -52,6 +54,9 @@ const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathn
 export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args: VerifyArgs } | { ok: false; error: string } {
   const a: Partial<VerifyArgs> & { external: boolean; json: boolean } = { external: false, json: false };
   const checks: VerifyArgs["checks"] = [];
+  const uiPaths: string[] = [];
+  const routes: string[] = [];
+  let dev: string | null = null;
   for (let k = 0; k < argv.length; k++) {
     const f = argv[k];
     const val = () => {
@@ -71,14 +76,19 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
       else if (f === "--json") a.json = true;
       else if (f === "--hidden") a.hidden = path.resolve(io.cwd, val());
       else if (f === "--lint" || f === "--typecheck") checks.push({ name: f === "--lint" ? "lint" : "typecheck", command: val() });
+      else if (f === "--ui-paths") uiPaths.push(val());
+      else if (f === "--dev") dev = val();
+      else if (f === "--ui-route") routes.push(val());
       else return { ok: false, error: `unknown argument ${f ?? ""}` };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
     }
   }
   if (!a.repo) return { ok: false, error: "--repo is required" };
+  if (routes.length > 0 && !UiRoutes.safeParse(routes).success) return { ok: false, error: "--ui-route: at most 5 paths that start with a single /" };
+  const ui = uiPaths.length > 0 ? { paths: uiPaths, devCommand: dev, routes: routes.length > 0 ? routes : ["/"] } : null;
   const home = a.home ?? io.env.MANDAT_HOME ?? path.join(os.homedir(), ".mandat");
-  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null, checks } };
+  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null, checks, ui } };
 }
 
 const REASON_LABEL: Record<string, string> = {
@@ -123,7 +133,7 @@ export const exitFor = (r: string): 0 | 10 | 20 => (r === "VERIFIED" ? 0 : r ===
 export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCliDeps = {}): Promise<number> {
   const parsed = parseVerifyArgs(argv, io);
   if (!parsed.ok) {
-    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir>] [--lint <cmd>] [--typecheck <cmd>] [--json] [--home <dir>]\n`);
+    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir>] [--lint <cmd>] [--typecheck <cmd>] [--ui-paths <glob>]… [--dev <cmd>] [--ui-route <path>]… [--json] [--home <dir>]\n`);
     return 2;
   }
   const a = parsed.args;
@@ -148,6 +158,13 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     const images = deps.images ?? (await imageTags(deps.repoRoot ?? defaultRepoRoot));
     for (const t of [images.sandbox, images.gate]) {
       if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return envFail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build`);
+    }
+    // D12: the browser image is opt-in (`mandat images build --ui`); asked for and missing is an environment error
+    let uiImage: string | null = null;
+    if (a.ui?.devCommand) {
+      const tag = deps.images?.ui ?? (await uiImageTag(deps.repoRoot ?? defaultRepoRoot));
+      if ((await dockerText(docker, ["image", "inspect", tag])).exitCode !== 0) return envFail("E_IMAGES_MISSING", `${tag} missing; пусни pnpm mandat images build --ui`);
+      uiImage = tag;
     }
     const now = deps.verify?.now ?? (() => new Date());
     const runId = `r_${ulid(now().getTime())}`;
@@ -206,6 +223,7 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     writer.raw("export/diff.patch", diffPatch);
     const out = await verifyChange({
       req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps, ...(a.hidden ? { hidden: readHidden(a.hidden) } : {}), ...(a.checks.length > 0 ? { checks: a.checks } : {}),
+      ...(a.ui ? { ui: { ...a.ui, image: uiImage } } : {}),
     });
     await writer.text("verdict.json", out.verdict);
     return report(out, base);
