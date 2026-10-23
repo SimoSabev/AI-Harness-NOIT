@@ -33,7 +33,7 @@ describe("desktop banner (D-303, D-368)", () => {
   });
 
   it("env на детето без API ключове и без ELECTRON_RUN_AS_NODE", () => {
-    expect(childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "y", ELECTRON_RUN_AS_NODE: "1" })).toEqual({ PATH: "/bin" });
+    expect(childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "y", ELECTRON_RUN_AS_NODE: "1", MANDAT_KEK: "k" })).toEqual({ PATH: "/bin" });
   });
 
   it("навигация само в локалния адрес", () => {

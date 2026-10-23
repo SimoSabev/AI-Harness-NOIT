@@ -1652,7 +1652,7 @@ docker CLI процеса, D-043). (2) Проксито стартира зак�
 не стига до 127.0.0.1 на хоста; обратната посока (CLI → публикувания админ порт на 127.0.0.1) дава същите свойства без host
 мрежа: ключът само в паметта, токенът еднократен и с TTL, `docker inspect` без ключ.
 Алтернативи: `--network host` за проксито (разширява достъпа му); ключ във файл, монтиран ro (ключът на диска в чист вид).
-[НП] Electron safeStorage за KEK — проверява се в E9ж (документацията на Electron 44, линк + дата тогава).
+Electron safeStorage за KEK — проверено в E9ж, вж. D-374 (документацията на Electron, прочетена 24.10.2026).
 Източник: v5 т. 3.3. Статус: решено.
 
 ## D-346 Базова линия, flaky и рисков профил v1 (22.10.2026)
@@ -2214,3 +2214,41 @@ command-line-interface даде 404 на 24.10.2026]. Сегментите се 
 да бъде подправен от съдържанието ѝ; файлът е в профилната папка, защото там харнесът вече пази своето и няма втори
 източник; следата е в task_activities, защото дневникът е за присъди, а това не е присъда. Регистрирането на дадената
 папка като проект на харнеса (ред в repos + огледало) от уеба не съществува днес — Q-061.
+
+## D-374 KEK на ключовете в OS keychain през Electron safeStorage (24.10.2026)
+Решение: десктоп приложението пази KEK-а на плика с ключовете (D-313, D-345) в OS keychain чрез Electron `safeStorage`.
+На диска е само запечатаният KEK: `MANDAT_HOME/kek.keychain` (0600, атомарен запис: временен файл `wx`, fsync, rename).
+При старт main (`apps/desktop/src/kek-keychain.ts`, `resolveDesktopKek`) го отваря и подава KEK-а на детето `pnpm local`
+като env `MANDAT_KEK` (base64 на 32 байта) — точно това, което `loadKek` в `packages/llm-proxy` вече чете първо; кодът на
+CLI-то и проксито не се мени. Ползва се **асинхронното** API: `isAsyncEncryptionAvailable`, `encryptStringAsync`,
+`decryptStringAsync` (при `shouldReEncrypt` същият KEK се запечатва наново), защото синхронното (`isEncryptionAvailable`
+и др.) е отбелязано като остаряло. Първи старт с keychain: ако има обикновен `MANDAT_HOME/kek` (направен от `pnpm local`),
+той се приема (вече запечатаните ключове остават четими) и **файлът се оставя** (Q-062); иначе нов KEK от `randomBytes(32)`.
+Безопасни откази: няма keychain (`isAsyncEncryptionAvailable` → false или грешка; на Linux `getSelectedStorageBackend()`
+е `basic_text` или `unknown`, т.е. криптиране с вградена парола) → `source: "file"`, env не се пипа и `loadKek` си ползва
+файла 0600 както досега. Запечатан KEK, който keychain-ът не отваря (друг keychain, отказан достъп, повреда, не е 32 байта)
+→ също `file` с причина `keychain_locked`, и запечатаният файл **никога не се заменя** с нов KEK (иначе всички ключове
+стават нечетими).
+Изолация: `childEnv` маха `MANDAT_KEK` (`mandat apply` и другите деца не го получават); само `harnessEnv` го добавя за
+`pnpm local`. Пясъчникът: docker CLI-то получава само своите ключове (D-084), а `buildRunArgs` вече отказва `MANDAT_KEK`
+в `envNames` и в `publicEnv` на всеки контейнер (нов списък HOST_ONLY в `packages/sandbox/src/hardening.ts`; тест
+`packages/sandbox/src/kek-isolation.test.ts`). Нищо не се логва.
+Тестове: `apps/desktop/src/kek-keychain.test.ts` с фалшив keychain (XOR с тайна, която знае само той): първи старт,
+ключовете оцеляват рестарт (запечатан с `FileKeyStore`, отворен след нов `resolveDesktopKek` със същия keychain), приемане
+на стария файл, няма keychain, чужд keychain не заменя KEK-а, повреден запис, `shouldReEncrypt`, env-ът. Истински Electron
+(`pnpm --dir apps/desktop smoke`, 44.9.0, macOS arm64): асинхронното API съществува; `getSelectedStorageBackend` по време
+на работа е `undefined` на macOS (въпреки типа), затова кодът го вика само на Linux и с `?.`. Истинско криптиране не е
+правено в smoke-а: неподписан build на macOS може да поиска достъп до keychain, а нощем няма кой да отговори.
+Факти (документацията https://www.electronjs.org/docs/latest/api/safe-storage, прочетена 24.10.2026): macOS — ключът е в
+Keychain и е защитен от други потребители и от други приложения на същия потребител; Windows — DPAPI, защитен от други
+потребители, **не** от други приложения на същия потребител; Linux — kwallet/kwallet5/kwallet6/gnome-libsecret според
+средата, а без хранилище (`basic_text`) данните са незащитени; `isEncryptionAvailable` и `getSelectedStorageBackend` имат
+смисъл след `ready`; асинхронното API се инициализира лениво при първото извикване след `ready`.
+[НП] дали `getSelectedStorageBackend` отразява и доставчика на асинхронното API на Linux (документацията изрежда за него
+Portal Secret / Secret Service / резервен доставчик) — проверка на Linux машина или в CI на А5.
+Защо: AC-12.9 иска KEK-ът да е в keychain и ключовете да са налични след рестарт без ново въвеждане; env `MANDAT_KEK` вече
+е договореният вход на `loadKek`, така че нищо в CLI/проксито/worker-а не се мени и терминалният `pnpm local` без
+десктопа работи както преди. Отказът да се замени неотварящ се KEK пази ключовете от тиха загуба; на Windows защитата е
+по-слаба (DPAPI), но пак по-добра от файл 0600 и е същата като на всички Electron приложения.
+Алтернативи: синхронното API (остаряло); keytar (отделен native модул и нова зависимост); KEK-ът да остане само във файла (не изпълнява AC-12.9).
+Статус: решено.

@@ -22,10 +22,10 @@ export function stepOf(line: string): { n: number; of: number; text: string } | 
   return m ? { n: Number(m[1]), of: Number(m[2]), text: m[3] as string } : null;
 }
 
-/** API keys go to the proxy only through the UI (D-293); ELECTRON_RUN_AS_NODE must not leak into node children. */
+/** API keys go to the proxy only through the UI (D-293); ELECTRON_RUN_AS_NODE and the KEK (D-374) must not leak into node children. */
 export function childEnv(env: Record<string, string | undefined>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(env)) if (v !== undefined && k !== "ANTHROPIC_API_KEY" && k !== "OPENAI_API_KEY" && k !== "ELECTRON_RUN_AS_NODE") out[k] = v;
+  for (const [k, v] of Object.entries(env)) if (v !== undefined && k !== "ANTHROPIC_API_KEY" && k !== "OPENAI_API_KEY" && k !== "ELECTRON_RUN_AS_NODE" && k !== "MANDAT_KEK") out[k] = v;
   return out;
 }
 

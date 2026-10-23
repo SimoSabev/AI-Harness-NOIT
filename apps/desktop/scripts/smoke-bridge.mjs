@@ -7,7 +7,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, Menu, app, globalShortcut, ipcMain } from "electron";
+import { BrowserWindow, Menu, app, globalShortcut, ipcMain, safeStorage } from "electron";
 import { registerBridge, registerDrop } from "../dist/bridge-main.js";
 import { grantsFile } from "../dist/grant-store.js";
 import { localHandlers } from "../dist/local-handlers.js";
@@ -110,6 +110,13 @@ async function run() {
   console.log(`info quick entry ${QUICK_ENTRY} registered: ${registered} (false only if another app holds it)`);
   check("the quick entry registers system-wide", registered);
   globalShortcut.unregisterAll();
+  // E9g A4 (D-374): the async safeStorage API kek-keychain.ts uses exists in this Electron. No encrypt here: on an
+  // unsigned build macOS may ask for the keychain, and nobody may be there to answer.
+  // getSelectedStorageBackend exists only on Linux (on macOS 44.9.0 it is undefined at runtime though typed).
+  const names = ["isAsyncEncryptionAvailable", "encryptStringAsync", "decryptStringAsync", ...(process.platform === "linux" ? ["getSelectedStorageBackend"] : [])];
+  const api = names.every((n) => typeof safeStorage[n] === "function");
+  check("safeStorage has the async API (KEK in the keychain)", api);
+  if (process.platform === "linux") console.log(`info safeStorage backend: ${safeStorage.getSelectedStorageBackend()}`);
 }
 
 app.whenReady().then(run).then(

@@ -4,7 +4,7 @@ import { realpathSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage, shell } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from "electron";
 import { LocalPath } from "@mandat/contract";
 import type { DesktopCommand } from "@mandat/contract";
 import { childEnv, isErrorLine, parseBanner, stepOf } from "./banner.js";
@@ -15,6 +15,7 @@ import { desktopLang, dt, loadingPage } from "./i18n.js";
 import { grantsFile } from "./grant-store.js";
 import { createInboxWatcher, notificationFor } from "./inbox-watch.js";
 import { folderArgs } from "./local-access.js";
+import { harnessEnv, resolveDesktopKek } from "./kek-keychain.js";
 import { localHandlers } from "./local-handlers.js";
 import { appMenu, toTemplate, trayMenu, trayState } from "./menu.js";
 import type { MenuAction } from "./menu.js";
@@ -229,7 +230,7 @@ async function open(b: Banner): Promise<void> {
   }
 }
 
-function start(): void {
+function start(kek: Buffer | null): void {
   lang = desktopLang(process.env, app.getLocale());
   win = new BrowserWindow({ width: 1200, height: 820, title: "", icon, webPreferences: SECURE });
   lockDown(win);
@@ -241,7 +242,7 @@ function start(): void {
   });
   void win.loadURL(loadingPage(lang));
   let out = "";
-  child = spawn("pnpm", ["local"], { cwd: repoRoot, env: { ...childEnv(process.env), MANDAT_LANG: lang }, stdio: ["ignore", "pipe", "pipe"] });
+  child = spawn("pnpm", ["local"], { cwd: repoRoot, env: { ...harnessEnv(process.env, kek), MANDAT_LANG: lang }, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout?.on("data", (d: Buffer) => {
     if (banner) return;
     out += d.toString("utf8");
@@ -289,9 +290,11 @@ else {
   app.on("window-all-closed", () => undefined); // the tray keeps it alive
   app.on("before-quit", () => child?.kill("SIGINT"));
   app.on("will-quit", () => globalShortcut.unregisterAll());
-  void app.whenReady().then(() => {
+  void app.whenReady().then(async () => {
     registerBridge(ipcMain, handlers, () => base);
     registerDrop(ipcMain, () => base, addProject);
-    start();
+    // E9g A4 (D-374): the KEK of the key envelope from the OS keychain; without one, `pnpm local` keeps its 0600 file.
+    const kek = await resolveDesktopKek({ keychain: safeStorage, platform: process.platform, mandatHome }).catch(() => null);
+    start(kek?.source === "keychain" ? kek.kek : null);
   });
 }
