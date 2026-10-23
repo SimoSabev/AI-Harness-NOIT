@@ -2252,3 +2252,53 @@ Portal Secret / Secret Service / резервен доставчик) — про
 по-слаба (DPAPI), но пак по-добра от файл 0600 и е същата като на всички Electron приложения.
 Алтернативи: синхронното API (остаряло); keytar (отделен native модул и нова зависимост); KEK-ът да остане само във файла (не изпълнява AC-12.9).
 Статус: решено.
+
+## D-375 Вграденият терминал на хоста в десктопа: node-pty + xterm.js, само с право `terminal` (24.10.2026)
+Решение: в блока „На този компютър“ под diff-а на задачата има бутон „Отвори терминал“, само когато избраното работно
+копие е дадено с право `terminal` (D-373). Панелът казва първо „Не е пясъчникът: командите вървят на този компютър, в
+<папка>, с твоите права…“ (жълта рамка). Обвивката я пуска main процесът с node-pty (`apps/desktop/src/terminal-sessions.ts`,
+чист модул с подадени отвън проверка, зареждане на node-pty и изпращане); уебът рисува с xterm.js
+(`apps/web/src/components/host-terminal.tsx`, зареден динамично само в браузъра).
+Мост (contract, D-371): методи `terminalOpen {task_id, path, cols, rows} → {id}`, `terminalWrite {id, data ≤ 16 KiB}`,
+`terminalResize`, `terminalClose`; main → уеб по същия канал `harness:event`: `terminal_output {id, data ≤ 64 KiB}` (на
+партиди от 16 ms, на парчета ≤ 32 KiB), `terminal_exit {id, code}`, `terminal_line {id, task_id, line}`. `TerminalId` =
+`term_<16 hex>` (randomBytes). Всяко отваряне минава `authorizeUse(…, "terminal")` наново (истински път, вътре в дадена
+папка, с правото); най-много 4 терминала; отнемане на правото `terminal` (или на папката) затваря веднага терминалите там
+(`onRevoked` → `closeWhere`); пълно презареждане на страницата (`did-navigate`) и изход от приложението ги затварят всички.
+Обвивката: `$SHELL -l` на macOS/Linux (login, за да има PATH-а на човека; GUI приложение тръгва с къс PATH), иначе `/bin/sh`;
+на Windows `COMSPEC`, иначе `powershell.exe`. Env: `childEnv` (без API ключове, без `MANDAT_KEK`, без
+`ELECTRON_RUN_AS_NODE`) + `TERM=xterm-256color`, `COLORTERM=truecolor`, `MANDAT_HOST_TERMINAL=1`.
+Следа (AC-12.8): `LineTracker` (`apps/desktop/src/terminal-lines.ts`) следи натиснатите клавиши: печатни знаци, backspace,
+Ctrl+U/Ctrl+C чистят реда, escape последователностите (стрелки, история, маркери на paste, OSC) се пропускат; Enter дава
+ред. Tab-допълването и историята стават в обвивката и не се виждат — следата е приблизителна по замисъл. Всеки ред →
+`terminal_line` → уебът праща `POST /api/tasks/:id/local-activity` с `{kind: "local_terminal", outcome: "command",
+detail ≤ 300}`; отварянето → `outcome: "opened"`. Сървърът минава detail-а през `@mandat/redaction` (`createRedactor`,
+същите правила като навсякъде; напр. `export ANTHROPIC_API_KEY=sk-ant-…` → `[REDACTED:anthropic]`) преди да го запише
+в `task_activities`, **не в дневника**. Изходът на терминала не отива никъде освен в прозореца.
+Агентът в пясъчника не получава нищо: нови mount-ове, env или канали към контейнерите няма; терминалът е на човека.
+Зависимости (правило 8, проверено с `npm view <пакет> time` на 24.10.2026): `node-pty` 1.1.0 (MIT, публикуван 22.12.2025)
+само в `apps/desktop` (извън workspace, собствен lockfile); `@xterm/xterm` 6.0.0 (MIT, 22.12.2025, без зависимости) в
+`apps/web`. node-pty е native: собствените му install скриптове не се пускат (`allowBuilds: node-pty: false` в
+`apps/desktop/pnpm-workspace.yaml`), ползват се готовите двоични файлове в пакета. Факти от самия пакет (`npm pack
+node-pty@1.1.0` + `tar tvzf`, 24.10.2026): `prebuilds/` има darwin-arm64, darwin-x64, win32-arm64, win32-x64 — **няма Linux**;
+`spawn-helper` е с права 644, а без изпълнимия бит всяко пускане пада с „posix_spawnp failed“ (видяно в Electron 44.9.0) —
+затова `pnpm --dir apps/desktop run setup` вика и `scripts/setup-pty.mjs`, който прави `spawn-helper` 0755 (pnpm държи
+файловете като твърди връзки към общото си хранилище, така че битът се сменя и там — безвредно). Без двоичен файл за
+платформата `terminalOpen` отговаря `not_ready` („Терминалът не е наличен в тази версия“), а останалото приложение работи.
+Проверено: unit (contract, LineTracker, сесиите с фалшив pty, revoke → затваряне, env/обвивка, сървърът с редакция),
+e2e под Playwright (`apps/web/e2e/local-access.spec.ts`: без право няма бутон; с право — надписът „Not the sandbox“,
+`terminalOpen` с task_id и папката, написан ред → POST local-activity, затваряне → `terminalClose`; axe 0 serious/critical
+на отворения панел в двете теми; мостът е фалшив) и истински Electron (`pnpm --dir apps/desktop smoke`, 23/23 на macOS
+arm64): без право → `not_granted`; с право истинската обвивка в дадената папка изпълни `echo SMOKE_$((40+2)); pwd`,
+редовете се върнаха, изходът от обвивката се отчете с код 0.
+[НП] Linux: build на node-pty (node-addon-api / N-API, значи един двоичен файл и за Node, и за Electron — по документацията
+на N-API, не е пробвано) — в А5 (CI файла). [НП] Windows (conpty) не е пускан. [НП] Истинският Next UI в Electron със CSP
+(D-371) и xterm.js — в e2e на А5 под Playwright Electron.
+Защо: AC-12.8 иска терминал върху работното копие на хоста, ясно обозначен „не е пясъчник“, с команди в task_activities;
+node-pty + xterm.js вървят с Electron без промени по прозореца; правото
+`terminal` по папка и проверката при всяко отваряне пазят модела на А3; редакцията на сървъра пази правило 5, защото човек
+лесно пише ключ в терминал.
+Алтернативи: `child_process` без pty (без интерактивни програми, без цветове); терминал в пясъчника (друго нещо — агентът
+има своя); следа от изхода вместо от клавишите (шум и тайни в изхода).
+Статус: решено (Linux/Windows — [НП] до А5).
+
