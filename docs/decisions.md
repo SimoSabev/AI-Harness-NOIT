@@ -2047,4 +2047,42 @@ CSRF бисквитка отива на `GET /api/auth/local` (поставя я
 извън машината; безплатно до 50 000 потребители на месец — https://clerk.com/articles/clerk-pricing-explained, 23.10.2026);
 Supabase Auth локално (GoTrue — тежко, D-292 го махна от `pnpm local`); парола без TOTP (пак триене без полза на една машина).
 Риск: всеки процес на същата машина може да ползва харнеса (както и досега базата на 127.0.0.1:54329); в мрежата — нищо.
-Статус: решено; командите от уеба/десктопа (`mandat login`, doctor, images, fixtures, stats, verify-log) — следващ ход.
+Статус: решено; командите от уеба/десктопа — D-369 (вход в абонамент), D-370 (страница „Система“).
+
+## D-369 Вход в абонамент от уеба (`mandat login` от „Акаунти“) (23.10.2026)
+Решение: (1) В `pnpm local` „Акаунти“ има форма вместо командата за терминал: име → `mandat local` пуска непроменения
+`claude auth login --claudeai` в контейнер (`buildProfileArgs("login-web")` = същите аргументи като `login`, но `-i` с тръби
+вместо `-it`), показва адреса на Anthropic като връзка, а кодът, който човекът постави, отива в stdin на процеса — само
+там: не се пази, не се логва, не се връща в отговор (тестове). След изход: `claude auth status --json` → готово/не.
+(2) Състоянието минава през контролната точка (D-293: 127.0.0.1 + bearer токен): `GET|POST|DELETE /accounts/login`,
+`POST /accounts/login/code`, `POST /accounts/logout`; схемата е в packages/contract (`LoginState`, `AccountName`,
+`LoginCode`, `findLoginUrl`) — уебът отказва адрес извън claude.com, claude.ai, platform.claude.com, console.anthropic.com
+(https, път …/oauth/authorize). Един вход наведнъж; забравен вход спира след 10 мин. (3) Уеб API: `/api/accounts/login`,
+`/api/accounts/login/code`, `/api/accounts/logout` — право `accounts.manage`, Origin + CSRF. „Махни“ до всеки акаунт.
+(4) Хостнатият режим (без контролна точка) остава с командата за терминал.
+Факт (спайк на живо, 23.10.2026, образ mandat-sandbox cc2.1.302): Claude Code 2.1.302 без TTY печата „Opening browser to sign in…“,
+„If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&…&code_challenge_method=S256&…“ и
+„Paste code here if prompted >“, после чете един ред; грешен код → „Invalid code. Please make sure the full code was copied.“
+(проверено и през `LoginSessions` с истинския Docker: waiting_code → invalid_code, контейнерът спира).
+Защо: Симо: „всяка команда да бъде направена от уеба/десктопа“. Входът остава потокът на Anthropic в непроменения Claude
+Code (D-295); потокът е PKCE (S256), затова кодът без verifier-а в контейнера е безполезен, а харнесът никога не вижда токена —
+уебът прави каквото прави терминалът: препраща реда, който човекът пише. [НП: дали Anthropic гледа на това като на
+„посредничество“ — по нашия прочит не, защото токенът не минава през харнеса; Симо да потвърди.]
+Алтернативи: вграден терминал (xterm.js + pty — нова зависимост, същото препращане); само командата (сегашното, трудно).
+
+## D-370 Страница „Система“: командите на CLI-то от уеба (23.10.2026)
+Решение: нова страница „Система“ (/system, в менюто) с бутони за затворен списък от задачи (`SystemJob` в contract):
+doctor (`doctor --json`), images (`images build`), images-ui (`images build --ui`), fixtures (`fixtures build` и
+`--name demo-shop`), fixtures-force (същото с `--force`, след потвърждение), stats (`stats --json`), verify-log
+(`verify-log --org <локалната org> --json`). argv е фиксиран в contract (`SYSTEM_JOB_ARGV`); от уеба идва само името на
+задачата. `mandat local` пуска себе си (`node main.js …`) без API ключовете в env (D-293); по една задача от вид наведнъж;
+страницата вижда последните 200 реда (без ANSI и контролни знаци) и JSON резултата (проверките на doctor, числата на stats,
+веригата). Контролна точка: `GET /system`, `POST /system/<job>`; уеб API `/api/system`, `/api/system/<job>` — право
+`tools.manage`. Проверено на живо през `SystemJobs` с истинските команди: doctor (Node 26 ≠ 24.22.0, липсващи образи),
+stats (3 VERIFIED), verify-log (веригата е цяла, 19 реда), fixtures (E_FIXTURE_MISMATCH → затова fixtures-force).
+Защо: Симо: „всяка команда да бъде направена от уеба/десктопа, за да е лесна за ползване“; десктопът е прозорец около уеба,
+затова получава същото. Не са в уеба: run (задачите вече са от „Нова задача“), bench/redteam (дълги, за разработчици),
+proxy (ключовете са в „Акаунти“), init/contract/anchor/tui — при нужда следващ ход.
+Не е проверено: страниците в браузър (локалният `pnpm local` на Симо върви със старата версия; нов `next build` би
+презаписал `.next` под него).
+
