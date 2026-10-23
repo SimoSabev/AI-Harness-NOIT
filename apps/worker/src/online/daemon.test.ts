@@ -158,6 +158,24 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
     expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
   });
+  it("E9б (D12): the before/after screenshots named by D12 go to changeset_shots with the verdict; nothing outside runs/<id>/ui", async () => {
+    const s = await setup(0, "UNKNOWN");
+    const run = s.deps.run;
+    s.deps.run = async (i) => {
+      const r = await run(i);
+      const ui = path.join(r.runDir ?? "", "ui");
+      mkdirSync(ui, { recursive: true });
+      writeFileSync(path.join(ui, "route-0.png"), "AFTER");
+      writeFileSync(path.join(ui, "base-route-0.png"), "BEFORE");
+      writeFileSync(path.join(r.runDir ?? "", "secret.png"), "NO");
+      const d12 = { detector: "D12.ui" as const, phase: 1, status: "unknown" as const, summary: "1 route(s) look different from base", source: "sandbox:verify", agent_visible: true, signature: "D12:visual_diff:/",
+        data: { routes: [{ route: "/", screenshot: "ui/route-0.png", base_screenshot: "ui/base-route-0.png", visual_diff: 0.2 }, { route: "/x", screenshot: "../secret.png", base_screenshot: null }] } };
+      return { ...r, verdict: r.verdict ? { ...r.verdict, evidence: [...r.verdict.evidence, d12] } : r.verdict };
+    };
+    expect(await runDaemonOnce(s.deps)).toBe("t_web_1");
+    const shots = (await s.db.query<{ name: string; png: Uint8Array }>("select name, png from public.changeset_shots order by name")).rows;
+    expect(shots.map((x) => [x.name, Buffer.from(x.png).toString()])).toEqual([["base-route-0.png", "BEFORE"], ["route-0.png", "AFTER"]]);
+  }, 30_000);
   it("FAILED → BLOCKED „failed“ без доставка", async () => {
     const s = await setup(2, "FAILED");
     await runDaemonOnce(s.deps);
