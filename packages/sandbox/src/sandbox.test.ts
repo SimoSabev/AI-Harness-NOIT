@@ -18,6 +18,7 @@ import {
   imageTags,
   uiImageTag,
   infraUser,
+  names,
   runIdTime,
   sandboxHardening,
   sweepOrphans,
@@ -167,6 +168,22 @@ describe("buildRunArgs", () => {
   it("SANDBOX_HARDENING е шаблонът", () => {
     expect(SANDBOX_HARDENING).toContain("--log-driver=none");
     expect(sandboxHardening(RUN, "test")).toContain("mandat.role=test");
+  });
+});
+
+describe("D12 roles (D-364)", () => {
+  it("ui-app and ui get exactly SANDBOX_HARDENING, as 1000:1000, never a secret, never --cap-add; their network is named", () => {
+    const vol = { kind: "volume" as const, source: `mandat-vol-${RUN}-b`, target: "/m", readonly: false };
+    for (const role of ["ui-app", "ui"] as const) {
+      const a = buildRunArgs({ role, runId: RUN, image: "img", network: `mandat-ui-${RUN}`, user: "1000:1000", mounts: [vol], envNames: [], publicEnv: { PORT: "4173" }, detach: role === "ui-app", name: `mandat-ui-app-${RUN}` }, ctx);
+      for (const f of sandboxHardening(RUN, role)) expect(a).toContain(f);
+      expect(a).toContain(`mandat.role=${role}`);
+      expect(a.join(" ")).not.toMatch(/--cap-add|--privileged|-p |--publish|docker\.sock/);
+      expect(code(() => buildRunArgs({ role, runId: RUN, image: "img", network: "x", user: "1000:1000", mounts: [], envNames: ["ANTHROPIC_API_KEY"], publicEnv: {} }, ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+      expect(code(() => buildRunArgs({ role, runId: RUN, image: "img", network: "x", user: "0:0", mounts: [], envNames: [], publicEnv: {} }, ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    }
+    expect(names.uiNet(RUN)).toBe(`mandat-ui-${RUN}`);
+    expect(names.uiApp(RUN)).toBe(`mandat-ui-app-${RUN}`);
   });
 });
 
