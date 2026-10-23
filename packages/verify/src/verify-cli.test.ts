@@ -276,18 +276,20 @@ describe("retry-same-tree (S27)", () => {
 describe("mandat-verify D12 (UI)", () => {
   const d12Of = async (f: ReturnType<typeof demo>, extra: string[]) => {
     const seen: { ui?: TestProcedureInput["ui"] }[] = [];
+    const seenAll: { tree: string; ui?: TestProcedureInput["ui"] }[] = [];
     const r = await verify(f, ["--external", "--type", "free", "--json", ...extra], (i, raw) => {
       if (i.tree === "b") seen.push({ ui: i.ui });
+      seenAll.push({ tree: i.tree, ui: i.ui });
       return raw;
     });
     const o = JSON.parse(r.out.trim()) as { verdict: { run_id: string; result: string; reasons: string[]; evidence: { detector: string; status: string; data: Record<string, unknown> }[] } };
-    return { ...o, seen, d12: o.verdict.evidence.find((e) => e.detector === "D12.ui") };
+    return { ...o, seen, seenAll, d12: o.verdict.evidence.find((e) => e.detector === "D12.ui") };
   };
   it("a UI change whose routes render clean → VERIFIED, D12 pass; the screenshots land in the run directory", async () => {
     const f = demo();
     edit(f.repo, "src/cart.ts", fixCode);
     const r = await d12Of(f, ["--ui-paths", "src/**", "--dev", "npm run dev", "--ui-route", "/", "--ui-route", "/cart"]);
-    expect(r.seen.at(-1)?.ui).toEqual({ image: "u:t", devCommand: "npm run dev", routes: ["/", "/cart"] });
+    expect(r.seen.at(-1)?.ui).toMatchObject({ image: "u:t", devCommand: "npm run dev", routes: ["/", "/cart"] });
     expect([r.verdict.result, r.d12?.status]).toEqual(["VERIFIED", "pass"]);
     expect(readFileSync(path.join(f.home, "runs", r.verdict.run_id, "ui", "route-0.png"), "utf8")).toBe("PNG");
   });
@@ -311,6 +313,20 @@ describe("mandat-verify D12 (UI)", () => {
 // UI_DOWN
 `);
     expect((await d12Of(g, ["--ui-paths", "src/**", "--dev", "npm run dev"])).verdict.reasons).toContain("D12:not_run:-");
+  });
+  it("visual diff: the base is shot once (cached per base commit); a page that moves → UNKNOWN D12:visual_diff:/ with before/after in the run", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", (s) => `${fixCode(s)}\n// UI_SHIFT\n`);
+    const r = await d12Of(f, ["--ui-paths", "src/**", "--dev", "npm run dev"]);
+    expect(r.verdict.reasons).toContain("D12:visual_diff:/");
+    const run = path.join(f.home, "runs", r.verdict.run_id);
+    expect(r.d12?.data).toMatchObject({ routes: [{ route: "/", visual_diff: 0.3, screenshot: "ui/route-0.png", base_screenshot: "ui/base-route-0.png" }] });
+    expect(readFileSync(path.join(run, "ui", "base-route-0.png"), "utf8")).toBe("PNG");
+    const baseRuns = r.seenAll.filter((x) => x.tree === "base" && x.ui).length;
+    expect(baseRuns).toBe(1);
+    const again = await d12Of(f, ["--ui-paths", "src/**", "--dev", "npm run dev"]);
+    expect(again.seenAll.filter((x) => x.tree === "base" && x.ui).length).toBe(0);
+    expect(again.verdict.reasons).toContain("D12:visual_diff:/");
   });
   it("a change outside the UI paths → no browser, no D12 evidence", async () => {
     const f = demo();
