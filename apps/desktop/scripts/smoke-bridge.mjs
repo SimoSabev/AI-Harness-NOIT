@@ -5,9 +5,11 @@
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, app, ipcMain } from "electron";
+import { BrowserWindow, Menu, app, globalShortcut, ipcMain } from "electron";
 import { notReady, registerBridge } from "../dist/bridge-main.js";
 import { allowPermission, attachGuards, withCsp } from "../dist/window-guard.js";
+import { appMenu, toTemplate, trayMenu } from "../dist/menu.js";
+import { QUICK_ENTRY } from "../dist/shortcuts.js";
 
 const dist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist");
 const failures = [];
@@ -61,6 +63,24 @@ async function run() {
   await new Promise((res) => setTimeout(res, 800));
   check("outside navigation is refused", win.webContents.getURL().startsWith(base));
   srv.close();
+  // E9g A2: the menus build in real Electron (roles and accelerators accepted) and the quick entry registers
+  const noop = () => undefined;
+  let menusOk = true;
+  for (const platform of ["darwin", "linux", "win32"]) {
+    try {
+      const m = Menu.buildFromTemplate(toTemplate(appMenu("en", platform, { appName: "Harness", loginItem: platform === "linux" ? null : false }), noop, noop));
+      Menu.buildFromTemplate(toTemplate(trayMenu("bg", { waiting: 2, loginItem: false }), noop, noop));
+      if (!m.items.length) menusOk = false;
+    } catch (e) {
+      console.error(e);
+      menusOk = false;
+    }
+  }
+  check("the menus build (3 platforms)", menusOk);
+  const registered = globalShortcut.register(QUICK_ENTRY, noop);
+  console.log(`info quick entry ${QUICK_ENTRY} registered: ${registered} (false only if another app holds it)`);
+  check("the quick entry registers system-wide", registered);
+  globalShortcut.unregisterAll();
 }
 
 app.whenReady().then(run).then(

@@ -2,12 +2,17 @@ import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BrowserWindow, Menu, Notification, Tray, app, dialog, ipcMain, nativeImage } from "electron";
+import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage } from "electron";
+import type { DesktopCommand } from "@mandat/contract";
 import { childEnv, isErrorLine, parseBanner, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
 import { commandFor, notReady, registerBridge, sendCommand } from "./bridge-main.js";
 import type { DesktopHandlers } from "./bridge-main.js";
 import { desktopLang, dt, loadingPage } from "./i18n.js";
+import { createInboxWatcher, notificationFor } from "./inbox-watch.js";
+import { appMenu, toTemplate, trayMenu, trayState } from "./menu.js";
+import type { MenuAction } from "./menu.js";
+import { QUICK_ENTRY, shortcutsText } from "./shortcuts.js";
 import type { DesktopKey, Lang } from "./i18n.js";
 import { allowPermission, attachGuards, withCsp } from "./window-guard.js";
 
@@ -28,6 +33,11 @@ let tray: Tray | null = null;
 let banner: Banner | null = null;
 /** The local address of `pnpm local` once its banner came; the guards, the CSP and the bridge allow only it. */
 let base: string | null = null;
+/** E9g A2: how many items wait for the person (the inbox), shown in the tray, the menubar and the badge. */
+let waiting = 0;
+/** E9g A2: "Start at login" exists on macOS and Windows only (Electron: app.setLoginItemSettings @platform darwin,win32). */
+const loginSupported = process.platform === "darwin" || process.platform === "win32";
+const INBOX_POLL_MS = 15_000;
 
 /** D-303 + D-371: new windows denied, navigation only to the local address, a CSP, no web permissions but copy. */
 function lockDown(w: BrowserWindow): void {
@@ -51,12 +61,7 @@ const handlers: DesktopHandlers = {
   openInEditor: () => Promise.resolve(notReady()),
   applyLocal: () => Promise.resolve(notReady()),
   notify: (req) => {
-    const n = new Notification({ title: req.title, body: req.body, icon });
-    n.on("click", () => {
-      show();
-      if (win && !win.isDestroyed()) sendCommand(win.webContents, commandFor(req.task_id));
-    });
-    n.show();
+    notifyNative(req.title, req.body, req.task_id);
     return Promise.resolve({ ok: true, value: {} });
   },
   badge: (req) => {
@@ -64,11 +69,70 @@ const handlers: DesktopHandlers = {
     return Promise.resolve({ ok: true, value: {} });
   },
   inboxCount: (req) => {
-    tray?.setToolTip(req.count > 0 ? `${t("app.name")} — ${t("tray.waiting", { count: req.count })}` : t("app.name"));
-    if (process.platform === "darwin") tray?.setTitle(req.count > 0 ? String(req.count) : "");
+    setWaiting(req.count);
     return Promise.resolve({ ok: true, value: {} });
   },
 };
+
+/** A system notification; a click shows the window and opens the task card (else the inbox). */
+function notifyNative(title: string, body: string, taskId: string | undefined): void {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body, icon });
+  n.on("click", () => toWeb(commandFor(taskId)));
+  n.show();
+}
+
+/** E9g A2: a menu item, a shortcut or a notification click → the window comes up and the web gets the command. */
+function toWeb(cmd: DesktopCommand): void {
+  show();
+  if (win && !win.isDestroyed() && base) sendCommand(win.webContents, cmd);
+}
+
+function loginItemOn(): boolean | null {
+  return loginSupported ? app.getLoginItemSettings().openAtLogin : null;
+}
+
+function runAction(action: MenuAction): void {
+  if (action === "open") show();
+  else if (action === "quit") {
+    if (child) child.kill("SIGINT");
+    else app.quit();
+  } else if (action === "toggle_login") {
+    // off by default: only this click turns it on (or off again); the OS keeps the setting
+    if (loginSupported) app.setLoginItemSettings({ openAtLogin: !app.getLoginItemSettings().openAtLogin });
+    buildMenus();
+  } else {
+    const opts = { type: "info" as const, message: t("help.shortcuts"), detail: shortcutsText(lang, process.platform), buttons: [t("dialog.ok")] };
+    void (win && !win.isDestroyed() ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
+  }
+}
+
+function buildMenus(): void {
+  const login = loginItemOn();
+  Menu.setApplicationMenu(Menu.buildFromTemplate(toTemplate(appMenu(lang, process.platform, { appName: t("app.name"), loginItem: login }), toWeb, runAction)));
+  tray?.setContextMenu(Menu.buildFromTemplate(toTemplate(trayMenu(lang, { waiting, loginItem: login }), toWeb, runAction)));
+}
+
+/** The counter everywhere at once: tray tooltip and menu, the macOS menubar title, the dock/taskbar badge. */
+function setWaiting(count: number): void {
+  const changed = count !== waiting;
+  waiting = count;
+  const s = trayState(lang, count, process.platform);
+  tray?.setToolTip(s.tooltip);
+  if (s.title !== null) tray?.setTitle(s.title);
+  app.setBadgeCount(count); // macOS dock, Linux Unity launchers; Windows has none (the tray tooltip carries it, D-372)
+  if (changed) buildMenus();
+}
+
+const watcher = createInboxWatcher({
+  base: () => base,
+  fetch: (url) => fetch(url, { redirect: "manual", signal: AbortSignal.timeout(5000) }),
+  onUpdate: (count, fresh) => {
+    setWaiting(count);
+    const n = notificationFor(lang, fresh, win !== null && !win.isDestroyed() && win.isVisible() && win.isFocused());
+    if (n) notifyNative(n.title, n.body, n.task_id);
+  },
+});
 
 function show(): void {
   if (win && !win.isDestroyed()) {
@@ -96,6 +160,8 @@ async function open(b: Banner): Promise<void> {
   if (!win || win.isDestroyed()) return;
   base = b.url;
   await win.loadURL(`${b.url}/`); // D-368: no login — the local owner, this computer only
+  void watcher.tick();
+  setInterval(() => void watcher.tick(), INBOX_POLL_MS).unref();
 }
 
 function start(): void {
@@ -136,12 +202,11 @@ function start(): void {
   });
   tray = new Tray(icon.resize({ width: 18, height: 18 }));
   tray.setToolTip(t("app.name"));
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: t("tray.open"), click: show },
-    { type: "separator" },
-    { label: t("tray.quit"), click: () => (child ? child.kill("SIGINT") : app.quit()) },
-  ]));
   tray.on("click", show);
+  buildMenus();
+  // E9g A2: the one system-wide shortcut — quick entry of a new task from anywhere. If another app holds it, the
+  // menu items and the window shortcuts still work.
+  globalShortcut.register(QUICK_ENTRY, () => toWeb({ command: "new_task" }));
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -150,6 +215,7 @@ else {
   app.on("activate", show);
   app.on("window-all-closed", () => undefined); // the tray keeps it alive
   app.on("before-quit", () => child?.kill("SIGINT"));
+  app.on("will-quit", () => globalShortcut.unregisterAll());
   void app.whenReady().then(() => {
     registerBridge(ipcMain, handlers, () => base);
     start();

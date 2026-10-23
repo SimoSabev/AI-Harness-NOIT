@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DESKTOP_BG, DESKTOP_EN, desktopLang, dt, loadingPage } from "./i18n.js";
 
@@ -26,5 +29,12 @@ describe("desktop i18n (E7е)", () => {
     expect(decodeURIComponent(loadingPage("en"))).toContain('<html lang="en">');
     expect(decodeURIComponent(loadingPage("en"))).toContain("The harness is starting");
     expect(decodeURIComponent(loadingPage("bg"))).toContain("Харнесът се пуска");
+  });
+  it("no Cyrillic outside the catalog in apps/desktop/src (the tests aside; AC-12.10)", () => {
+    const dir = path.dirname(fileURLToPath(import.meta.url));
+    const bad = readdirSync(dir)
+      .filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "i18n.ts" && f !== "banner.ts") // banner.ts parses the CLI output in both languages, it shows nothing
+      .filter((f) => /[\u0400-\u04FF]/.test(readFileSync(path.join(dir, f), "utf8")));
+    expect(bad).toEqual([]);
   });
 });
