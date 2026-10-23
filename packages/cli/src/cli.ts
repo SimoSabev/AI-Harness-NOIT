@@ -2,7 +2,7 @@ import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
 import { applyLocal } from "./commands/apply.js";
-import { ATTACKS } from "@mandat/bench";
+import { ATTACKS, SCENARIOS } from "@mandat/bench";
 import { doctor } from "./commands/doctor.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
@@ -142,7 +142,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
   const list = (v: string | undefined): string[] | undefined => (v === undefined ? undefined : v.split(",").map((s) => s.trim()).filter(Boolean));
   program
     .command("bench")
-    .description("run the 8 bench scenarios (9.6)")
+    .description("run the bench scenarios B1–B40 (9.6, E9b)")
     .option("--only <ids>", "e.g. B1,B5")
     .option("--fail-gate", "B1 with a broken verifier: must NOT be VERIFIED (exit 1 = caught, T3-3)")
     .option("--json", "machine output")
@@ -152,7 +152,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
         return;
       }
       const only = list(o.only);
-      if (only && only.some((x) => !/^B[1-8]$/.test(x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
+      if (only && only.some((x) => !SCENARIOS.some((s) => s.id === x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
       code = await benchCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
   program
