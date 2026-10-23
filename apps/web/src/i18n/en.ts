@@ -808,6 +808,18 @@ export const en = {
   "ws.end.ok": "The agent says it is done.",
   "ws.end.failed": "The agent stopped: {reason}",
   "ws.verdict": "Verdict",
+  "nav.library": "Library",
+  "res.title": "Result",
+  "res.preview": "Preview",
+  "res.change": "Change",
+  "res.noPreview": "only the change is stored for an edited file",
+  "res.files": "Files: {n}",
+  "lib.title": "Library",
+  "lib.intro": "Everything the agents wrote, per task. Documents open as documents; code as its change.",
+  "lib.empty": "Nothing here yet. When an agent changes or writes a file, it shows up here.",
+  "lib.pick": "Pick a file on the left.",
+  "lib.openTask": "Open the task",
+  "lib.search": "Search files and tasks",
 } as const;
 
 export type Key = keyof typeof en;

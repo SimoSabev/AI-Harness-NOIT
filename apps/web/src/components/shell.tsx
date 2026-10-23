@@ -14,10 +14,11 @@ import { btn } from "./ui";
 
 // D-305: the frame of every page — a side bar that stays (sections, the projects with their health, settings, theme),
 // one primary action (+ New task) on top. On a phone the side bar becomes a row of links.
-type Current = "tasks" | "overview" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research";
+type Current = "tasks" | "overview" | "library" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research";
 const NAV: { id: Current; href: string; label: Key }[] = [
   { id: "tasks", href: "/", label: "nav.tasks" },
   { id: "overview", href: "/overview", label: "nav.overview" },
+  { id: "library", href: "/library", label: "nav.library" },
   { id: "agents", href: "/agents", label: "nav.agents" },
   { id: "board", href: "/board", label: "nav.board" },
   { id: "tools", href: "/tools", label: "nav.tools" },
