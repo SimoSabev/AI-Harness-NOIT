@@ -32,10 +32,13 @@ export interface TestProcedureInput {
   /** D-301: npm (default), pnpm or yarn v1 — the lockfile and the install command */
   packageManager?: PackageManager;
   mutantTimeoutMs?: number;
+  /** v5 E9б (D8): the project's lint and typecheck, run last on the same installed volume with no network */
+  checks?: { name: "lint" | "typecheck"; command: string }[];
 }
+export interface CheckResult { name: "lint" | "typecheck"; exit: number | null }
 export interface MutantResult { exit: number | null; timedOut: boolean; report: ParsedReport }
 export type TestProcedureResult =
-  | { ok: true; exit: number | null; timedOut: boolean; raw: string | null; report: ParsedReport; mutants?: (MutantResult | null)[] }
+  | { ok: true; exit: number | null; timedOut: boolean; raw: string | null; report: ParsedReport; mutants?: (MutantResult | null)[]; checks?: CheckResult[] }
   | { ok: false; code: "E_LOCKFILE_BASE" | "E_GATE_START" | "E_GATE_POLICY" | "E_INSTALL_BASE" | "E_INSTALL_TREE" };
 
 export const REPORT_LIMIT = 20971521;
@@ -71,7 +74,20 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
     const t = await runSandbox(ctx, { role: "test", volume: vol, network: "none", env: { phase: "test", testsEnv: i.testsEnv }, cmd: ["/bin/sh", "-c", i.testsCommand], timeoutMs: i.timeoutMs });
     const raw = (await safeReadVolume(ctx, { volume: vol, file: "/m/out/report.json", limit: REPORT_LIMIT, role: "test" }))?.toString("utf8") ?? null;
     const report = parseVitestReport(raw, "/m/work");
-    if (!i.mutants || i.mutants.length === 0) return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report };
+    // D8: after everything else (a check that writes files cannot change a mutant run); exit null = timed out
+    const runChecks = async (): Promise<CheckResult[] | undefined> => {
+      if (!i.checks || i.checks.length === 0) return undefined;
+      const out: CheckResult[] = [];
+      for (const c of i.checks) {
+        const r = await runSandbox(ctx, { role: "test", volume: vol, network: "none", env: { phase: "test", testsEnv: i.testsEnv }, cmd: ["/bin/sh", "-c", c.command], timeoutMs: i.timeoutMs });
+        out.push({ name: c.name, exit: r.timedOut ? null : r.exitCode });
+      }
+      return out;
+    };
+    if (!i.mutants || i.mutants.length === 0) {
+      const checks = await runChecks();
+      return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report, ...(checks ? { checks } : {}) };
+    }
     const mutants: (MutantResult | null)[] = [];
     const scratch = mkdtempSync(path.join(path.dirname(i.treeDir), "mutant-"));
     const put = async (rel: string, content: Buffer): Promise<boolean> => {
@@ -104,7 +120,8 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
       rmSync(scratch, { recursive: true, force: true });
     }
     while (mutants.length < i.mutants.length) mutants.push(null);
-    return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report, mutants };
+    const checks = await runChecks();
+    return { ok: true, exit: t.timedOut ? null : t.exitCode, timedOut: t.timedOut, raw, report, mutants, ...(checks ? { checks } : {}) };
   } finally {
     await gate?.stop();
     await dockerText(i.docker, ["volume", "rm", "-f", vol], 60_000);
