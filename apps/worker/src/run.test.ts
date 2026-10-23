@@ -450,7 +450,7 @@ describe("runTask D12 (E9б, D-364)", () => {
     const layers = demoProfileLayers();
     const profile = sealProfile({ version: 1, repo_id: "local", layers: { ...layers, b: { ...layers.b, commands: { ...layers.b.commands, dev: "npm run dev" } }, g: { ...layers.g, ui_paths: ["src/**"] } }, sources: {}, approved_by: null, approved_at: null });
     const withUi = (i: TestProcedureInput): TestProcedureResult => {
-      const r = ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW);
+      const r = ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW) as Extract<TestProcedureResult, { ok: true }>;
       return i.ui ? { ...r, ui: { up: true, routes: [{ route: "/", console_errors: ["Uncaught TypeError"], failed_requests: [], screenshot: "route-0.png" }], shots: { "route-0.png": Buffer.from("PNG") } } } : r;
     };
     const { r, testsCalls } = await go({ docker: new FakeDocker({ head: honest }), tests: withUi, i: { profile }, x: { images: { ...IMAGES, ui: "mandat-sandbox-ui:test" } } });
