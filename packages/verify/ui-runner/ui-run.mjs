@@ -71,8 +71,8 @@ for (const [n, route] of routes.entries()) {
   const shot = `route-${n}.png`;
   await page.screenshot({ path: `${out}/${shot}`, fullPage: false }).catch(() => undefined);
   await page.close();
-  const base = `/m/in/base/${shot}`;
-  const visual_diff = existsSync(base) && existsSync(`${out}/${shot}`) ? await visualDiff(dataUrl(base), dataUrl(`${out}/${shot}`)) : null;
+  const before = `/m/in/base/${shot}`;
+  const visual_diff = existsSync(before) && existsSync(`${out}/${shot}`) ? await visualDiff(dataUrl(before), dataUrl(`${out}/${shot}`)) : null;
   results.push({ route, console_errors, failed_requests, screenshot: shot, visual_diff });
 }
 await browser.close();
