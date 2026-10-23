@@ -1,6 +1,8 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEMO_OWNER_ID } from "@mandat/worker";
-import { LOCAL_DB, dbRunArgs, localBanner, localDbUrl, localPreflight, localWebArgs, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, localBanner, localDbUrl, localPreflight, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -23,7 +25,12 @@ describe("mandat local (D-292)", () => {
 
 describe("без вход (D-368)", () => {
   it("уебът слуша само на 127.0.0.1 (next start по подразбиране е 0.0.0.0)", () => {
-    expect(localWebArgs()).toEqual(["--filter", "@mandat/web", "exec", "next", "start", "-p", "3000", "-H", "127.0.0.1"]);
+    expect(localWebArgs("/h/next")).toEqual(["/h/next", "start", "-p", "3000", "-H", "127.0.0.1"]);
+  });
+  it("E9g A5 (D-376): next start се пуска с Node-а, който върви (process.execPath), не през pnpm — и в пакета на десктопа", () => {
+    const bin = localWebBin(path.resolve(import.meta.dirname, "../../.."));
+    expect(bin.replaceAll("\\", "/")).toMatch(/\/next\/dist\/bin\/next$/);
+    expect(existsSync(bin)).toBe(true);
   });
   it("env на уеба: локалният собственик, без демо входа и без API ключове", () => {
     const e = localWebEnv({ PATH: "/bin", MANDAT_DEMO_DEV_AUTH: "1" }, { dbUrl: "postgresql://x", control: { url: "http://127.0.0.1:1", token: "t" } });

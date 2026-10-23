@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statfsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
 import { compareVersions, imageTags } from "@mandat/sandbox";
@@ -36,9 +37,16 @@ export function pendingMigrations(files: string[], applied: Set<string>): string
   return ["shim", ...[...files].sort()].filter((f) => !applied.has(f));
 }
 
-/** D-368: `next start` listens on 0.0.0.0 by default; without a login the harness must not be reachable from the network. */
-export function localWebArgs(): string[] {
-  return ["--filter", "@mandat/web", "exec", "next", "start", "-p", String(WEB_PORT), "-H", "127.0.0.1"];
+/** D-368: `next start` listens on 0.0.0.0 by default; without a login the harness must not be reachable from the network.
+ * E9g A5 (D-376): run with the Node that runs this CLI (process.execPath), not through pnpm, so the desktop package
+ * (Electron's Node, ELECTRON_RUN_AS_NODE) needs no pnpm. */
+export function localWebArgs(nextBin: string): string[] {
+  return [nextBin, "start", "-p", String(WEB_PORT), "-H", "127.0.0.1"];
+}
+
+/** The `next` executable as apps/web resolves it (pnpm's isolated tree in the repo, a hoisted one in the desktop package). */
+export function localWebBin(root: string): string {
+  return createRequire(path.join(root, "apps/web/package.json")).resolve("next/dist/bin/next");
 }
 
 /** The web server's env: the local owner instead of a login (D-368), the control endpoint for keys (D-293), no API keys. */
@@ -237,7 +245,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   });
   const env = localWebEnv(clean, { dbUrl: url, control });
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
-  const web = spawn("pnpm", localWebArgs(), { cwd: repoRoot, env, stdio: ["ignore", "ignore", "inherit"] });
+  const web = spawn(process.execPath, localWebArgs(localWebBin(repoRoot)), { cwd: path.join(repoRoot, "apps/web"), env, stdio: ["ignore", "ignore", "inherit"] });
   const stop = new AbortController();
   const onSig = () => stop.abort();
   process.once("SIGINT", onSig);
