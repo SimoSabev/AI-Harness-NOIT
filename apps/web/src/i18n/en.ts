@@ -41,7 +41,7 @@ export const en = {
   "system.run.imagesUi": "Build with the browser",
   "system.run.fixtures": "Build the demo repos",
   "system.run.fixturesForce": "Recreate (--force)",
-  "system.fixturesForceConfirm": "Recreate the demo repos from scratch? The branches of earlier demo tasks in them are lost.",
+  "system.fixturesForceConfirm": "Recreate the demo repos from scratch? The branches of earlier demo tasks and the changes applied to main by themselves (D-367) are lost.",
   "system.run.stats": "Count",
   "system.run.ledger": "Check the chain",
   "system.state.idle": "Not run",

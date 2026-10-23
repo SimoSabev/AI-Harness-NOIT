@@ -40,7 +40,7 @@ export const bg: Record<Key, string> = {
   "system.run.imagesUi": "Построй и браузъра",
   "system.run.fixtures": "Построй демо репата",
   "system.run.fixturesForce": "Пресъздай (--force)",
-  "system.fixturesForceConfirm": "Да пресъздам ли демо репата от нулата? Клоновете на старите демо задачи в тях се губят.",
+  "system.fixturesForceConfirm": "Да пресъздам ли демо репата от нулата? Губят се клоновете на старите демо задачи и промените, които са влезли сами в main (D-367).",
   "system.run.stats": "Пресметни",
   "system.run.ledger": "Провери веригата",
   "system.state.idle": "Не е пускано",

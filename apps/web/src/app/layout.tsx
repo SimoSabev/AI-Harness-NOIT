@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { LangProvider } from "../i18n/client";
 import { getLang, getT } from "../i18n/server";
+import { LocalCsrf } from "../components/local-csrf";
 import { SecondFactorProvider } from "../components/second-factor";
 import { HARNESS } from "../lib/brand";
 import { parseTheme } from "../lib/prefs";
@@ -23,6 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={lang} data-theme={theme}>
       <body className="min-h-screen">
         <LangProvider lang={lang}>
+          {authMode() === "local" && <LocalCsrf />}
           <SecondFactorProvider needsCode={authMode() !== "local"}>{children}</SecondFactorProvider>
         </LangProvider>
       </body>

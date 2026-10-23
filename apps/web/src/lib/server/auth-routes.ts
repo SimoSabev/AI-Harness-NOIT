@@ -1,7 +1,7 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { authMode, currentUser, supabaseServer } from "./auth";
+import { authMode, supabaseServer } from "./auth";
 import { db } from "./db";
 import { CSRF_COOKIE, checkOrigin } from "./guard";
 import { SESSION_COOKIE, SESSION_TTL_S, devLogin, sessionSecret, signSession } from "./session";
@@ -26,15 +26,6 @@ export async function login(req: Request): Promise<Response> {
     if (error) return back(req, "/login?e=bad");
   } else return back(req, "/login?e=off");
   jar.set(CSRF_COOKIE, randomBytes(32).toString("base64url"), { httpOnly: false, sameSite: "strict", secure, path: "/", maxAge: SESSION_TTL_S });
-  return back(req, "/");
-}
-
-/** D-368: `pnpm local` has no login form; the first visit from this computer gets the CSRF cookie (double submit) here. */
-export const LOCAL_CSRF_TTL_S = 30 * 24 * 3600;
-export async function localEnter(req: Request): Promise<Response> {
-  if (authMode() !== "local" || !(await currentUser())) return back(req, "/login");
-  const secure = new URL(req.url).protocol === "https:";
-  (await cookies()).set(CSRF_COOKIE, randomBytes(32).toString("base64url"), { httpOnly: false, sameSite: "strict", secure, path: "/", maxAge: LOCAL_CSRF_TTL_S });
   return back(req, "/");
 }
 
