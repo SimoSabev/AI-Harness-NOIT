@@ -56,6 +56,18 @@ describe("images build", () => {
     expect(failing.code).toBe(3);
     expect((await cli(["images", "build"], deps(docker([])), { MANDAT_EXTRA_CA_CERTS: "/nope.pem" })).code).toBe(2);
   });
+  it("--ui also builds the D12 browser image (opt-in: ~2 GB); without it the UI image is not touched", async () => {
+    const plain: { args: string[]; env: Record<string, string> }[] = [];
+    await cli(["images", "build", "--force"], deps(docker([], plain)));
+    expect(plain.some((c) => c.args.some((x) => x.startsWith("mandat-sandbox-ui:")))).toBe(false);
+    const ui: typeof plain = [];
+    const r = await cli(["images", "build", "--force", "--ui"], deps(docker([], ui)));
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/^mandat-sandbox-ui:pw1\.63\.0-[0-9a-f]+ built$/m);
+    const b = ui.find((c) => c.args[0] === "build" && c.args.some((x) => x.startsWith("mandat-sandbox-ui:")));
+    expect(b?.args.join(" ")).toContain("docker/sandbox-ui/Dockerfile");
+    expect(b?.args).not.toContain("SANDBOX_APT=0");
+  });
 });
 
 describe("proxy start", () => {
