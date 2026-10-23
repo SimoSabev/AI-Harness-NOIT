@@ -24,7 +24,7 @@ import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
 import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { RunWriter, VerifyInfraError, acquireRunLock, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
+import { RunWriter, VerifyInfraError, acquireRunLock, checksFromCommands, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
 import type { HiddenTests, RunGate, runTestProcedure } from "@mandat/verify";
 
 export interface RunHooks {
@@ -618,8 +618,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
 
         // ---------- VERIFY (7.8)
         // E9б (D8): the approved profile's lint and typecheck commands (layer B), when it has them
-        const cmds = i.profile?.layers.b.commands ?? {};
-        const profileChecks = [...(cmds.lint ? [{ name: "lint" as const, command: cmds.lint }] : []), ...(cmds.typecheck ? [{ name: "typecheck" as const, command: cmds.typecheck }] : [])];
+        const profileChecks = checksFromCommands(i.profile?.layers.b.commands ?? {});
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
           await timed("verify", async () => {
