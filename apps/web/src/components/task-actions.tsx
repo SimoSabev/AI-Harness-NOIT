@@ -47,7 +47,7 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
     <div className="space-y-3">
       {!confirm && (
         <div className="flex flex-wrap gap-2">
-          {canDecide && <button className={btn.primary} type="button" disabled={busy} onClick={() => setConfirm("approved")}>{t("actions.approve")}</button>}
+          {canDecide && <button className={btn.primary} type="button" data-desktop-approve="" disabled={busy} onClick={() => setConfirm("approved")}>{t("actions.approve")}</button>}
           {canDecide && <button className={btn.danger} type="button" disabled={busy} onClick={() => setConfirm("rejected")}>{t("actions.reject")}</button>}
           {canRetry && <button className={btn.primary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/retry`, {})}>{t("actions.retry")}</button>}
           {canFixCi && <button className={btn.primary} type="button" disabled={busy} onClick={() => void run(`/api/tasks/${p.taskId}/fix-ci`, {})}>{t("actions.fixCi")}</button>}

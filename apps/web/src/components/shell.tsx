@@ -75,9 +75,9 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
                 <div className="hidden px-2 pt-4 lg:block">
                   <p className="px-3 pb-2 font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("shell.projects", { n: list.length })}</p>
                   <ul className="space-y-0.5">
-                    {list.map((p) => (
+                    {list.map((p, i) => (
                       <li key={p.full_name}>
-                        <Link href={`/overview?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-raised">
+                        <Link href={`/overview?project=${encodeURIComponent(p.full_name)}`} {...(i < 9 ? { "data-desktop-project": String(i + 1) } : {})} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-ink transition hover:bg-raised">
                           <span aria-hidden="true" className={`hex inline-block h-2.5 w-3 ${HEALTH[p.health].mark}`} />
                           <span className="min-w-0 flex-1 truncate">{p.name}</span>
                           <span className="sr-only">{t(HEALTH[p.health].label)}</span>
