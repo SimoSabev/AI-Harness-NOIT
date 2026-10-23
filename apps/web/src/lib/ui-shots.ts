@@ -17,7 +17,7 @@ export interface UiShotRow { route: string; errors: string[]; before: string | n
 export function uiShotsView(changesetId: string | null, evidence: { detector: string; data: Record<string, unknown> }[], names: string[]): UiShotRow[] {
   const e = evidence.find((x) => x.detector === "D12.ui");
   const d = e ? Data.safeParse(e.data) : null;
-  if (!changesetId || !d?.success) return [];
+  if (!changesetId || !d?.success || names.length === 0) return [];
   const have = new Set(names);
   const url = (p: string | null | undefined) => {
     const n = p?.replace(/^ui\//, "") ?? null;
