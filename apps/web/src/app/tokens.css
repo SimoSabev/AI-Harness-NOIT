@@ -1,5 +1,6 @@
-/* AC-12.4 / D-305 / E9g B (D-377): THE design tokens — fonts, colours of both themes. One file; the web (globals.css)
-   and the download site (apps/site/src/app/site.css) import it after `@import "tailwindcss"`. Both serve /fonts/. */
+/* AC-12.4 / D-305 / E9g B (D-377): THE design tokens — fonts, colours of both themes, the logo mark. One file; the web
+   (globals.css) and the download site (apps/site/src/app/site.css) import it after `@import "tailwindcss"`. Both serve
+   /fonts/ and /logo-mark.svg. */
 
 /* Self-hosted (no request to Google at runtime). SIL OFL 1.1, see public/fonts/OFL-*.txt. */
 @font-face { font-family: "Tektur"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("/fonts/tektur-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
@@ -112,3 +113,8 @@
   }
 }
 
+/* D-382: the logo (scripts/brand-icons.mjs draws it) is a mask, so it takes the element's colour (bg-accent) and
+   follows the theme. */
+.logo-mark {
+  mask: url("/logo-mark.svg") center / contain no-repeat;
+}

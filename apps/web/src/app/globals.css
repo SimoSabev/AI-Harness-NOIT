@@ -12,7 +12,7 @@ body {
   @apply outline-2 outline-offset-2 outline-accent-text;
 }
 
-/* The hexagon: agents, projects, the logo. Flat-top, like the tiles. */
+/* The hexagon: agents, projects, statuses. Flat-top, like the tiles. (The logo is .logo-mark in tokens.css, D-382.) */
 .hex {
   clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
 }

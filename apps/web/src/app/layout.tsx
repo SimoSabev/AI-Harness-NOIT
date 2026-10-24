@@ -6,13 +6,13 @@ import { getLang, getT } from "../i18n/server";
 import { DesktopCommands } from "../components/desktop-commands";
 import { LocalCsrf } from "../components/local-csrf";
 import { SecondFactorProvider } from "../components/second-factor";
-import { HARNESS } from "../lib/brand";
+import { FAVICON, HARNESS } from "../lib/brand";
 import { parseTheme } from "../lib/prefs";
 import { authMode } from "../lib/server/auth";
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
-  return { title: HARNESS || t("meta.title"), description: t("meta.description") };
+  return { title: HARNESS || t("meta.title"), description: t("meta.description"), icons: { icon: [FAVICON, { url: "/icon-192.png", sizes: "192x192", type: "image/png" }] } };
 }
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: [{ media: "(prefers-color-scheme: dark)", color: "#0c0f0d" }, { media: "(prefers-color-scheme: light)", color: "#f3f4f1" }] };
 
