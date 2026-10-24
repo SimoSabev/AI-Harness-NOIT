@@ -29,6 +29,11 @@ describe("harness layout (E9g A5, D-376)", () => {
     expect(l.cliMain).toBe(path.join(app.resourcesPath, "harness/packages/cli/dist/main.js"));
     expect(l.mandatHome).toBe(path.resolve(app.userData, "mandat"));
   });
+  it("the menu-bar icon: a black template image on macOS (the system tints it), the app icon elsewhere (D-382)", () => {
+    expect(harnessLayout(dev).trayIcon).toBe(path.join("/repo", "apps/web/public/trayTemplate.png"));
+    expect(harnessLayout({ ...dev, platform: "win32" }).trayIcon).toBe(path.join("/repo", "apps/web/public/icon-192.png"));
+    expect(harnessLayout({ ...app, platform: "linux" }).trayIcon).toBe(path.join(app.resourcesPath, "harness/apps/web/public/icon-192.png"));
+  });
   it("MANDAT_HOME set by the person wins in both", () => {
     expect(harnessLayout({ ...app, env: { MANDAT_HOME: "/data/h" } }).mandatHome).toBe(path.resolve("/data/h"));
     expect(harnessLayout({ ...dev, env: { MANDAT_HOME: "" } }).mandatHome).toBe(path.resolve("/repo/.mandat"));

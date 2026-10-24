@@ -30,6 +30,8 @@ export interface HarnessLayout {
   /** the harness profile folder; the desktop and the CLI must use the same one (grants, KEK, accounts) */
   mandatHome: string;
   icon: string;
+  /** the menu bar / tray: on macOS a black template image (the system tints it, D-382), elsewhere the app icon */
+  trayIcon: string;
 }
 
 export function harnessLayout(i: LaunchInput): HarnessLayout {
@@ -43,6 +45,7 @@ export function harnessLayout(i: LaunchInput): HarnessLayout {
     cliMain: path.join(root, "packages", "cli", "dist", "main.js"),
     mandatHome: path.resolve(set !== undefined && set !== "" ? set : fallback),
     icon: path.join(root, "apps", "web", "public", "icon-192.png"),
+    trayIcon: path.join(root, "apps", "web", "public", i.platform === "darwin" ? "trayTemplate.png" : "icon-192.png"),
   };
 }
 

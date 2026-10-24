@@ -310,7 +310,9 @@ function openWindow(): void {
     }
   });
   void win.loadURL(loadingPage(lang));
-  tray = new Tray(icon.resize({ width: 18, height: 18 }));
+  // D-382: the template image as it is on macOS (18 pt + @2x, tinted by the system); elsewhere the app icon, scaled
+  const trayImage = nativeImage.createFromPath(layout.trayIcon);
+  tray = new Tray(launch.platform === "darwin" ? trayImage : trayImage.resize({ width: 18, height: 18 }));
   tray.setToolTip(t("app.name"));
   tray.on("click", show);
   buildMenus();
