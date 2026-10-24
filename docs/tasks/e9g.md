@@ -72,14 +72,16 @@
 - [x] `/download` — macOS (Apple Silicon / Intel), Windows, Linux (AppImage / deb), SHA-256 до всеки файл от
       `apps/site/releases.json` (генерира се от `scripts/release-manifest.mjs` от dist/), изисквания (Docker ≥ 25.0.5, диск),
       телефон → PWA. Линковете водят към GitHub Releases (Q-054); без release показва „скоро“, не счупен линк
-- [ ] `/docs` — Първи стъпки, Как работи, Присъдите (VERIFIED/UNKNOWN/FAILED и детекторите D1–D12 с примери),
-      Десктоп и локален достъп (таблицата с правата), Нощна смяна, Сигурност, Абонамент и ключове, ЧЗВ — bg/en
-- [ ] Визуализации: SVG диаграми с токените (двете теми); снимки на истинския UI, правени от скрипт с Playwright срещу
+- [x] `/docs` — Първи стъпки, Как работи, Присъдите (VERIFIED/UNKNOWN/FAILED и детекторите D1–D12 с примери),
+      Десктоп и локален достъп (таблицата с правата), Нощна смяна, Сигурност, Абонамент и ключове, ЧЗВ — bg/en (D-378)
+- [x] Визуализации: SVG диаграми с токените (двете теми); снимки на истинския UI, правени от скрипт с Playwright срещу
       `pnpm local` с примерните данни (тъмна + светла), в `apps/site/public/shots/`; alt текст на всяка
-- [ ] Тестове: build на export, линковете вътре в сайта, axe 0 serious/critical, без външни заявки; `docs/setup/site.md`
+      (`scripts/site-shots.mjs`: уеб сървърът на `pnpm local` върху временна демо база — Q-065; 5 екрана × en/bg × 2 теми)
+- [x] Тестове: build на export, линковете вътре в сайта, axe 0 serious/critical, без външни заявки; `docs/setup/site.md`
       (как Симо го пуска на GitHub Pages/Vercel)
       (стъпка 6: build на export, вътрешните линкове/котви/`url()`, без външни заявки и бисквитки — `apps/site/src/export.test.ts`,
-      в `pnpm check`; остават axe и `docs/setup/site.md` за стъпка 7; хостингът — Q-064)
+      в `pnpm check`; стъпка 7: axe 0 serious/critical на 22 страници × 2 теми — `pnpm --filter @mandat/site e2e`, 4/4;
+      `docs/setup/site.md`; хостингът — Q-064)
 
 ## Нощта (workflow, по ред; всяка стъпка: червен тест → код → зелен, `pnpm check` → `CHECK OK`, малки комити)
 | # | стъпка | зависи от |
