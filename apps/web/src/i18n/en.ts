@@ -772,7 +772,7 @@ export const en = {
 
   // research (design H6)
   "research.title": "Research",
-  "research.intro": "The agents search and read; Mandat opens every source and looks for the quote before a claim goes into the answer.",
+  "research.intro": "Questions, sources and claims with checked quotes will show here. The research service is not built yet: nothing is recorded and no quote is checked so far.",
   "research.sample": "the research questions, the sources read and the checked claims",
   "research.none": "No research questions yet.",
   "research.v.confirmed": "confirmed",
