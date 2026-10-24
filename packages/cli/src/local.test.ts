@@ -54,11 +54,11 @@ describe("без вход (D-368)", () => {
 });
 
 describe("localPreflight (D-302)", () => {
-  const good = { docker: "29.1.0", cpus: 4, node: "24.22.0", freeGb: 40, imagesPresent: false, webPortFree: true };
+  const good = { docker: "29.1.0", cpus: 4, node: "24.22.0", git: "2.50.1", freeGb: 40, imagesPresent: false, webPortFree: true };
   it("всичко наред → ok, по един ред на проверка", () => {
     const r = localPreflight(good);
     expect(r.ok).toBe(true);
-    expect(r.lines.map((l) => l.startsWith("✓"))).toEqual([true, true, true, true, true]);
+    expect(r.lines.map((l) => l.startsWith("✓"))).toEqual([true, true, true, true, true, true]);
   });
   it("Docker не работи / стар; малко място за образите; зает порт → ясни причини и какво да направиш", () => {
     expect(localPreflight({ ...good, docker: null }).lines[0]).toContain("Пусни Docker Desktop");
@@ -69,6 +69,11 @@ describe("localPreflight (D-302)", () => {
     expect(localPreflight({ ...good, freeGb: 6, imagesPresent: true }).ok).toBe(true);
     expect(localPreflight({ ...good, webPortFree: false }).lines.join("\n")).toContain("порт 3000 е зает");
     expect(localPreflight({ ...good, node: "22.11.0" }).ok).toBe(false);
+    expect(localPreflight({ ...good, node: "26.4.0" }).lines.join("\n")).toContain("brew install node@24");
+    // D-380: git is needed (the demo repo, the export); on a Mac without Command Line Tools /usr/bin/git is only a stub
+    const noGit = localPreflight({ ...good, git: null });
+    expect(noGit.ok).toBe(false);
+    expect(noGit.lines.join("\n")).toContain("xcode-select --install");
     expect(localPreflight({ ...good, cpus: 1 }).ok).toBe(false);
   });
   it("aptFailed: повторът без apt само ако не е изключен вече", () => {

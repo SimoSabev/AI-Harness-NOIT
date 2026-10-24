@@ -98,7 +98,7 @@ export function localBanner(slots: number): string[] {
 }
 
 /** D-302: what `pnpm local` needs, checked before anything is created; each line says what is wrong and what to do. */
-export interface PreflightFacts { docker: string | null; cpus: number; node: string; freeGb: number; imagesPresent: boolean; webPortFree: boolean }
+export interface PreflightFacts { docker: string | null; cpus: number; node: string; git: string | null; freeGb: number; imagesPresent: boolean; webPortFree: boolean }
 export function localPreflight(f: PreflightFacts): { ok: boolean; lines: string[] } {
   const out: { ok: boolean; text: string }[] = [];
   const add = (ok: boolean, text: string) => out.push({ ok, text });
@@ -106,7 +106,9 @@ export function localPreflight(f: PreflightFacts): { ok: boolean; lines: string[
   else add(compareVersions(f.docker, "25.0.5") >= 0, compareVersions(f.docker, "25.0.5") >= 0 ? `Docker ${f.docker}` : `Docker ${f.docker} е стар: нужен е ≥ 25.0.5`);
   add(f.cpus >= 2, f.cpus >= 2 ? `${f.cpus} CPU за Docker` : `Docker вижда ${f.cpus} CPU; нужни са ≥ 2 (Docker Desktop: Settings → Resources)`);
   const major = Number(f.node.split(".")[0]);
-  add(major === 24, major === 24 ? `Node ${f.node}` : `Node ${f.node}: нужен е Node 24 (nvm install 24)`);
+  add(major === 24, major === 24 ? `Node ${f.node}` : `Node ${f.node}: нужен е Node 24 (brew install node@24 или nvm install 24)`);
+  // D-380: git builds the demo repo and the export; on a Mac without Command Line Tools /usr/bin/git is only a stub
+  add(f.git !== null, f.git !== null ? `git ${f.git}` : "git липсва: на Mac пусни xcode-select --install (Command Line Tools) и опитай пак");
   const need = f.imagesPresent ? 2 : 10;
   add(f.freeGb >= need, f.freeGb >= need ? `${f.freeGb} GB свободно място` : `${f.freeGb} GB свободно място; нужни са ≥ ${need} GB${f.imagesPresent ? "" : " за образите"} (docker system prune освобождава)`);
   add(f.webPortFree, f.webPortFree ? `порт ${WEB_PORT} е свободен` : `порт ${WEB_PORT} е зает: спри другото приложение (lsof -i :${WEB_PORT})`);
@@ -139,7 +141,9 @@ async function gatherFacts(): Promise<PreflightFacts> {
   } catch {
     freeGb = 0;
   }
-  return { docker: up ? v.stdout.trim() : null, cpus, node: process.versions.node, freeGb, imagesPresent, webPortFree: await portFree(WEB_PORT) };
+  const g = spawnSync("git", ["--version"], { encoding: "utf8" });
+  const git = g.status === 0 ? (/(\d+\.\d+(?:\.\d+)?)/.exec(g.stdout)?.[1] ?? "?") : null;
+  return { docker: up ? v.stdout.trim() : null, cpus, node: process.versions.node, git, freeGb, imagesPresent, webPortFree: await portFree(WEB_PORT) };
 }
 
 const docker = (args: string[]) => spawnSync("docker", args, { encoding: "utf8" });
