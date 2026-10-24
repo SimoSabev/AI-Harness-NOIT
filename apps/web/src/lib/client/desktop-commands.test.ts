@@ -15,7 +15,7 @@ describe("commandAction", () => {
 
   it("new task, a task card from a notification, add project", () => {
     expect(commandAction({ command: "new_task" }, idle)).toEqual({ kind: "navigate", href: "/" });
-    expect(commandAction({ command: "open_task", task_id: "t_ab_1" }, idle)).toEqual({ kind: "navigate", href: "/tasks/t_ab_1" });
+    expect(commandAction({ command: "open_task", task_id: "t_ab_1" }, idle)).toEqual({ kind: "navigate", href: "/?task=t_ab_1" });
     expect(commandAction({ command: "add_project" }, idle)).toEqual({ kind: "navigate", href: "/projects/add" });
     // E9g A3 (AC-12.6): a dropped folder / "Open with" → the Add project screen with the suggestion
     expect(commandAction({ command: "add_project", path: "/Users/simo/shop" }, idle)).toEqual({ kind: "navigate", href: "/projects/add?path=%2FUsers%2Fsimo%2Fshop" });

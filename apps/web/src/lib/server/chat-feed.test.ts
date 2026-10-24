@@ -12,7 +12,7 @@ describe("taskFeed: новото по задача за чата на живо",
       await sql.query("insert into public.agent_sessions (id, org_id, task_id, agent, model, role, state, step, touching, context_pct, started_at) values ('s_old', $1, 't_seed_docs', 'claude', 'm', 'lead', 'failed', 'x', '{}', null, now() - interval '5 minutes'), ('s_lead', $1, 't_seed_docs', 'claude', 'm', 'lead', 'running', 'Edit', '{src/cart.ts,README.md}', 18, now())", [DEMO_ORG_ID]);
       await sql.query("insert into public.agent_sessions (id, org_id, task_id, parent_id, agent, model, role, state, step, touching) values ('s_sub', $1, 't_seed_docs', 's_lead', 'claude', 'm', 'subagent', 'running', 'Read', '{docs/a.md}')", [DEMO_ORG_ID]);
       await sql.query("insert into public.session_lines (org_id, session_id, seq, kind, text) values ($1, 's_old', 0, 'text', 'стар опит'), ($1, 's_lead', 0, 'init', 'start'), ($1, 's_lead', 1, 'text', 'Ще опиша кода.'), ($1, 's_lead', 2, 'tool_call', 'Read: README.md')", [DEMO_ORG_ID]);
-      await sql.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_seed_docs', 'steer', 'пиши кратко')", [DEMO_ORG_ID]);
+      await sql.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_seed_docs', 'steer', 'пиши кратко'), ($1, 't_seed_docs', 'review', 'не пипай тестовете')", [DEMO_ORG_ID]);
       await sql.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1, 't_seed_docs', 'needs_you', 'sensitive:deps:package.json'), ($1, 't_seed_docs', 'tool', 'edit x')", [DEMO_ORG_ID]);
     });
   });
@@ -27,7 +27,8 @@ describe("taskFeed: новото по задача за чата на живо",
     expect(typeof f?.lines[0]?.at).toBe("string");
     expect(f?.touching).toEqual(["README.md", "docs/a.md", "src/cart.ts"]);
     expect(f?.context_pct).toBe(18);
-    expect(f?.steers.map((s) => s.text)).toEqual(["пиши кратко"]);
+    // D-386: a note from "Run again with a note" shows in the conversation like a steer
+    expect(f?.steers.map((s) => s.text)).toEqual(["пиши кратко", "не пипай тестовете"]);
     expect(f?.notes).toEqual([{ kind: "needs_you", text: "sensitive:deps:package.json" }]);
   });
   it("само след курсора", async () => {

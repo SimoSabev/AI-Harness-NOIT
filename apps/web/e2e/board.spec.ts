@@ -16,6 +16,7 @@ test("board: 7 columns and the ladder on the card", async ({ page }) => {
 test("task: tests before → after, ladder, ledger", async ({ page }) => {
   await login(page, EMAIL.viewer);
   await page.goto("/tasks/t_seed_failed");
+  await page.getByText("Details: checks, trust, cost, log").click();
   const trust = page.locator("section", { has: page.getByRole("heading", { name: "Why trust the result" }) });
   await expect(trust.getByText("A 20/20 · B 19/20 (20 → 19)")).toBeVisible();
   await expect(trust.getByText(/level 0/)).toBeVisible();

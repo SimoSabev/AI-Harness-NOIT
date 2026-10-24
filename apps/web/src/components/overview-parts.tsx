@@ -9,6 +9,7 @@ import type { Tone } from "../lib/status";
 import { HEALTH } from "./shell";
 import { StatusBadge, TONE, card, label } from "./ui";
 import { FlowLines } from "./workbench-parts";
+import { taskHref } from "../lib/nav";
 
 // D-305: the pieces of the start page (design H1): the flow map, the swarm, project tiles / columns, the rhythm.
 export function FlowMap({ flow, t }: { flow: Flow; t: T }) {
@@ -45,7 +46,7 @@ export function Swarm({ swarm, t }: { swarm: { id: string; tone: Tone; label: st
       <p className={label}>{t("swarm.title", { n: swarm.length })}</p>
       <ul className="flex flex-wrap gap-0.5">
         {swarm.map((s) => (
-          <li key={s.id}><Link href={`/tasks/${s.id}`} aria-label={`${s.label}: ${s.id}`} title={s.label} className="flex size-6 items-center justify-center rounded transition hover:bg-raised"><span aria-hidden="true" className={`hex block h-4 w-[18px] ${TONE[s.tone].mark.replace(" animate-pulse", "")} ${s.tone === "blue" ? "beat" : ""}`} /></Link></li>
+          <li key={s.id}><Link href={taskHref(s.id)} aria-label={`${s.label}: ${s.id}`} title={s.label} className="flex size-6 items-center justify-center rounded transition hover:bg-raised"><span aria-hidden="true" className={`hex block h-4 w-[18px] ${TONE[s.tone].mark.replace(" animate-pulse", "")} ${s.tone === "blue" ? "beat" : ""}`} /></Link></li>
         ))}
       </ul>
     </div>
@@ -57,7 +58,7 @@ type P = ProjectSummary<OverviewTask & { reasons?: string[] }>;
 function ItemLine({ t: task, tr, stacked = false }: { t: P["items"][number]; tr: T; stacked?: boolean }) {
   return (
     <li>
-      <Link href={`/tasks/${task.id}`} className={`flex gap-2 rounded-lg border border-line bg-canvas px-3 py-2 transition hover:border-line-strong ${stacked ? "flex-col-reverse items-start" : "items-center gap-3"}`}>
+      <Link href={taskHref(task.id)} className={`flex gap-2 rounded-lg border border-line bg-canvas px-3 py-2 transition hover:border-line-strong ${stacked ? "flex-col-reverse items-start" : "items-center gap-3"}`}>
         <span className="min-w-0 w-full flex-1">
           <span className="block truncate text-sm">{task.text}</span>
           <span className="block text-xs text-mute">{agentLabel(task.agent, tr.lang)} · {ago(task.updated_at, new Date(), tr.lang)}</span>

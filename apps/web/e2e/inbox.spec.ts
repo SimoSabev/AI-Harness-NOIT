@@ -19,7 +19,7 @@ test("viewer: the task without the diff and without decision buttons", async ({ 
   await login(page, EMAIL.viewer);
   await page.goto("/tasks/t_seed_bugfix");
   await expect(page.getByText("Awaiting approval").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "The agent's change" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "The agent's change" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Approve the change" })).toHaveCount(0);
 });
 
@@ -27,14 +27,16 @@ test("failed: the reason in plain words and the check that did not pass", async 
   await login(page, EMAIL.approver);
   await page.goto("/tasks/t_seed_failed");
   await expect(page.getByText("Mandat rejected the change.")).toBeVisible();
-  await expect(page.getByText("No test was deleted, skipped or weakened")).toBeVisible();
   await expect(page.getByRole("button", { name: "Run again" })).toBeVisible();
+  await expect(page.getByLabel("A note to the agent (optional)")).toBeVisible();
+  await page.getByText("Details: checks, trust, cost, log").click();
+  await expect(page.getByText("No test was deleted, skipped or weakened")).toBeVisible();
 });
 
 test("approver: approve (confirm) → “Approved”", async ({ page }) => {
   await login(page, EMAIL.approver);
   await page.goto("/tasks/t_seed_bugfix");
-  await expect(page.getByRole("heading", { name: "The agent's change" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "The agent's change" })).toBeVisible();
   await page.getByRole("button", { name: "Approve the change" }).click();
   await expect(page.getByText("Approve this change?")).toBeVisible();
   await page.getByRole("button", { name: "Yes, approve" }).click();

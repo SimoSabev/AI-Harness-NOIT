@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatItems, stagesOf, toolIcon, usageOf, whyOf } from "./chat";
+import { chatItems, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -56,28 +56,6 @@ describe("usageOf", () => {
     expect(usageOf([L(1, "usage", "tokens in 10 · out 2"), L(2, "usage", "tokens in 1200 · out 340 · $0.0123")])).toEqual({ input: 1200, output: 340, usd: 0.0123 });
     expect(usageOf([L(1, "usage", "tokens in 5 · out 1")])).toEqual({ input: 5, output: 1, usd: null });
     expect(usageOf([])).toBeNull();
-  });
-});
-
-describe("stagesOf: конвейерът", () => {
-  const st = (state: string, last_result: string | null = null) => stagesOf({ state, last_result }).map((s) => s.status).join(" ");
-  it("по състоянието на задачата", () => {
-    expect(st("CREATED")).toBe("todo todo todo todo todo");
-    expect(st("PROVISIONING")).toBe("active todo todo todo todo");
-    expect(st("RUNNING")).toBe("done active todo todo todo");
-    expect(st("RETRY")).toBe("done active todo todo todo");
-    expect(st("EXPORTING")).toBe("done done active todo todo");
-    expect(st("VERIFY_1")).toBe("done done done active todo");
-    expect(st("HELD", "VERIFIED")).toBe("done done done done active");
-    expect(st("HELD", "UNKNOWN")).toBe("done done done warn active");
-    expect(st("BLOCKED", "FAILED")).toBe("done done done fail done");
-    expect(st("CLOSED", "VERIFIED")).toBe("done done done done done");
-  });
-  it("спряна или блокирана без присъда", () => {
-    expect(st("BLOCKED")).toBe("fail todo todo todo todo");
-  });
-  it("етапите имат ключове за превод", () => {
-    expect(stagesOf({ state: "RUNNING", last_result: null }).map((s) => s.key)).toEqual(["sandbox", "agent", "export", "judge", "decision"]);
   });
 });
 

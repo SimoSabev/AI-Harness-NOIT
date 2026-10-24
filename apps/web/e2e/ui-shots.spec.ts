@@ -37,7 +37,7 @@ test.afterAll(async () => {
 test("D12 on the card: an approver compares before and after; a viewer sees neither", async ({ page }) => {
   await login(page, EMAIL.approver);
   await page.goto("/tasks/t_seed_bugfix");
-  await expect(page.getByRole("heading", { name: "How the pages look (before and after)" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "How the pages look (before and after)" })).toBeVisible();
   await expect(page.getByText("62.0% of the pixels changed")).toBeVisible();
   const before = page.getByRole("img", { name: "Page / before the change" });
   await expect(before).toBeVisible();
@@ -45,11 +45,12 @@ test("D12 on the card: an approver compares before and after; a viewer sees neit
   expect(await before.evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBe(8);
   const r = await page.request.get(`/api/changesets/${cs}/shots/route-0.png`);
   expect([r.status(), r.headers()["content-type"], r.headers()["x-content-type-options"]]).toEqual([200, "image/png", "nosniff"]);
+  await page.getByText("Details: checks, trust, cost, log").click();
   await expect(page.getByText("The changed pages render in a browser")).toBeVisible();
 
   await page.context().clearCookies();
   await login(page, EMAIL.viewer);
   await page.goto("/tasks/t_seed_bugfix");
-  await expect(page.getByRole("heading", { name: "How the pages look (before and after)" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "How the pages look (before and after)" })).toHaveCount(0);
   expect((await page.request.get(`/api/changesets/${cs}/shots/route-0.png`)).status()).toBe(404);
 });

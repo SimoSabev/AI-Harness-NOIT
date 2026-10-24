@@ -11,6 +11,7 @@ import type { FleetRow } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
 import { fleet } from "../../lib/server/workbench";
+import { taskHref } from "../../lib/nav";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -62,7 +63,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                       <tr key={r.id} className="border-b border-line last:border-0">
                         <td className="px-4 py-2"><AgentHex s={r.state} role={r.role} initials={initialsOf(r.agent, r.role)} size="sm" /></td>
                         <td className="py-2" style={{ paddingLeft: r.depth * 18 }}>
-                          {r.task_id ? <Link href={`/tasks/${r.task_id}`} className="font-medium">{r.agent}</Link> : <span className="font-medium">{r.agent}</span>}
+                          {r.task_id ? <Link href={taskHref(r.task_id)} className="font-medium">{r.agent}</Link> : <span className="font-medium">{r.agent}</span>}
                           <span className="block font-mono text-[10px] text-mute">{r.model}{r.account ? ` · ${r.account}` : ""}</span>
                         </td>
                         <td className="max-w-[280px] py-2"><span className={`block truncate ${tone.text}`}>{t(tone.label)}</span><span className="block truncate text-xs text-mute">{r.step}</span></td>

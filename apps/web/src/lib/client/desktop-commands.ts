@@ -1,5 +1,6 @@
 import type { DesktopCommand, DesktopView } from "@mandat/contract";
 import { addProjectHref } from "./local-access";
+import { taskHref } from "../nav";
 
 // E9g A2 (AC-12.5, AC-12.7): what the web does with a command from the desktop app (menu, keyboard shortcut, a click on
 // a system notification). Only in the desktop window; in a browser there is no bridge and none of this runs.
@@ -21,7 +22,7 @@ export function commandAction(cmd: DesktopCommand, ctx: { typing: boolean }): Co
     case "view":
       return { kind: "navigate", href: VIEW_HREF[cmd.view] };
     case "open_task":
-      return { kind: "navigate", href: `/tasks/${encodeURIComponent(cmd.task_id)}` };
+      return { kind: "navigate", href: taskHref(cmd.task_id) };
     case "add_project":
       return { kind: "navigate", href: addProjectHref(cmd.path) };
     case "approve":

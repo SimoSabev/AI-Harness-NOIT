@@ -1,5 +1,5 @@
-// The workspace chat: the agent's stream lines (session_lines, already redacted by the worker) → what the person reads,
-// and the task's state → the build pipeline on the right. Pure, so the browser and the tests share it.
+// The workspace chat: the agent's stream lines (session_lines, already redacted by the worker) → what the person reads.
+// Pure, so the browser and the tests share it.
 export interface StreamLine { seq: number; kind: string; text: string; at: string }
 export interface SteerLine { text: string; at: string }
 
@@ -104,28 +104,6 @@ export function usageOf(lines: StreamLine[]): { input: number; output: number; u
     if (m) return { input: Number(m[1]), output: Number(m[2]), usd: m[3] ? Number(m[3]) : null };
   }
   return null;
-}
-
-export type StageKey = "sandbox" | "agent" | "export" | "judge" | "decision";
-export type StageStatus = "todo" | "active" | "done" | "fail" | "warn";
-const ORDER: StageKey[] = ["sandbox", "agent", "export", "judge", "decision"];
-const AT: Record<string, number> = {
-  PROVISIONING: 0, RUNNING: 1, RETRY: 1, EXPORTING: 2, VERIFY_1: 3, REBASING: 3, PUSHED: 3, VERIFY_2: 3, VERDICT: 3, GATED: 4, HELD: 4,
-};
-
-/** Where the task is: sandbox → agent → export → judge (Mandat) → the person's decision. */
-export function stagesOf(t: { state: string; last_result: string | null }): { key: StageKey; status: StageStatus }[] {
-  const done = (n: number) => ORDER.map((key, i) => ({ key, status: (i < n ? "done" : i === n ? "active" : "todo") as StageStatus }));
-  if (t.state === "CREATED" || t.state === "CONTRACTED") return ORDER.map((key) => ({ key, status: "todo" }));
-  if (t.last_result) {
-    const judge: StageStatus = t.last_result === "VERIFIED" ? "done" : t.last_result === "FAILED" ? "fail" : "warn";
-    const open = t.state === "HELD" || t.state === "GATED";
-    return ORDER.map((key, i) => ({ key, status: i < 3 ? "done" : i === 3 ? judge : open && judge !== "fail" ? "active" : "done" }));
-  }
-  const at = AT[t.state];
-  if (at !== undefined) return done(at);
-  if (t.state === "BLOCKED") return ORDER.map((key, i) => ({ key, status: i === 0 ? "fail" : "todo" }));
-  return ORDER.map((key) => ({ key, status: "done" }));
 }
 
 /** D-367: Mandat's reasons to ask a person (task_activities "needs_you", comma-separated codes) → catalog keys. */

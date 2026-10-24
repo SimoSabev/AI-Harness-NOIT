@@ -21,3 +21,8 @@ const UNDER: Record<Page, Section | null> = {
 export function navActive(page: Page): Section | null {
   return UNDER[page];
 }
+
+/** D-386: one page per task — the tasks page with the task open (the old /tasks/:id redirects here). */
+export function taskHref(id: string): string {
+  return `/?task=${encodeURIComponent(id)}`;
+}

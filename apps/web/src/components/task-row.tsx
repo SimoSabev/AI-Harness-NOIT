@@ -5,6 +5,7 @@ import { ago, statusOf } from "../lib/status";
 import { reasonText } from "../lib/verdict-view";
 import type { TaskRow as Row } from "../lib/server/queries";
 import { StatusBadge } from "./ui";
+import { taskHref } from "../lib/nav";
 
 // D-292: one line per task in the list: status, what was asked, who did it, when; the first reason if it failed.
 export function TaskRow({ t, tr }: { t: Row; tr: T }) {
@@ -12,7 +13,7 @@ export function TaskRow({ t, tr }: { t: Row; tr: T }) {
   const why = s.key === "failed" && t.reasons[0] ? reasonText(t.reasons[0], tr.lang) : null;
   return (
     <li>
-      <Link href={`/tasks/${t.id}`} className="group flex items-start gap-4 px-4 py-3.5 transition hover:bg-raised">
+      <Link href={taskHref(t.id)} className="group flex items-start gap-4 px-4 py-3.5 transition hover:bg-raised">
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium text-ink group-hover:underline">{t.text}</p>
           <p className="mt-0.5 text-sm text-mute">

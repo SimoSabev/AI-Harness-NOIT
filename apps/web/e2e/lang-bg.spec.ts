@@ -13,10 +13,10 @@ test("bg: inbox → task card → approve, all in Bulgarian", async ({ page, con
   const waiting = page.locator("section", { has: page.getByRole("heading", { name: /Чака теб/ }) });
   await expect(waiting.getByText("съществува на base и липсва").first()).toBeVisible();
   await waiting.getByRole("link", { name: /Мобилна карта/ }).click();
-  await page.waitForURL(/\/tasks\/t_seed_mobile/);
+  await page.waitForURL(/\/\?task=t_seed_mobile/);
   await expect(page.getByText("Чака одобрение").first()).toBeVisible();
   await expect(page.getByText("Мандат провери промяната и тя мина. Прегледай я и реши.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Промяната на агента" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Промяната на агента" })).toBeVisible();
   await page.getByRole("button", { name: "Одобри промяната" }).click();
   await expect(page.getByText("Одобряваш тази промяна?")).toBeVisible();
   await page.getByRole("button", { name: "Да, одобри" }).click();

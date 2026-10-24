@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LiveTask } from "../components/live-task";
+import { TaskDetails, TaskShots } from "../components/task-details";
 import { Shell } from "../components/shell";
 import { NewTask, TaskList } from "../components/workspace";
 import type { WsAgent } from "../components/workspace";
@@ -11,7 +12,8 @@ import { taskFeed } from "../lib/server/chat-feed";
 import { db } from "../lib/server/db";
 import { controlKeys } from "../lib/server/keys";
 import { canAct, pageCtx } from "../lib/server/page";
-import { board, firstRepo } from "../lib/server/queries";
+import { board, firstRepo, taskDetail } from "../lib/server/queries";
+import { sessionOf } from "../lib/server/workbench";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +22,8 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: pageTitle(c.waiting, t.lang) };
 }
 
-// The workspace (chat-first start page): the tasks on the left like conversations; the chosen one live in the middle
-// with how it is being built on the right; no task chosen → one box to start a new one. The overview is at /overview.
+// The workspace (chat-first start page): the tasks on the left like conversations; the chosen one in the middle — the one
+// page of a task (D-386: /tasks/:id redirects here); no task chosen → one box to start a new one. The overview is at /overview.
 export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ task?: string | string[]; text?: string | string[] }> }) {
   const c = await pageCtx();
   const t = await getT();
@@ -30,7 +32,13 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   // E9a: "Make a task" from a night question prefills the text (it used to open /tasks/new, D-384)
   const prefill = typeof sp.text === "string" ? sp.text.slice(0, 4000) : "";
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
-  const [b, repo, initial] = await Promise.all([board(db(), c.uid, c.org), firstRepo(db(), c.uid, c.org), selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null]);
+  const [b, repo, initial, d, sess] = await Promise.all([
+    board(db(), c.uid, c.org),
+    firstRepo(db(), c.uid, c.org),
+    selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
+    selected ? taskDetail(db(), c.uid, c.org, c.role, selected) : null,
+    selected ? sessionOf(db(), c.uid, c.org, selected) : null,
+  ]);
   const now = new Date();
   const tasks = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1)).slice(0, 100).map((x) => {
     const s = statusOf(x, t.lang);
@@ -50,8 +58,10 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           <TaskList tasks={tasks} selected={initial ? selected : null} />
         </div>
         <div className="flex min-h-0 flex-col">
-          {initial ? (
-            <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)} />
+          {initial && d && sess ? (
+            <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)}
+              view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id }}
+              shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
             <NewTask agents={agents} repo={repo} canAct={canAct(c.role)} initialText={prefill} />
           )}
