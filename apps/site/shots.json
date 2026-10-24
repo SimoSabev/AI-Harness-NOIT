@@ -1,0 +1,10 @@
+{
+  "viewport": { "width": 1280, "height": 800 },
+  "shots": [
+    { "name": "inbox", "route": "/" },
+    { "name": "task-verified", "route": "/tasks/t_seed_bugfix" },
+    { "name": "task-failed", "route": "/tasks/t_seed_failed" },
+    { "name": "night", "route": "/night" },
+    { "name": "board", "route": "/board" }
+  ]
+}
