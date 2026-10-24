@@ -134,3 +134,19 @@ describe("истински процес", () => {
     expect(JSON.parse(lines[0] ?? "")).toMatchObject({ ok: true, count: 5 });
   });
 });
+
+// D-384: the help lists what a person runs; the developer commands still work but stay out of it.
+describe("help", () => {
+  it("shows the everyday commands and hides the developer ones", async () => {
+    const h = await cli(["--help"]);
+    expect(h.code).toBe(0);
+    const listed = [...h.stdout.matchAll(/^ {2}([a-z-]+)/gm)].map((m) => m[1]);
+    for (const c of ["run", "local", "login", "accounts", "logout", "doctor", "images", "apply", "stats", "verify", "verify-log", "init", "proxy"]) expect(listed, c).toContain(c);
+    for (const c of ["bench", "redteam", "fixtures", "contract", "ladder", "anchor", "worker", "demo"]) expect(listed, c).not.toContain(c);
+  });
+  it("a hidden command still runs", async () => {
+    const h = await cli(["ladder", "--help"]);
+    expect(h.code).toBe(0);
+    expect(h.stdout).toContain("sim");
+  });
+});

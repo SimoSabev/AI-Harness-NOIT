@@ -49,6 +49,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .exitOverride()
     .configureOutput({ writeOut: (s) => io.stdout(s), writeErr: (s) => io.stderr(s) })
     .showHelpAfterError();
+  // D-384: developer commands (bench, red team, fixtures, contracts, ladder, anchor, worker, demo) run as before but
+  // stay out of `mandat --help`, which lists only what a person runs.
+  const DEV = { hidden: true } as const;
   const globals = (): { home?: string; json?: boolean } => program.opts<{ home?: string; json?: boolean }>();
 
   program
@@ -90,7 +93,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = r.ok ? 0 : 3;
     });
 
-  const contract = program.command("contract").description("seal or inspect a task contract");
+  const contract = program.command("contract", DEV).description("seal or inspect a task contract");
   contract
     .command("seal <file>")
     .description("fill config_hash and contract_hash")
@@ -154,7 +157,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
 
   const list = (v: string | undefined): string[] | undefined => (v === undefined ? undefined : v.split(",").map((s) => s.trim()).filter(Boolean));
   program
-    .command("bench")
+    .command("bench", DEV)
     .description("run the bench scenarios B1–B40 (9.6, E9b)")
     .option("--only <ids>", "e.g. B1,B5")
     .option("--fail-gate", "B1 with a broken verifier: must NOT be VERIFIED (exit 1 = caught, T3-3)")
@@ -169,7 +172,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = await benchCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
   program
-    .command("redteam")
+    .command("redteam", DEV)
     .description("run the red team: R5, R6, R8, R14 (E0) and R15–R20 (v5 E8h)")
     .option("--only <ids>", "e.g. R5,R14")
     .option("--json", "machine output")
@@ -180,7 +183,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     });
 
   program
-    .command("fixtures")
+    .command("fixtures", DEV)
     .description("build the deterministic demo repository mirror")
     .command("build")
     .option("--force", "recreate the mirror if its base_commit differs")
@@ -220,7 +223,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = await initCommand(io, { repo: o.repo, json: json(o), baseline: o.baseline === true, profile: o.profile === true, runBaseline: (dir, policy) => runBaseline(dir, policy, { mandatHome: home(), repoRoot, env: io.env }) });
     });
   program
-    .command("ladder")
+    .command("ladder", DEV)
     .description("trust ladder tools")
     .command("sim")
     .description("mean number of tasks until the first promotion (spec т. 7: ≈ 87)")
@@ -233,7 +236,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = ladderSim(io, { ...o, json: json(o) });
     });
   program
-    .command("anchor")
+    .command("anchor", DEV)
     .description("RFC 3161 timestamp of the last ledger hash (TSA_URLS)")
     .option("--org <org>", "o_local or an org uuid (Postgres)", "o_local")
     .option("--json", "machine output")
@@ -242,7 +245,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = await anchorCommand(io, { home: home(), org: o.org, json: json(o), ...(o.org !== "o_local" ? { db: depsIn?.db ?? openDb(dbUrl(io.env)) } : {}), ...(depsIn?.tsaFetcher ? { fetcher: depsIn.tsaFetcher } : {}) });
     });
   program
-    .command("worker")
+    .command("worker", DEV)
     .description("the online worker (MANDAT_MODE=worker): takes CREATED tasks from Postgres")
     .option("--once", "process at most one task and exit")
     .action(async (o: { once?: boolean }) => {
@@ -290,7 +293,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
       code = await tuiCommand(io, { dbPort, once: Boolean(o.once) });
     });
-  const demo = program.command("demo").description("demo data and scenes");
+  const demo = program.command("demo", DEV).description("demo data and scenes");
   demo
     .command("external-pr")
     .option("--fake", "fakeGitHub + local sandbox (no network)")
