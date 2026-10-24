@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEMO_OWNER_ID } from "@mandat/worker";
-import { LOCAL_DB, dbRunArgs, localBanner, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, imageEvent, imagesStep, localBanner, waitForDocker, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -79,5 +79,41 @@ describe("localPreflight (D-302)", () => {
   it("aptFailed: повторът без apt само ако не е изключен вече", () => {
     expect(retryWithoutApt({})).toBe(true);
     expect(retryWithoutApt({ MANDAT_SANDBOX_APT: "0" })).toBe(false);
+  });
+});
+
+// D-387: a missing Docker is waited for (the window says what to do), not a reason to quit.
+describe("waitForDocker (D-387)", () => {
+  it("up at once → true, no message", async () => {
+    const said: string[] = [];
+    expect(await waitForDocker({ up: () => true, sleep: async () => undefined, say: (s) => said.push(s), lang: "bg" })).toBe(true);
+    expect(said).toEqual([]);
+  });
+  it("down → one step line in the [n/4] form, then it polls until Docker answers", async () => {
+    const said: string[] = [];
+    let n = 0;
+    expect(await waitForDocker({ up: () => ++n > 3, sleep: async () => undefined, say: (s) => said.push(s), lang: "bg" })).toBe(true);
+    expect(said).toEqual(["[1/4] Чакам Docker: пусни Docker Desktop (продължавам сам, щом тръгне)\n"]);
+    expect(n).toBe(4);
+  });
+  it("gives up after the limit or when stopped", async () => {
+    expect(await waitForDocker({ up: () => false, sleep: async () => undefined, say: () => undefined, lang: "en", tries: 5 })).toBe(false);
+    const stop = new AbortController();
+    stop.abort();
+    expect(await waitForDocker({ up: () => false, sleep: async () => undefined, say: () => undefined, lang: "en", signal: stop.signal })).toBe(false);
+  });
+});
+
+// D-387: the image build shows where it is (image k of n, the Docker step, the minutes) instead of one silent line.
+describe("image build progress (D-387)", () => {
+  it("reads the lines of `mandat images build` and of BuildKit", () => {
+    expect(imageEvent("mandat/sandbox:abc built")).toEqual({ kind: "image" });
+    expect(imageEvent("mandat/gate:abc exists")).toEqual({ kind: "image" });
+    expect(imageEvent("#7 [3/9] RUN apt-get install -y git")).toEqual({ kind: "step", n: 3, of: 9 });
+    expect(imageEvent("#7 0.512 Reading package lists...")).toBeNull();
+  });
+  it("one [3/4] line: image k of n, the step, the minutes and the usual time", () => {
+    expect(imagesStep({ done: 0, total: 3, step: null, secs: 5 }, "bg")).toBe("[3/4] Образи на пясъчника: 1 от 3 · 0 мин (обикновено 5–15 мин)");
+    expect(imagesStep({ done: 1, total: 3, step: { n: 4, of: 9 }, secs: 190 }, "en")).toBe("[3/4] Sandbox images: 2 of 3 · step 4/9 · 3 min (usually 5–15 min)");
   });
 });

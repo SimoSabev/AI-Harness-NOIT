@@ -6,6 +6,8 @@ import path from "node:path";
 import { compareVersions, imageTags } from "@mandat/sandbox";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
 import { realDeps } from "../deps.js";
+import { cliLang, tt } from "../i18n.js";
+import type { Lang } from "../i18n.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 import { startControl } from "./local-control.js";
@@ -115,6 +117,31 @@ export function localPreflight(f: PreflightFacts): { ok: boolean; lines: string[
   return { ok: out.every((x) => x.ok), lines: out.map((x) => `${x.ok ? "✓" : "✗"} ${x.text}`) };
 }
 
+/** D-387: Docker that does not answer is waited for (one step line for the desktop window), every 3 s, up to ~10 min. */
+export async function waitForDocker(o: { up: () => boolean; sleep: (ms: number) => Promise<void>; say: (s: string) => void; lang: Lang; tries?: number; signal?: AbortSignal }): Promise<boolean> {
+  if (o.up()) return true;
+  o.say(`${tt(o.lang, "local.waitDocker")}\n`);
+  for (let i = 0; i < (o.tries ?? 200); i++) {
+    if (o.signal?.aborted) return false;
+    await o.sleep(3000);
+    if (o.up()) return true;
+  }
+  return false;
+}
+
+/** D-387: what a line of `mandat images build` (stdout) or of BuildKit (stderr) says about the progress. */
+export function imageEvent(line: string): { kind: "image" } | { kind: "step"; n: number; of: number } | null {
+  if (/^\S+ (built|exists)$/.test(line.trim())) return { kind: "image" };
+  const m = /^#\d+ \[(?:[\w.-]+ )?(\d+)\/(\d+)\]/.exec(line.trim());
+  return m ? { kind: "step", n: Number(m[1]), of: Number(m[2]) } : null;
+}
+
+/** D-387: the [3/4] line the desktop window shows while the images build. */
+export function imagesStep(p: { done: number; total: number; step: { n: number; of: number } | null; secs: number }, lang: Lang): string {
+  const step = p.step ? tt(lang, "local.imageStep", { n: p.step.n, of: p.step.of }) : "";
+  return tt(lang, "local.images", { k: Math.min(p.done + 1, p.total), n: p.total, step, min: Math.floor(p.secs / 60) });
+}
+
 /** The sandbox image needs the Debian mirrors only for the R14 probe tools; without them the build retries once with SANDBOX_APT=0 (D-151). */
 export function retryWithoutApt(env: Record<string, string | undefined>): boolean {
   return env.MANDAT_SANDBOX_APT !== "0";
@@ -193,16 +220,40 @@ async function migrate(io: Io, db: ReturnType<typeof openDb>): Promise<void> {
   }
 }
 
+/** D-387: `mandat images build` as a child; its output becomes one progress line (image k of n, the step, the minutes). */
+function buildImages(io: Io, env: Record<string, string | undefined>, lang: Lang): Promise<boolean> {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const p = { done: 0, total: 3, step: null as { n: number; of: number } | null };
+    const show = () => io.stderr(`${imagesStep({ ...p, secs: (Date.now() - started) / 1000 }, lang)}\n`);
+    const read = (chunk: string) => {
+      for (const line of chunk.split("\n")) {
+        const e = imageEvent(line);
+        if (e?.kind === "image") Object.assign(p, { done: p.done + 1, step: null });
+        else if (e?.kind === "step") p.step = { n: e.n, of: e.of };
+        if (e) show();
+        if (/build failed/.test(line)) io.stderr(`${line}\n`);
+      }
+    };
+    const child = spawn(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), "images", "build"], { env, stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.setEncoding("utf8").on("data", read);
+    child.stderr.setEncoding("utf8").on("data", read);
+    show();
+    const tick = setInterval(show, 15_000);
+    child.on("error", () => (clearInterval(tick), resolve(false)));
+    child.on("close", (code) => (clearInterval(tick), resolve(code === 0)));
+  });
+}
+
 async function ensureImages(io: Io): Promise<boolean> {
   const t = await imageTags(repoRoot);
   if ([t.sandbox, t.gate, t.proxy].every((x) => docker(["image", "inspect", x]).status === 0)) return true;
-  io.stderr("образи: липсват, правя ги (първия път е бавно, 5–15 мин)…\n");
   const env = Object.fromEntries(Object.entries(io.env).filter(([k]) => k !== "ANTHROPIC_API_KEY" && k !== "OPENAI_API_KEY"));
-  const build = (e: Record<string, string | undefined>) => spawnSync(process.execPath, [path.join(repoRoot, "packages/cli/dist/main.js"), "images", "build"], { stdio: "inherit", env: e }).status === 0;
-  if (build(env)) return true;
+  const lang = cliLang(io.env);
+  if (await buildImages(io, env, lang)) return true;
   if (retryWithoutApt(env)) {
     io.stderr("образи: строежът падна; пробвам пак без Debian огледалата (MANDAT_SANDBOX_APT=0)…\n");
-    if (build({ ...env, MANDAT_SANDBOX_APT: "0" })) return true;
+    if (await buildImages(io, { ...env, MANDAT_SANDBOX_APT: "0" }, lang)) return true;
   }
   io.stderr("образи: не станаха. Зад фирмен прокси: MANDAT_EXTRA_CA_CERTS=/път/до/ca.pem pnpm local\n");
   return false;
@@ -210,6 +261,9 @@ async function ensureImages(io: Io): Promise<boolean> {
 
 export async function localCommand(io: Io, o: { home: string; dbPort: number; signal?: AbortSignal }): Promise<number> {
   io.stderr("[1/4] проверка на компютъра\n");
+  // D-387: Docker that is not running yet is waited for, so the person can start it instead of starting over
+  const up = () => spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], { encoding: "utf8" }).status === 0;
+  await waitForDocker({ up, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), say: io.stderr, lang: cliLang(io.env), ...(o.signal ? { signal: o.signal } : {}) });
   const pre = localPreflight(await gatherFacts());
   for (const l of pre.lines) io.stderr(`      ${l}\n`);
   if (!pre.ok) return 3;

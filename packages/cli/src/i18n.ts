@@ -23,6 +23,9 @@ export const TUI_EN = {
   "tui.health.idle": "quiet",
   "tui.done24h": "{n} done in 24 h",
   "tui.keys": " 1-6 pane · tab next · o browser · r refresh · q quit",
+  "local.waitDocker": "[1/4] Waiting for Docker: start Docker Desktop (I continue on my own once it runs)",
+  "local.images": "[3/4] Sandbox images: {k} of {n}{step} · {min} min (usually 5–15 min)",
+  "local.imageStep": " · step {n}/{of}",
   "tui.dbDown": "tui: the database does not answer. Run `pnpm local` first.",
 } as const;
 
@@ -48,6 +51,9 @@ export const TUI_BG: Record<TuiKey, string> = {
   "tui.health.idle": "тихо",
   "tui.done24h": "{n} готови за 24 ч",
   "tui.keys": " 1-6 панел · tab следващ · o браузър · r обнови · q изход",
+  "local.waitDocker": "[1/4] Чакам Docker: пусни Docker Desktop (продължавам сам, щом тръгне)",
+  "local.images": "[3/4] Образи на пясъчника: {k} от {n}{step} · {min} мин (обикновено 5–15 мин)",
+  "local.imageStep": " · стъпка {n}/{of}",
   "tui.dbDown": "tui: базата не отговаря. Пусни първо `pnpm local`.",
 };
 
