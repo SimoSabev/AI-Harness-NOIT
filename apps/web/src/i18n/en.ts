@@ -921,7 +921,7 @@ export const en = {
   "res.change": "Change",
   "res.noPreview": "only the change is stored for an edited file",
   "res.binary": "binary file — no preview",
-  "res.tooLarge": "the change is over 1 MB and is not stored for viewing",
+  "res.tooLarge": "The change is {mb} MB — over the 1 MB limit, so it is not stored for viewing. See it on the task's branch.",
   "res.files": "Files: {n}",
   "lib.title": "Library",
   "lib.intro": "Everything the agents wrote, per task. Documents open as documents; code as its change.",

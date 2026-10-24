@@ -457,7 +457,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     );
     const csId = cs.rows[0]?.id as string;
     // E3а: the diff for the card (approver+ by RLS); only the non-redacted patch, which exists only without a secret hit
-    if (diffPatch.length > 0 && diffPatch.length <= 1048576) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff) values ($1::uuid, $2::uuid, $3)", [csId, t.org_id, diffPatch.toString("utf8")]);
+    // over 1 MB only the size stays, so the task does not vanish from the library and the card says why nothing is shown
+    if (diffPatch.length > 1048576) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff, omitted_bytes) values ($1::uuid, $2::uuid, '', $3)", [csId, t.org_id, diffPatch.length]);
+    else if (diffPatch.length > 0) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff) values ($1::uuid, $2::uuid, $3)", [csId, t.org_id, diffPatch.toString("utf8")]);
     const vr = await tx.query<{ id: string }>(
       "insert into public.verdicts (org_id, task_id, changeset_id, run_id, attempt, mode, agent, result, reasons, base_sha, tree_sha, config_hash, verdict_hash) values ($1::uuid, $2, $3::uuid, $4, $5, 'full', $6, $7, $8::jsonb, $9, $10, $11, $12) returning id::text as id",
       [t.org_id, t.id, csId, v.run_id, t.attempt, t.agent, v.result, JSON.stringify(v.reasons), v.base_sha, v.tree_sha, contract.config_hash, hashJcs(v)],

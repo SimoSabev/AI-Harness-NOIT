@@ -8,6 +8,8 @@ import type { Db } from "./sql";
 export interface LibraryItem {
   task_id: string; text: string; agent: string; state: string; last_result: string | null; wait_reason: string | null;
   approval_needed: boolean; approved_by_human: boolean; updated_at: string; files: DiffFile[];
+  /** a change over 1 MB: only its size is kept, there are no files to show */
+  omitted_bytes: number | null;
 }
 
 export async function library(db: Db, uid: string, org: string, limit = 100): Promise<LibraryItem[]> {
@@ -15,7 +17,7 @@ export async function library(db: Db, uid: string, org: string, limit = 100): Pr
     const rows = (await sql.query<Omit<LibraryItem, "files"> & { diff: string }>(
       `select t.id as task_id, t.text, t.agent, t.state, t.last_result, t.wait_reason, coalesce(c.approval_needed, false) as approval_needed,
               exists (select 1 from public.approvals a where a.changeset_id = c.id and a.decision = 'approved') as approved_by_human,
-              to_char(t.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at, d.diff
+              to_char(t.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at, d.diff, d.omitted_bytes::float8 as omitted_bytes
          from public.tasks t
          join lateral (select * from public.changesets x where x.task_id = t.id order by x.attempt desc, x.created_at desc limit 1) c on true
          join public.changeset_diffs d on d.changeset_id = c.id
@@ -24,6 +26,6 @@ export async function library(db: Db, uid: string, org: string, limit = 100): Pr
         limit $2`,
       [org, limit],
     )).rows;
-    return rows.map(({ diff, ...r }) => ({ ...r, files: splitDiff(diff) })).filter((r) => r.files.length > 0);
+    return rows.map(({ diff, ...r }) => ({ ...r, files: splitDiff(diff) })).filter((r) => r.files.length > 0 || r.omitted_bytes !== null);
   });
 }

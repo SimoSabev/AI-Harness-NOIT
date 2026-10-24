@@ -83,7 +83,9 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
                   <span className="min-w-0 flex-1 truncate text-ink">{sel.text}</span>
                   <Link href={`/?task=${sel.task_id}`} className="underline hover:text-ink">{t("lib.openTask")}</Link>
                 </div>
-                <FileViewer key={`${sel.task_id}-${fileNo}`} files={sel.files} start={fileNo} tall />
+                {sel.files.length > 0
+                  ? <FileViewer key={`${sel.task_id}-${fileNo}`} files={sel.files} start={fileNo} tall />
+                  : sel.omitted_bytes !== null && <p className={`${card} p-6 text-sm text-mute`}>{t("res.tooLarge", { mb: t.num(sel.omitted_bytes / 1048576, 1) })}</p>}
               </>
             ) : <p className="text-sm text-mute">{t("lib.pick")}</p>}
           </div>

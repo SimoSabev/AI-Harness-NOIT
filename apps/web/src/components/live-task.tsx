@@ -42,7 +42,7 @@ function useFeed(id: string, initial: Feed | null): { feed: Feed | null; online:
 }
 
 /** The verdict's checks, fetched once per verdict (GET /api/tasks/:id). */
-type Detail = { evidence: FeedCheck[]; diff: string | null };
+type Detail = { evidence: FeedCheck[]; diff: string | null; diffOmitted: number | null };
 function useDetail(id: string, verdictId: string | null, state: string): Detail | null {
   const [d, setD] = useState<Detail | null>(null);
   useEffect(() => {
@@ -216,6 +216,7 @@ export function LiveTask({ id, initial, canAct, agentName }: { id: string; initi
               <FileViewer files={files} />
             </section>
           )}
+          {files.length === 0 && typeof detail?.diffOmitted === "number" && <p className="rounded-xl bg-raised px-4 py-3 text-sm text-mute">{t("res.tooLarge", { mb: t.num(detail.diffOmitted / 1048576, 1) })}</p>}
           {task.last_result && (
             <div className={`rounded-xl px-4 py-3 text-sm ${s.tone === "red" ? "bg-bad-soft text-bad" : s.tone === "green" ? "bg-ok-soft text-ok" : s.tone === "amber" ? "bg-warn-soft text-warn" : "bg-raised text-ink"}`}>
               <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">{t("ws.verdict")} · {task.last_result}</p>

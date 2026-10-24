@@ -23,6 +23,11 @@ describe("library: всичко, което агентите са написал
     const at = l.map((x) => x.updated_at);
     expect([...at].sort().reverse()).toEqual(at);
   });
+  it("промяна над 1 MB (без текст, с размер) остава в списъка без файлове и с размера", async () => {
+    const cs = await changesetOf(db, "t_seed_failed");
+    await asService(db, (sql) => sql.query("update public.changeset_diffs set diff = '', omitted_bytes = 2000000 where changeset_id = $1::uuid", [cs.id]));
+    expect((await library(db, U.approver, DEMO_ORG_ID)).find((x) => x.task_id === "t_seed_failed")).toMatchObject({ files: [], omitted_bytes: 2000000 });
+  });
   it("задачи без промяна не са в списъка", async () => {
     expect((await library(db, U.approver, DEMO_ORG_ID)).map((x) => x.task_id)).not.toContain("t_seed_docs");
   });

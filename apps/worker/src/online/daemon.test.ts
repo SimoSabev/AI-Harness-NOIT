@@ -177,6 +177,12 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     const shots = (await s.db.query<{ name: string; png: Uint8Array }>("select name, png from public.changeset_shots order by name")).rows;
     expect(shots.map((x) => [x.name, Buffer.from(x.png).toString()])).toEqual([["base-route-0.png", "BEFORE"], ["route-0.png", "AFTER"]]);
   }, 30_000);
+  it("промяна над 1 MB: редът в changeset_diffs остава с размера (omitted_bytes), без текста — задачата не изчезва от прегледа", async () => {
+    const big = Buffer.from(`diff --git a/src/cart.ts b/src/cart.ts\n@@ -1 +1 @@\n${"+x\n".repeat(400_000)}`);
+    const s = await setup(0, "VERIFIED", () => big);
+    expect(await runDaemonOnce(s.deps)).toBe("t_web_1");
+    expect((await s.db.query<{ diff: string; omitted_bytes: number }>("select diff, omitted_bytes::int as omitted_bytes from public.changeset_diffs")).rows).toEqual([{ diff: "", omitted_bytes: big.length }]);
+  });
   it("FAILED → BLOCKED „failed“ без доставка", async () => {
     const s = await setup(2, "FAILED");
     await runDaemonOnce(s.deps);

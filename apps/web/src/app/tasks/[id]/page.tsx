@@ -202,6 +202,12 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         </section>
       )}
 
+      {d.diff === null && d.diffOmitted !== null && c.role !== "viewer" && (
+        <section aria-labelledby="diff-h" className="mt-8">
+          <h2 id="diff-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{tr("task.change")}</h2>
+          <p className={`${card} p-4 text-sm text-mute`}>{tr("res.tooLarge", { mb: tr.num(d.diffOmitted / 1048576, 1) })}</p>
+        </section>
+      )}
       {d.diff && c.role !== "viewer" && (
         <section aria-labelledby="diff-h" className="mt-8">
           <h2 id="diff-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{tr("task.change")}</h2>
