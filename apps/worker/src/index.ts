@@ -41,3 +41,4 @@ export type { McpServerRow, McpVetResult, McpVetRunner } from "./online/mcp.js";
 export { vetMcpDocker } from "./mcp-vet-docker.js";
 export { ciNote, fixCi, pollCi } from "./online/ci.js";
 export { deliverLocal } from "./online/deliver-local.js";
+export { addLocalProject, projectSlug } from "./online/add-project.js";
