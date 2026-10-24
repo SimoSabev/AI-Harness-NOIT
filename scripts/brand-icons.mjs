@@ -1,20 +1,21 @@
 #!/usr/bin/env node
-// D-382: the logo, drawn once. An isometric box (a pointy-top hexagon) cut at its three inner edges (upper-left,
-// upper-right, bottom); the check stands in it and leaves through the top face: the agent's work gets out only
-// verified. Measured on the image Simo chose (ChatGPT, 24.10.2026) and cleaned to the 30°/45° grid.
+// D-382, D-383: the logo is the image Simo chose (ChatGPT Images, 24.10.2026: the isometric box with the check and the
+// circuit, texture and relief as they are), scripts/brand/logo-source.webp. This script cuts the icons from it; only the
+// macOS menu bar gets the box as a one-colour shape, drawn here (a template image is black + alpha, D-382).
 //
-//   node scripts/brand-icons.mjs     # writes apps/web/public/{logo-mark,favicon}.svg and the PNG icons
+//   node scripts/brand-icons.mjs     # writes apps/web/public/{logo,icon-192,icon-512,icon-maskable-512,trayTemplate}.png
 //
 // The PNGs are rendered by Chromium (the Playwright of apps/web, as in scripts/site-shots.mjs; MANDAT_CHROMIUM
 // overrides the browser). The site copies what it needs from apps/web/public (apps/site/scripts/copy-assets.mjs).
-import { writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// Drawing space: the 1254 px original; the mark is the 620 × 620 square around it.
+// The menu-bar shape, measured on the image (1254 px) and cleaned to the 30°/45° grid; the mark is the 620 × 620
+// square around it.
 const VIEW = [330.75, 291, 620];
 const COS30 = Math.sqrt(3) / 2;
 const C = /** @type {Pt} */ ([627, 601]);
@@ -91,80 +92,52 @@ const right = [
   cross(shift(toB, -GAP / 2), line(I.B, I.LR)),
 ];
 
-// The circuit inside (the full icon only): 45° runs into the wall, ring pads; the right side mirrors the left.
-const mirror = (/** @type {Pt} */ [x, y]) => /** @type {Pt} */ ([2 * C[0] - x, y]);
-/** @type {{ run: Pt[], pad?: Pt }[]} */
-const halfCircuit = [
-  { run: [[479.8, 604.8], [553, 678], [553, 778]], pad: [472, 597] },
-  { run: [[412, 591.5], [529, 708.5], [529, 762]] },
-  { run: [[412, 638], [486.2, 712.2]], pad: [494, 720] },
-];
-const circuit = halfCircuit.flatMap((c) => [c, { run: c.run.map(mirror), ...(c.pad ? { pad: mirror(c.pad) } : {}) }]);
-
 const n = (/** @type {number} */ v) => String(Math.round(v * 10) / 10);
-const pt = (/** @type {Pt} */ [x, y]) => `${n(x - VIEW[0])},${n(y - VIEW[1])}`;
-const pts = (/** @type {Pt[]} */ list) => list.map(pt).join(" ");
+const pts = (/** @type {Pt[]} */ list) => list.map(([x, y]) => `${n(x - VIEW[0])},${n(y - VIEW[1])}`).join(" ");
 const viewed = (/** @type {Pt[]} */ list) => list.map(([x, y]) => /** @type {Pt} */ ([x - VIEW[0], y - VIEW[1]]));
 
 /** The drawing in mark units (0..620), for the tests. */
 export const GEOMETRY = { hexagon: viewed(Object.values(O)), faces: [top, left, right].map(viewed), check: viewed(check) };
 
-/** @typedef {{ top: string, left: string, right: string, check: string, circuit?: string }} Paint */
-/** the polygons and the circuit; a colour of "" leaves the fill to CSS */
-function shapes(/** @type {Paint} */ c) {
-  const fill = (/** @type {string} */ f) => (f ? ` fill="${f}"` : "");
-  const wires = c.circuit
-    ? circuit
-        .map((w) => `<polyline points="${pts(w.run)}" fill="none" stroke="${c.circuit}" stroke-width="9"/>` + (w.pad ? `<circle cx="${pt(w.pad).replace(",", '" cy="')}" r="9" fill="none" stroke="${c.circuit}" stroke-width="7"/>` : ""))
-        .join("")
-    : "";
-  return `${wires}<polygon${fill(c.top)} points="${pts(top)}"/><polygon${fill(c.left)} points="${pts(left)}"/><polygon${fill(c.right)} points="${pts(right)}"/><polygon${fill(c.check)} points="${pts(check)}"/>`;
-}
-const svg = (/** @type {string} */ body, size = "") => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEW[2]} ${VIEW[2]}"${size}>${body}</svg>\n`;
+/** the polygons, all in one colour */
+const shapes = (/** @type {string} */ fill) => [top, left, right, check].map((p) => `<polygon fill="${fill}" points="${pts(p)}"/>`).join("");
 
-/** The one-colour mark: the CSS mask of the header logo, the macOS menu-bar template. */
+/** The one-colour box: the macOS menu-bar template. */
 export function markSvg(/** @type {string} */ fill) {
-  return svg(shapes({ top: fill, left: fill, right: fill, check: fill }));
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEW[2]} ${VIEW[2]}">${shapes(fill)}</svg>\n`;
 }
 
-// The tokens (apps/web/src/app/tokens.css): accent of the light and the dark theme; the tests compare them.
-const ACCENT = { light: "#4f681c", dark: "#a6c25e" };
-/** The browser tab: the mark in the accent of the visitor's system theme. */
-export function faviconSvg() {
-  return svg(`<style>polygon{fill:${ACCENT.light}}@media (prefers-color-scheme: dark){polygon{fill:${ACCENT.dark}}}</style>${shapes({ top: "", left: "", right: "", check: "" })}`);
+// The image: 1254 × 1254; the box with the check spans x 356–922, y 294–908 (centre 639, 601; 614 high).
+export const SOURCE = path.join(repo, "scripts/brand/logo-source.webp");
+export const MARK = { cx: 639, cy: 601, h: 614 };
+/** how much of the square the box fills: the header and tab logo, the app tile, the PWA maskable (safe circle 40 %) */
+export const CROPS = { logo: 0.86, app: 0.64, maskable: 0.56 };
+
+/** the image scaled so the box is `share` of `side`, centred in a `side` px square */
+function crop(/** @type {string} */ src, /** @type {number} */ side, /** @type {number} */ share) {
+  const k = (side * share) / MARK.h;
+  return `<img src="${src}" style="position:absolute;width:${1254 * k}px;left:${side / 2 - MARK.cx * k}px;top:${side / 2 - MARK.cy * k}px">`;
 }
-
-// The full icon: the dark tokens, lit from above (top face = accent, left and right darker toward the canvas), the
-// check in the accent text colour so it stands out.
-const FULL = { top: "#a6c25e", left: "#849a4c", right: "#687a3e", check: "#b6cf7a", circuit: "#849a4c" };
-const TILE = { fill: "#121613", edge: "#232a25", canvas: "#0c0f0d" };
-
-/** The app icon (Dock, taskbar, PWA "any"): a rounded tile on the Apple icon grid (824 of 1024, radius 185). */
-function appIcon(/** @type {number} */ s) {
+/** header and browser tab: the box close up, rounded corners */
+const logo = (/** @type {number} */ s, /** @type {string} */ src) => `<div style="position:relative;width:${s}px;height:${s}px;border-radius:${s * 0.22}px;overflow:hidden">${crop(src, s, CROPS.logo)}</div>`;
+/** Dock, taskbar, PWA "any": a rounded tile on the Apple icon grid (824 of 1024, radius 185), a thin edge for dark docks */
+function appIcon(/** @type {number} */ s, /** @type {string} */ src) {
   const inset = (s * 100) / 1024;
   const tile = (s * 824) / 1024;
-  const mark = tile * 0.64;
-  const o = (s - mark) / 2;
-  const edge = s / 256;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">` +
-    `<rect x="${inset + edge / 2}" y="${inset + edge / 2}" width="${tile - edge}" height="${tile - edge}" rx="${(tile * 185) / 824}" fill="${TILE.fill}" stroke="${TILE.edge}" stroke-width="${edge}"/>` +
-    `<svg x="${o}" y="${o}" width="${mark}" height="${mark}" viewBox="0 0 ${VIEW[2]} ${VIEW[2]}">${shapes(FULL)}</svg></svg>`;
+  return `<div style="position:absolute;left:${inset}px;top:${inset}px;width:${tile}px;height:${tile}px;border-radius:${(tile * 185) / 824}px;overflow:hidden">${crop(src, tile, CROPS.app)}` +
+    `<div style="position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 0 ${s / 256}px #232a25"></div></div>`;
 }
-/** PWA "maskable": full bleed; the mark stays inside the safe circle (radius 40 %). */
-function maskable(/** @type {number} */ s) {
-  const mark = s * 0.56;
-  const o = (s - mark) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><rect width="${s}" height="${s}" fill="${TILE.canvas}"/>` +
-    `<svg x="${o}" y="${o}" width="${mark}" height="${mark}" viewBox="0 0 ${VIEW[2]} ${VIEW[2]}">${shapes(FULL)}</svg></svg>`;
-}
-/** macOS menu bar: black + alpha, file name ends in "Template" (Electron, D-382); the mark is 16 of 18 points. */
+/** PWA "maskable": full bleed */
+const maskable = (/** @type {number} */ s, /** @type {string} */ src) => `<div style="position:relative;width:${s}px;height:${s}px;overflow:hidden">${crop(src, s, CROPS.maskable)}</div>`;
+/** macOS menu bar: black + alpha, the file name ends in "Template" (Electron, D-382); the box is 16 of 18 points */
 function template(/** @type {number} */ s) {
   const mark = (s * 16) / 18;
   const o = (s - mark) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><svg x="${o}" y="${o}" width="${mark}" height="${mark}" viewBox="0 0 ${VIEW[2]} ${VIEW[2]}">${shapes({ top: "#000", left: "#000", right: "#000", check: "#000" })}</svg></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><svg x="${o}" y="${o}" width="${mark}" height="${mark}" viewBox="0 0 ${VIEW[2]} ${VIEW[2]}">${shapes("#000")}</svg></svg>`;
 }
 
 export const ICONS = [
+  { file: "logo.png", size: 256, draw: logo },
   { file: "icon-192.png", size: 192, draw: appIcon },
   { file: "icon-512.png", size: 512, draw: appIcon },
   { file: "icon-maskable-512.png", size: 512, draw: maskable },
@@ -174,8 +147,7 @@ export const ICONS = [
 
 async function main() {
   const pub = path.join(repo, "apps/web/public");
-  writeFileSync(path.join(pub, "logo-mark.svg"), markSvg("#000"));
-  writeFileSync(path.join(pub, "favicon.svg"), faviconSvg());
+  const src = `data:image/webp;base64,${readFileSync(SOURCE).toString("base64")}`;
   const webRequire = createRequire(path.join(repo, "apps/web/package.json"));
   const { chromium } = webRequire("@playwright/test");
   const browser = await chromium.launch(process.env.MANDAT_CHROMIUM ? { executablePath: process.env.MANDAT_CHROMIUM } : {});
@@ -183,7 +155,7 @@ async function main() {
     const page = await browser.newPage({ deviceScaleFactor: 1 });
     for (const icon of ICONS) {
       await page.setViewportSize({ width: icon.size, height: icon.size });
-      await page.setContent(`<!doctype html><body style="margin:0">${icon.draw(icon.size)}</body>`);
+      await page.setContent(`<!doctype html><body style="margin:0">${icon.draw(icon.size, src)}</body>`);
       await page.screenshot({ path: path.join(pub, icon.file), omitBackground: true, clip: { x: 0, y: 0, width: icon.size, height: icon.size } });
       console.log(`brand-icons: ${icon.file}`);
     }
