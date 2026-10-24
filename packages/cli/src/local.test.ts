@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEMO_OWNER_ID } from "@mandat/worker";
-import { LOCAL_DB, dbRunArgs, localBanner, localDbUrl, localPreflight, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, localBanner, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {
@@ -37,6 +37,13 @@ describe("без вход (D-368)", () => {
     expect(e.MANDAT_LOCAL_OWNER).toBe(DEMO_OWNER_ID);
     expect(e.MANDAT_DEMO_DEV_AUTH).toBeUndefined();
     expect(e).toMatchObject({ PATH: "/bin", MANDAT_DB_URL: "postgresql://x", MANDAT_LOCAL_CONTROL_URL: "http://127.0.0.1:1", MANDAT_LOCAL_CONTROL_TOKEN: "t", NEXT_TELEMETRY_DISABLED: "1" });
+  });
+  it("E9g review (D-374): KEK-ът от десктопа (MANDAT_KEK) остава в процеса на CLI/worker — не стига до уеб сървъра и системните задачи", () => {
+    const kek = Buffer.alloc(32, 7).toString("base64");
+    const w = localWebEnv({ PATH: "/bin", MANDAT_KEK: kek }, { dbUrl: "postgresql://x", control: { url: "http://127.0.0.1:1", token: "t" } });
+    expect(w.MANDAT_KEK).toBeUndefined();
+    expect(JSON.stringify(w)).not.toContain(kek);
+    expect(localJobEnv({ PATH: "/bin", MANDAT_KEK: kek }, "postgresql://x")).toEqual({ PATH: "/bin", MANDAT_DB_URL: "postgresql://x" });
   });
   it("банерът: адресът, без имейл, парола и TOTP", () => {
     const b = localBanner(2).join("\n");

@@ -49,9 +49,23 @@ export function localWebBin(root: string): string {
   return createRequire(path.join(root, "apps/web/package.json")).resolve("next/dist/bin/next");
 }
 
-/** The web server's env: the local owner instead of a login (D-368), the control endpoint for keys (D-293), no API keys. */
+/**
+ * D-374 (E9g review): the KEK the desktop app passes in (MANDAT_KEK) is for this process only — the proxy start and the
+ * worker run here and read it; the web server and the system jobs never need it, so their env goes without it.
+ */
+function withoutKek(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const { MANDAT_KEK: _kek, ...rest } = env;
+  return rest;
+}
+
+/** D-370 + D-374: the env of a system job (`mandat …` from the web): no API keys (clean), no KEK. */
+export function localJobEnv(clean: Record<string, string | undefined>, dbUrl: string): Record<string, string | undefined> {
+  return { ...withoutKek(clean), MANDAT_DB_URL: dbUrl };
+}
+
+/** The web server's env: the local owner instead of a login (D-368), the control endpoint for keys (D-293), no API keys, no KEK (D-374). */
 export function localWebEnv(clean: Record<string, string | undefined>, o: { dbUrl: string; control: { url: string; token: string } }): Record<string, string | undefined> {
-  const { MANDAT_DEMO_DEV_AUTH: _dev, ...rest } = clean;
+  const { MANDAT_DEMO_DEV_AUTH: _dev, ...rest } = withoutKek(clean);
   return { ...rest, MANDAT_DB_URL: o.dbUrl, MANDAT_LOCAL_OWNER: DEMO_OWNER_ID, NEXT_TELEMETRY_DISABLED: "1", MANDAT_LOCAL_CONTROL_URL: o.control.url, MANDAT_LOCAL_CONTROL_TOKEN: o.control.token };
 }
 
@@ -241,7 +255,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     accounts: () => listAccounts(deps),
     login: new LoginSessions(loginDeps(deps)),
     logout: (name) => logoutProfile(deps, name),
-    system: new SystemJobs({ run: cliRun({ ...clean, MANDAT_DB_URL: url }), org: DEMO_ORG_ID }),
+    system: new SystemJobs({ run: cliRun(localJobEnv(clean, url)), org: DEMO_ORG_ID }),
   });
   const env = localWebEnv(clean, { dbUrl: url, control });
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
