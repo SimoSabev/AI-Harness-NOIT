@@ -1,0 +1,21 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "src/**",
+        "scripts/**",
+        "releases.json",
+        "next.config.ts",
+        "postcss.config.mjs",
+        "tsconfig.json",
+        "package.json",
+        "$TURBO_ROOT$/apps/web/src/app/tokens.css",
+        "$TURBO_ROOT$/apps/web/public/fonts/**",
+        "$TURBO_ROOT$/apps/web/public/icon-192.png"
+      ],
+      "outputs": ["out/**"]
+    }
+  }
+}

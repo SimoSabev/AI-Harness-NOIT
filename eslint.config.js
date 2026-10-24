@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "fixtures/**", ".mandat/**", "docs/spec/**", ".next/**", "**/.next/**", ".claude/**"] },
+  { ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "fixtures/**", ".mandat/**", "docs/spec/**", ".next/**", "**/.next/**", "apps/site/out/**", ".claude/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -17,8 +17,8 @@ export default tseslint.config(
     },
   },
   {
-    // Next.js App Router (page/layout) and Playwright globalSetup require default exports (D-285)
-    files: ["apps/web/src/app/**/page.tsx", "apps/web/src/app/**/layout.tsx", "apps/web/src/app/manifest.ts", "apps/web/e2e/global-setup.ts"],
+    // Next.js App Router (page/layout/global-not-found) and Playwright globalSetup require default exports (D-285, D-377)
+    files: ["apps/web/src/app/**/page.tsx", "apps/web/src/app/**/layout.tsx", "apps/web/src/app/manifest.ts", "apps/web/e2e/global-setup.ts", "apps/site/src/app/**/page.tsx", "apps/site/src/app/**/layout.tsx", "apps/site/src/app/global-not-found.tsx"],
     rules: { "no-restricted-syntax": "off" },
   },
   {
