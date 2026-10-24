@@ -531,3 +531,27 @@ describe("approval of a local task (D-367)", () => {
     expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(1);
   });
 });
+
+// D-388: a local project added on this computer (not the demo repo) — its GitHub side is the offline one under its own
+// name, never the worker's one repo; the mirror is its delivery, so nothing is "merged" on a fake PR.
+describe("daemon and an own local project (D-388)", () => {
+  const own = async (level: number, patchOf?: (mirror: string) => Buffer) => {
+    const s = await setup(level, "VERIFIED", patchOf);
+    await s.db.query("update public.repos set full_name = 'local/shop' where id = $1", [DEMO_REPO_ID]);
+    const localGh = fakeGitHub({ autoRepos: true });
+    return { ...s, localGh, deps: { ...s.deps, localGh } };
+  };
+  it("level 0: the branch goes to the offline GitHub under local/shop; the worker's GitHub is not touched", async () => {
+    const s = await own(0);
+    await runDaemonOnce(s.deps);
+    expect(s.localGh.state.calls.some((c) => c.startsWith("createRef") && c.includes("local/shop"))).toBe(true);
+    expect(s.gh.state.calls).toEqual([]);
+  });
+  it("level 2 with a change that needs a person: no auto-merge of a fake PR — HELD approval, main does not move", async () => {
+    const s = await own(2, realPatch((w) => writeFileSync(path.join(w, "package.json"), `${readFileSync(path.join(w, "package.json"), "utf8")}\n`)));
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks")).rows[0]).toEqual({ state: "HELD", wait_reason: "approval" });
+    expect(s.localGh.state.calls.some((c) => c.startsWith("merge"))).toBe(false);
+    expect(execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "main"], { env: gitEnv, encoding: "utf8" }).trim()).toBe(s.fx.sha);
+  });
+});

@@ -13,6 +13,8 @@ import { forbidAtNight } from "@mandat/profile";
 import type { SqlClient } from "@mandat/ledger";
 import { autoMerge, commitMessage, deliver } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
+import { ghFor } from "./gh-target.js";
+import type { GhDeps } from "./gh-target.js";
 import { readAtBase } from "@mandat/verify";
 import { runTask } from "../run.js";
 import { sessionRecorder } from "./session-recorder.js";
@@ -32,11 +34,11 @@ import type { Db } from "./db.js";
 // Демо промпт т. 5.8 + 8.1 (D-275, D-280): the online worker. One task at a time per process; every state change +
 // ledger row (+ outbox row) in one transaction. Effects on GitHub go through the GitHubPort (fakeGitHub offline).
 
-export interface DaemonDeps {
+export interface DaemonDeps extends GhDeps {
   db: Db;
   home: string;
   gh: GitHubPort;
-  /** GitHub repo name for the demo (fakeGitHub offline) */
+  /** GitHub repo name for the demo (fakeGitHub offline); every other project goes to its own (gh-target.ts, D-388) */
   ghRepo: string;
   broadcast?: (topic: string, event: string, payload: Record<string, unknown>) => Promise<void>;
   run?: (i: RunTaskInput) => Promise<RunTaskOutput>;
@@ -447,6 +449,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // itself (mergeLocal below); every other case keeps the person, with the reasons written down for the card
   const aa = autoApply({ result: v.result, origin: "mandat", files: diffStat(diffPatch.toString("utf8")) });
   const willAuto = t.provider === "local" && !night && aa.auto && diffPatch.length > 0;
+  // D-388: an own local project goes into main only through its mirror (above); a fake PR's auto-merge would not touch
+  // it, so whatever is not applied by itself waits for the person
+  const target = ghFor(d, t);
+  if (target.own && !willAuto && action.kind === "pr_then_auto_merge") action = { kind: "draft_pr" };
   const needsHuman = !willAuto && v.result !== "FAILED" && (action.kind === "draft_pr" || action.kind === "hold" || action.kind === "branch_only");
   const requires2fa = !willAuto && v.result === "VERIFIED" && lvl.level === 1;
   const askWhy = aa.why.length > 0 ? aa.why : night ? ["night"] : [];
@@ -543,7 +549,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     log(`[daemon] ${t.id}: not applied by itself (${applyFail}) → a person decides`);
   }
   // Delivery through the gate (fakeGitHub offline; Writer App online)
-  const delivered = await deliver(d.gh, { repo: d.ghRepo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full", task: { type: t.type, text: t.text }, appUrl: process.env.MANDAT_APP_URL ?? null }, action);
+  const delivered = await deliver(target.gh, { repo: target.repo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full", task: { type: t.type, text: t.text }, appUrl: process.env.MANDAT_APP_URL ?? null }, action);
   if (delivered.kind === "pr" || delivered.kind === "branch") {
     await d.db.query("update public.changesets set head_sha = $2 where id = $1::uuid", [changesetId, delivered.head_sha]);
     // the delivery itself (branch / draft PR / PR): the card's „Отвори PR“ and the approval effects need its number
@@ -559,7 +565,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     return { state: "CLOSED", verdict: v };
   }
   if (delivered.kind === "pr" && delivered.auto_merge && (lvl.level === 2 || lvl.level === 3)) {
-    const m = await autoMerge(d.gh, { repo: d.ghRepo, base: "main", number: delivered.number, head_sha: delivered.head_sha, base_sha: (await d.gh.getPull(d.ghRepo, delivered.number)).base_sha, tree_sha_expected: "", task_id: t.id, level: lvl.level, verdictSeq: out.ledger?.to ?? null, redact: (s) => s });
+    const m = await autoMerge(target.gh, { repo: target.repo, base: "main", number: delivered.number, head_sha: delivered.head_sha, base_sha: (await target.gh.getPull(target.repo, delivered.number)).base_sha, tree_sha_expected: "", task_id: t.id, level: lvl.level, verdictSeq: out.ledger?.to ?? null, redact: (s) => s });
     if (m.kind === "merged") {
       await finishOutcome(d, t, ladder, "success", changesetId, delivered.number, m.merge_commit_sha);
       if (lvl.level >= 2) await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:merged`, payload: { task_id: t.id, kind: "merged" } });

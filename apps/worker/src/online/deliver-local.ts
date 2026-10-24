@@ -28,8 +28,14 @@ export async function mergeLocal(o: { mirror: string; sha: string; tmpRoot?: str
 }
 
 export async function deliverLocal(o: { mirror: string; taskId: string; attempt: number; baseSha: string; patch: Buffer; message: string; tmpRoot?: string }): Promise<{ ok: true; ref: string; sha: string } | { ok: false; reason: "branch_exists" | "does_not_apply" }> {
-  if (!/^t_[a-z0-9_]{1,40}$/.test(o.taskId) || !/^[0-9a-f]{40}$/.test(o.baseSha) || !Number.isInteger(o.attempt) || o.attempt < 1) throw new Error("deliverLocal: bad input");
-  const ref = `mandat/${o.taskId}-a${o.attempt}`;
+  if (!/^t_[a-z0-9_]{1,40}$/.test(o.taskId) || !Number.isInteger(o.attempt) || o.attempt < 1) throw new Error("deliverLocal: bad input");
+  return deliverLocalRef({ ...o, ref: `mandat/${o.taskId}-a${o.attempt}` });
+}
+
+/** D-388: the same for any Mandat branch of the mirror (a task's, or the approved rules' mandat/harness-<proposal>). */
+export async function deliverLocalRef(o: { mirror: string; ref: string; baseSha: string; patch: Buffer; message: string; tmpRoot?: string }): Promise<{ ok: true; ref: string; sha: string } | { ok: false; reason: "branch_exists" | "does_not_apply" }> {
+  if (!/^mandat\/(t_[a-z0-9_]{1,40}-a\d+|harness-[0-9a-f-]{36})$/.test(o.ref) || !/^[0-9a-f]{40}$/.test(o.baseSha)) throw new Error("deliverLocal: bad input");
+  const ref = o.ref;
   const tmp = mkdtempSync(path.join(o.tmpRoot ?? os.tmpdir(), "mandat-deliver-"));
   try {
     const git = cleanGit({ tmpHome: tmp });

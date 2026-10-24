@@ -17,11 +17,14 @@ import { approvalHandlers } from "./effects.js";
 import { mcpHandlers } from "./mcp.js";
 import { upsertBuiltinPlugins, upsertSkills } from "./skills.js";
 import type { McpVetRunner } from "./mcp.js";
+import { deliverLocalRef, mergeLocal } from "./deliver-local.js";
+import { ghFor } from "./gh-target.js";
+import type { GhDeps } from "./gh-target.js";
 
 // Демо промпт т. 8.2 Поток 1 (стъпки 1–4, 6, 9; стъпка 5 LLM е забранена): connect → scan a clean clone (hooks off)
 // → proposal + field_sources + ledger config_change/proposed; after the owner's TOTP approval (web, private.approve_harness)
 // → the outbox delivers a draft PR with .mandat.yml + AGENTS.md + CLAUDE.md through the Writer port.
-export interface HarnessDeps {
+export interface HarnessDeps extends GhDeps {
   db: Db;
   gh: GitHubPort;
   ghRepo: string;
@@ -35,8 +38,9 @@ export interface HarnessDeps {
 export interface Existing { ".mandat.yml": string | null; "AGENTS.md": string | null; "CLAUDE.md": string | null }
 
 export async function scanForProposal(d: HarnessDeps, repoId: string): Promise<string> {
-  const r = (await d.db.query<{ org_id: string; remote_url: string; default_branch: string }>("select org_id::text as org_id, remote_url, default_branch from public.repos where id = $1::uuid", [repoId])).rows[0];
+  const r = (await d.db.query<{ org_id: string; remote_url: string; default_branch: string; provider: string; full_name: string }>("select org_id::text as org_id, remote_url, default_branch, provider, full_name from public.repos where id = $1::uuid", [repoId])).rows[0];
   if (!r) throw new Error("unknown repo");
+  const g = ghFor(d, r);
   const tmp = mkdtempSync(path.join(d.tmpRoot ?? os.tmpdir(), "mandat-scan-"));
   try {
     const git = cleanGit({ tmpHome: tmp });
@@ -48,7 +52,8 @@ export async function scanForProposal(d: HarnessDeps, repoId: string): Promise<s
     const head = (await git.run(["rev-parse", "HEAD"], { cwd: clone })).stdout.toString("utf8").trim();
     const view = dirView(clone);
     const scan = scanRepo(view);
-    const rules = await d.gh.getRules(d.ghRepo, r.default_branch).catch(() => null);
+    // D-388: an own local project has no GitHub ruleset (its offline GitHub would only answer the defaults)
+    const rules = g.own ? null : await g.gh.getRules(g.repo, r.default_branch).catch(() => null);
     const p = propose(scan, { rulesStrict: rules ? rules.strict : null });
     const subjects = (await git.run(["log", "-n", "50", "--format=%s"], { cwd: clone })).stdout.toString("utf8").split("\n").filter(Boolean);
     const stats = (await git.run(["log", "-n", "50", "--shortstat", "--format=tformat:@"], { cwd: clone })).stdout.toString("utf8");
@@ -121,28 +126,55 @@ export async function baselineForProposal(d: HarnessDeps, proposalId: string): P
 interface GeneratedFile { path: string; sha256: string; content: string; before: string | null }
 
 export async function deliverHarnessPr(d: HarnessDeps, proposalId: string): Promise<{ number: number } | null> {
-  const hp = (await d.db.query<{ org_id: string; status: string; base_commit: string; version: number; generated: GeneratedFile[]; pr_number: number | null; yaml_sha256: string; default_branch: string }>(
-    "select h.org_id::text as org_id, h.status, h.base_commit, h.version, h.generated, h.pr_number, h.yaml_sha256, r.default_branch from public.harness_proposals h join public.repos r on r.id = h.repo_id where h.id = $1::uuid",
+  const hp = (await d.db.query<{ org_id: string; status: string; base_commit: string; version: number; generated: GeneratedFile[]; pr_number: number | null; yaml_sha256: string; default_branch: string; provider: string; full_name: string; remote_url: string }>(
+    "select h.org_id::text as org_id, h.status, h.base_commit, h.version, h.generated, h.pr_number, h.yaml_sha256, r.default_branch, r.provider, r.full_name, r.remote_url from public.harness_proposals h join public.repos r on r.id = h.repo_id where h.id = $1::uuid",
     [proposalId],
   )).rows[0];
   if (!hp || hp.status !== "approved") throw new Error("proposal is not approved");
   if (hp.pr_number !== null) return { number: hp.pr_number }; // idempotent
   const patch = filesPatch(hp.generated.map((f) => ({ path: f.path, before: f.before, after: f.content })));
-  const c = await d.gh.createCommit(d.ghRepo, { treeFromDiff: Buffer.from(patch, "utf8"), parentSha: hp.base_commit, message: `mandat: harness v${hp.version} (${hp.yaml_sha256.slice(7, 15)})` });
+  const g = ghFor(d, hp);
+  if (g.own) {
+    await deliverHarnessLocal(d, proposalId, { ...hp, patch });
+    return null;
+  }
+  const c = await g.gh.createCommit(g.repo, { treeFromDiff: Buffer.from(patch, "utf8"), parentSha: hp.base_commit, message: `mandat: harness v${hp.version} (${hp.yaml_sha256.slice(7, 15)})` });
   const ref = `mandat/harness-${proposalId}`;
-  const created = await d.gh.createRefIfAbsent(d.ghRepo, { ref: `refs/heads/${ref}`, sha: c.commitSha });
+  const created = await g.gh.createRefIfAbsent(g.repo, { ref: `refs/heads/${ref}`, sha: c.commitSha });
   if (!created.ok) throw new Error("harness branch already exists (changed by a human?)");
   const body = [`Mandat harness v${hp.version} from .mandat.yml@${hp.yaml_sha256.slice(0, 15)}…`, "", ...hp.generated.map((f) => `- \`${f.path}\` ${f.sha256.slice(0, 15)}…`), "", "Approved by the owner with a fresh TOTP code. A human merges this PR."].join("\n");
-  const pr = await d.gh.createPull(d.ghRepo, { head: ref, base: hp.default_branch, title: `Mandat harness v${hp.version}`, body, draft: true });
+  const pr = await g.gh.createPull(g.repo, { head: ref, base: hp.default_branch, title: `Mandat harness v${hp.version}`, body, draft: true });
   const ext = `harness:${proposalId}`;
-  await d.gh.createOrUpdateCheckRun(d.ghRepo, { name: "Мандат harness", head_sha: c.commitSha, external_id: ext, conclusion: "success", title: `harness v${hp.version}`, summary: "Generated by template from the approved .mandat.yml (no LLM)." });
-  await d.gh.createOrUpdateCheckRun(d.ghRepo, { name: "Мандат approval", head_sha: c.commitSha, external_id: ext, conclusion: "success", title: "approved (owner + TOTP)", summary: "The harness proposal was approved by an owner with a fresh second factor." });
-  await d.gh.createOrUpdateCheckRun(d.ghRepo, { name: "Мандат verdict", head_sha: c.commitSha, external_id: ext, conclusion: "skipped", title: "harness PR: no agent change", summary: "This PR carries no agent change; the protection is the approval check." });
+  await g.gh.createOrUpdateCheckRun(g.repo, { name: "Мандат harness", head_sha: c.commitSha, external_id: ext, conclusion: "success", title: `harness v${hp.version}`, summary: "Generated by template from the approved .mandat.yml (no LLM)." });
+  await g.gh.createOrUpdateCheckRun(g.repo, { name: "Мандат approval", head_sha: c.commitSha, external_id: ext, conclusion: "success", title: "approved (owner + TOTP)", summary: "The harness proposal was approved by an owner with a fresh second factor." });
+  await g.gh.createOrUpdateCheckRun(g.repo, { name: "Мандат verdict", head_sha: c.commitSha, external_id: ext, conclusion: "skipped", title: "harness PR: no agent change", summary: "This PR carries no agent change; the protection is the approval check." });
   await inTransaction(d.db, async (tx) => {
     await tx.query("update public.harness_proposals set pr_number = $2 where id = $1::uuid", [proposalId, pr.number]);
     await appendLedgerOnline(tx, { org_id: hp.org_id, kind: "delivered", task_id: null, payload: { proposal_id: proposalId, kind: "draft_pr", pr: pr.number, head_sha: c.commitSha } });
   });
   return { number: pr.number };
+}
+
+/**
+ * D-388: the approved rules of a local project added on this computer — one commit on the scanned base as branch
+ * mandat/harness-<proposal> in Mandat's mirror, then main moves forward to it (fast-forward only, like D-367). An existing
+ * branch is reused, so a second run changes nothing; a main that moved since the scan is refused (scan again).
+ */
+async function deliverHarnessLocal(d: HarnessDeps, proposalId: string, hp: { org_id: string; base_commit: string; version: number; yaml_sha256: string; remote_url: string; patch: string }): Promise<void> {
+  const mirror = hp.remote_url.replace(/^file:\/\//, "");
+  const ref = `mandat/harness-${proposalId}`;
+  const tmp = mkdtempSync(path.join(d.tmpRoot ?? os.tmpdir(), "mandat-rules-"));
+  const have = await cleanGit({ tmpHome: tmp }).run(["rev-parse", "--verify", "--quiet", "--end-of-options", `refs/heads/${ref}`], { cwd: mirror }).then((x) => (x.code === 0 ? x.stdout.toString("utf8").trim() : null)).finally(() => rmSync(tmp, { recursive: true, force: true }));
+  let sha = have;
+  if (!sha) {
+    const b = await deliverLocalRef({ mirror, ref, baseSha: hp.base_commit, patch: Buffer.from(hp.patch, "utf8"), message: `mandat: harness v${hp.version} (${hp.yaml_sha256.slice(7, 15)})`, ...(d.tmpRoot ? { tmpRoot: d.tmpRoot } : {}) });
+    if (!b.ok) throw new Error(`harness rules: ${b.reason}`);
+    sha = b.sha;
+  }
+  const m = await mergeLocal({ mirror, sha, ...(d.tmpRoot ? { tmpRoot: d.tmpRoot } : {}) });
+  if (!m.ok) throw new Error(`harness rules not applied: ${m.reason}`);
+  if (m.from === m.to) return;
+  await inTransaction(d.db, (tx) => appendLedgerOnline(tx, { org_id: hp.org_id, kind: "delivered", task_id: null, payload: { proposal_id: proposalId, kind: "local_merge", head_sha: sha } }));
 }
 
 export function harnessHandlers(d: HarnessDeps): { harness_scan: EffectHandler; harness_pr: EffectHandler; baseline: EffectHandler } {

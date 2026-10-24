@@ -1,10 +1,11 @@
 import { codeSpan, frameUntrusted } from "@mandat/contract";
-import type { GitHubPort } from "@mandat/gate-github";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
 import type { Db } from "./db.js";
 import { inTransaction } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
+import { ghFor } from "./gh-target.js";
+import type { GhDeps } from "./gh-target.js";
 
 // E8g (v5 p. 4.7 (3), AC-9.2, D-356): the project's CI on Mandat's PR. Mandat's own checks never count. A red round →
 // HELD ci_failed with the failing checks (names and conclusions, as code spans — never their text) and the round counted;
@@ -12,9 +13,10 @@ import { enqueueOutbox } from "./pg-outbox.js";
 const RED_RUN = new Set(["failure", "timed_out", "cancelled", "startup_failure"]);
 const mine = (name: string, slug: string) => slug === "mandat-writer" || name.startsWith("Мандат");
 
-export async function pollCi(d: { db: Db; gh: GitHubPort; ghRepo: string }): Promise<string[]> {
-  const rows = (await d.db.query<{ id: string; org_id: string; attempt: number; head_sha: string; ci_rounds: number }>(
-    `select t.id, t.org_id::text as org_id, t.attempt, dl.head_sha, t.ci_rounds from public.tasks t
+export async function pollCi(d: GhDeps & { db: Db }): Promise<string[]> {
+  const rows = (await d.db.query<{ id: string; org_id: string; attempt: number; head_sha: string; ci_rounds: number; provider: string; full_name: string }>(
+    `select t.id, t.org_id::text as org_id, t.attempt, dl.head_sha, t.ci_rounds, r.provider, r.full_name from public.tasks t
+       join public.repos r on r.id = t.repo_id
        join lateral (select c.id from public.changesets c where c.task_id = t.id and c.attempt = t.attempt order by c.created_at desc limit 1) c on true
        join lateral (select x.head_sha from public.deliveries x where x.changeset_id = c.id and x.kind in ('pr', 'draft_pr') order by x.created_at desc limit 1) dl on true
       where t.state in ('GATED', 'HELD') and coalesce(t.wait_reason, 'approval') = 'approval' and dl.head_sha ~ '^[0-9a-f]{40}$'
@@ -22,8 +24,10 @@ export async function pollCi(d: { db: Db; gh: GitHubPort; ghRepo: string }): Pro
   )).rows;
   const failed: string[] = [];
   for (const r of rows) {
-    const runs = (await d.gh.listCheckRunsForRef(d.ghRepo, r.head_sha)).filter((c) => !mine(c.name, c.app_slug));
-    const statuses = (await d.gh.listCommitStatusesForRef(d.ghRepo, r.head_sha)).filter((s) => !s.context.startsWith("Мандат"));
+    // D-388: the CI of the task's own project
+    const g = ghFor(d, r);
+    const runs = (await g.gh.listCheckRunsForRef(g.repo, r.head_sha)).filter((c) => !mine(c.name, c.app_slug));
+    const statuses = (await g.gh.listCommitStatusesForRef(g.repo, r.head_sha)).filter((s) => !s.context.startsWith("Мандат"));
     const red = [
       ...runs.filter((c) => c.status === "completed" && c.conclusion !== null && RED_RUN.has(c.conclusion)).map((c) => `${codeSpan(c.name.slice(0, 80))}: ${c.conclusion ?? ""}`),
       ...statuses.filter((s) => s.state === "failure" || s.state === "error").map((s) => `${codeSpan(s.context.slice(0, 80))}: ${s.state}`),
