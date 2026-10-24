@@ -65,9 +65,10 @@ let waiting = 0;
 const loginSupported = process.platform === "darwin" || process.platform === "win32";
 const INBOX_POLL_MS = 15_000;
 
-/** D-303 + D-371: new windows denied, navigation only to the local address, a CSP, no web permissions but copy. */
+/** D-303 + D-371: new windows denied, navigation only to the local address, a CSP, no web permissions but copy.
+ * E9g review: a target=_blank http(s) link (e.g. the subscription login) opens in the system browser instead. */
 function lockDown(w: BrowserWindow): void {
-  attachGuards(w.webContents, () => base);
+  attachGuards(w.webContents, () => base, (url) => void shell.openExternal(url).catch(() => undefined));
   // E9g A4 (D-375): a full load of the page (reload, not an in-app route change) leaves no host terminal behind
   w.webContents.on("did-navigate", () => terms?.closeAll());
   const ses = w.webContents.session;

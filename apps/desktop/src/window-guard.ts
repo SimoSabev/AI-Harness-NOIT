@@ -35,8 +35,32 @@ export const DESKTOP_CSP = [
   "form-action 'self'",
 ].join("; ");
 
-export function attachGuards(target: GuardTarget, base: () => string | null): void {
-  target.setWindowOpenHandler(() => ({ action: "deny" }));
+/**
+ * E9g review: a link the page opens in a new window (target=_blank: the subscription login of D-369, research sources,
+ * links in task text) — the URL to hand to the system browser, or null. Only http(s), never the local address, no
+ * user:password@, at most 2048 characters; file:, javascript:, data: and app schemes (vscode://, smb://) never leave.
+ */
+export function outsideUrl(url: string, base: string | null): string | null {
+  if (url.length > 2048) return null;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+  if (u.username !== "" || u.password !== "") return null;
+  if (base !== null && allowedUrl(url, base)) return null;
+  return u.href;
+}
+
+/** The window locks. `openOutside` (shell.openExternal in main) gets the links outsideUrl lets out; no in-app window ever opens. */
+export function attachGuards(target: GuardTarget, base: () => string | null, openOutside?: (url: string) => void): void {
+  target.setWindowOpenHandler((details) => {
+    const out = openOutside ? outsideUrl(details.url, base()) : null;
+    if (out !== null) openOutside?.(out);
+    return { action: "deny" };
+  });
   const stayLocal = (e: GuardEvent): void => {
     const b = base();
     if (!b || !allowedUrl(e.url, b)) e.preventDefault();

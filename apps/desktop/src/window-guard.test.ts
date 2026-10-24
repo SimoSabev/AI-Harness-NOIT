@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DESKTOP_CSP, allowPermission, attachGuards, withCsp } from "./window-guard.js";
+import { DESKTOP_CSP, allowPermission, attachGuards, outsideUrl, withCsp } from "./window-guard.js";
 import type { GuardEvent } from "./window-guard.js";
 
 const BASE = "http://127.0.0.1:3000";
@@ -30,6 +30,26 @@ describe("desktop window guard (D-303, D-371)", () => {
     attachGuards(c.target, () => BASE);
     expect(c.open("https://evil.example/")).toEqual({ action: "deny" });
     expect(c.open(`${BASE}/tasks/t_1`)).toEqual({ action: "deny" });
+  });
+
+  it("E9g review: a link that opens a new window (the subscription login, a research source) goes to the system browser; the window itself stays denied", () => {
+    const c = fakeContents();
+    const opened: string[] = [];
+    attachGuards(c.target, () => BASE, (u) => void opened.push(u));
+    expect(c.open("https://claude.ai/oauth/authorize?code=true&state=x")).toEqual({ action: "deny" });
+    expect(c.open("http://example.org/paper")).toEqual({ action: "deny" });
+    for (const u of [`${BASE}/tasks/t_1`, "file:///etc/passwd", "javascript:alert(1)", "vscode://file/etc/passwd", "smb://host/share", "https://user:pw@evil.example/", "data:text/html,x", "not a url"]) {
+      expect(c.open(u), u).toEqual({ action: "deny" });
+    }
+    expect(opened).toEqual(["https://claude.ai/oauth/authorize?code=true&state=x", "http://example.org/paper"]);
+  });
+
+  it("outsideUrl: only http(s) on another origin, without credentials, at most 2048 characters", () => {
+    expect(outsideUrl("https://github.com/SimoSabev/AI-Harness-NOIT/pull/1", BASE)).toBe("https://github.com/SimoSabev/AI-Harness-NOIT/pull/1");
+    expect(outsideUrl(`${BASE}/board`, BASE)).toBeNull();
+    expect(outsideUrl("https://github.com/x", null)).toBe("https://github.com/x");
+    expect(outsideUrl(`https://example.org/${"a".repeat(2048)}`, BASE)).toBeNull();
+    expect(outsideUrl("ftp://example.org/", BASE)).toBeNull();
   });
 
   it("navigation and redirects leave the local address → refused; inside → allowed; no address yet → everything refused", () => {

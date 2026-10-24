@@ -61,7 +61,8 @@ async function run() {
   const dropped = [];
   registerDrop(ipcMain, () => base, (p) => dropped.push(p));
   win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(dist, "preload.cjs") } });
-  attachGuards(win.webContents, () => base);
+  const outside = []; // E9g review: links for the system browser are recorded here, never opened
+  attachGuards(win.webContents, () => base, (u) => void outside.push(u));
   let csp = null;
   win.webContents.session.webRequest.onHeadersReceived((d, cb) => {
     const h = withCsp(d.url, d.responseHeaders, base);
@@ -113,6 +114,7 @@ async function run() {
   check("main refuses an invalid request", r.bad.ok === false && r.bad.error.code === "invalid_request");
   check("the preload refuses a non-object", r.notPlain.ok === false && r.notPlain.error.code === "invalid_request");
   check("window.open is denied", r.open);
+  check("its http(s) link goes to the system browser (recorded, not opened)", JSON.stringify(outside) === JSON.stringify(["https://example.com/"]));
   check("the CSP replaced the page's", Array.isArray(csp) && csp.length === 1 && csp[0].startsWith("default-src 'self'"));
   await win.webContents.executeJavaScript(`location.href = "https://example.com/"; 1`).catch(() => 0);
   await new Promise((res) => setTimeout(res, 800));
