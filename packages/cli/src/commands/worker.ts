@@ -69,7 +69,9 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   const gh: GitHubPort =
     env.GITHUB_WRITER_APP_ID && env.GITHUB_WRITER_PRIVATE_KEY && env.GITHUB_WRITER_INSTALLATION_ID
       ? octokitGitHub({ appId: env.GITHUB_WRITER_APP_ID, privateKey: env.GITHUB_WRITER_PRIVATE_KEY, installationId: Number(env.GITHUB_WRITER_INSTALLATION_ID) })
-      : fakeGitHub({ repos: { [repo]: {} } });
+      : fakeGitHub({ repos: { [repo]: {} }, autoRepos: true });
+  // D-388: local projects added on this computer have their GitHub side offline only, never on the App's GitHub
+  const localGh = fakeGitHub({ autoRepos: true });
   const broadcast = broadcasterFromEnv(env);
   io.stderr(`mandat worker: ${gh === undefined ? "?" : env.GITHUB_WRITER_APP_ID ? "GitHub App" : "fakeGitHub (offline)"} · realtime ${broadcast ? "on" : "off (polling)"}\n`);
   const slots = o.slots ?? slotsFrom(env.MANDAT_WORKER_SLOTS, 1);
@@ -89,7 +91,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       pollMs: o.pollMs ?? 2000,
       ...(o.signal ? { signal: o.signal } : {}),
       // E8g (D-353): steering a live Claude Code waits for spike S2 (live); MANDAT_STEER=1 turns it on
-      tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n"), ...(env.MANDAT_STEER === "1" ? { steer: true } : {}), mcpSecrets }),
+      tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, localGh, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n"), ...(env.MANDAT_STEER === "1" ? { steer: true } : {}), mcpSecrets }),
       drain: async () => {
         // E7г (D-314): the baseline at connect runs in the sandbox; MANDAT_BASELINE=0 turns it off
         const baselineRunner = env.MANDAT_BASELINE === "0" ? undefined : (dir: string, policy: Parameters<typeof runBaseline>[1]) => runBaseline(dir, policy, { mandatHome: o.home, repoRoot, env });
@@ -98,11 +100,11 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         if (expired.length > 0) io.stderr(`[held] expired: ${expired.join(", ")}\n`);
         await night();
         // E8g (D-356): the project's CI on Mandat's PRs (a red round → HELD ci_failed)
-        const red = await pollCi({ db, gh, ghRepo: repo }).catch(() => []);
+        const red = await pollCi({ db, gh, ghRepo: repo, localGh }).catch(() => []);
         if (red.length > 0) io.stderr(`[ci] failed: ${red.join(", ")}\n`);
         // E8e (D-354): vetting an approved MCP server runs it once in Docker without network; MANDAT_MCP_VET=0 turns it off
         const mcpVetRunner = env.MANDAT_MCP_VET === "0" ? undefined : (s: Parameters<typeof vetMcpDocker>[0]) => vetMcpDocker(s, { mandatHome: o.home, repoRoot, env });
-        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, ...(baselineRunner ? { baselineRunner } : {}), ...(mcpVetRunner ? { mcpVetRunner } : {}) });
+        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, localGh, ...(baselineRunner ? { baselineRunner } : {}), ...(mcpVetRunner ? { mcpVetRunner } : {}) });
         if (fx.done + fx.failed > 0) io.stderr(`[outbox] harness: ${fx.done} done, ${fx.failed} failed\n`);
       },
     });

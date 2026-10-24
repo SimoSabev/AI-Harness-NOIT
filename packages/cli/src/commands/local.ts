@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
 import { compareVersions, imageTags } from "@mandat/sandbox";
-import { DEMO_ORG_ID, DEMO_OWNER_ID, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
+import { DEMO_ORG_ID, DEMO_OWNER_ID, addLocalProject, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
 import { realDeps } from "../deps.js";
 import { cliLang, tt } from "../i18n.js";
 import type { Lang } from "../i18n.js";
@@ -306,6 +306,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   if (!fromEnv) await fromStore();
   const healer = setInterval(() => void fromStore().catch(() => undefined), 30_000);
   healer.unref();
+  const projectsDb = openDb(url);
   const control = await startControl({
     start: startProxy,
     stop: async () => void (await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort })),
@@ -314,6 +315,8 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     login: new LoginSessions(loginDeps(deps)),
     logout: (name) => logoutProfile(deps, name),
     system: new SystemJobs({ run: cliRun(localJobEnv(clean, url)), org: DEMO_ORG_ID }),
+    // D-388: "Add project" from the web — a mirror under MANDAT_HOME/projects, a repos row, the rules scan queued
+    addProject: (p) => addLocalProject({ db: projectsDb, home: o.home, org: DEMO_ORG_ID, path: p }),
   });
   const env = localWebEnv(clean, { dbUrl: url, control });
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.
@@ -333,5 +336,6 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     clearInterval(healer);
     web.kill("SIGTERM");
     await control.close();
+    await projectsDb.end();
   }
 }

@@ -6,7 +6,7 @@ import { SystemJobs } from "./commands/system-jobs.js";
 import type { LoginProc } from "./commands/login-session.js";
 
 const noLogin = () => new LoginSessions({ prepare: async () => "images_missing", discard: async () => undefined, spawn: () => { throw new Error("no"); }, status: async () => ({ loggedIn: false, email: null, plan: null }), timeoutMs: 1000 });
-const base = (): Omit<ControlDeps, "start" | "stop" | "providers" | "accounts"> => ({ login: noLogin(), logout: async () => false, system: new SystemJobs({ run: () => undefined, org: "o" }) });
+const base = (): Omit<ControlDeps, "start" | "stop" | "providers" | "accounts"> => ({ login: noLogin(), logout: async () => false, system: new SystemJobs({ run: () => undefined, org: "o" }), addProject: async () => ({ ok: false, error: "failed" }) });
 
 // D-293: the keys reach the proxy through `mandat local` only: 127.0.0.1, a bearer token, never echoed, never stored.
 describe("mandat local control (D-293)", () => {
@@ -111,6 +111,29 @@ describe("mandat local control (D-293)", () => {
       expect((await call("POST", "/system/..%2Fdoctor"))[0]).toBe(404);
       expect((await call("DELETE", "/system/doctor"))[0]).toBe(405);
       expect((await call("POST", "/system"))[0]).toBe(405);
+    } finally {
+      await c.close();
+    }
+  });
+});
+
+// D-388: "Add project" from the web — the path is validated here before anything touches the disk.
+describe("POST /projects (D-388)", () => {
+  it("an absolute path → the project; a relative path or extra fields → 400; GET → 405; no token → 401", async () => {
+    const seen: string[] = [];
+    const c = await startControl({
+      start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base(),
+      addProject: async (p) => (seen.push(p), { ok: true, repo_id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/shop", created: true }),
+    });
+    try {
+      const post = (body: unknown, token = c.token) => fetch(`${c.url}/projects`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const r = await post({ path: "/Users/simo/shop" });
+      expect([r.status, await r.json()]).toEqual([200, { ok: true, repo_id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/shop", created: true }]);
+      expect((await post({ path: "shop" })).status).toBe(400);
+      expect((await post({ path: "/x", more: 1 })).status).toBe(400);
+      expect((await post({ path: "/x" }, "y".repeat(64))).status).toBe(401);
+      expect((await fetch(`${c.url}/projects`, { headers: { authorization: `Bearer ${c.token}` } })).status).toBe(405);
+      expect(seen).toEqual(["/Users/simo/shop"]);
     } finally {
       await c.close();
     }

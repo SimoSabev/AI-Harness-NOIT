@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AccountName, LoginCode, SystemJob } from "@mandat/contract";
-import type { JobState, LoginState } from "@mandat/contract";
+import { AccountName, AddProjectBody, LoginCode, SystemJob } from "@mandat/contract";
+import type { AddProjectReply, JobState, LoginState } from "@mandat/contract";
 
 // D-293: the web UI of `mandat local` hands API keys to the proxy through this control endpoint: 127.0.0.1 only,
 // a random bearer token known to the web server alone, the key only in memory on its way to `docker run` env.
@@ -23,6 +23,8 @@ export interface ControlDeps {
   logout(name: string): Promise<boolean>;
   /** D-370: the CLI commands from the web (system-jobs.ts) */
   system: { all(): JobState[]; start(job: SystemJob): JobState };
+  /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
+  addProject(path: string): Promise<AddProjectReply>;
 }
 
 const MAX_BODY = 4096;
@@ -100,6 +102,14 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
       if (req.url === "/system") return req.method === "GET" ? send(200, { jobs: d.system.all() }) : send(405, { error: "method" });
       if (!job.success) return send(404, { error: "not_found" });
       return req.method === "POST" ? send(200, d.system.start(job.data)) : send(405, { error: "method" });
+    }
+    if (req.url === "/projects") {
+      if (req.method !== "POST") return send(405, { error: "method" });
+      void readJson(req).then(async (raw) => {
+        const b = AddProjectBody.safeParse(raw);
+        return b.success ? send(200, await d.addProject(b.data.path)) : send(400, { error: "bad_path" });
+      }).catch(() => send(500, { error: "internal" }));
+      return;
     }
     if (req.url?.startsWith("/accounts/")) {
       void accountsRoute(req.url, req.method ?? "GET", () => readJson(req), d).then(([code, body]) => send(code, body), () => send(500, { error: "internal" }));
