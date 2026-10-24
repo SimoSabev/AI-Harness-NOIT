@@ -1,4 +1,4 @@
-// E9g A5 (D-376): electron-builder for the 3 OS, unsigned (AC-12.1 without signing; docs/setup/signing.md has the steps).
+// E9g A5 (D-376): electron-builder for the 3 OS, without a real signature (macOS ad-hoc, D-380; AC-12.1 without signing; docs/setup/signing.md has the steps).
 // The harness bundle (scripts/bundle-harness.mjs) goes into resources/harness. Everything is built outside the repo
 // ($MANDAT_DESKTOP_OUT, default <tmp>/mandat-desktop), so neither the Docker build context of the repo nor the tests see it.
 // Built only with `--publish never`: no release, no upload (rule 3). The publish entry only writes app-update.yml for
@@ -6,6 +6,8 @@
 import os from "node:os";
 import path from "node:path";
 
+// MANDAT_MAC_ARCH=arm64 builds only the Apple Silicon dmg (`pnpm site:mac`, scripts/site-local-release.mjs)
+const macArch = (process.env.MANDAT_MAC_ARCH ?? "arm64,x64").split(",").filter((a) => a === "arm64" || a === "x64");
 const out = process.env.MANDAT_DESKTOP_OUT ? path.resolve(process.env.MANDAT_DESKTOP_OUT) : path.join(os.tmpdir(), "mandat-desktop");
 
 /** @type {import("electron-builder").Configuration} */
@@ -32,10 +34,14 @@ export const config = {
   icon: "../web/public/icon-512.png",
   publish: [{ provider: "github", owner: "SimoSabev", repo: "AI-Harness-NOIT" }],
   mac: {
-    target: [{ target: "dmg", arch: ["arm64", "x64"] }],
+    target: [{ target: "dmg", arch: macArch }],
     category: "public.app-category.developer-tools",
-    // unsigned until Simo has an Apple Developer ID (Q-053); null = do not even look for a signing identity
-    identity: null,
+    // D-380: ad-hoc ("-") until Simo has an Apple Developer ID (Q-053). With no signature at all (null) a downloaded app
+    // on Apple Silicon is "damaged" and cannot be opened; ad-hoc signed, Privacy & Security offers Open Anyway.
+    // Hardened runtime off: ad-hoc + hardened runtime needs extra entitlements (electron-builder warns) and buys nothing
+    // without notarization.
+    identity: "-",
+    hardenedRuntime: false,
   },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
   nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
