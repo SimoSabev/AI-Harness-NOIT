@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AccountName, DoctorReport, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
+import { AccountName, AddProjectBody, AddProjectReply, DoctorReport, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
 
 // D-369: the subscription login from the web — what crosses between `mandat local` and the web server.
 const URL_LINE =
@@ -56,5 +56,18 @@ describe("local control: system jobs (D-370)", () => {
     expect(DoctorReport.safeParse({ checks: [{ name: "node", ok: false, detail: "26.4.0" }], exit: 3 }).success).toBe(true);
     expect(StatsReport.safeParse({ total: 3, byResult: { VERIFIED: 3, UNKNOWN: 0, FAILED: 0 }, unknownShare: 0, topReasons: [], meanUsd: 0, meanMinutes: 0.5, byAgent: {} }).success).toBe(true);
     expect(LedgerReport.safeParse({ ok: true, count: 12, lastHash: "sha256:x" }).success).toBe(true);
+  });
+});
+
+// D-388: "Add project" from the web — an absolute folder path in, the project (or why not) out.
+describe("AddProject (D-388)", () => {
+  it("the body is one absolute local path, nothing else", () => {
+    expect(AddProjectBody.safeParse({ path: "/Users/simo/code/shop" }).success).toBe(true);
+    for (const b of [{ path: "code/shop" }, { path: "/x", extra: 1 }, {}, { path: "/a\0b" }]) expect(AddProjectBody.safeParse(b).success, JSON.stringify(b)).toBe(false);
+  });
+  it("the reply: the project, or one of the known reasons", () => {
+    expect(AddProjectReply.safeParse({ ok: true, repo_id: "d0000000-0000-4000-8000-0000000000b1", full_name: "local/shop", created: true }).success).toBe(true);
+    for (const error of ["not_a_folder", "not_git", "no_commits", "inside_home", "failed"]) expect(AddProjectReply.safeParse({ ok: false, error }).success, error).toBe(true);
+    expect(AddProjectReply.safeParse({ ok: false, error: "boom" }).success).toBe(false);
   });
 });

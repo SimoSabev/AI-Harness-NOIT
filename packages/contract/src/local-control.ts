@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LocalPath } from "./desktop.js";
 
 // D-369: what crosses between `mandat local` (its control endpoint, 127.0.0.1 + bearer token) and the web server.
 // The subscription login runs the unchanged `claude auth login` in a container; the web shows Anthropic's address and
@@ -91,3 +92,12 @@ export const StatsReport = z.object({
   meanMinutes: z.number(),
 }).passthrough();
 export const LedgerReport = z.object({ ok: z.boolean(), count: z.number().optional(), firstBadSeq: z.number().nullable().optional(), code: z.string().optional() }).passthrough();
+
+/** D-388: "Add project" from the web — the folder of a git project on this computer (the control endpoint registers it). */
+export const AddProjectBody = z.object({ path: LocalPath }).strict();
+export type AddProjectBody = z.infer<typeof AddProjectBody>;
+export const AddProjectReply = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), repo_id: z.string().uuid(), full_name: z.string().min(1).max(200), created: z.boolean() }).strict(),
+  z.object({ ok: z.literal(false), error: z.enum(["not_a_folder", "not_git", "no_commits", "inside_home", "failed"]) }).strict(),
+]);
+export type AddProjectReply = z.infer<typeof AddProjectReply>;
