@@ -62,13 +62,16 @@ async function fakeBridge(page: Page, initial: FakeGrant[] = []): Promise<void> 
 }
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __calls: { m: string; p: unknown }[] }).__calls);
 
-test("browser: no bridge → Local access is not in Settings and Add project says desktop only", async ({ page }) => {
+test("browser: no bridge → Local access is not in Settings; Add project takes a typed path (D-388)", async ({ page }) => {
   await login(page, EMAIL.owner);
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Local access" })).toHaveCount(0);
-  await page.goto("/projects/add?path=%2FUsers%2Fsimo%2Fshop");
-  await expect(page.getByText("This works only in the desktop app.")).toBeVisible();
+  await page.goto("/projects/add");
+  await page.getByLabel("Full path of the project folder").fill("/Users/simo/shop");
+  await page.getByRole("button", { name: "Add the project" }).click();
+  // the e2e server runs without `mandat local`, so there is nothing to register with — the page says so
+  await expect(page.getByText("This works only while the app runs on this computer.")).toBeVisible();
 });
 
 test("desktop: a dropped folder → Add project with the suggestion → grant → listed in Local access → revoke", async ({ page }) => {

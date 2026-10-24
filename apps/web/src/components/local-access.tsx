@@ -3,7 +3,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { DesktopResult, EditorKind, LocalActivityBody, LocalGrant, LocalScope } from "@mandat/contract";
 import { useT } from "../i18n/client";
-import { rich } from "../i18n/rich";
 import type { Key } from "../i18n/t";
 import { postJson } from "../lib/client/api";
 import { desktopBridge } from "../lib/client/desktop";
@@ -11,6 +10,7 @@ import type { DesktopClient } from "../lib/client/desktop";
 import { EDITOR_STORAGE_KEY, WORKING_COPY_STORAGE_KEY, activityFor, joinLocal, parseEditor, suggestProject } from "../lib/client/local-access";
 import { HostTerminal } from "./host-terminal";
 import { btn, card, input } from "./ui";
+import { AddProjectForm } from "./add-project-form";
 
 // E9g A3 (AC-12.6, D-373): the web half of local access. Everything here runs only in the desktop window (the bridge);
 // in a browser or the PWA these components render nothing. Grants live in the desktop app's main process; main checks
@@ -153,7 +153,8 @@ export function AddProject({ initialPath }: { initialPath: string | null }) {
     setGranted(null);
   }, [initialPath]);
   if (b === undefined) return null;
-  if (!b) return <p className={`${card} mt-6 p-5 text-sm text-mute`}>{t("local.desktopOnly")}</p>;
+  // D-388: in a browser the folder is typed; the desktop picks it, grants the rights, then adds it the same way
+  if (!b) return <AddProjectForm />;
   const pick = async () => {
     const r = await b.call("pickFolder", {});
     if (r.ok && r.value.path) {
@@ -201,9 +202,9 @@ export function AddProject({ initialPath }: { initialPath: string | null }) {
         </>
       )}
       {granted && (
-        <div role="status" className="mt-4 text-sm">
-          <p className="text-ok">{t("add.granted", { path: granted })}</p>
-          <p className="mt-1 text-mute">{rich(t("add.next"), { cmd: <code className="font-mono text-ink">pnpm mandat init --repo {granted}</code> })}</p>
+        <div className="mt-4 text-sm">
+          <p role="status" className="text-ok">{t("add.granted", { path: granted })}</p>
+          <AddProjectForm path={granted} />
         </div>
       )}
       {m.node}

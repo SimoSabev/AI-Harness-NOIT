@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deleteKeys, deleteLogin, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postRetry, postSystemJob } from "./api";
+import { deleteKeys, deleteLogin, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postProject, postRetry, postSystemJob } from "./api";
 import type { ApiDeps } from "./api";
 import { RateLimiter } from "./guard";
 import { controlKeys } from "./keys";
@@ -26,6 +26,7 @@ const fake: KeysClient = {
   logout: async (name) => (calls.push({ kind: "logout", name }), true),
   jobs: async () => [job("doctor")],
   runJob: async (j) => (calls.push({ kind: "job", j }), { ...job(j), state: "running" }),
+  addProject: async (path) => (calls.push({ kind: "project", path }), { ok: true, repo_id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/shop", created: true }),
 };
 const job = (j: "doctor" | "images" | "images-ui" | "fixtures" | "fixtures-force" | "stats" | "verify-log") => ({ job: j, state: "idle" as const, started_at: null, finished_at: null, exit: null, lines: [], result: null });
 const calls: unknown[] = [];
@@ -168,5 +169,20 @@ describe("retry after a rejected key (D-293)", () => {
     expect((await r("t_key_rej")).status).toBe(200);
     expect((await r("t_empty_ch")).status).toBe(200);
     expect((await r("t_appr_wait")).status).toBe(409);
+  });
+});
+
+// D-388: "Add project" from the web — the owner (projects.manage) only; the path is checked here and again in `mandat local`.
+describe("API POST /api/repos (D-388)", () => {
+  it("owner → the project; approver → 403; a relative path → 400; no `mandat local` → 503", async () => {
+    who = U.owner;
+    const r = await postProject(req("POST", { path: "/Users/simo/shop" }), deps(fake));
+    expect([r.status, await r.json()]).toEqual([200, { ok: true, repo_id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/shop", created: true }]);
+    expect(calls).toContainEqual({ kind: "project", path: "/Users/simo/shop" });
+    expect((await postProject(req("POST", { path: "shop" }), deps(fake))).status).toBe(400);
+    expect((await postProject(req("POST", { path: "/x" }), deps(null))).status).toBe(503);
+    who = U.approver;
+    expect((await postProject(req("POST", { path: "/x" }), deps(fake))).status).toBe(403);
+    who = U.owner;
   });
 });

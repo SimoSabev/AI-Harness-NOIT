@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { JobState, LoginState } from "@mandat/contract";
+import { AddProjectReply, JobState, LoginState } from "@mandat/contract";
 import type { SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
@@ -21,6 +21,8 @@ export interface KeysClient {
   /** D-370: the CLI commands of `mandat local` (page System); null = the control endpoint did not answer */
   jobs(): Promise<JobState[] | null>;
   runJob(job: SystemJob): Promise<JobState | null>;
+  /** D-388: "Add project" — a git folder of this computer becomes a project; null = the control endpoint did not answer */
+  addProject(path: string): Promise<AddProjectReply | null>;
   /** D-295: the subscription accounts of `mandat local` */
   accounts(): Promise<Account[]>;
   status(): Promise<KeysStatus>;
@@ -89,11 +91,17 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const j = JobState.safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data : null;
   };
+  const addProject = async (path: string): Promise<AddProjectReply | null> => {
+    const r = await send("POST", "/projects", { path }).catch(() => null);
+    const j = AddProjectReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
+    return j.success ? j.data : null;
+  };
   return {
     login,
     logout,
     jobs,
     runJob,
+    addProject,
     accounts,
     status: async () => (await call("GET").catch(() => null)) ?? down,
     set: (k) => call("POST", k).catch(() => null),

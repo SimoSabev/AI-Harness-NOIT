@@ -20,7 +20,7 @@ import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
-import { AccountName, LoginCode, SystemJob } from "@mandat/contract";
+import { AccountName, AddProjectBody, LoginCode, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -290,7 +290,7 @@ const NameBody = z.object({ name: AccountName }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 const LOGIN_ERRORS = new Set(["bad_name", "bad_code", "not_waiting"]);
 
-async function keysOwner(req: Request, d: ApiDeps, write: boolean, cap: "accounts.manage" | "tools.manage" = "accounts.manage"): Promise<{ uid: string; body: unknown; keys: KeysClient } | Response> {
+async function keysOwner(req: Request, d: ApiDeps, write: boolean, cap: "accounts.manage" | "tools.manage" | "projects.manage" = "accounts.manage"): Promise<{ uid: string; body: unknown; keys: KeysClient } | Response> {
   const p = write ? await post(req, d) : await ctx(req, d);
   if (p instanceof Response) return p;
   if (!(await hasCap(d.db, p.uid, p.org, cap))) return json(403, { error: "not_an_owner" });
@@ -347,6 +347,16 @@ export async function postLogout(req: Request, d: ApiDeps): Promise<Response> {
   if (!b.success) return json(400, { error: "bad_name" });
   const removed = await k.keys.logout(b.data.name);
   return removed === null ? json(502, { error: "control_unavailable" }) : json(200, { removed });
+}
+
+// D-388: "Add project" from the web — `mandat local` mirrors the folder, adds the repo and queues the rules scan
+export async function postProject(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true, "projects.manage");
+  if (k instanceof Response) return k;
+  const b = AddProjectBody.safeParse(k.body);
+  if (!b.success) return json(400, { error: "bad_path" });
+  const r = await k.keys.addProject(b.data.path);
+  return r === null ? json(502, { error: "control_unavailable" }) : json(200, r);
 }
 
 // E8c (v5 p. 4.3): roles and member roles; every check is a capability (roles.manage / members.manage)
