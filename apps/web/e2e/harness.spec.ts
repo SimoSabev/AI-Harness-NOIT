@@ -15,7 +15,7 @@ const worker = () => execFileSync("node", [path.join(repo, "packages/cli/dist/ma
 test("rules: scan → a proposal with sources → approve with a code → draft PR, version 1", async ({ page }) => {
   await login(page, EMAIL.owner);
   await page.goto("/harness");
-  await expect(page.getByRole("heading", { name: "Repository rules", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Projects", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Scan the repository" }).click();
   await expect(page.getByText("Scanning the repository…")).toBeVisible();
   worker();
@@ -31,7 +31,9 @@ test("rules: scan → a proposal with sources → approve with a code → draft 
   await expect(page.getByText(/draft PR #\d+/)).toBeVisible();
   await expect(page.getByText(/Rules version: 1/)).toBeVisible();
   // E8b (AC-2.1, AC-2.5): the scan also proposed the full profile — 8 layers with sources, the compiled preview, approve
-  await expect(page.getByRole("heading", { name: "Harness profile (layers A–H)" })).toBeVisible();
+  // D-384: the profile and the hidden tests sit under "Advanced" on the project
+  await page.getByText("Advanced: agent profile and hidden tests").click();
+  await expect(page.getByRole("heading", { name: "Agent profile" })).toBeVisible();
   await page.getByText("C · Permissions (allow, ask, deny)").click();
   await expect(page.getByText(/bash:git push \*/).first()).toBeVisible();
   await page.getByText("Preview: what the agent gets").click();

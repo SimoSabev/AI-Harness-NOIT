@@ -23,8 +23,8 @@ describe("status (D-292)", () => {
   });
   it("D-367: a change that went into main by itself → applied (green, done); approved by a person stays approved", () => {
     const st = statusOf(t({ state: "CLOSED", last_result: "VERIFIED", delivered: "merge" }));
-    expect([st.key, st.tone, st.label]).toEqual(["applied", "green", "Applied by itself"]);
-    expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED", delivered: "merge" }), "bg").label).toBe("Приложена сама");
+    expect([st.key, st.tone, st.label]).toEqual(["applied", "green", "Added automatically"]);
+    expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED", delivered: "merge" }), "bg").label).toBe("Добавена автоматично");
     expect(groupOf(st.key)).toBe("done");
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED", delivered: "merge", approved_by_human: true })).key).toBe("approved");
   });

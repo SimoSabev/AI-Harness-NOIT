@@ -2,16 +2,13 @@ import type { Metadata } from "next";
 import { McpCatalog } from "../../components/mcp-catalog";
 import { PermissionEditor } from "../../components/permission-editor";
 import { Shell } from "../../components/shell";
-import { Meter, Panel, SampleNote, ToolCalls } from "../../components/workbench-parts";
+import { Meter, Panel, ToolCalls } from "../../components/workbench-parts";
 import { getT } from "../../i18n/server";
 import { pageName } from "../../lib/brand";
-import { SAMPLE } from "../../lib/sample";
-import { withSample } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
 import { hasCap } from "../../lib/server/roles";
 import { mcpCatalog } from "../../lib/server/mcp";
-import { sampleOn } from "../../lib/server/sample-pref";
 import { tools } from "../../lib/server/workbench";
 
 export const dynamic = "force-dynamic";
@@ -26,12 +23,9 @@ const PERM = { allow: "border-ok/40 bg-ok-soft text-ok", ask: "border-warn/40 bg
 export default async function ToolsPage() {
   const c = await pageCtx();
   const tr = await getT();
-  const show = await sampleOn();
-  const real = await tools(db(), c.uid, c.org);
+  const d = await tools(db(), c.uid, c.org);
   const canEdit = await hasCap(db(), c.uid, c.org, "tools.manage");
   const catalog = canEdit ? await mcpCatalog(db(), c.uid, c.org) : [];
-  const t = withSample(real, { mcp: SAMPLE.mcp, skills: SAMPLE.skills, plugins: SAMPLE.plugins, permissions: SAMPLE.permissions, calls: SAMPLE.calls }, (x) => x.mcp.length + x.skills.length + x.plugins.length + x.permissions.length + x.calls.length === 0, show);
-  const d = t.data;
   const max = Math.max(1, ...d.mcp.map((m) => m.calls_hour));
   const subjects = [...new Set(d.permissions.map((p) => p.subject))];
   const cols = [...new Set(d.permissions.map((p) => p.tool))];
@@ -39,7 +33,6 @@ export default async function ToolsPage() {
     <Shell current="tools" waiting={c.waiting} wide>
       <h1 className="font-display text-2xl font-semibold tracking-tight">{tr("tools.title")}</h1>
       <p className="mt-1 text-sm text-mute">{tr("tools.summary", { mcp: d.mcp.length, skills: d.skills.length, plugins: d.plugins.length })}</p>
-      {t.sample && <SampleNote what={tr("tools.sample")} table="mcp_servers, skills, plugins, tool_calls" t={tr} />}
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <Panel title={tr("tools.mcp")} aside={tr("tools.mcpAside")} className="overflow-x-auto">
           {d.mcp.length === 0 ? <p className="p-4 text-sm text-mute">{tr("tools.noMcp")}</p> : (

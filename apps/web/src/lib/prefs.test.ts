@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { LANG_CHOICES, THEMES, VIEWS, parseSample, parseTheme, parseView, prefCookie } from "./prefs";
+import { LANG_CHOICES, THEMES, VIEWS, parseTheme, parseView, prefCookie } from "./prefs";
 
 describe("prefs (D-305)", () => {
   it("тема и изглед: непозната стойност → по подразбиране (тъмна, карта)", () => {
@@ -17,11 +17,6 @@ describe("prefs (D-305)", () => {
     expect(parseView("x")).toBe("map");
     expect(THEMES.map((t) => t.id)).toEqual(["dark", "light", "system"]);
     expect(VIEWS.map((v) => v.id)).toEqual(["map", "columns", "project", "list"]);
-  });
-  it("примерите са включени, докато не ги изключиш", () => {
-    expect(parseSample(undefined)).toBe(true);
-    expect(parseSample("1")).toBe(true);
-    expect(parseSample("0")).toBe(false);
   });
   it("бисквитката е за цялия сайт, година, SameSite=Lax", () => {
     expect(prefCookie("theme", "light")).toBe("theme=light; Path=/; Max-Age=31536000; SameSite=Lax");

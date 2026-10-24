@@ -219,8 +219,7 @@ export function LiveTask({ id, initial, canAct, agentName }: { id: string; initi
           {files.length === 0 && typeof detail?.diffOmitted === "number" && <p className="rounded-xl bg-raised px-4 py-3 text-sm text-mute">{t("res.tooLarge", { mb: t.num(detail.diffOmitted / 1048576, 1) })}</p>}
           {task.last_result && (
             <div className={`rounded-xl px-4 py-3 text-sm ${s.tone === "red" ? "bg-bad-soft text-bad" : s.tone === "green" ? "bg-ok-soft text-ok" : s.tone === "amber" ? "bg-warn-soft text-warn" : "bg-raised text-ink"}`}>
-              <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">{t("ws.verdict")} · {task.last_result}</p>
-              <p className="mt-1 font-medium">{s.headline}</p>
+              <p className="font-medium">{s.headline}</p>
               {appliedNote && <p className="mt-1 font-mono text-xs">{t("ws.applied", { range: appliedNote.text })}</p>}
               {waitingYou && ask && (
                 <div className="mt-2">

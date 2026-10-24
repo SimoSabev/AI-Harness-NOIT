@@ -6,7 +6,7 @@ describe("verdict view (Ф4 карта)", () => {
     expect(verdictView("VERIFIED")).toEqual({ sign: "✔", word: "VERIFIED", tone: "verified" });
     expect(verdictView("VERIFIED", "bg")).toEqual({ sign: "✔", word: "ПРОВЕРЕНО", tone: "verified" });
     expect(verdictView("FAILED", "bg")).toEqual({ sign: "✖", word: "ПРОВАЛ", tone: "failed" });
-    expect(verdictView("UNKNOWN", "bg")).toEqual({ sign: "?", word: "НЕИЗВЕСТНО", tone: "unknown" });
+    expect(verdictView("UNKNOWN", "bg")).toEqual({ sign: "?", word: "НЕПРОВЕРЕНО", tone: "unknown" });
     expect(verdictView(null, "bg")).toEqual({ sign: "…", word: "РАБОТИ", tone: "working" });
     expect(verdictView(null)).toEqual({ sign: "…", word: "WORKING", tone: "working" });
   });

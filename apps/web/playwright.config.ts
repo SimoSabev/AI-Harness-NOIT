@@ -19,6 +19,6 @@ export default defineConfig({
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { MANDAT_DB_URL: E2E_DB, MANDAT_DEMO_DEV_AUTH: "1", NEXT_TELEMETRY_DISABLED: "1" },
+    env: { MANDAT_DB_URL: E2E_DB, MANDAT_DEMO_DEV_AUTH: "1", MANDAT_DEMO_AGENTS: "1", NEXT_TELEMETRY_DISABLED: "1" },
   },
 });

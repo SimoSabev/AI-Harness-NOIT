@@ -17,11 +17,8 @@ import type { Group } from "../../lib/status";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
 import { board, repos } from "../../lib/server/queries";
-import { sampleOn } from "../../lib/server/sample-pref";
 import { homeExtras } from "../../lib/server/workbench";
-import { SAMPLE } from "../../lib/sample";
-import { withSample } from "../../lib/workbench";
-import { Panel, Windows } from "../../components/workbench-parts";
+import { Panel } from "../../components/workbench-parts";
 import type { TaskRow as Row } from "../../lib/server/queries";
 
 export const dynamic = "force-dynamic";
@@ -64,7 +61,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const view = chosen ? "project" : parseView((await cookies()).get("view")?.value);
   const sel = view === "project" ? (chosen ?? o.projects[0]) : undefined;
   const waiting = all.filter((x) => groupOf(statusOf(x).key) === "waiting").length;
-  const ex = withSample(await homeExtras(db(), c.uid, c.org), SAMPLE.home, (x) => x.windows.length === 0 && x.mcpPerMin === 0 && x.conflicts.length === 0 && x.costToday === 0, await sampleOn());
+  const ex = await homeExtras(db(), c.uid, c.org);
   const decide = all.filter((x) => groupOf(statusOf(x).key) === "waiting").slice(0, 6);
   return (
     <Shell current="overview" waiting={waiting} wide={view !== "list"}>
@@ -80,7 +77,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <span aria-hidden="true" className="hex inline-block h-10 w-12 bg-accent/80" />
           <p className="mt-4 font-display text-lg font-medium">{t("home.empty")}</p>
           <p className="mt-1 max-w-md text-sm text-mute">{t("home.emptyHint")}</p>
-          <Link href="/tasks/new" className={`${btn.primary} mt-6`}>{t("shell.newTask")}</Link>
+          <Link href="/" className={`${btn.primary} mt-6`}>{t("shell.newTask")}</Link>
         </div>
       ) : view === "list" ? (
         <Groups rows={all} t={t} />
@@ -90,10 +87,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <FlowMap flow={o.flow} t={t} />
           <Swarm swarm={o.swarm} t={t} />
           <ul aria-label={t("home.now")} className="mt-4 flex flex-wrap gap-2 text-sm">
-            {ex.data.conflicts.map((k) => <li key={k.path}><Link href="/agents?by=problems" className="inline-flex h-8 items-center gap-2 rounded-lg border border-warn/40 bg-warn-soft px-3 text-warn no-underline">{t("home.conflict", { n: k.sessions, path: `${k.repo}/${k.path}` })}</Link></li>)}
-            <li className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute">{t("home.costToday")} <span className="font-mono text-ink">{t.usd(ex.data.costToday)}</span></li>
-            <li><Link href="/tools" className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute no-underline">MCP <span className="font-mono text-ink">{t("home.mcpRate", { n: t.num(ex.data.mcpPerMin) })}</span> · {t("home.denied", { n: ex.data.denied24h })}</Link></li>
-            {ex.sample && <li className="inline-flex h-8 items-center rounded-lg border border-dashed border-line-strong px-3 text-xs text-warn">{t("sample.badge")} · <Link href="/settings" className="ml-1 underline">{t("sample.hide")}</Link></li>}
+            {ex.conflicts.map((k) => <li key={k.path}><Link href="/agents?by=problems" className="inline-flex h-8 items-center gap-2 rounded-lg border border-warn/40 bg-warn-soft px-3 text-warn no-underline">{t("home.conflict", { n: k.sessions, path: `${k.repo}/${k.path}` })}</Link></li>)}
+            <li className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute">{t("home.costToday")} <span className="font-mono text-ink">{t.usd(ex.costToday)}</span></li>
+            <li><Link href="/tools" className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute no-underline">MCP <span className="font-mono text-ink">{t("home.mcpRate", { n: t.num(ex.mcpPerMin) })}</span> · {t("home.denied", { n: ex.denied24h })}</Link></li>
           </ul>
           {view === "map" && (
             <>
@@ -140,7 +136,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               <ul className="space-y-1.5 p-3">{decide.map((x) => { const st = statusOf(x, t.lang); return <li key={x.id}><Link href={`/tasks/${x.id}`} className="block rounded-lg bg-raised px-3 py-2 no-underline hover:brightness-110"><span className="block truncate text-sm text-ink">{x.text}</span><span className="text-xs text-mute">{st.label}</span></Link></li>; })}</ul>
             )}
           </Panel>}
-          <Panel title={t("home.open", { n: ex.data.windows.length })} aside={ex.sample ? t("sample.short") : undefined}><div className="p-3"><Windows windows={ex.data.windows} t={t} /></div></Panel>
         </aside>
         </div>
       )}

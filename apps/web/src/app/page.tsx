@@ -4,7 +4,7 @@ import { Shell } from "../components/shell";
 import { NewTask, TaskList } from "../components/workspace";
 import type { WsAgent } from "../components/workspace";
 import { getT } from "../i18n/server";
-import { AGENTS, agentHint, agentLabel } from "../lib/agents";
+import { agentChoices, agentLabel } from "../lib/agents";
 import { pageTitle } from "../lib/inbox";
 import { ago, statusOf } from "../lib/status";
 import { taskFeed } from "../lib/server/chat-feed";
@@ -22,10 +22,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // The workspace (chat-first start page): the tasks on the left like conversations; the chosen one live in the middle
 // with how it is being built on the right; no task chosen → one box to start a new one. The overview is at /overview.
-export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ task?: string | string[] }> }) {
+export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ task?: string | string[]; text?: string | string[] }> }) {
   const c = await pageCtx();
   const t = await getT();
-  const q = (await searchParams).task;
+  const sp = await searchParams;
+  const q = sp.task;
+  // E9a: "Make a task" from a night question prefills the text (it used to open /tasks/new, D-384)
+  const prefill = typeof sp.text === "string" ? sp.text.slice(0, 4000) : "";
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
   const [b, repo, initial] = await Promise.all([board(db(), c.uid, c.org), firstRepo(db(), c.uid, c.org), selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null]);
   const now = new Date();
@@ -37,11 +40,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   if (!initial) {
     const ctl = controlKeys(process.env);
     const keys = (await ctl?.status())?.providers ?? [];
-    const accounts = ((await ctl?.accounts()) ?? []).filter((a) => a.loggedIn);
-    agents = [
-      ...accounts.map((a) => ({ id: a.agent, label: t("agent.account", { name: a.name }), hint: `${a.email ?? t("agent.subscription")} · ${a.plan ?? t("agent.subscription")}`, ready: true })),
-      ...[...AGENTS].sort((x, y) => Number(x.needsKey) - Number(y.needsKey)).map((a) => ({ id: a.id, label: agentLabel(a.id, t.lang), hint: agentHint(a.id, t.lang), ready: a.id === "claude" ? keys.includes("anthropic") : a.id === "codex" ? keys.includes("openai") : true })),
-    ];
+    const accounts = ((await ctl?.accounts()) ?? []).filter((a) => a.loggedIn).map((a) => a.agent);
+    agents = agentChoices({ accounts, keys, demo: process.env.MANDAT_DEMO_AGENTS === "1" }).map((id) => ({ id, label: agentLabel(id, t.lang) }));
   }
   return (
     <Shell current="tasks" waiting={c.waiting} full>
@@ -53,7 +53,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           {initial ? (
             <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)} />
           ) : (
-            <NewTask agents={agents} repo={repo} canAct={canAct(c.role)} />
+            <NewTask agents={agents} repo={repo} canAct={canAct(c.role)} initialText={prefill} />
           )}
         </div>
       </div>

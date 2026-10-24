@@ -1,19 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Shell } from "../../components/shell";
-import { FlowLines, Meter, Panel, SampleNote } from "../../components/workbench-parts";
+import { FlowLines, Meter, Panel } from "../../components/workbench-parts";
 import { card } from "../../components/ui";
 import { rich } from "../../i18n/rich";
 import { getT } from "../../i18n/server";
 import type { Key } from "../../i18n/t";
 import { pageName } from "../../lib/brand";
-import { SAMPLE } from "../../lib/sample";
 import { NightPlanForm } from "../../components/night-plan-form";
 import { NightQuestions } from "../../components/night-questions";
-import { nightPlan, withSample } from "../../lib/workbench";
+import { nightPlan } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { canAct, pageCtx } from "../../lib/server/page";
-import { sampleOn } from "../../lib/server/sample-pref";
 import { nightView } from "../../lib/server/workbench";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +27,7 @@ export default async function NightPage() {
   const c = await pageCtx();
   const tr = await getT();
   const t = (iso: string) => new Date(iso).toLocaleTimeString(tr.locale, { hour: "2-digit", minute: "2-digit" });
-  const src = withSample(await nightView(db(), c.uid, c.org), SAMPLE.night, (x) => x.shift === null && x.last === null, await sampleOn());
-  const n = src.data;
+  const n = await nightView(db(), c.uid, c.org);
   const s = n.shift;
   const minutes = s ? Math.max(60, Math.round((Date.parse(s.ends_at) - Date.parse(s.starts_at)) / 60000)) : 480;
   const lanes = nightPlan(n.queue, 5, minutes, 8, tr.lang);
@@ -53,9 +50,8 @@ export default async function NightPage() {
           </div>
         </div>
       </section>
-      {src.sample && <SampleNote what={tr("night.sample")} table="night_shifts, night_queue" t={tr} />}
       {/* E9a: a plan when no night is open (night.manage is checked by the server) */}
-      {!src.sample && !s && canAct(c.role) && <div className={`${card} mt-4`}><NightPlanForm repos={n.repos} /></div>}
+      {!s && canAct(c.role) && <div className={`${card} mt-4`}><NightPlanForm repos={n.repos} /></div>}
       <div className="mt-4 grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)_340px]">
         <div className="flex flex-col gap-4">
           <Panel title={tr("night.rules")}>
@@ -96,7 +92,7 @@ export default async function NightPage() {
             </div>
           ) : <p className="p-4 text-sm text-mute">{tr("night.noReport")}</p>}
           <h3 className="border-t border-line px-4 pt-3 text-sm font-medium">{tr("night.questions")}</h3>
-          <NightQuestions questions={n.questions} sample={src.sample} />
+          <NightQuestions questions={n.questions} />
         </Panel>
       </div>
     </Shell>

@@ -21,11 +21,8 @@ import { reasonText, testsOf } from "../../../lib/verdict-view";
 import { db } from "../../../lib/server/db";
 import { canAct, pageCtx } from "../../../lib/server/page";
 import { taskDetail } from "../../../lib/server/queries";
-import { sampleOn } from "../../../lib/server/sample-pref";
 import { sessionOf } from "../../../lib/server/workbench";
-import { sessionSample } from "../../../lib/sample";
-import { withSample } from "../../../lib/workbench";
-import { Panel, SampleNote, SessionTree, Terminal, ToolCalls, Windows } from "../../../components/workbench-parts";
+import { Panel, SessionTree, Terminal, ToolCalls } from "../../../components/workbench-parts";
 import { uiShotsView } from "../../../lib/ui-shots";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +56,7 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
   // E9b (D12): before/after per route — the screenshots are approver+ (the names come back only for them)
   const ui = uiShotsView(t.changeset_id, d.evidence, d.shots);
   const minutes = t.minutes > 0 ? tr("task.minutes", { n: tr.num(t.minutes, 1) }) : null;
-  const sess = withSample(await sessionOf(db(), c.uid, c.org, id), sessionSample(id), (x) => x.sessions.length + x.calls.length + x.lines.length === 0, await sampleOn());
+  const sess = await sessionOf(db(), c.uid, c.org, id);
   return (
     <Shell current="task" waiting={c.waiting}>
       <Link href="/" className="text-sm text-mute hover:text-ink">{tr("task.back")}</Link>
@@ -109,20 +106,17 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
         {d.asks.length > 0 && <AskCards taskId={t.id} asks={d.asks} attempt={d.asks[0]?.attempt ?? 1} canDecide={canAct(c.role) && s.key === "ask"} />}
       </div>
 
-      <section aria-labelledby="sess-h" className="mt-8">
+      {/* D-384: the session inside shows only what was recorded; no sample, no empty panels */}
+      {sess.sessions.length + sess.calls.length + sess.lines.length > 0 && <section aria-labelledby="sess-h" className="mt-8">
         <h2 id="sess-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{tr("task.session")}</h2>
-        {sess.sample && <SampleNote what={tr("task.sessionSample")} table="agent_sessions, tool_calls, open_windows" t={tr} />}
         <div className="mt-2 grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <div className="flex flex-col gap-4">
-            <Panel title={tr("task.sessionAgents")}>{sess.data.sessions.length ? <div className="p-4"><SessionTree sessions={sess.data.sessions} t={tr} /></div> : <p className="p-4 text-sm text-mute">{tr("task.noAgents")}</p>}</Panel>
-            <Panel title={tr("home.open", { n: sess.data.windows.length })}><div className="p-3"><Windows windows={sess.data.windows} t={tr} /></div></Panel>
-          </div>
-          <Panel title={tr("task.toolCalls")} aside={`${sess.data.calls.length}`}>{sess.data.calls.length ? <ToolCalls calls={sess.data.calls} t={tr} /> : <p className="p-4 text-sm text-mute">{tr("task.noCalls")}</p>}</Panel>
+          <Panel title={tr("task.sessionAgents")}>{sess.sessions.length ? <div className="p-4"><SessionTree sessions={sess.sessions} t={tr} /></div> : <p className="p-4 text-sm text-mute">{tr("task.noAgents")}</p>}</Panel>
+          <Panel title={tr("task.toolCalls")} aside={`${sess.calls.length}`}>{sess.calls.length ? <ToolCalls calls={sess.calls} t={tr} /> : <p className="p-4 text-sm text-mute">{tr("task.noCalls")}</p>}</Panel>
         </div>
         <div className="mt-4">
-          <Panel title={tr("task.terminal")} aside={tr("task.lines", { n: tr.num(sess.data.lines.length) })}>{sess.data.lines.length ? <Terminal lines={sess.data.lines} t={tr} /> : <p className="p-4 text-sm text-mute">{tr("task.noLines")}</p>}</Panel>
+          <Panel title={tr("task.terminal")} aside={tr("task.lines", { n: tr.num(sess.lines.length) })}>{sess.lines.length ? <Terminal lines={sess.lines} t={tr} /> : <p className="p-4 text-sm text-mute">{tr("task.noLines")}</p>}</Panel>
         </div>
-      </section>
+      </section>}
 
       {(t.a_total !== null || t.inv_before !== null || d.ladder || t.ledger_seq !== null) && (
         <section aria-labelledby="trust-h" className="mt-8">
@@ -170,7 +164,6 @@ export default async function TaskPage({ params }: { params: Promise<{ id: strin
                   <p className="text-sm font-medium">{checkLabel(e.detector, tr.lang)}</p>
                   {e.status !== "pass" && <p className="mt-0.5 text-sm text-mute">{e.signature ? reasonText(e.signature, tr.lang) : e.summary}</p>}
                 </div>
-                <span className="font-mono text-xs text-mute">{e.detector}</span>
               </li>
             ))}
           </ul>

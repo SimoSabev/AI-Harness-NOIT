@@ -9,7 +9,7 @@ import { Hex, btn } from "./ui";
 
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; text: string; tone: Tone; label: string; ago: string }
-export interface WsAgent { id: string; label: string; hint: string; ready: boolean }
+export interface WsAgent { id: string; label: string }
 
 export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: string | null }) {
   const t = useT();
@@ -37,14 +37,16 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
 }
 
 // No scope to pick: a real agent works without limits ("free", D-360; the judge still runs), the demo agents'
-// scenarios are bug fixes. The narrower types stay in the project's rules (.mandat.yml) and the detailed form.
+// scenarios are bug fixes. The narrower types stay in the project's rules (.mandat.yml) and the CLI.
+// D-384: the agent picker shows only agents that can run (lib/agents.ts agentChoices); one agent → just its name;
+// none → a link to sign in instead of a box that cannot start anything.
 const typeFor = (agent: string) => (agent.startsWith("fake") ? "bugfix" : "free");
 
-export function NewTask({ agents, repo, canAct }: { agents: WsAgent[]; repo: string | null; canAct: boolean }) {
+export function NewTask({ agents, repo, canAct, initialText = "" }: { agents: WsAgent[]; repo: string | null; canAct: boolean; initialText?: string }) {
   const t = useT();
   const router = useRouter();
-  const [text, setText] = useState("");
-  const [agent, setAgent] = useState(agents[0]?.id ?? "fake:honest-fix");
+  const [text, setText] = useState(initialText);
+  const [agent, setAgent] = useState(agents[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async (e: React.FormEvent) => {
@@ -67,16 +69,22 @@ export function NewTask({ agents, repo, canAct }: { agents: WsAgent[]; repo: str
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
           className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-mute" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-mute">
-            {t("ws.agent")}
-            <select value={agent} onChange={(e) => setAgent(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
-              {agents.map((a) => <option key={a.id} value={a.id} disabled={!a.ready}>{a.label}{a.ready ? "" : ` (${t("newTask.setKey")})`}</option>)}
-            </select>
-          </label>
-          <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy}>{busy ? t("ws.sending") : t("ws.send")}</button>
+          {agents.length > 1 ? (
+            <label className="flex items-center gap-1.5 text-xs text-mute">
+              {t("ws.agent")}
+              <select value={agent} onChange={(e) => setAgent(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
+                {agents.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+              </select>
+            </label>
+          ) : agents[0] ? (
+            <span className="text-xs text-mute">{t("ws.agent")} <span className="text-ink">{agents[0].label}</span></span>
+          ) : (
+            <Link href="/keys" className="text-sm text-accent underline-offset-4 hover:underline">{t("ws.signIn")}</Link>
+          )}
+          <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy || agents.length === 0}>{busy ? t("ws.sending") : t("ws.send")}</button>
         </div>
       </div>
-      <p className="text-center text-xs text-mute">{repo ? <>{t("newTask.repo")} <span className="font-mono">{repo}</span> · {agents.find((a) => a.id === agent)?.hint}</> : null}</p>
+      {repo && <p className="text-center text-xs text-mute">{t("newTask.repo")} <span className="font-mono">{repo}</span></p>}
       {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
   );

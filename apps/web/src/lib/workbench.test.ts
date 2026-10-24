@@ -1,14 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { conflicts, tree, withSample } from "./workbench";
-import { SAMPLE } from "./sample";
+import { conflicts, terminalLines, tree } from "./workbench";
 
 describe("workbench view (D-307)", () => {
-  it("истинските данни печелят; празно + примери включени → пример, маркиран", () => {
-    const empty = (x: number[]) => x.length === 0;
-    expect(withSample([1], [9], empty, true)).toEqual({ data: [1], sample: false });
-    expect(withSample([], [9], empty, true)).toEqual({ data: [9], sample: true });
-    expect(withSample([], [9], empty, false)).toEqual({ data: [], sample: false });
-  });
   it("конфликт: два живи агента в едно репо и един файл", () => {
     expect(conflicts([
       { repo: "shop", state: "running", touching: ["src/cart.ts", "a"] }, { repo: "shop", state: "waiting", touching: ["src/cart.ts"] },
@@ -17,14 +10,6 @@ describe("workbench view (D-307)", () => {
   });
   it("дърво: водещ агент, после подагентите му", () => {
     expect(tree([{ id: "b", parent_id: "a" }, { id: "a", parent_id: null }, { id: "c", parent_id: null }]).map((x) => `${x.id}${x.depth}`)).toEqual(["a0", "b1", "c0"]);
-  });
-  it("примерът е пълен за всеки екран и без истински адреси извън localhost", () => {
-    expect(SAMPLE.fleet.length).toBeGreaterThan(5);
-    expect(SAMPLE.mcp.length).toBeGreaterThan(3);
-    expect(SAMPLE.night.shift).not.toBeNull();
-    expect(SAMPLE.research.current?.claims.length).toBeGreaterThan(2);
-    for (const w of SAMPLE.home.windows) if (w.url) expect(w.url).toMatch(/^http:\/\/localhost/);
-    for (const c of SAMPLE.research.current?.claims ?? []) expect(c.text.startsWith("[ПРИМЕР]")).toBe(true);
   });
 });
 
@@ -36,5 +21,15 @@ describe("nightPlan (D-307)", () => {
     expect(nightPlan([{ text: "a", repo: "r", risk: "low", est_minutes: 60 }], 1, 480, 8, "bg")[0]?.[1]?.label).toBe("Мандат");
     expect(lanes[1]?.[0]).toMatchObject({ label: "r · b", kind: "risk" });
     expect(lanes.flat().some((s) => s.label.includes("big"))).toBe(false);
+  });
+});
+
+describe("terminal lines (E7д)", () => {
+  it("keeps order, caps at 50 000, marks the kind", () => {
+    const rows = Array.from({ length: 50_010 }, (_, i) => ({ seq: i, kind: i === 0 ? "init" : "text", text: `l${i}` }));
+    const t = terminalLines(rows);
+    expect(t).toHaveLength(50_000);
+    expect(t[0]).toEqual({ seq: 0, mark: "▶", text: "l0" });
+    expect(terminalLines([{ seq: 1, kind: "permission", text: "Bash [denied]" }])[0]?.mark).toBe("✕");
   });
 });

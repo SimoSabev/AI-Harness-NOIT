@@ -98,7 +98,7 @@ export function ProjectColumns({ projects, t }: { projects: P[]; t: T }) {
             <span className={`ml-auto text-xs ${HEALTH[p.health].text}`}>{p.word}</span>
           </h2>
           {p.items.length === 0 ? <p className="px-1 py-2 text-xs text-mute">{t("tile.nothing", { n: p.done24h })}</p> : <ul className="space-y-1.5">{p.items.map((x) => <ItemLine key={x.id} t={x} tr={t} stacked />)}</ul>}
-          <Link href="/tasks/new" className="mt-auto rounded-lg border border-dashed border-line-strong px-3 py-2 text-center text-xs text-mute hover:text-ink">{t("tile.addTask")}</Link>
+          <Link href="/" className="mt-auto rounded-lg border border-dashed border-line-strong px-3 py-2 text-center text-xs text-mute hover:text-ink">{t("tile.addTask")}</Link>
         </section>
       ))}
     </div>

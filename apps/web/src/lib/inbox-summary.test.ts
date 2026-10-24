@@ -18,9 +18,9 @@ describe("inbox summary (т. 8.1)", () => {
       now,
     );
     expect(s).toEqual({ autoMerged: 1, failed: 1, waiting: 2 });
-    expect(summaryLine(s)).toBe("1 VERIFIED and merged on their own · 1 FAILED · 2 waiting for you");
-    expect(summaryLine(s, "bg")).toBe("1 ПРОВЕРЕНО и слети сами · 1 ПРОВАЛ · 2 чакат теб");
-    expect(summaryLine({ autoMerged: 0, failed: 0, waiting: 1 }, "bg")).toBe("0 ПРОВЕРЕНО и слети сами · 0 ПРОВАЛ · 1 чака теб");
+    expect(summaryLine(s)).toBe("1 added automatically · 1 failed · 2 waiting for you");
+    expect(summaryLine(s, "bg")).toBe("1 добавени автоматично · 1 провал · 2 чакат теб");
+    expect(summaryLine({ autoMerged: 0, failed: 0, waiting: 1 }, "bg")).toBe("0 добавени автоматично · 0 провал · 1 чака теб");
   });
 
   it("<title> с брояча", () => {
