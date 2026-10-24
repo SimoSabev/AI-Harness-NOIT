@@ -374,7 +374,7 @@ export const bg: Record<Key, string> = {
   "newTask.type.docs": "Документация",
   "newTask.type.css": "Стилове",
   "newTask.type.free": "Без ограничения",
-  "newTask.repo": "Хранилище:",
+  "newTask.repo": "Проект:",
   "newTask.what": "Какво да направи агентът",
   "newTask.type": "Обхват на промяната",
   "newTask.failed": "Задачата не беше създадена (грешка {status}).",

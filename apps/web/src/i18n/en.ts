@@ -387,7 +387,7 @@ export const en = {
   "newTask.type.docs": "Documentation",
   "newTask.type.css": "Styles",
   "newTask.type.free": "No limits",
-  "newTask.repo": "Repository:",
+  "newTask.repo": "Project:",
   "newTask.what": "What should the agent do",
   "newTask.type": "Scope of the change",
   "newTask.failed": "The task was not created (error {status}).",
