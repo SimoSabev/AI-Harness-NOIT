@@ -6,8 +6,9 @@ export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" 
 export type Tone = "gray" | "blue" | "green" | "red" | "amber";
 export interface Status { key: StatusKey; label: string; tone: Tone; headline: string }
 
+// D-386: what waits for the person is amber (or red when it failed) — never green like a finished task.
 const TONES: Record<StatusKey, Tone> = {
-  queued: "gray", running: "blue", checking: "blue", review: "green", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", applied: "green", closed: "gray", expired: "gray", ask: "amber", base: "amber", ci: "red",
+  queued: "gray", running: "blue", checking: "blue", review: "amber", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", applied: "green", closed: "gray", expired: "gray", ask: "amber", base: "amber", ci: "red",
 };
 
 const RUNNING = new Set(["PROVISIONING", "RUNNING", "EXPORTING", "RETRY"]);
@@ -39,6 +40,18 @@ function keyOf(t: StatusInput): StatusKey {
   // D-367: verified, safe, and gone into main by itself
   if (t.state === "CLOSED" && t.delivered === "merge" && t.last_result === "VERIFIED") return "applied";
   return "closed";
+}
+
+/** D-386: the box with the outcome takes the colour of the verdict; before a verdict, the colour of the status. */
+export function outcomeTone(result: string | null, status: Tone): Tone {
+  return result === "VERIFIED" ? "green" : result === "FAILED" ? "red" : result === "UNKNOWN" ? "amber" : status;
+}
+
+/** D-386: what the person can do in each status. `note` = a note to the agent that starts a new attempt with it. */
+export interface Actions { decide: boolean; again: boolean; note: boolean; fixCi: boolean; stop: boolean }
+export function actionsOf(k: StatusKey): Actions {
+  const again = k === "failed" || k === "unknown" || k === "empty" || k === "key" || k === "base";
+  return { decide: k === "review", again, note: k === "review" || k === "ci" || (again && k !== "key"), fixCi: k === "ci", stop: k === "queued" || k === "running" || k === "checking" };
 }
 
 export type Group = "waiting" | "active" | "done";
