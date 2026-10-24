@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from "electron";
 import { LocalPath } from "@mandat/contract";
 import type { DesktopCommand } from "@mandat/contract";
-import { childEnv, isErrorLine, parseBanner, stepOf } from "./banner.js";
+import { childEnv, parseBanner, startFailed, stepOf } from "./banner.js";
 import type { Banner } from "./banner.js";
 import { commandFor, registerBridge, registerDrop, sendCommand } from "./bridge-main.js";
 import type { DesktopHandlers } from "./bridge-main.js";
@@ -369,8 +369,11 @@ function startHarness(kek: Buffer | null): void {
   });
   child.on("exit", (code) => {
     child = null;
-    if (!banner) dialog.showErrorBox(t("error.start"), errTail.split("\n").filter(isErrorLine).join("\n") || t("error.exit", { code: code ?? "?" }));
-    app.quit();
+    if (banner) return app.quit();
+    // D-387: it stopped before it opened (Docker gone, a port taken…) — say why and offer to try again, not just quit
+    const f = startFailed(errTail, code, lang);
+    const opts = { type: "warning" as const, message: f.message, detail: f.detail, buttons: f.buttons, defaultId: f.retry, cancelId: 1 };
+    void (win && !win.isDestroyed() ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts)).then(({ response }) => (response === f.retry ? startHarness(kek) : app.quit()));
   });
 }
 

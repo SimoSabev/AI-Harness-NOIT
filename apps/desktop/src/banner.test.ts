@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allowedUrl, childEnv, isErrorLine, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, parseBanner, startFailed, stepOf } from "./banner.js";
 
 const BANNER = [
   "",
@@ -41,5 +41,18 @@ describe("desktop banner (D-303, D-368)", () => {
     expect(allowedUrl("http://localhost:3001/", "http://localhost:3000")).toBe(false);
     expect(allowedUrl("https://example.com/", "http://localhost:3000")).toBe(false);
     expect(allowedUrl("not a url", "http://localhost:3000")).toBe(false);
+  });
+});
+
+// D-387: when the harness stops before it opens, the window offers "Try again" instead of quitting.
+describe("startFailed (D-387)", () => {
+  it("the error lines as the detail, Try again first, Quit second", () => {
+    const f = startFailed("[1/4] check\n✗ Docker не отговаря\nsome noise\n", 3, "bg");
+    expect(f.detail).toBe("✗ Docker не отговаря");
+    expect(f.buttons).toEqual(["Опитай пак", "Изход"]);
+    expect(f.retry).toBe(0);
+  });
+  it("no error line → the exit code", () => {
+    expect(startFailed("", 7, "en").detail).toBe("the harness exited with 7");
   });
 });

@@ -1,3 +1,5 @@
+import { dt } from "./i18n.js";
+import type { Lang } from "./i18n.js";
 // D-303: the pure part of the desktop wrapper — it reads what `pnpm local` prints. D-368: `pnpm local` has no login, so
 // the banner is only the address; the window opens it and is in.
 export interface Banner { url: string }
@@ -35,4 +37,10 @@ export function allowedUrl(url: string, base: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** D-387: the harness stopped before it opened — the dialog: its error lines, "Try again" (default) and "Quit". */
+export function startFailed(errTail: string, code: number | null, lang: Lang): { message: string; detail: string; buttons: string[]; retry: number } {
+  const detail = errTail.split("\n").filter(isErrorLine).join("\n") || dt(lang, "error.exit", { code: code ?? "?" });
+  return { message: dt(lang, "error.start"), detail, buttons: [dt(lang, "start.retry"), dt(lang, "keychain.quit")], retry: 0 };
 }
