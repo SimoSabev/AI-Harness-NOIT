@@ -48,9 +48,11 @@ describe("site release manifest (E9g B)", () => {
       expect(siteAssetKind(f), f).toBeNull();
     }
   });
-  it("download links go to the latest GitHub release of the repo", () => {
+  it("download links go to the release of the file's own version (tag v<version>), so link and SHA-256 stay together after a newer release", () => {
     expect(SITE_RELEASE_REPO).toBe("SimoSabev/AI-Harness-NOIT");
-    expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg")).toBe("https://github.com/SimoSabev/AI-Harness-NOIT/releases/latest/download/Harness-0.1.0-mac-arm64.dmg");
+    expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg")).toBe("https://github.com/SimoSabev/AI-Harness-NOIT/releases/download/v0.1.0/Harness-0.1.0-mac-arm64.dmg");
+    expect(siteDownloadUrl("Harness-1.2.3-beta.1-linux-x64.deb")).toBe("https://github.com/SimoSabev/AI-Harness-NOIT/releases/download/v1.2.3-beta.1/Harness-1.2.3-beta.1-linux-x64.deb");
+    expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg")).not.toContain("/latest/");
     expect(() => siteDownloadUrl("../x")).toThrow();
   });
 });

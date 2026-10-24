@@ -24,7 +24,7 @@ describe("download rows (E9g B)", () => {
       file: "Harness-0.1.0-mac-arm64.dmg",
       sha256: sha,
       sizeMb: 220,
-      url: "https://github.com/SimoSabev/AI-Harness-NOIT/releases/latest/download/Harness-0.1.0-mac-arm64.dmg",
+      url: "https://github.com/SimoSabev/AI-Harness-NOIT/releases/download/v0.1.0/Harness-0.1.0-mac-arm64.dmg",
     });
     expect(rows.slice(1).every((r) => r.asset === null)).toBe(true);
   });
