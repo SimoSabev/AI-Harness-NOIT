@@ -55,6 +55,15 @@ describe("site release manifest (E9g B)", () => {
     expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg")).not.toContain("/latest/");
     expect(() => siteDownloadUrl("../x")).toThrow();
   });
+  it("host: github by default; site = the installer is served by the site itself under /downloads/ (a local build)", () => {
+    const m = { version: "0.1.0", assets: [asset("mac-arm64", "Harness-0.1.0-mac-arm64.dmg")] };
+    expect(SiteReleaseManifest.parse(m).host).toBeUndefined();
+    expect(SiteReleaseManifest.parse({ ...m, host: "site" }).host).toBe("site");
+    expect(SiteReleaseManifest.safeParse({ ...m, host: "example.com" }).success).toBe(false);
+    expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg", "github")).toBe(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg"));
+    expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg", "site")).toBe("/downloads/Harness-0.1.0-mac-arm64.dmg");
+    expect(() => siteDownloadUrl("../x", "site")).toThrow();
+  });
 });
 
 // E9g B step 7 (D-378): apps/site/shots.json — the screens scripts/site-shots.mjs photographs for the docs.

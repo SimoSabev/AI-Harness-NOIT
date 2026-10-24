@@ -43,9 +43,17 @@ export const SiteAsset = z
   .refine((a) => siteAssetKind(a.file) === a.kind, "kind does not match the file name");
 export type SiteAsset = z.infer<typeof SiteAsset>;
 
+/**
+ * Who serves the installers: "github" (the default, the published release) or "site" — the site itself under
+ * /downloads/ (a local build: scripts/site-local-release.mjs copies the files in; nothing is published, rule 3).
+ */
+export const SiteAssetHost = z.enum(["github", "site"]);
+export type SiteAssetHost = z.infer<typeof SiteAssetHost>;
+
 export const SiteReleaseManifest = z
   .object({
     version: z.string().regex(new RegExp(`^${SEMVER}$`)).nullable(),
+    host: SiteAssetHost.optional(),
     assets: z.array(SiteAsset).max(SiteAssetKind.options.length),
   })
   .strict()
@@ -64,9 +72,10 @@ export function siteReleaseTag(version: string): string {
  * (D-379): not `releases/latest/download/…` — the file names carry the version, so after a newer release a "latest"
  * link to the old file would be 404 and the SHA-256 on the page would describe another file.
  */
-export function siteDownloadUrl(file: string): string {
+export function siteDownloadUrl(file: string, host: SiteAssetHost = "github"): string {
   const version = fileVersion(file);
   if (siteAssetKind(file) === null || version === undefined) throw new MandatError("E_USAGE", "not an installer file name", { file });
+  if (host === "site") return `/downloads/${encodeURIComponent(file)}`;
   return `https://github.com/${SITE_RELEASE_REPO}/releases/download/${encodeURIComponent(siteReleaseTag(version))}/${encodeURIComponent(file)}`;
 }
 
