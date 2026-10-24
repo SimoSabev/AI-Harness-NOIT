@@ -1,8 +1,8 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildManifest, defaultReleaseDir, parseArgs, writeReleaseManifest } from "./release-manifest.mjs";
+import { buildManifest, defaultReleaseDir, parseArgs, writeLocalSiteRelease, writeReleaseManifest } from "./release-manifest.mjs";
 
 const sha = (c: string) => c.repeat(64);
 
@@ -58,5 +58,28 @@ describe("release manifest (E9g B)", () => {
     ]);
     expect(JSON.parse(readFileSync(out, "utf8"))).toEqual(m);
     expect(readFileSync(out, "utf8").endsWith("}\n")).toBe(true);
+  });
+  it("a local site build: only the chosen kinds, host site, the files copied into public/downloads", async () => {
+    const release = mkdtempSync(path.join(os.tmpdir(), "release-"));
+    const site = mkdtempSync(path.join(os.tmpdir(), "site-"));
+    writeFileSync(path.join(release, "Harness-0.3.0-mac-arm64.dmg"), "dmg");
+    writeFileSync(path.join(release, "Harness-0.3.0-mac-x64.dmg"), "intel");
+    mkdirSync(path.join(site, "public", "downloads"), { recursive: true });
+    writeFileSync(path.join(site, "public", "downloads", "Harness-0.2.0-mac-arm64.dmg"), "old");
+    const m = await writeLocalSiteRelease({ releaseDir: release, siteDir: site, kinds: ["mac-arm64"] });
+    expect(m).toEqual({
+      version: "0.3.0",
+      host: "site",
+      assets: [{ kind: "mac-arm64", file: "Harness-0.3.0-mac-arm64.dmg", sha256: "00cbbd0ddbda2762798f7009838ed34ca1f12b93965813c7df22943bc62166d1", size: 3 }],
+    });
+    expect(JSON.parse(readFileSync(path.join(site, "releases.local.json"), "utf8"))).toEqual(m);
+    // the folder holds exactly the files of the manifest: an older build does not linger
+    expect(readdirSync(path.join(site, "public", "downloads"))).toEqual(["Harness-0.3.0-mac-arm64.dmg"]);
+    expect(readFileSync(path.join(site, "public", "downloads", "Harness-0.3.0-mac-arm64.dmg"), "utf8")).toBe("dmg");
+  });
+  it("a local site build with none of the chosen installers fails instead of writing an empty page", async () => {
+    const release = mkdtempSync(path.join(os.tmpdir(), "release-"));
+    const site = mkdtempSync(path.join(os.tmpdir(), "site-"));
+    await expect(writeLocalSiteRelease({ releaseDir: release, siteDir: site, kinds: ["mac-arm64"] })).rejects.toThrow(/no installer/);
   });
 });

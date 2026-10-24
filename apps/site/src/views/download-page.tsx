@@ -28,6 +28,7 @@ export function DownloadPage({ lang }: { lang: Lang }) {
             <ul className="mt-3 divide-y divide-line">
               {rows.filter((r) => r.platform === p).map((r) => <Row key={r.kind} row={r} lang={lang} />)}
             </ul>
+            {p === "mac" && rows.some((r) => r.platform === "mac" && r.asset) ? <MacInstall lang={lang} /> : null}
           </section>
         ))}
       </div>
@@ -56,6 +57,21 @@ export function DownloadPage({ lang }: { lang: Lang }) {
         </ul>
       </section>
     </Frame>
+  );
+}
+
+const MAC_STEPS = ["install.mac.1", "install.mac.2", "install.mac.3", "install.mac.4", "install.mac.5"] as const;
+
+// How to open the unsigned app (until Q-053 signing): the steps of macOS 15+, no Terminal needed.
+function MacInstall({ lang }: { lang: Lang }) {
+  const t = translator(lang);
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <h3 className="font-display text-base font-semibold tracking-wide">{t("install.mac.title")}</h3>
+      <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+        {MAC_STEPS.map((k) => <li key={k}>{t(k)}</li>)}
+      </ol>
+    </div>
   );
 }
 

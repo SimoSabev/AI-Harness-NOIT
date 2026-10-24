@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const out = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../out");
 const port = Number(process.argv[2] ?? process.env.PORT ?? 3101);
-const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".ico": "image/x-icon" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8", ".ico": "image/x-icon", ".dmg": "application/x-apple-diskimage" };
 
 /** The file for a URL path inside out/, or null (no escape above out/). */
 function fileFor(urlPath) {
@@ -37,6 +37,12 @@ createServer((req, res) => {
   })();
   const status = file ? 200 : 404;
   const f = file ?? path.join(out, "404.html");
-  res.writeHead(status, { "content-type": TYPES[path.extname(f)] ?? "application/octet-stream", "x-content-type-options": "nosniff" });
+  const headers = { "content-type": TYPES[path.extname(f)] ?? "application/octet-stream", "x-content-type-options": "nosniff" };
+  // an installer of a local build (public/downloads): the browser saves it instead of showing it
+  if (file && path.dirname(file) === path.join(out, "downloads")) {
+    headers["content-disposition"] = `attachment; filename="${path.basename(file)}"`;
+    headers["content-length"] = String(statSync(file).size);
+  }
+  res.writeHead(status, headers);
   createReadStream(f).pipe(res);
 }).listen(port, "127.0.0.1", () => console.log(`site: http://127.0.0.1:${port}/`));

@@ -21,3 +21,6 @@ apps/web/CLAUDE.md
 apps/site/out/
 apps/site/public/fonts/
 apps/site/public/icon-192.png
+# a local build of the download site (scripts/site-local-release.mjs): the installers and their manifest
+apps/site/public/downloads/
+apps/site/releases.local.json

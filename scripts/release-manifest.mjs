@@ -4,7 +4,7 @@
 // Only reads and hashes local files: no upload, no release, no network (rule 3). Simo runs it for a published release:
 //   node scripts/release-manifest.mjs [--dir <folder>] [--out <file>] [--version <x.y.z>]
 import { createHash } from "node:crypto";
-import { createReadStream, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, createReadStream, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -63,6 +63,25 @@ export async function writeReleaseManifest(o) {
   const files = await Promise.all(names.map(async (name) => ({ name, sha256: await sha256(path.join(o.dir, name)), size: statSync(path.join(o.dir, name)).size })));
   const m = buildManifest(files, o.version);
   writeFileSync(o.out, `${JSON.stringify(m, null, 2)}\n`);
+  return m;
+}
+
+/**
+ * A local build of the download site (scripts/site-local-release.mjs): the chosen installers of `releaseDir` are copied
+ * into <siteDir>/public/downloads (emptied first) and <siteDir>/releases.local.json says the site serves them itself.
+ * Both are ignored by git; nothing is uploaded (rule 3).
+ * @param {{ releaseDir: string, siteDir: string, kinds: string[], version?: string | undefined }} o
+ */
+export async function writeLocalSiteRelease(o) {
+  const names = readdirSync(o.releaseDir).filter((n) => o.kinds.includes(siteAssetKind(n) ?? "") && statSync(path.join(o.releaseDir, n)).isFile());
+  if (names.length === 0) throw new Error(`release-manifest: no installer of ${o.kinds.join(", ")} in ${o.releaseDir}`);
+  const files = await Promise.all(names.map(async (name) => ({ name, sha256: await sha256(path.join(o.releaseDir, name)), size: statSync(path.join(o.releaseDir, name)).size })));
+  const m = SiteReleaseManifest.parse({ ...buildManifest(files, o.version), host: "site" });
+  const downloads = path.join(o.siteDir, "public", "downloads");
+  rmSync(downloads, { recursive: true, force: true });
+  mkdirSync(downloads, { recursive: true });
+  for (const a of m.assets) copyFileSync(path.join(o.releaseDir, a.file), path.join(downloads, a.file));
+  writeFileSync(path.join(o.siteDir, "releases.local.json"), `${JSON.stringify(m, null, 2)}\n`);
   return m;
 }
 

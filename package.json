@@ -35,6 +35,7 @@
     "test:db:prove": "supabase test db",
     "test:e2e": "pnpm --filter @mandat/web build && pnpm --filter @mandat/web e2e",
     "test:sentinel": "pnpm --filter @mandat/web test:sentinel",
+    "site:mac": "node scripts/site-local-release.mjs",
     "desktop": "pnpm build && pnpm --dir apps/desktop install --frozen-lockfile && pnpm --dir apps/desktop run setup && pnpm --dir apps/desktop run build && pnpm --dir apps/desktop start"
   },
   "devDependencies": {
