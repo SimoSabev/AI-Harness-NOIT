@@ -10,9 +10,11 @@
 отваряни нощес: цените и менютата в портала са [НП].
 
 ## Какво вижда човек днес (без подпис)
-- **macOS**: dmg-то се отваря, но при първо пускане macOS казва, че приложението е от неидентифициран разработчик (или
-  „повредено“, ако е свалено от интернет). Заобикаляне за тест: десен бутон върху Harness.app → Open, или
-  `xattr -dr com.apple.quarantine /Applications/Harness.app`. За хора извън екипа това не е приемливо → нотаризация.
+- **macOS**: приложението е подписано само ad-hoc (D-380), не с Developer ID. При първо пускане macOS казва, че не може да
+  провери приложението → Done → System Settings → Privacy & Security → Open Anyway (веднъж). Десен бутон → Open вече
+  не заобикаля проверката на новите macOS. Без ad-hoc подписа (както беше) свалено приложение на Apple Silicon е
+  „повредено“ и се отваря само с `xattr -dr com.apple.quarantine /Applications/Harness.app`. За хора извън екипа и
+  това не е достатъчно гладко → нотаризация.
 - **Windows**: SmartScreen показва „Windows protected your PC“ → More info → Run anyway.
 - **Linux**: AppImage и deb не се подписват по този начин; няма предупреждение (по желание: подпис на AppImage с gpg — не е нужен).
 
