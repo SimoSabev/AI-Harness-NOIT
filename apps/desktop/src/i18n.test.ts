@@ -24,8 +24,8 @@ describe("desktop i18n (E7е)", () => {
     expect(desktopLang({ MANDAT_LANG: "xx" }, "")).toBe("en");
   });
   it("templates fill {params}; the loading page is in the chosen language, with <html lang>", () => {
-    expect(dt("en", "error.exit", { code: 3 })).toBe("pnpm local exited with 3");
-    expect(dt("bg", "error.exit", { code: 3 })).toBe("pnpm local излезе с 3");
+    expect(dt("en", "error.exit", { code: 3 })).toBe("the harness exited with 3");
+    expect(dt("bg", "error.exit", { code: 3 })).toBe("харнесът излезе с 3");
     expect(decodeURIComponent(loadingPage("en"))).toContain('<html lang="en">');
     expect(decodeURIComponent(loadingPage("en"))).toContain("The harness is starting");
     expect(decodeURIComponent(loadingPage("bg"))).toContain("Харнесът се пуска");

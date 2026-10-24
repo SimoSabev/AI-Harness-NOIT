@@ -17,7 +17,7 @@ import { createInboxWatcher, notificationFor } from "./inbox-watch.js";
 import { authorize, folderArgs } from "./local-access.js";
 import { cliSpawn, harnessLayout, harnessSpawn } from "./harness-launch.js";
 import type { LaunchInput } from "./harness-launch.js";
-import { harnessEnv, resolveDesktopKek } from "./kek-keychain.js";
+import { harnessEnv, resolveDesktopKek, within } from "./kek-keychain.js";
 import { updateFeed } from "./updater.js";
 import type { UpdateFeed } from "./updater.js";
 import { authorizeUse, localHandlers } from "./local-handlers.js";
@@ -64,6 +64,8 @@ let waiting = 0;
 /** E9g A2: "Start at login" exists on macOS and Windows only (Electron: app.setLoginItemSettings @platform darwin,win32). */
 const loginSupported = process.platform === "darwin" || process.platform === "win32";
 const INBOX_POLL_MS = 15_000;
+/** D-380: how long the keychain may stay silent before the person is asked to keep waiting or quit. */
+const KEYCHAIN_WAIT_MS = 30_000;
 
 /** D-303 + D-371: new windows denied, navigation only to the local address, a CSP, no web permissions but copy.
  * E9g review: a target=_blank http(s) link (e.g. the subscription login) opens in the system browser instead. */
@@ -291,7 +293,13 @@ async function open(b: Banner): Promise<void> {
   }
 }
 
-function start(kek: Buffer | null): void {
+/** The step line of the loading page (before the harness banner). */
+function setStep(text: string): void {
+  if (win && !win.isDestroyed() && !banner) void win.webContents.executeJavaScript(`document.getElementById("s").textContent = ${JSON.stringify(text)}`).catch(() => undefined);
+}
+
+/** D-380: the window, tray and menus come first, so a slow keychain never leaves the person with no window at all. */
+function openWindow(): void {
   lang = desktopLang(process.env, app.getLocale());
   win = new BrowserWindow({ width: 1200, height: 820, title: "", icon, webPreferences: SECURE });
   lockDown(win);
@@ -302,6 +310,35 @@ function start(kek: Buffer | null): void {
     }
   });
   void win.loadURL(loadingPage(lang));
+  tray = new Tray(icon.resize({ width: 18, height: 18 }));
+  tray.setToolTip(t("app.name"));
+  tray.on("click", show);
+  buildMenus();
+  // E9g A2: the one system-wide shortcut — quick entry of a new task from anywhere. If another app holds it, the
+  // menu items and the window shortcuts still work.
+  globalShortcut.register(QUICK_ENTRY, () => toWeb({ command: "new_task" }));
+}
+
+/**
+ * E9g A4 (D-374): the KEK of the key envelope from the OS keychain; without one, the CLI keeps its 0600 file. D-380:
+ * after KEYCHAIN_WAIT_MS without an answer the person chooses to keep waiting or quit — never a new key in between.
+ */
+async function keychainKek(): Promise<Buffer | null | "quit"> {
+  const pending = resolveDesktopKek({ keychain: safeStorage, platform: process.platform, mandatHome }).catch(() => null);
+  const quick = await within(pending, 1500);
+  if (quick.done) return quick.value?.source === "keychain" ? quick.value.kek : null;
+  setStep(t("loading.keychain"));
+  for (;;) {
+    const r = await within(pending, KEYCHAIN_WAIT_MS);
+    if (r.done) return r.value?.source === "keychain" ? r.value.kek : null;
+    const opts = { type: "warning" as const, message: t("keychain.slow.title"), detail: t("keychain.slow.detail"), buttons: [t("keychain.wait"), t("keychain.quit")], defaultId: 0, cancelId: 1 };
+    const { response } = win && !win.isDestroyed() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    if (response === 1) return "quit";
+  }
+}
+
+function startHarness(kek: Buffer | null): void {
+  setStep(t("loading.check"));
   let out = "";
   const run = harnessSpawn(launch, layout, { ...harnessEnv(process.env, kek), MANDAT_LANG: lang });
   child = spawn(run.command, run.args, { cwd: run.cwd, env: run.env, stdio: ["ignore", "pipe", "pipe"], shell: false });
@@ -325,7 +362,7 @@ function start(kek: Buffer | null): void {
     errTail = (errTail + text).slice(-2000);
     for (const line of text.split("\n")) {
       const s = stepOf(line);
-      if (s && win && !banner) void win.webContents.executeJavaScript(`document.getElementById("s").textContent = ${JSON.stringify(`${s.n}/${s.of} ${s.text}`)}`);
+      if (s) setStep(`${s.n}/${s.of} ${s.text}`);
     }
   });
   child.on("exit", (code) => {
@@ -333,13 +370,6 @@ function start(kek: Buffer | null): void {
     if (!banner) dialog.showErrorBox(t("error.start"), errTail.split("\n").filter(isErrorLine).join("\n") || t("error.exit", { code: code ?? "?" }));
     app.quit();
   });
-  tray = new Tray(icon.resize({ width: 18, height: 18 }));
-  tray.setToolTip(t("app.name"));
-  tray.on("click", show);
-  buildMenus();
-  // E9g A2: the one system-wide shortcut — quick entry of a new task from anywhere. If another app holds it, the
-  // menu items and the window shortcuts still work.
-  globalShortcut.register(QUICK_ENTRY, () => toWeb({ command: "new_task" }));
 }
 
 /** E9g A5 (D-376, Q-054): electron-updater only when a feed is configured; otherwise it is never loaded. */
@@ -376,9 +406,13 @@ else {
   void app.whenReady().then(async () => {
     registerBridge(ipcMain, handlers, () => base);
     registerDrop(ipcMain, () => base, addProject);
-    // E9g A4 (D-374): the KEK of the key envelope from the OS keychain; without one, `pnpm local` keeps its 0600 file.
-    const kek = await resolveDesktopKek({ keychain: safeStorage, platform: process.platform, mandatHome }).catch(() => null);
-    start(kek?.source === "keychain" ? kek.kek : null);
+    openWindow();
+    const kek = await keychainKek();
+    if (kek === "quit") {
+      app.quit();
+      return;
+    }
+    startHarness(kek);
     const feed = updateFeed(process.env, app.isPackaged);
     if (feed) void checkUpdates(feed).catch(() => undefined);
   });

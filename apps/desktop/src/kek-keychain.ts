@@ -109,3 +109,17 @@ export function harnessEnv(env: Record<string, string | undefined>, kek: Buffer 
   else if (inherited !== undefined && inherited !== "") out.MANDAT_KEK = inherited;
   return out;
 }
+
+/**
+ * D-380: `p` if it settles within `ms`, else `{ done: false }` (p keeps running and can be awaited again). macOS may hold
+ * a keychain answer while it waits for the person, or not answer at all; the window must not wait silently forever.
+ */
+export async function within<T>(p: Promise<T>, ms: number): Promise<{ done: true; value: T } | { done: false }> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<{ done: false }>((resolve) => (timer = setTimeout(() => resolve({ done: false }), ms)));
+  try {
+    return await Promise.race([p.then((value) => ({ done: true as const, value })), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}

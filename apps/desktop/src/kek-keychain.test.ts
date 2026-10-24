@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileKeyStore, loadKek } from "../../../packages/llm-proxy/src/envelope.js";
-import { KEYCHAIN_KEK_FILE, harnessEnv, keychainUsable, resolveDesktopKek } from "./kek-keychain.js";
+import { KEYCHAIN_KEK_FILE, harnessEnv, keychainUsable, resolveDesktopKek, within } from "./kek-keychain.js";
 import type { KeychainLike } from "./kek-keychain.js";
 
 // E9g A4 (AC-12.9, D-374): the KEK of the key envelope (D-313/D-345) lives in the OS keychain through Electron
@@ -143,5 +143,23 @@ describe("the KEK in the OS keychain (AC-12.9, D-374)", () => {
     expect(harnessEnv({ PATH: "/bin", MANDAT_KEK: "old", ANTHROPIC_API_KEY: "x", ELECTRON_RUN_AS_NODE: "1" }, kek)).toEqual({ PATH: "/bin", MANDAT_KEK: kek.toString("base64") });
     expect(harnessEnv({ PATH: "/bin", MANDAT_KEK: "inherited" }, null)).toEqual({ PATH: "/bin", MANDAT_KEK: "inherited" });
     expect(harnessEnv({ PATH: "/bin" }, null)).toEqual({ PATH: "/bin" });
+  });
+});
+
+// D-380: macOS may hold the keychain answer while it waits for the person (password / Always Allow) or never answer;
+// the desktop shows its window first and asks after a while instead of hanging with no window at all.
+describe("waiting for the keychain has a limit (D-380)", () => {
+  it("an answer in time is passed on", async () => {
+    expect(await within(Promise.resolve(7), 50)).toEqual({ done: true, value: 7 });
+  });
+  it("no answer in time → not done, and the same promise can still be awaited later", async () => {
+    let resolve: (v: number) => void = () => undefined;
+    const p = new Promise<number>((r) => (resolve = r));
+    expect(await within(p, 10)).toEqual({ done: false });
+    resolve(3);
+    expect(await within(p, 10)).toEqual({ done: true, value: 3 });
+  });
+  it("a refusal stays a refusal", async () => {
+    await expect(within(Promise.reject(new Error("no")), 50)).rejects.toThrow("no");
   });
 });
