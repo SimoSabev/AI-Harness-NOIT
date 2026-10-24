@@ -13,7 +13,7 @@ describe("brand (D-296)", () => {
     expect(pageName("Вход")).toBe("Вход");
   });
 
-  it("the installed app (PWA) has the dark canvas and the logo icons; the tab has the SVG favicon (D-382)", () => {
+  it("the installed app (PWA) has the dark canvas and the logo icons; the tab has the logo (D-382, D-383)", () => {
     const tokens = readFileSync(path.join(web, "src/app/tokens.css"), "utf8");
     expect(APP_COLOR).toBe(/\[data-theme="dark"\]\s*\{[^}]*--canvas:\s*(#[0-9a-f]{6})/.exec(tokens)?.[1]);
     expect(APP_ICONS.map((i) => i.purpose ?? "any")).toEqual(["any", "any", "maskable"]);
@@ -21,7 +21,7 @@ describe("brand (D-296)", () => {
       const png = readFileSync(path.join(web, "public", i.src));
       expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`, i.src).toBe(i.sizes);
     }
-    expect(FAVICON).toEqual({ url: "/favicon.svg", type: "image/svg+xml" });
-    readFileSync(path.join(web, "public/favicon.svg"));
+    expect(FAVICON).toEqual({ url: "/logo.png", type: "image/png" });
+    readFileSync(path.join(web, "public/logo.png"));
   });
 });

@@ -12,5 +12,5 @@ const pub = path.join(site, "public");
 mkdirSync(pub, { recursive: true });
 rmSync(path.join(pub, "fonts"), { recursive: true, force: true });
 cpSync(path.join(web, "fonts"), path.join(pub, "fonts"), { recursive: true });
-for (const f of ["icon-192.png", "logo-mark.svg", "favicon.svg"]) copyFileSync(path.join(web, f), path.join(pub, f));
+for (const f of ["icon-192.png", "logo.png"]) copyFileSync(path.join(web, f), path.join(pub, f));
 console.log("site: fonts, icon and logo copied from apps/web/public");

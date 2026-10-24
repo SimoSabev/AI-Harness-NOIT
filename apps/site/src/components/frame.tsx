@@ -21,7 +21,7 @@ export function Frame({ lang, page, children }: { lang: Lang; page: PagePath; ch
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
           <a href={pagePath(lang, "/")} className="flex items-center gap-2 font-display text-lg font-semibold tracking-wide">
-            <span aria-hidden="true" className="logo-mark inline-block size-7 bg-accent" />
+            <span aria-hidden="true" className="logo-mark inline-block size-7" />
             {t("brand.name")}
           </a>
           <nav aria-label={t("nav.label")} className="flex flex-1 items-center gap-1">

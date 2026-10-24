@@ -65,7 +65,7 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
             <div className="flex h-full flex-col">
               <div className="flex items-center gap-3 px-4 py-3">
                 <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-wide">
-                  <span aria-hidden="true" className="logo-mark inline-block size-7 bg-accent" />
+                  <span aria-hidden="true" className="logo-mark inline-block size-7" />
                   {HARNESS || <span className="sr-only">{t("shell.home")}</span>}
                 </Link>
                 <div className="ml-auto lg:hidden"><Link href="/" className={btn.primary}>{t("shell.newTask")}</Link></div>

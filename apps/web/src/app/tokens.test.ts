@@ -34,9 +34,9 @@ describe("one token file (AC-12.4, E9g B)", () => {
     expect(css).toMatch(/url\("\/fonts\/tektur-latin\.woff2"\)/);
     expect(css).not.toMatch(/url\(\s*["']?(https?:)?\/\//);
   });
-  it("the logo is one class of the token file: a mask of /logo-mark.svg, coloured by the theme (D-382)", () => {
+  it("the logo is one class of the token file: the chosen image, /logo.png, for the web and the site (D-383)", () => {
     const css = readFileSync(path.join(here, "tokens.css"), "utf8");
-    expect(css).toMatch(/\.logo-mark\s*\{[^}]*mask:[^;}]*url\("\/logo-mark\.svg"\)/);
-    expect(existsSync(path.join(repo, "apps/web/public/logo-mark.svg"))).toBe(true);
+    expect(css).toMatch(/\.logo-mark\s*\{[^}]*background:[^;}]*url\("\/logo\.png"\)/);
+    expect(existsSync(path.join(repo, "apps/web/public/logo.png"))).toBe(true);
   });
 });
