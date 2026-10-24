@@ -23,6 +23,8 @@ export const CreateTaskBody = z.object({
   type: TaskType, // D-360: "free" too
   agent: z.union([z.enum(AGENT_IDS), z.string().regex(ACCOUNT_AGENT)]),
   text: z.string().min(1).max(4000),
+  /** D-387: the project picked in the task box; without it the org's first project */
+  repo: z.string().uuid().optional(),
 }).strict();
 
 export const FailureLabelBody = z.object({
@@ -140,11 +142,14 @@ export async function createTask(db: Db, o: { uid: string; org: string; body: z.
   const id = `t_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
   const ok = await asService(db, async (sql) => {
     // D-360: "free" needs no task type of the policy (its default scope applies); the other types must be defined
-    const repo = (await sql.query<{ id: string }>("select r.id::text as id from public.repos r where r.org_id = $1::uuid and ($2 = 'free' or exists (select 1 from public.task_types tt where tt.repo_id = r.id and tt.name = $2)) order by r.created_at limit 1", [o.org, o.body.type])).rows[0];
+    const chosen = o.body.repo ?? null;
+    if (chosen && (await sql.query("select 1 from public.repos where id = $1::uuid and org_id = $2::uuid", [chosen, o.org])).rows.length === 0) return "no_repo";
+    const repo = (await sql.query<{ id: string }>("select r.id::text as id from public.repos r where r.org_id = $1::uuid and ($3::uuid is null or r.id = $3::uuid) and ($2 = 'free' or exists (select 1 from public.task_types tt where tt.repo_id = r.id and tt.name = $2)) order by r.created_at limit 1", [o.org, o.body.type, chosen])).rows[0];
     if (!repo) return false;
     await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, created_by) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7::uuid)", [id, o.org, repo.id, o.body.type, o.body.agent, o.body.text, o.uid]);
     return true;
   });
+  if (ok === "no_repo") return err(404, "unknown_repo");
   if (!ok) return err(409, "no_repo_for_type");
   return { status: 201, body: { id, state: "CREATED" }, broadcast: { org: o.org, task: id } };
 }

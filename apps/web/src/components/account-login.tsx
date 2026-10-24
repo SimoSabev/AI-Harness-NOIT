@@ -10,7 +10,7 @@ import { btn, input } from "./ui";
 
 const ERR: Record<string, Key> = { keys_unavailable: "error.keys_unavailable", not_an_owner: "error.keys_not_an_owner" };
 
-// D-369: `mandat login` from the web. The unchanged Claude Code runs in a container of `pnpm local`; this form shows
+// D-369, D-387: `mandat login` from the web, one button. The unchanged Claude Code runs in a container of `pnpm local`; this form shows
 // Anthropic's sign-in address and passes the pasted code on. The code field clears itself; nothing is kept here.
 export function AccountLogin({ suggested }: { suggested: string }) {
   const router = useRouter();
@@ -61,12 +61,16 @@ export function AccountLogin({ suggested }: { suggested: string }) {
   return (
     <div className="mt-3 space-y-3">
       {v.show === "form" && (
-        <form className="flex flex-wrap items-end gap-3" onSubmit={(e) => void start(e)}>
-          <label className="text-sm">
-            <span className="font-medium">{t("keys.login.name")}</span>
-            <input className={`${input} mt-1.5 w-44 font-mono`} value={name} onChange={(e) => setName(e.target.value.toLowerCase())} pattern="[a-z0-9][a-z0-9\-]{0,31}" maxLength={32} required />
-          </label>
+        // D-387: one button; the account's name has a default and is changed only by whoever wants to
+        <form className="space-y-3" onSubmit={(e) => void start(e)}>
           <button className={btn.primary} type="submit">{t("keys.login.start")}</button>
+          <details className="text-sm">
+            <summary className="cursor-pointer text-mute hover:text-ink">{t("keys.login.nameOther")}</summary>
+            <label className="mt-2 block">
+              <span className="font-medium">{t("keys.login.name")}</span>
+              <input className={`${input} mt-1.5 w-44 font-mono`} value={name} onChange={(e) => setName(e.target.value.toLowerCase())} pattern="[a-z0-9][a-z0-9\-]{0,31}" maxLength={32} required />
+            </label>
+          </details>
         </form>
       )}
       {v.show === "wait" && <p className="text-sm text-mute" role="status">{note}</p>}

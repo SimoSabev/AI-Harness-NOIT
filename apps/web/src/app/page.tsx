@@ -12,7 +12,7 @@ import { taskFeed } from "../lib/server/chat-feed";
 import { db } from "../lib/server/db";
 import { controlKeys } from "../lib/server/keys";
 import { canAct, pageCtx } from "../lib/server/page";
-import { board, firstRepo, taskDetail } from "../lib/server/queries";
+import { board, repos, taskDetail } from "../lib/server/queries";
 import { sessionOf } from "../lib/server/workbench";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +32,9 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   // E9a: "Make a task" from a night question prefills the text (it used to open /tasks/new, D-384)
   const prefill = typeof sp.text === "string" ? sp.text.slice(0, 4000) : "";
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
-  const [b, repo, initial, d, sess] = await Promise.all([
+  const [b, projects, initial, d, sess] = await Promise.all([
     board(db(), c.uid, c.org),
-    firstRepo(db(), c.uid, c.org),
+    repos(db(), c.uid, c.org),
     selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
     selected ? taskDetail(db(), c.uid, c.org, c.role, selected) : null,
     selected ? sessionOf(db(), c.uid, c.org, selected) : null,
@@ -63,7 +63,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
-            <NewTask agents={agents} repo={repo} canAct={canAct(c.role)} initialText={prefill} />
+            <NewTask agents={agents} projects={projects} canAct={canAct(c.role)} initialText={prefill} />
           )}
         </div>
       </div>

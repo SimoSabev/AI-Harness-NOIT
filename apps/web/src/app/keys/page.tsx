@@ -77,7 +77,10 @@ export default async function KeysPage() {
           )}
         </div>
       </section>
-      <h2 className="mt-10 mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.api")}</h2>
+      {/* D-387: an API key is the less common way; it waits folded under the subscription sign-in */}
+      <details className="mt-10">
+      <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">{t("keys.apiMore")}</summary>
+      <h2 className="mt-4 mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.api")}</h2>
       <p className="max-w-2xl text-sm text-mute">
         {t("keys.apiHint")}
       </p>
@@ -116,6 +119,7 @@ export default async function KeysPage() {
           </ul>
         </section>
       )}
+      </details>
     </Shell>
   );
 }

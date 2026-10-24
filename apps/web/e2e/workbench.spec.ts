@@ -31,3 +31,13 @@ test("a task without a recorded session shows no empty session panels", async ({
   await page.goto("/tasks/t_seed_bugfix");
   await expect(page.getByRole("heading", { name: "The session inside" })).toHaveCount(0);
 });
+
+// D-387: accounts — the subscription first; an API key waits folded underneath.
+test("accounts: the API key form is folded under one question", async ({ page }) => {
+  await login(page, EMAIL.owner);
+  await page.goto("/keys");
+  await expect(page.getByText("Have an API key instead of a subscription?")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "API keys (pay per token)" })).toBeHidden();
+  await page.getByText("Have an API key instead of a subscription?").click();
+  await expect(page.getByRole("heading", { name: "API keys (pay per token)" })).toBeVisible();
+});

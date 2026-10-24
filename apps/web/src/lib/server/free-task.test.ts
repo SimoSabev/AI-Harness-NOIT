@@ -23,3 +23,15 @@ describe("free task (D-360)", () => {
     expect((await createTask(db, { uid: U.owner, org, body: { type: "css", agent: "claude", text: "x" } })).status).toBe(409);
   });
 });
+
+// D-387: the project picker in the task box — the task goes to the chosen repo of the org, never to another org's.
+describe("the chosen project (D-387)", () => {
+  it("a second repo of the org gets the task; a repo of no org or another org → 404", async () => {
+    const second = "d0000000-0000-4000-8000-0000000000b9";
+    await db.query("insert into public.repos (id, org_id, provider, full_name, remote_url, default_branch) values ($1, $2, 'local', 'me/second', 'file:///tmp/none.git', 'main') on conflict (id) do nothing", [second, org]);
+    const r = await createTask(db, { uid: U.owner, org, body: { type: "free", agent: "claude", text: "on the second", repo: second } });
+    expect(r.status).toBe(201);
+    expect((await db.query<{ repo_id: string }>("select repo_id::text as repo_id from public.tasks where id = $1", [(r.body as { id: string }).id])).rows[0]?.repo_id).toBe(second);
+    expect((await createTask(db, { uid: U.owner, org, body: { type: "free", agent: "claude", text: "x", repo: "d0000000-0000-4000-8000-0000000000ff" } })).status).toBe(404);
+  });
+});

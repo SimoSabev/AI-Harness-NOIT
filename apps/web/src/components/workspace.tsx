@@ -39,14 +39,15 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
 // No scope to pick: a real agent works without limits ("free", D-360; the judge still runs), the demo agents'
 // scenarios are bug fixes. The narrower types stay in the project's rules (.mandat.yml) and the CLI.
 // D-384: the agent picker shows only agents that can run (lib/agents.ts agentChoices); one agent → just its name;
-// none → a link to sign in instead of a box that cannot start anything.
+// none → a link to sign in instead of a box that cannot start anything. D-387: more than one project → a picker.
 const typeFor = (agent: string) => (agent.startsWith("fake") ? "bugfix" : "free");
 
-export function NewTask({ agents, repo, canAct, initialText = "" }: { agents: WsAgent[]; repo: string | null; canAct: boolean; initialText?: string }) {
+export function NewTask({ agents, projects, canAct, initialText = "" }: { agents: WsAgent[]; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
   const [agent, setAgent] = useState(agents[0]?.id ?? "");
+  const [repo, setRepo] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submit = async (e: React.FormEvent) => {
@@ -54,7 +55,7 @@ export function NewTask({ agents, repo, canAct, initialText = "" }: { agents: Ws
     if (text.trim() === "") return setError(t("ws.ask"));
     setBusy(true);
     setError(null);
-    const r = await postJson("/api/tasks", { text: text.trim(), type: typeFor(agent), agent });
+    const r = await postJson("/api/tasks", { text: text.trim(), type: typeFor(agent), agent, ...(repo ? { repo } : {}) });
     if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
     setBusy(false);
     setError(errorText(t, r, {}, t("newTask.failed", { status: r.status })));
@@ -84,7 +85,16 @@ export function NewTask({ agents, repo, canAct, initialText = "" }: { agents: Ws
           <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy || agents.length === 0}>{busy ? t("ws.sending") : t("ws.send")}</button>
         </div>
       </div>
-      {repo && <p className="text-center text-xs text-mute">{t("newTask.repo")} <span className="font-mono">{repo}</span></p>}
+      {projects.length > 1 ? (
+        <label className="mx-auto flex items-center gap-1.5 text-xs text-mute">
+          {t("newTask.repo")}
+          <select value={repo} onChange={(e) => setRepo(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 font-mono text-sm text-ink">
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+          </select>
+        </label>
+      ) : projects[0] ? (
+        <p className="text-center text-xs text-mute">{t("newTask.repo")} <span className="font-mono">{projects[0].full_name}</span></p>
+      ) : null}
       {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
   );
