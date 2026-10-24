@@ -1,22 +1,31 @@
 // D-299: the agent's change per file (path, added/modified/deleted, +/−), so a reviewer sees the shape before the lines.
 export type LineKind = "add" | "del" | "ctx" | "hunk";
-export interface DiffFile { path: string; kind: "added" | "modified" | "deleted" | "renamed"; added: number; removed: number; lines: { kind: LineKind; text: string }[] }
+export interface DiffFile { path: string; kind: "added" | "modified" | "deleted" | "renamed"; binary: boolean; added: number; removed: number; lines: { kind: LineKind; text: string }[] }
+
+// The header lines git writes between "diff --git" and the first hunk. Inside a hunk the same text ("--- x") is a change.
+const HEADER = ["index ", "--- ", "+++ ", "similarity ", "rename ", "old mode", "new mode"];
 
 export function splitDiff(diff: string): DiffFile[] {
   const out: DiffFile[] = [];
   let cur: DiffFile | null = null;
+  let inHunk = false;
   for (const l of diff.split("\n")) {
     const head = /^diff --git a\/(.+) b\/(.+)$/.exec(l);
     if (head) {
-      cur = { path: head[2] ?? head[1] ?? "", kind: head[1] !== head[2] ? "renamed" : "modified", added: 0, removed: 0, lines: [] };
+      cur = { path: head[2] ?? head[1] ?? "", kind: head[1] !== head[2] ? "renamed" : "modified", binary: false, added: 0, removed: 0, lines: [] };
       out.push(cur);
+      inHunk = false;
       continue;
     }
-    if (!cur) continue;
-    if (l.startsWith("new file mode")) cur.kind = "added";
-    else if (l.startsWith("deleted file mode")) cur.kind = "deleted";
-    else if (l.startsWith("index ") || l.startsWith("--- ") || l.startsWith("+++ ") || l.startsWith("similarity ") || l.startsWith("rename ") || l.startsWith("old mode") || l.startsWith("new mode")) continue;
-    else if (l.startsWith("@@")) cur.lines.push({ kind: "hunk", text: l });
+    if (!cur || cur.binary) continue; // a binary patch (base85) has nothing a reader can use
+    if (!inHunk && l.startsWith("new file mode")) cur.kind = "added";
+    else if (!inHunk && l.startsWith("deleted file mode")) cur.kind = "deleted";
+    else if (!inHunk && (l === "GIT binary patch" || /^Binary files .* differ$/.test(l))) cur.binary = true;
+    else if (!inHunk && HEADER.some((h) => l.startsWith(h))) continue;
+    else if (l.startsWith("@@")) {
+      inHunk = true;
+      cur.lines.push({ kind: "hunk", text: l });
+    }
     else if (l.startsWith("+")) {
       cur.added++;
       cur.lines.push({ kind: "add", text: l });
