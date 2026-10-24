@@ -59,3 +59,17 @@ export function siteDownloadUrl(file: string): string {
   if (siteAssetKind(file) === null) throw new MandatError("E_USAGE", "not an installer file name", { file });
   return `https://github.com/${SITE_RELEASE_REPO}/releases/latest/download/${encodeURIComponent(file)}`;
 }
+
+// E9g B step 7 (D-378): apps/site/shots.json — the harness screens scripts/site-shots.mjs photographs for the docs
+// (one PNG per screen, language and theme in apps/site/public/shots). Routes are local paths of the harness web UI.
+export const SiteShotList = z
+  .object({
+    viewport: z.object({ width: z.number().int().min(320).max(3840), height: z.number().int().min(320).max(2160) }).strict(),
+    shots: z
+      .array(z.object({ name: z.string().max(40).regex(/^[a-z0-9]+(-[a-z0-9]+)*$/), route: z.string().max(200).regex(/^\/(?!\/)[\w\-./?=&%]*$/) }).strict())
+      .min(1)
+      .max(20)
+      .refine((s) => new Set(s.map((x) => x.name)).size === s.length, "duplicate screen name"),
+  })
+  .strict();
+export type SiteShotList = z.infer<typeof SiteShotList>;

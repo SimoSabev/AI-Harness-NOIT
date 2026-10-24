@@ -16,6 +16,7 @@ import { mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { SiteShotList } from "../packages/contract/dist/index.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const SHOT_LANGS = /** @type {const} */ (["en", "bg"]);
@@ -125,7 +126,7 @@ async function waitFor(url, ms) {
 }
 
 async function shoot(base, outDir) {
-  const list = JSON.parse(readFileSync(path.join(repo, "apps/site/shots.json"), "utf8"));
+  const list = SiteShotList.parse(JSON.parse(readFileSync(path.join(repo, "apps/site/shots.json"), "utf8")));
   const { chromium } = webRequire("@playwright/test");
   const browser = await chromium.launch(process.env.MANDAT_CHROMIUM ? { executablePath: process.env.MANDAT_CHROMIUM } : {});
   mkdirSync(outDir, { recursive: true });

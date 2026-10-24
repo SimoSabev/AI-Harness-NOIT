@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SITE_RELEASE_REPO, SiteReleaseManifest, siteAssetKind, siteDownloadUrl } from "./site.js";
+import { SITE_RELEASE_REPO, SiteReleaseManifest, SiteShotList, siteAssetKind, siteDownloadUrl } from "./site.js";
 
 const sha = "a".repeat(64);
 const asset = (kind: string, file: string) => ({ kind, file, sha256: sha, size: 1024 });
@@ -52,5 +52,24 @@ describe("site release manifest (E9g B)", () => {
     expect(SITE_RELEASE_REPO).toBe("SimoSabev/AI-Harness-NOIT");
     expect(siteDownloadUrl("Harness-0.1.0-mac-arm64.dmg")).toBe("https://github.com/SimoSabev/AI-Harness-NOIT/releases/latest/download/Harness-0.1.0-mac-arm64.dmg");
     expect(() => siteDownloadUrl("../x")).toThrow();
+  });
+});
+
+// E9g B step 7 (D-378): apps/site/shots.json — the screens scripts/site-shots.mjs photographs for the docs.
+describe("site shot list (E9g B)", () => {
+  const ok = { viewport: { width: 1280, height: 800 }, shots: [{ name: "task-failed", route: "/tasks/t_seed_failed" }] };
+  it("accepts kebab-case names and local routes", () => {
+    expect(SiteShotList.parse(ok)).toEqual(ok);
+  });
+  it("refuses other hosts, bad names, duplicates, odd viewports and extra keys", () => {
+    for (const bad of [
+      { ...ok, shots: [{ name: "x", route: "https://evil.example/" }] },
+      { ...ok, shots: [{ name: "x", route: "//evil.example/" }] },
+      { ...ok, shots: [{ name: "Bad Name", route: "/" }] },
+      { ...ok, shots: [{ name: "x", route: "/" }, { name: "x", route: "/board" }] },
+      { ...ok, shots: [] },
+      { ...ok, viewport: { width: 100, height: 800 } },
+      { ...ok, extra: 1 },
+    ]) expect(SiteShotList.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
   });
 });
