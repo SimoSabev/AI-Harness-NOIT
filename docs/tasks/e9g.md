@@ -66,10 +66,10 @@
       (`pnpm --dir apps/desktop e2e`, фалшив харнес; в CI на macOS и Linux)
 
 ## Б. Сайтът (`apps/site`)
-- [ ] Статичен Next (`output: "export"`, без нови зависимости) със **същите токени и шрифтове** като уеба: токените се изнасят
+- [x] Статичен Next (`output: "export"`, без нови зависимости) със **същите токени и шрифтове** като уеба: токените се изнасят
       в един файл (`apps/web/src/app/tokens.css`), който и двете приложения внасят (AC-12.4 остава зелен)
-- [ ] `/` — какво е харнесът в 3 изречения, диаграма на потока, бутон „Изтегли за <твоята ОС>“ (откриване в браузъра)
-- [ ] `/download` — macOS (Apple Silicon / Intel), Windows, Linux (AppImage / deb), SHA-256 до всеки файл от
+- [x] `/` — какво е харнесът в 3 изречения, диаграма на потока, бутон „Изтегли за <твоята ОС>“ (откриване в браузъра)
+- [x] `/download` — macOS (Apple Silicon / Intel), Windows, Linux (AppImage / deb), SHA-256 до всеки файл от
       `apps/site/releases.json` (генерира се от `scripts/release-manifest.mjs` от dist/), изисквания (Docker ≥ 25.0.5, диск),
       телефон → PWA. Линковете водят към GitHub Releases (Q-054); без release показва „скоро“, не счупен линк
 - [ ] `/docs` — Първи стъпки, Как работи, Присъдите (VERIFIED/UNKNOWN/FAILED и детекторите D1–D12 с примери),
@@ -78,6 +78,8 @@
       `pnpm local` с примерните данни (тъмна + светла), в `apps/site/public/shots/`; alt текст на всяка
 - [ ] Тестове: build на export, линковете вътре в сайта, axe 0 serious/critical, без външни заявки; `docs/setup/site.md`
       (как Симо го пуска на GitHub Pages/Vercel)
+      (стъпка 6: build на export, вътрешните линкове/котви/`url()`, без външни заявки и бисквитки — `apps/site/src/export.test.ts`,
+      в `pnpm check`; остават axe и `docs/setup/site.md` за стъпка 7; хостингът — Q-064)
 
 ## Нощта (workflow, по ред; всяка стъпка: червен тест → код → зелен, `pnpm check` → `CHECK OK`, малки комити)
 | # | стъпка | зависи от |

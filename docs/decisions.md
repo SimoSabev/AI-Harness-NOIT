@@ -2363,3 +2363,42 @@ Dev (`pnpm desktop`, `app.isPackaged === false`) остава както беш�
 Алтернативи: Next `output: "standalone"` (сменя build-а на `pnpm local` и пак иска контекста за образите); втори вграден Node
 (двойно по-голямо, още един runtime); архив, разпакетиран при първо пускане (бавно, връзките на Windows пак са проблем).
 Статус: решено (подпис — Q-053; име — Q-063; Linux/Windows — [НП] до първия CI run).
+
+## D-377 Сайтът за изтегляне `apps/site`: статичен Next, общите токени, манифест на изданията (24.10.2026)
+Решение: (1) `apps/site` е Next 16 с `output: "export"` и `trailingSlash: true` (всяка страница е `<път>/index.html`, излиза
+в `apps/site/out`); без нови зависимости — next, react, tailwind и @tailwindcss/postcss са със същите версии като в apps/web,
+pnpm-lock.yaml получава само нов importer. В workspace-а е (apps/*), затова `pnpm build` (turbo) го строи, а `pnpm check` пуска
+тестовете му; `apps/site/turbo.json` пази `out/**` в кеша и следи `tokens.css` и шрифтовете на уеба през `$TURBO_ROOT$`.
+(2) Един файл с токени (AC-12.4): шрифтовете и цветовете на двете теми са изнесени от `apps/web/src/app/globals.css` в
+`apps/web/src/app/tokens.css`; уебът го внася с `@import "./tokens.css"`, сайтът с `@import "../../../web/src/app/tokens.css"`.
+Тест (`apps/web/src/app/tokens.test.ts`) пада, ако друг CSS файл под apps/ дефинира цветовете или някой спре да го внася.
+Шрифтовете и иконата се копират от `apps/web/public` при build (`apps/site/scripts/copy-assets.mjs`; копието е в .gitignore).
+(3) Езици: английски на `/`, български на `/bg/` (статичен export няма сървър за Accept-Language); два root layout-а
+(`(en)` и `(bg)/bg`), за да е `<html lang>` верен; 404 е `app/global-not-found.tsx` с `experimental.globalNotFound`
+(Next docs, „not-found.js“ → global-not-found, експериментално от v15.4.0, прочетено 24.10.2026:
+https://nextjs.org/docs/app/api-reference/file-conventions/not-found). Каталогът е като на уеба (`apps/site/src/i18n`,
+en изворът, bg преводът, тест за същите ключове и за кирилица извън каталога). Темата следва системата (`data-theme="system"`).
+(4) „Изтегли за <твоята ОС>“: чиста функция `detectOs` (User-Agent Client Hints, после User-Agent; iPad, който се представя
+като Mac, по maxTouchPoints) в браузъра; статичният HTML казва „Изтегли“ → `/download/`; телефон → `/download/#phone` (PWA, D-289).
+(5) `/download`: петте инсталатора (mac arm64/x64 dmg, win x64 exe, linux AppImage/deb) с SHA-256 и размер от
+`apps/site/releases.json`; схемата е `SiteReleaseManifest` в packages/contract (правило 11) и се проверява при build — счупен
+манифест чупи build-а. Без издание (`version: null`) всеки ред казва „Скоро“, без линк. Линкът е
+`https://github.com/SimoSabev/AI-Harness-NOIT/releases/latest/download/<файл>` (Q-054) — GitHub документира
+`/releases/latest/download/<asset>` като линк към файл от последното издание (https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases,
+прочетено 24.10.2026). Имената носят версията (`Harness-<версия>-<ос>-<arch>.<ext>`, D-376), затова манифестът трябва да е
+на последното издание: `node scripts/release-manifest.mjs [--dir] [--out] [--version]` чете папката на electron-builder
+(`$MANDAT_DESKTOP_OUT/release`), хешира файловете и пише JSON-а; само чете локални файлове, не качва нищо.
+Проверено: върху двата истински dmg от А5 дава 0.1.0 с два файла; сайтът, построен с него, показва двата линка и хешовете,
+останалите три реда — „Скоро“. В репото манифестът остава празен, докато няма издание (иначе линковете биха били 404).
+(6) Изисквания на страницата: Docker ≥ 25.0.5 и ≥ 2 CPU, ≥ 10 GB свободно (D-302); приложението ~1 GB (измерено:
+Harness.app arm64 731 MB), образите ~5 GB (измерено: sandbox 1,66 GB + proxy и gate по 361 MB + база).
+(7) Без аналитика, бисквитки и външни заявки (PRD-15): тестът `apps/site/src/export.test.ts` минава по `out/` — всички страници
+и в двата езика, всеки вътрешен линк, `#котва` и `url()` в CSS-а съществуват, няма script/link/img/iframe към друг хост,
+`<a>` навън само към репото, няма `document.cookie`/storage/beacon. Клиентският бандъл на бутона не внася zod/манифеста.
+Защо: една и съща визия без втори източник на цветове; статичният сайт може да седи на всеки хостинг и не праща нищо към нас;
+„Скоро“ вместо счупен линк, докато Симо не публикува издание.
+Алтернативи: копие на токените в сайта (два източника, AC-12.4 пада); `[lang]` сегмент с redirect от `/` (статичен export
+няма redirect, а `/` трябва да е страница); линк към конкретен tag (иска версията в URL-а и пак манифест).
+[НП] Хостингът (GitHub Pages под под-път `/AI-Harness-NOIT/` чупи абсолютните `/fonts/` и `/_next/`) — Q-064; axe и
+снимките на UI-я са в следващата стъпка (документацията).
+Статус: решено (хостингът — Q-064).
