@@ -60,7 +60,8 @@ export function checkGrantable(p: string, env: PathEnv): GrantCheck {
   if (P.parse(r).root === r || P.dirname(r) === r) return { ok: false, reason: "root" };
   const home = real(env.home, env) ?? P.normalize(env.home);
   if (insideFolded(home, r, env.platform)) return { ok: false, reason: "home" }; // home itself or one of its ancestors
-  if (env.platform === "win32" ? WIN_SYSTEM.test(fold(r, env.platform)) : POSIX_SYSTEM.some((s) => insideFolded(r, s, env.platform))) return { ok: false, reason: "system" };
+  // a system folder, inside one, or (E9g review) one that holds a system folder: /var above /var/lib, /private above /private/etc
+  if (env.platform === "win32" ? WIN_SYSTEM.test(fold(r, env.platform)) : POSIX_SYSTEM.some((s) => insideFolded(r, s, env.platform) || insideFolded(s, r, env.platform))) return { ok: false, reason: "system" };
   if (HOME_SECRETS.some((s) => insideFolded(r, P.join(home, s), env.platform))) return { ok: false, reason: "secrets" };
   const profile = real(env.mandatHome, env) ?? P.normalize(env.mandatHome);
   if (insideFolded(r, profile, env.platform)) return { ok: false, reason: "profile" };
@@ -68,11 +69,15 @@ export function checkGrantable(p: string, env: PathEnv): GrantCheck {
   return { ok: true, path: r };
 }
 
-/** May a local action with this scope touch this path? Its real path must be inside a granted folder with the scope. */
+/**
+ * May a local action with this scope touch this path? Its real path must be inside a granted folder with the scope.
+ * E9g review: a stored grant counts only while its folder could still be granted (checkGrantable), so a hand-edited or
+ * older grants file with "/", the home folder or a system folder gives nothing.
+ */
 export function authorize(p: string, scope: LocalScope, grants: readonly LocalGrant[], env: PathEnv): UseCheck {
   const r = real(p, env);
   if (r === null) return { ok: false, reason: "missing" };
-  const holders = grants.filter((g) => isInside(r, g.path, env.platform));
+  const holders = grants.filter((g) => isInside(r, g.path, env.platform) && checkGrantable(g.path, env).ok);
   if (holders.length === 0) return { ok: false, reason: "not_granted" };
   const grant = holders.find((g) => g.scopes.includes(scope));
   return grant ? { ok: true, path: r, grant } : { ok: false, reason: "no_scope" };

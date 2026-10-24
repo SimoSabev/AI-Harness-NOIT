@@ -59,6 +59,17 @@ describe("granting a folder (AC-12.6, D-373)", () => {
     expect(checkGrantable("/home/simo/code/escape", env)).toEqual({ ok: false, reason: "system" });
   });
 
+  it("E9g review: a folder that holds a system folder (/var above /var/lib, /private above /private/etc) is refused too", () => {
+    const linux = fakeEnv({ dirs: ["/var", "/var/www", "/var/lib"] });
+    expect(checkGrantable("/var", linux)).toEqual({ ok: false, reason: "system" });
+    expect(checkGrantable("/var/www", linux)).toEqual({ ok: true, path: "/var/www" });
+    const mac = fakeEnv({ platform: "darwin", home: "/Users/simo", mandatHome: "/Users/simo/h/.mandat", dirs: ["/private", "/private/var", "/private/tmp/x"], links: { "/var": "/private/var" } });
+    expect(checkGrantable("/private", mac)).toEqual({ ok: false, reason: "system" });
+    expect(checkGrantable("/var", mac)).toEqual({ ok: false, reason: "system" });
+    expect(checkGrantable("/PRIVATE/var", fakeEnv({ platform: "darwin", home: "/Users/simo", dirs: ["/PRIVATE/var"] }))).toEqual({ ok: false, reason: "system" });
+    expect(checkGrantable("/private/tmp/x", mac)).toEqual({ ok: true, path: "/private/tmp/x" });
+  });
+
   it("secrets folders in home and the harness profile (MANDAT_HOME) are refused", () => {
     expect(checkGrantable("/home/simo/.ssh", env)).toEqual({ ok: false, reason: "secrets" });
     expect(checkGrantable("/home/simo/.config/app", env)).toEqual({ ok: false, reason: "secrets" });
@@ -117,6 +128,14 @@ describe("using a grant (AC-12.6, D-373)", () => {
     expect(authorize("/w/shop/../other/b.ts", "open_editor", grants, fakeEnv({ files: ["/w/shop/../other/b.ts"] }))).toEqual({ ok: false, reason: "not_granted" });
     expect(authorize("/w/shop/missing.ts", "open_editor", grants, env)).toEqual({ ok: false, reason: "missing" });
     expect(authorize("/w/shop/src/a.ts", "open_editor", [], env)).toEqual({ ok: false, reason: "not_granted" });
+  });
+
+  it("E9g review: a stored grant whose folder may not be granted (a hand-edited or older file: /, home, /etc) gives nothing", () => {
+    const e = fakeEnv({ dirs: ["/", "/home/simo", "/etc", "/w/shop"], files: ["/etc/passwd", "/home/simo/notes.txt", "/w/shop/a.ts"] });
+    expect(authorize("/etc/passwd", "open_editor", [grant("/", ["open_editor"])], e)).toEqual({ ok: false, reason: "not_granted" });
+    expect(authorize("/home/simo/notes.txt", "open_editor", [grant("/home/simo", ["open_editor"])], e)).toEqual({ ok: false, reason: "not_granted" });
+    expect(authorize("/etc/passwd", "open_editor", [grant("/etc", ["open_editor"])], e)).toEqual({ ok: false, reason: "not_granted" });
+    expect(authorize("/w/shop/a.ts", "open_editor", [grant("/", ["open_editor"]), grant("/w/shop", ["open_editor"])], e)).toMatchObject({ ok: true, grant: { path: "/w/shop" } });
   });
 
   it("nested grants: the scope may come from either", () => {
