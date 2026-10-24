@@ -78,6 +78,15 @@ describe("site export (E9g B)", () => {
     expect(broken).toEqual([]);
   });
 
+  it("every page: the logo in the header and the favicon (D-382)", () => {
+    for (const page of Object.keys(PAGES)) {
+      const html = read(page);
+      expect(html, page).toMatch(/<span aria-hidden="true" class="logo-mark /);
+      expect(html, page).toMatch(/<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml"/);
+    }
+    for (const f of ["logo-mark.svg", "favicon.svg", "icon-192.png"]) expect(existsSync(path.join(out, f)), f).toBe(true);
+  });
+
   it("the home page links the download page with an anchor per system, and each language links the other", () => {
     expect(attrs(read("index.html"), "href")).toEqual(expect.arrayContaining(["/download/", "/bg/"]));
     expect(attrs(read("bg/download/index.html"), "href")).toEqual(expect.arrayContaining(["/bg/", "/download/"]));

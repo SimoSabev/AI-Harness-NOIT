@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// E9g B (D-377): the site uses the web's self-hosted fonts and icon (same design, no Google/CDN request). They are
-// copied at build time, so the repo keeps one copy (apps/web/public); apps/site/public/{fonts,icon-192.png} are ignored by git.
+// E9g B (D-377): the site uses the web's self-hosted fonts, icon and logo (same design, no Google/CDN request, D-382).
+// They are copied at build time, so the repo keeps one copy (apps/web/public); the copies in apps/site/public are ignored by git.
 import { copyFileSync, cpSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,5 +12,5 @@ const pub = path.join(site, "public");
 mkdirSync(pub, { recursive: true });
 rmSync(path.join(pub, "fonts"), { recursive: true, force: true });
 cpSync(path.join(web, "fonts"), path.join(pub, "fonts"), { recursive: true });
-copyFileSync(path.join(web, "icon-192.png"), path.join(pub, "icon-192.png"));
-console.log("site: fonts and icon copied from apps/web/public");
+for (const f of ["icon-192.png", "logo-mark.svg", "favicon.svg"]) copyFileSync(path.join(web, f), path.join(pub, f));
+console.log("site: fonts, icon and logo copied from apps/web/public");
