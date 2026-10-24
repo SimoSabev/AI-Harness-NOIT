@@ -43,7 +43,9 @@ export function FileViewer({ files, start = 0, tall = false }: { files: DiffFile
         )}
       </div>
       <div className={`overflow-auto ${tall ? "max-h-[calc(100vh-14rem)]" : "max-h-[32rem]"}`}>
-        {mode === "view" && content !== null ? (
+        {f.binary ? (
+          <p className="px-4 py-6 text-sm text-mute">{t("res.binary")}</p>
+        ) : mode === "view" && content !== null ? (
           isMd(f.path) ? <Markdown src={content} className="px-6 py-5 text-[15px]" /> : <pre className="px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">{content}</pre>
         ) : (
           <pre className="py-2 font-mono text-xs leading-relaxed">
@@ -53,7 +55,7 @@ export function FileViewer({ files, start = 0, tall = false }: { files: DiffFile
       </div>
       <p className="border-t border-line px-4 py-2 text-xs text-mute">
         {t(`diff.kind.${f.kind}`)} · <span className="text-ok">+{f.added}</span> <span className="text-bad">−{f.removed}</span>
-        {content === null && f.kind !== "deleted" && <> · {t("res.noPreview")}</>}
+        {content === null && f.kind !== "deleted" && !f.binary && <> · {t("res.noPreview")}</>}
       </p>
     </div>
   );

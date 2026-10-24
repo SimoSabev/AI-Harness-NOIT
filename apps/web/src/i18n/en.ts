@@ -920,6 +920,8 @@ export const en = {
   "res.preview": "Preview",
   "res.change": "Change",
   "res.noPreview": "only the change is stored for an edited file",
+  "res.binary": "binary file — no preview",
+  "res.tooLarge": "the change is over 1 MB and is not stored for viewing",
   "res.files": "Files: {n}",
   "lib.title": "Library",
   "lib.intro": "Everything the agents wrote, per task. Documents open as documents; code as its change.",

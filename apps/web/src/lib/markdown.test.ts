@@ -57,5 +57,6 @@ describe("addedContent: съдържанието на нов файл от diff-
   it("само за добавен файл", () => {
     expect(addedContent({ kind: "added", lines: [{ kind: "hunk", text: "@@ -0,0 +1,2 @@" }, { kind: "add", text: "+# Х" }, { kind: "add", text: "+ред" }] })).toBe("# Х\nред");
     expect(addedContent({ kind: "modified", lines: [{ kind: "add", text: "+a" }] })).toBeNull();
+    expect(addedContent({ kind: "added", binary: true, lines: [] })).toBeNull();
   });
 });

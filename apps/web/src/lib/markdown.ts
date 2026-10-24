@@ -114,8 +114,8 @@ export function inline(src: string): Inline[] {
   return out;
 }
 
-/** The whole content of a file the change adds (from its diff lines); null for a changed or deleted file. */
-export function addedContent(f: { kind: string; lines: { kind: string; text: string }[] }): string | null {
-  if (f.kind !== "added") return null;
+/** The whole content of a file the change adds (from its diff lines); null for a changed, deleted or binary file. */
+export function addedContent(f: { kind: string; binary?: boolean; lines: { kind: string; text: string }[] }): string | null {
+  if (f.kind !== "added" || f.binary === true) return null;
   return f.lines.filter((l) => l.kind === "add").map((l) => l.text.slice(1)).join("\n");
 }
