@@ -142,7 +142,7 @@ export const docsEn = {
   "docs.desktop.agent.p1": "Folder rights are for you and the harness on your computer. The agent in the sandbox never gets a granted folder, the terminal, a key or a setting of the app: a grant changes no sandbox mount and no environment variable, and a test checks that.",
   "docs.desktop.agent.p2": "Every use (apply, open in editor, a terminal line) is written to the task's activity, not to the ledger.",
   "docs.desktop.window.h": "The window is locked down",
-  "docs.desktop.window.p": "The page in the window cannot use Node or open other windows, can go only to the harness's local address, and talks to the app only through a short list of checked requests.",
+  "docs.desktop.window.p": "The page in the window cannot use Node or open windows of its own (a web link opens in your browser), can go only to the harness's local address, and talks to the app only through a short list of checked requests.",
   "docs.desktop.keys.h": "Keys in the system keychain",
   "docs.desktop.keys.p": "The master key that protects your saved API keys is kept in the system keychain through Electron's safeStorage; only the sealed key is on disk. Where no usable keychain exists, for example on a Linux desktop without one, the app keeps the earlier protected file.",
 
