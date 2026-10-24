@@ -13,7 +13,10 @@ const sha = "b".repeat(64);
 describe("download rows (E9g B)", () => {
   it("the committed releases.json is valid", () => {
     expect(SiteReleaseManifest.safeParse(raw).success).toBe(true);
-    expect(releaseManifest(path.resolve(__dirname, "../.."))).toEqual(SiteReleaseManifest.parse(raw));
+    // in a folder with only the committed file (a local `pnpm site:mac` build adds releases.local.json next to it)
+    const dir = mkdtempSync(path.join(os.tmpdir(), "site-"));
+    writeFileSync(path.join(dir, "releases.json"), JSON.stringify(raw));
+    expect(releaseManifest(dir)).toEqual(SiteReleaseManifest.parse(raw));
   });
   it("no release → five rows, all coming soon, no link", () => {
     const rows = downloadRows({ version: null, assets: [] });
