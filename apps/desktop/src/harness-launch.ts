@@ -1,7 +1,8 @@
 import path from "node:path";
 
-// E9g A5 (D-376): where the harness lives and how the desktop starts it. In dev (`pnpm desktop`) it is the repo and
-// `pnpm local`, as before. In the installed app it is the bundle in the app's resources (resources/harness, the same
+// E9g A5 (D-376): where the harness lives and how the desktop starts it. In dev (`pnpm desktop`) it is the repo's built
+// CLI (`pnpm desktop` builds it first), run by Electron's own Node like the installed app (D-380: the Node on PATH may be
+// another major, e.g. Homebrew's 26, which `mandat local` refuses). In the installed app it is the bundle in the app's resources (resources/harness, the same
 // layout as the repo: packages/*/dist, apps/web/.next, supabase/, docker/, fixtures/, node_modules) run by Electron's
 // own Node (ELECTRON_RUN_AS_NODE=1): no pnpm, no Node install, no repo. Docker stays required (the CLI checks it).
 
@@ -78,7 +79,7 @@ export function harnessSpawn(i: LaunchInput, l: HarnessLayout, base: Record<stri
   if (!i.packaged && fake !== undefined && fake !== "") {
     return { command: i.execPath, args: [path.resolve(fake)], cwd: i.repoRoot, env: { ...base, ELECTRON_RUN_AS_NODE: "1", MANDAT_HOME: l.mandatHome } };
   }
-  if (!i.packaged) return { command: "pnpm", args: ["local"], cwd: i.repoRoot, env: { ...base } };
+  if (!i.packaged) return { command: i.execPath, args: [l.cliMain, "local"], cwd: i.repoRoot, env: { ...base, ELECTRON_RUN_AS_NODE: "1" } };
   return {
     command: i.execPath,
     args: [l.cliMain, "local"],
@@ -87,9 +88,9 @@ export function harnessSpawn(i: LaunchInput, l: HarnessLayout, base: Record<stri
   };
 }
 
-/** A one-off CLI run (apply): `node` from the person's PATH in dev, Electron's Node in the installed app. */
+/** A one-off CLI run (apply): Electron's Node in dev and in the installed app (D-380). */
 export function cliSpawn(i: LaunchInput, l: HarnessLayout, argv: string[], base: Record<string, string>): SpawnSpec {
-  if (!i.packaged) return { command: "node", args: [l.cliMain, ...argv], cwd: l.root, env: { ...base } };
+  if (!i.packaged) return { command: i.execPath, args: [l.cliMain, ...argv], cwd: l.root, env: { ...base, ELECTRON_RUN_AS_NODE: "1" } };
   return {
     command: i.execPath,
     args: [l.cliMain, ...argv],

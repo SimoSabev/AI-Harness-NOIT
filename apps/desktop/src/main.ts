@@ -34,7 +34,7 @@ import { allowPermission, attachGuards, withCsp } from "./window-guard.js";
 // opens the address it printed (no login, D-368) and keeps the app in the tray. Built only locally.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../../..");
-// E9g A5 (D-376): dev → the repo and `pnpm local`; the installed app → resources/harness run by Electron's own Node.
+// E9g A5 (D-376, D-380): dev → the repo's built CLI, the installed app → resources/harness; both run by Electron's own Node.
 const launch: LaunchInput = {
   packaged: app.isPackaged,
   resourcesPath: process.resourcesPath,

@@ -36,9 +36,10 @@ describe("harness layout (E9g A5, D-376)", () => {
 });
 
 describe("how the harness starts (E9g A5, D-376)", () => {
-  it("dev keeps `pnpm local` from the repo, env as given", () => {
-    const s = harnessSpawn(dev, harnessLayout(dev), { PATH: "/bin", MANDAT_KEK: "k" });
-    expect(s).toEqual({ command: "pnpm", args: ["local"], cwd: "/repo", env: { PATH: "/bin", MANDAT_KEK: "k" } });
+  it("dev: Electron's own Node (24.22.0) runs the repo's built CLI, never the Node on PATH (Node 26 is refused, D-380)", () => {
+    const l = harnessLayout(dev);
+    const s = harnessSpawn(dev, l, { PATH: "/bin", MANDAT_KEK: "k" });
+    expect(s).toEqual({ command: dev.execPath, args: [l.cliMain, "local"], cwd: "/repo", env: { PATH: "/bin", MANDAT_KEK: "k", ELECTRON_RUN_AS_NODE: "1" } });
   });
   it("installed: Electron's own Node runs the bundled CLI — no pnpm, no Node install; MANDAT_HOME = the desktop's profile", () => {
     const l = harnessLayout(app);
@@ -61,8 +62,8 @@ describe("how the harness starts (E9g A5, D-376)", () => {
     const a = harnessSpawn({ ...app, env }, harnessLayout({ ...app, env }), {});
     expect(a.args).toEqual([harnessLayout(app).cliMain, "local"]);
   });
-  it("apply: `node` in dev, Electron's Node in the installed app; never the KEK unless the caller put it there", () => {
-    expect(cliSpawn(dev, harnessLayout(dev), ["apply"], { PATH: "/bin" })).toEqual({ command: "node", args: [path.join("/repo", "packages/cli/dist/main.js"), "apply"], cwd: "/repo", env: { PATH: "/bin" } });
+  it("apply: Electron's Node in dev and in the installed app; never the KEK unless the caller put it there", () => {
+    expect(cliSpawn(dev, harnessLayout(dev), ["apply"], { PATH: "/bin" })).toEqual({ command: dev.execPath, args: [path.join("/repo", "packages/cli/dist/main.js"), "apply"], cwd: "/repo", env: { PATH: "/bin", ELECTRON_RUN_AS_NODE: "1" } });
     const s = cliSpawn(app, harnessLayout(app), ["--json", "apply"], { PATH: "/bin" });
     expect(s.command).toBe(app.execPath);
     expect(s.env).toMatchObject({ ELECTRON_RUN_AS_NODE: "1", MANDAT_HOME: harnessLayout(app).mandatHome });
