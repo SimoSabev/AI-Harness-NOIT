@@ -66,7 +66,7 @@ export function sendCommand(target: CommandTarget, cmd: unknown): boolean {
 
 /** A click on a notification: its task card, else the inbox. */
 export function commandFor(taskId: string | undefined): DesktopCommand {
-  return taskId ? { command: "open_task", task_id: taskId } : { command: "view", view: "inbox" };
+  return taskId ? { command: "open_task", task_id: taskId } : { command: "view", view: "tasks" };
 }
 
 export interface IpcMainOnLike {

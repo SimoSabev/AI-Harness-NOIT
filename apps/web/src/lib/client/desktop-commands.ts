@@ -10,15 +10,14 @@ import { addProjectHref } from "./local-access";
 export type CommandAction =
   | { kind: "navigate"; href: string }
   | { kind: "click"; selector: string }
-  | { kind: "focus"; selector: string; fallback: string }
   | { kind: "none" };
 
-const VIEW_HREF: Record<DesktopView, string> = { inbox: "/", board: "/board", agents: "/agents", tools: "/tools", night: "/night", research: "/research" };
+const VIEW_HREF: Record<DesktopView, string> = { tasks: "/", projects: "/harness", settings: "/settings" };
 
 export function commandAction(cmd: DesktopCommand, ctx: { typing: boolean }): CommandAction {
   switch (cmd.command) {
     case "new_task":
-      return { kind: "navigate", href: "/tasks/new" };
+      return { kind: "navigate", href: "/" };
     case "view":
       return { kind: "navigate", href: VIEW_HREF[cmd.view] };
     case "open_task":
@@ -27,14 +26,8 @@ export function commandAction(cmd: DesktopCommand, ctx: { typing: boolean }): Co
       return { kind: "navigate", href: addProjectHref(cmd.path) };
     case "approve":
       return ctx.typing ? { kind: "none" } : { kind: "click", selector: "[data-desktop-approve]" };
-    case "open_project":
-      return { kind: "click", selector: `[data-desktop-project="${cmd.index}"]` };
-    case "search":
-      return { kind: "focus", selector: "[data-desktop-search]", fallback: "/board" };
     case "apply_locally":
       return { kind: "click", selector: "[data-desktop-apply]" };
-    case "shortcuts":
-      return { kind: "none" };
     // E9g A4: the host terminal's events go to its panel (host-terminal.tsx), not to the page
     case "terminal_output":
     case "terminal_exit":
@@ -68,9 +61,5 @@ export function runCommandAction(a: CommandAction, doc: CommandDocument, push: (
   else if (a.kind === "click") {
     const el = doc.querySelector(a.selector);
     if (el && el.disabled !== true) el.click();
-  } else if (a.kind === "focus") {
-    const el = doc.querySelector(a.selector);
-    if (el) el.focus();
-    else push(a.fallback);
   }
 }

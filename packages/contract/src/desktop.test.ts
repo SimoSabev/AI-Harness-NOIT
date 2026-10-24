@@ -82,10 +82,10 @@ describe("desktop bridge contract (D-371)", () => {
     expect(parseDesktopResponse("nope", { ok: true, value: {} })).toEqual({ ok: false, error: { code: "invalid_response", message: expect.any(String) } });
   });
 
-  it("commands from main to the UI: menu items, project 1..9, open a task card", () => {
-    for (const c of [{ command: "new_task" }, { command: "approve" }, { command: "view", view: "board" }, { command: "open_project", index: 9 }, { command: "open_task", task_id: "t_1" }])
+  it("commands from main to the UI: menu items, the three sections, open a task card (D-384)", () => {
+    for (const c of [{ command: "new_task" }, { command: "approve" }, { command: "view", view: "tasks" }, { command: "view", view: "projects" }, { command: "view", view: "settings" }, { command: "open_task", task_id: "t_1" }])
       expect(DesktopCommand.safeParse(c).success, JSON.stringify(c)).toBe(true);
-    for (const c of [{ command: "open_project", index: 10 }, { command: "view", view: "settings/../x" }, { command: "eval", code: "1" }, { command: "new_task", x: 1 }])
+    for (const c of [{ command: "view", view: "board" }, { command: "open_project", index: 1 }, { command: "search" }, { command: "shortcuts" }, { command: "view", view: "settings/../x" }, { command: "eval", code: "1" }, { command: "new_task", x: 1 }])
       expect(DesktopCommand.safeParse(c).success, JSON.stringify(c)).toBe(false);
   });
   it("the inbox snapshot main reads from GET /api/inbox: only id + text of each waiting item are kept (E9g A2)", () => {

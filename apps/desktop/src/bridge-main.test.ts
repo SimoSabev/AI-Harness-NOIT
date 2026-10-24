@@ -76,7 +76,7 @@ describe("desktop bridge, main side (D-371)", () => {
     expect(sendCommand({ send }, { command: "eval", code: "1" })).toBe(false);
     expect(send).toHaveBeenCalledTimes(1);
     expect(commandFor("t_9")).toEqual({ command: "open_task", task_id: "t_9" });
-    expect(commandFor(undefined)).toEqual({ command: "view", view: "inbox" });
+    expect(commandFor(undefined)).toEqual({ command: "view", view: "tasks" });
   });
 });
 

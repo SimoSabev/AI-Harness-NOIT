@@ -116,7 +116,8 @@ export function parseDesktopResponse(method: string, raw: unknown): DesktopResul
   return env.success ? (env.data as DesktopResult<unknown>) : { ok: false, error: { code: "invalid_response", message: issue(env.error) } };
 }
 
-export const DesktopView = z.enum(["inbox", "board", "agents", "tools", "night", "research"]);
+/** D-384: the View menu opens the three sections of the side bar. */
+export const DesktopView = z.enum(["tasks", "projects", "settings"]);
 export type DesktopView = z.infer<typeof DesktopView>;
 
 /** main → web: what the menu, a shortcut or a notification click asks the UI to do. */
@@ -125,10 +126,7 @@ export const DesktopCommand = z.discriminatedUnion("command", [
   z.object({ command: z.literal("add_project"), path: LocalPath.optional() }).strict(),
   z.object({ command: z.literal("apply_locally") }).strict(),
   z.object({ command: z.literal("approve") }).strict(),
-  z.object({ command: z.literal("search") }).strict(),
-  z.object({ command: z.literal("shortcuts") }).strict(),
   z.object({ command: z.literal("view"), view: DesktopView }).strict(),
-  z.object({ command: z.literal("open_project"), index: z.number().int().min(1).max(9) }).strict(),
   z.object({ command: z.literal("open_task"), task_id: TaskId }).strict(),
   // E9g A4 (AC-12.8): the host terminal's output, its end, and each line the person typed (→ task_activities)
   z.object({ command: z.literal("terminal_output"), id: TerminalId, data: z.string().max(65_536) }).strict(),

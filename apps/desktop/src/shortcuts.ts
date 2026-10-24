@@ -2,8 +2,9 @@ import type { DesktopCommand } from "@mandat/contract";
 import { dt } from "./i18n.js";
 import type { DesktopKey, Lang } from "./i18n.js";
 
-// E9g A2 (AC-12.7): the keyboard map of the desktop window, pure. The "Keys" menu registers these accelerators (each
-// exactly once in the whole menu), Help → Keyboard shortcuts prints them, and main registers the one global entry.
+// E9g A2 (AC-12.7), D-384: the keyboard map of the desktop window, pure — new task, approve, and the global quick entry.
+// The File menu registers the window accelerators (each exactly once), Help → Keyboard shortcuts prints them, and main
+// registers the one global entry.
 // Approve sends the approve command to the web; the web opens its own confirm (with the TOTP code when the change asks
 // for one) and decides. Main never approves anything.
 
@@ -21,19 +22,9 @@ export interface Shortcut {
 }
 
 export function shortcutMap(): readonly Shortcut[] {
-  const projects: Shortcut[] = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
-    id: `project_${n}`,
-    accelerator: `CommandOrControl+${n}`,
-    command: { command: "open_project", index: n },
-    label: "cmd.project",
-    params: { n },
-    global: false,
-  }));
   return [
     { id: "new_task", accelerator: "CommandOrControl+N", command: { command: "new_task" }, label: "cmd.newTask", global: false },
     { id: "approve", accelerator: "CommandOrControl+Enter", command: { command: "approve" }, label: "cmd.approve", global: false },
-    { id: "search", accelerator: "CommandOrControl+K", command: { command: "search" }, label: "cmd.search", global: false },
-    ...projects,
     { id: "quick_entry", accelerator: QUICK_ENTRY, command: { command: "new_task" }, label: "cmd.quickEntry", global: true },
   ];
 }

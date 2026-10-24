@@ -10,19 +10,19 @@ const labelOf = (i: MenuSpec): string | undefined => ("label" in i ? i.label : u
 const top = (m: readonly MenuSpec[]) => m.map(labelOf);
 
 describe("the application menu (AC-12.7)", () => {
-  it("macOS: app, File, Edit, View, Keys, Window, Help; elsewhere without the app menu", () => {
-    expect(top(appMenu("en", "darwin", { appName: "Harness", loginItem: false }))).toEqual(["Harness", "File", "Edit", "View", "Keys", "Window", "Help"]);
-    expect(top(appMenu("en", "linux", { appName: "Harness", loginItem: null }))).toEqual(["File", "Edit", "View", "Keys", "Window", "Help"]);
-    expect(top(appMenu("bg", "win32", { appName: "Харнес", loginItem: false }))).toEqual(["Файл", "Редакция", "Изглед", "Клавиши", "Прозорец", "Помощ"]);
+  it("macOS: app, File, Edit, View, Window, Help; elsewhere without the app menu (no Keys menu, D-384)", () => {
+    expect(top(appMenu("en", "darwin", { appName: "Harness", loginItem: false }))).toEqual(["Harness", "File", "Edit", "View", "Window", "Help"]);
+    expect(top(appMenu("en", "linux", { appName: "Harness", loginItem: null }))).toEqual(["File", "Edit", "View", "Window", "Help"]);
+    expect(top(appMenu("bg", "win32", { appName: "Харнес", loginItem: false }))).toEqual(["Файл", "Редакция", "Изглед", "Прозорец", "Помощ"]);
   });
 
-  it("File has New task, Add project, Apply locally; View has the six screens", () => {
+  it("File has New task, Approve, Add project, Apply locally; View has the three sections", () => {
     const m = appMenu("en", "darwin", { appName: "Harness", loginItem: false });
     const file = m.find((i) => labelOf(i) === "File");
     const cmds = (i: MenuSpec | undefined) => flat(i && "submenu" in i && i.submenu ? i.submenu : []).flatMap((x) => ("command" in x && x.command ? [x.command] : []));
-    expect(cmds(file)).toEqual([{ command: "new_task" }, { command: "add_project" }, { command: "apply_locally" }]);
+    expect(cmds(file)).toEqual([{ command: "new_task" }, { command: "approve" }, { command: "add_project" }, { command: "apply_locally" }]);
     const view = m.find((i) => labelOf(i) === "View");
-    expect(cmds(view).map((c) => (c.command === "view" ? c.view : c.command))).toEqual(["inbox", "board", "agents", "tools", "night", "research"]);
+    expect(cmds(view).map((c) => (c.command === "view" ? c.view : c.command))).toEqual(["tasks", "projects", "settings"]);
   });
 
   it("Edit is built from roles, so copy and paste work in the window", () => {
@@ -32,12 +32,10 @@ describe("the application menu (AC-12.7)", () => {
     for (const r of ["undo", "redo", "cut", "copy", "paste", "selectAll"]) expect(roles).toContain(r);
   });
 
-  it("the Keys menu lists every shortcut; each window shortcut is registered exactly once in the whole menu", () => {
+  it("each window shortcut is registered exactly once in the whole menu; Keyboard shortcuts is in Help only", () => {
     for (const platform of ["darwin", "linux", "win32"]) {
       const m = appMenu("en", platform, { appName: "Harness", loginItem: false });
-      const keys = m.find((i) => labelOf(i) === "Keys");
-      const inKeys = flat(keys && "submenu" in keys && keys.submenu ? keys.submenu : []).map(labelOf).join("\n");
-      for (const s of shortcutMap()) expect(inKeys, s.id).toContain(s.id === "quick_entry" ? "Quick entry" : s.label === "cmd.project" ? `Project ${s.params?.n}` : "");
+      expect(flat(m).filter((i) => "action" in i && i.action === "show_shortcuts")).toHaveLength(1);
       const accels = flat(m).flatMap((i) => ("accelerator" in i && i.accelerator ? [i.accelerator] : []));
       for (const s of shortcutMap().filter((x) => !x.global)) expect(accels.filter((a) => a === s.accelerator), s.id).toHaveLength(1);
       expect(accels).not.toContain("CommandOrControl+Shift+Space"); // the global one is registered by globalShortcut only
@@ -62,10 +60,10 @@ describe("the application menu (AC-12.7)", () => {
 });
 
 describe("the tray (AC-12.5)", () => {
-  it("shows the waiting counter; a click on it opens the inbox", () => {
+  it("shows the waiting counter; a click on it opens the tasks", () => {
     const m = trayMenu("en", { waiting: 3, loginItem: false });
     expect(m.map(labelOf)).toContain("3 waiting for you");
-    expect(flat(m).find((i) => labelOf(i) === "3 waiting for you")).toMatchObject({ command: { command: "view", view: "inbox" } });
+    expect(flat(m).find((i) => labelOf(i) === "3 waiting for you")).toMatchObject({ command: { command: "view", view: "tasks" } });
     expect(trayMenu("bg", { waiting: 0, loginItem: false }).map(labelOf)).toContain("Нищо не чака теб");
     expect(flat(m).some((i) => "action" in i && i.action === "quit")).toBe(true);
   });

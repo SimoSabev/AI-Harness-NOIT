@@ -7,17 +7,14 @@ import type { CommandDocument } from "./desktop-commands";
 describe("commandAction", () => {
   const idle = { typing: false };
 
-  it("menu screens go to the real routes", () => {
-    expect(commandAction({ command: "view", view: "inbox" }, idle)).toEqual({ kind: "navigate", href: "/" });
-    expect(commandAction({ command: "view", view: "board" }, idle)).toEqual({ kind: "navigate", href: "/board" });
-    expect(commandAction({ command: "view", view: "agents" }, idle)).toEqual({ kind: "navigate", href: "/agents" });
-    expect(commandAction({ command: "view", view: "tools" }, idle)).toEqual({ kind: "navigate", href: "/tools" });
-    expect(commandAction({ command: "view", view: "night" }, idle)).toEqual({ kind: "navigate", href: "/night" });
-    expect(commandAction({ command: "view", view: "research" }, idle)).toEqual({ kind: "navigate", href: "/research" });
+  it("the View menu's three sections go to the side bar's routes (D-384)", () => {
+    expect(commandAction({ command: "view", view: "tasks" }, idle)).toEqual({ kind: "navigate", href: "/" });
+    expect(commandAction({ command: "view", view: "projects" }, idle)).toEqual({ kind: "navigate", href: "/harness" });
+    expect(commandAction({ command: "view", view: "settings" }, idle)).toEqual({ kind: "navigate", href: "/settings" });
   });
 
   it("new task, a task card from a notification, add project", () => {
-    expect(commandAction({ command: "new_task" }, idle)).toEqual({ kind: "navigate", href: "/tasks/new" });
+    expect(commandAction({ command: "new_task" }, idle)).toEqual({ kind: "navigate", href: "/" });
     expect(commandAction({ command: "open_task", task_id: "t_ab_1" }, idle)).toEqual({ kind: "navigate", href: "/tasks/t_ab_1" });
     expect(commandAction({ command: "add_project" }, idle)).toEqual({ kind: "navigate", href: "/projects/add" });
     // E9g A3 (AC-12.6): a dropped folder / "Open with" → the Add project screen with the suggestion
@@ -29,11 +26,8 @@ describe("commandAction", () => {
     expect(commandAction({ command: "approve" }, { typing: true })).toEqual({ kind: "none" });
   });
 
-  it("projects 1..9 press the n-th project in the side bar; search focuses a search field, else the board", () => {
-    expect(commandAction({ command: "open_project", index: 3 }, idle)).toEqual({ kind: "click", selector: '[data-desktop-project="3"]' });
-    expect(commandAction({ command: "search" }, idle)).toEqual({ kind: "focus", selector: "[data-desktop-search]", fallback: "/board" });
+  it("apply locally presses the page's own button", () => {
     expect(commandAction({ command: "apply_locally" }, idle)).toEqual({ kind: "click", selector: "[data-desktop-apply]" });
-    expect(commandAction({ command: "shortcuts" }, idle)).toEqual({ kind: "none" });
   });
 
   it("the host terminal's events are for its panel only: no navigation, no click (E9g A4)", () => {
@@ -65,26 +59,23 @@ describe("runCommandAction", () => {
     };
   }
 
-  it("navigate pushes the route; click and focus act on the element", () => {
+  it("navigate pushes the route; click presses the element", () => {
     const pushed: string[] = [];
-    const els = { "[data-desktop-approve]": {}, "[data-desktop-search]": {} };
+    const els = { "[data-desktop-approve]": {} };
     const doc = fakeDoc(els);
-    runCommandAction({ kind: "navigate", href: "/board" }, doc, (h) => pushed.push(h));
+    runCommandAction({ kind: "navigate", href: "/settings" }, doc, (h) => pushed.push(h));
     runCommandAction({ kind: "click", selector: "[data-desktop-approve]" }, doc, (h) => pushed.push(h));
-    runCommandAction({ kind: "focus", selector: "[data-desktop-search]", fallback: "/board" }, doc, (h) => pushed.push(h));
-    expect(pushed).toEqual(["/board"]);
+    expect(pushed).toEqual(["/settings"]);
     expect(els["[data-desktop-approve]"]).toEqual({ clicked: true });
-    expect(els["[data-desktop-search]"]).toEqual({ focused: true });
   });
 
-  it("no element: a click does nothing, a focus falls back to its route; a disabled button is not pressed", () => {
+  it("no element: a click does nothing; a disabled button is not pressed", () => {
     const pushed: string[] = [];
     const els = { "[data-desktop-approve]": { disabled: true } };
     runCommandAction({ kind: "click", selector: "[data-desktop-apply]" }, fakeDoc(els), (h) => pushed.push(h));
     runCommandAction({ kind: "click", selector: "[data-desktop-approve]" }, fakeDoc(els), (h) => pushed.push(h));
-    runCommandAction({ kind: "focus", selector: "[data-desktop-search]", fallback: "/board" }, fakeDoc(els), (h) => pushed.push(h));
     runCommandAction({ kind: "none" }, fakeDoc(els), (h) => pushed.push(h));
-    expect(pushed).toEqual(["/board"]);
+    expect(pushed).toEqual([]);
     expect(els["[data-desktop-approve]"]).toEqual({ disabled: true });
   });
 });

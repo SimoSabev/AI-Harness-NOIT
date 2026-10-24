@@ -2,16 +2,15 @@ import { DesktopCommand } from "@mandat/contract";
 import { describe, expect, it } from "vitest";
 import { QUICK_ENTRY, acceleratorLabel, shortcutMap, shortcutsText } from "./shortcuts.js";
 
-// E9g A2 (AC-12.7): the keyboard map is one pure list; the "Keys" menu, the help box and main's registration read it.
+// E9g A2 (AC-12.7): the keyboard map is one pure list; the File menu, the help box and main's registration read it.
 describe("the keyboard map (AC-12.7)", () => {
   const map = shortcutMap();
 
-  it("has new task, approve, search, projects 1..9 and the global quick entry", () => {
+  it("has only new task, approve and the global quick entry (D-384)", () => {
     const by = Object.fromEntries(map.map((s) => [s.id, s]));
+    expect(map.map((s) => s.id)).toEqual(["new_task", "approve", "quick_entry"]);
     expect(by.new_task?.accelerator).toBe("CommandOrControl+N");
     expect(by.approve?.accelerator).toBe("CommandOrControl+Enter");
-    expect(by.search?.accelerator).toBe("CommandOrControl+K");
-    for (let n = 1; n <= 9; n++) expect(by[`project_${n}`]).toMatchObject({ accelerator: `CommandOrControl+${n}`, command: { command: "open_project", index: n } });
     expect(by.quick_entry).toMatchObject({ accelerator: QUICK_ENTRY, global: true, command: { command: "new_task" } });
     expect(QUICK_ENTRY).toBe("CommandOrControl+Shift+Space");
     expect(map.filter((s) => s.global).map((s) => s.id)).toEqual(["quick_entry"]);
@@ -43,7 +42,6 @@ describe("the keyboard map (AC-12.7)", () => {
     expect(en.split("\n")).toHaveLength(map.length);
     expect(en).toContain("⌘N  New task");
     expect(en).toContain("⇧⌘Space  Quick entry (from anywhere)");
-    expect(bg).toContain("Ctrl+K  Търсене");
-    expect(bg).toContain("Ctrl+9  Проект 9");
+    expect(bg).toContain("Ctrl+N  Нова задача");
   });
 });

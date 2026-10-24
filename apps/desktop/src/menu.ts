@@ -2,12 +2,12 @@ import type { DesktopCommand, DesktopView } from "@mandat/contract";
 import type { MenuItemConstructorOptions } from "electron";
 import { dt } from "./i18n.js";
 import type { DesktopKey, Lang } from "./i18n.js";
-import { QUICK_ENTRY, acceleratorLabel, shortcutLabel, shortcutMap } from "./shortcuts.js";
+import { shortcutMap } from "./shortcuts.js";
 
 // E9g A2 (AC-12.5, AC-12.7): the native menus as plain data, pure (no Electron import) so they are tested as is. An item
 // either sends a DesktopCommand to the web (main → harness:event), runs a main-side action, or is an Electron role.
-// The window shortcuts are registered in the Keys menu only (each exactly once); the global quick entry only through
-// globalShortcut, so the Keys menu shows it in its label.
+// D-384: no Keys menu — the window shortcuts sit on their File items (each exactly once), Help lists them all, and the
+// global quick entry is registered only through globalShortcut.
 
 export type MenuAction = "open" | "quit" | "toggle_login" | "show_shortcuts";
 
@@ -27,33 +27,19 @@ export interface AppMenuOptions {
 
 const SEP: MenuSpec = { type: "separator" };
 const VIEWS: { view: DesktopView; label: DesktopKey }[] = [
-  { view: "inbox", label: "view.inbox" },
-  { view: "board", label: "view.board" },
-  { view: "agents", label: "view.agents" },
-  { view: "tools", label: "view.tools" },
-  { view: "night", label: "view.night" },
-  { view: "research", label: "view.research" },
+  { view: "tasks", label: "view.tasks" },
+  { view: "projects", label: "view.projects" },
+  { view: "settings", label: "view.settings" },
 ];
 
 function loginItem(lang: Lang, on: boolean | null): MenuSpec[] {
   return on === null ? [] : [{ label: dt(lang, "tray.startAtLogin"), type: "checkbox", checked: on, action: "toggle_login" }];
 }
 
-function keysMenu(lang: Lang, platform: string): MenuSpec[] {
-  const map = shortcutMap();
-  const item = (id: string): MenuSpec[] => map.filter((s) => s.id === id).map((s) => ({ label: shortcutLabel(s, lang), accelerator: s.accelerator, command: s.command }));
-  const projects: MenuSpec[] = map.filter((s) => s.id.startsWith("project_")).map((s) => ({ label: shortcutLabel(s, lang), accelerator: s.accelerator, command: s.command }));
-  return [
-    ...item("new_task"),
-    ...item("approve"),
-    ...item("search"),
-    SEP,
-    { label: dt(lang, "menu.projects"), submenu: projects },
-    SEP,
-    { label: `${dt(lang, "cmd.quickEntry")}    ${acceleratorLabel(QUICK_ENTRY, platform)}`, command: { command: "new_task" } },
-    SEP,
-    { label: dt(lang, "help.shortcuts"), action: "show_shortcuts" },
-  ];
+/** A File item with its window shortcut, when it has one. */
+function fileItem(lang: Lang, id: string, label: DesktopKey, command: DesktopCommand): MenuSpec {
+  const accelerator = shortcutMap().find((s) => s.id === id && !s.global)?.accelerator;
+  return { label: dt(lang, label), command, ...(accelerator ? { accelerator } : {}) };
 }
 
 export function appMenu(lang: Lang, platform: string, o: AppMenuOptions): MenuSpec[] {
@@ -68,7 +54,9 @@ export function appMenu(lang: Lang, platform: string, o: AppMenuOptions): MenuSp
     {
       label: dt(lang, "menu.file"),
       submenu: [
-        { label: dt(lang, "cmd.newTask"), command: { command: "new_task" } },
+        fileItem(lang, "new_task", "cmd.newTask", { command: "new_task" }),
+        fileItem(lang, "approve", "cmd.approve", { command: "approve" }),
+        SEP,
         { label: dt(lang, "cmd.addProject"), command: { command: "add_project" } },
         { label: dt(lang, "cmd.applyLocally"), command: { command: "apply_locally" } },
         ...(mac ? [] : [SEP, ...loginItem(lang, o.loginItem), ...(o.loginItem === null ? [] : [SEP]), quit]),
@@ -79,7 +67,6 @@ export function appMenu(lang: Lang, platform: string, o: AppMenuOptions): MenuSp
       label: dt(lang, "menu.view"),
       submenu: [...VIEWS.map((v): MenuSpec => ({ label: dt(lang, v.label), command: { command: "view", view: v.view } })), SEP, { role: "reload" }, SEP, { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" }, SEP, { role: "togglefullscreen" }],
     },
-    { label: dt(lang, "menu.keys"), submenu: keysMenu(lang, platform) },
     { label: dt(lang, "menu.window"), submenu: mac ? [{ role: "minimize" }, { role: "zoom" }, SEP, { role: "front" }] : [{ role: "minimize" }, { role: "close" }] },
     { label: dt(lang, "menu.help"), submenu: [{ label: dt(lang, "help.shortcuts"), action: "show_shortcuts" }, ...(mac ? [] : [SEP, about])] },
   ];
@@ -89,7 +76,7 @@ export function trayMenu(lang: Lang, o: { waiting: number; loginItem: boolean | 
   const waiting = o.waiting > 0 ? dt(lang, "tray.waiting", { count: o.waiting }) : dt(lang, "tray.nothingWaiting");
   return [
     { label: dt(lang, "tray.open"), action: "open" },
-    { label: waiting, command: { command: "view", view: "inbox" } },
+    { label: waiting, command: { command: "view", view: "tasks" } },
     SEP,
     ...loginItem(lang, o.loginItem),
     ...(o.loginItem === null ? [] : [SEP]),
