@@ -1,5 +1,8 @@
 // E9g B (D-377): the site catalog. English is the source; every key must exist in bg.ts (i18n-catalog.test.ts).
+import { docsEn } from "./docs-en";
+
 export const en = {
+  ...docsEn,
   "brand.name": "Harness",
   "meta.description": "Give AI coding agents tasks in a locked sandbox on your computer and get a verdict they cannot fake.",
   "meta.download": "Download",

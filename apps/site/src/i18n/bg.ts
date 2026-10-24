@@ -1,7 +1,9 @@
+import { docsBg } from "./docs-bg";
 import type { Key } from "./en";
 
 // E9g B (D-377): българският превод на каталога на сайта (изворът е en.ts).
 export const bg: Record<Key, string> = {
+  ...docsBg,
   "brand.name": "Harness",
   "meta.description": "Давай задачи на AI агенти в заключен пясъчник на твоя компютър и получавай присъда, която те не могат да подправят.",
   "meta.download": "Изтегляне",

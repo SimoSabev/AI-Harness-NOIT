@@ -5,10 +5,9 @@ import type { Lang } from "../i18n/t";
 import { downloadRows, releaseManifest } from "../lib/downloads";
 import type { DownloadRow } from "../lib/downloads";
 import { platformAnchor } from "../lib/os";
+import { DOCKER_MIN } from "../lib/requirements";
 import type { Platform } from "../lib/os";
 
-/** D-302: the lowest Docker version the harness accepts (the check before `mandat local`). */
-const DOCKER_MIN = "25.0.5";
 const PLATFORMS: readonly Platform[] = ["mac", "windows", "linux"];
 
 // E9g B (D-377): "/download" — every installer with its SHA-256 (apps/site/releases.json), what you need, the phone.

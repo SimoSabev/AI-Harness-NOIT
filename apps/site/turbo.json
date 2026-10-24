@@ -7,6 +7,8 @@
         "src/**",
         "scripts/**",
         "releases.json",
+        "shots.json",
+        "public/shots/**",
         "next.config.ts",
         "postcss.config.mjs",
         "tsconfig.json",

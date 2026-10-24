@@ -10,7 +10,9 @@ export function Frame({ lang, page, children }: { lang: Lang; page: PagePath; ch
   const nav: { path: PagePath; label: string }[] = [
     { path: "/", label: t("nav.home") },
     { path: "/download/", label: t("nav.download") },
+    { path: "/docs/", label: t("nav.docs") },
   ];
+  const active = (p: PagePath) => (p === "/docs/" ? page.startsWith("/docs/") : p === page);
   return (
     <>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-10 focus:rounded-lg focus:bg-panel focus:px-3 focus:py-2">
@@ -24,7 +26,7 @@ export function Frame({ lang, page, children }: { lang: Lang; page: PagePath; ch
           </a>
           <nav aria-label={t("nav.label")} className="flex flex-1 items-center gap-1">
             {nav.map((n) => (
-              <a key={n.path} href={pagePath(lang, n.path)} aria-current={n.path === page ? "page" : undefined} className={`${btn.ghost} aria-[current=page]:text-ink`}>
+              <a key={n.path} href={pagePath(lang, n.path)} aria-current={active(n.path) ? "page" : undefined} className={`${btn.ghost} aria-[current=page]:text-ink`}>
                 {n.label}
               </a>
             ))}

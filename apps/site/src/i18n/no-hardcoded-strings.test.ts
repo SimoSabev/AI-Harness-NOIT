@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 // E9g B (D-377, AC-12.10): every visible string of the site is in src/i18n/en.ts + bg.ts; Cyrillic elsewhere fails.
 const src = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ALLOWED = [/\.test\.tsx?$/, /^i18n\/(en|bg)\.ts$/];
+const ALLOWED = [/\.test\.tsx?$/, /^i18n\/(docs-)?(en|bg)\.ts$/];
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((n) => {
