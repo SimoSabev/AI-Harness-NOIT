@@ -64,6 +64,10 @@ pnpm local                        # уеб + proxy + worker → браузър �
   `npx vitest run packages/cli/src/commands.test.ts`.
 - `pnpm check | tail` скрива изходния код — проверявай за `CHECK OK`, преди да комитваш.
 - Tестът „drift“ на daemon-а е бавен (~5,5 s) — има 30 s таймаут.
+- **Colima на Mac** споделя с VM-а само `$HOME`: папки от `/var/folders` или `/tmp` се виждат празни в контейнера. Docker
+  тестовете затова ползват `<repo>/.mandat/tmp-docker` (D-389). Нова контрактна промяна сменя тага на образите →
+  `pnpm mandat images build` преди `pnpm test:docker`.
+- **Mac-ът спи** през нощта и Docker тестовете изтичат: `caffeinate -i pnpm test:docker` (D-389).
 
 ## 6. Карта на кода
 - `packages/contract` — zod схеми (единен източник), хешове, explain (текстове на причините), профил, договори
