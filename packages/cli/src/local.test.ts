@@ -46,7 +46,7 @@ describe("без вход (D-368)", () => {
     expect(localJobEnv({ PATH: "/bin", MANDAT_KEK: kek }, "postgresql://x")).toEqual({ PATH: "/bin", MANDAT_DB_URL: "postgresql://x" });
   });
   it("банерът: адресът, без имейл, парола и TOTP", () => {
-    const b = localBanner(2).join("\n");
+    const b = localBanner(2, "bg").join("\n");
     expect(b).toContain("  Отвори:  http://localhost:3000");
     expect(b).toContain("без вход");
     expect(b).not.toMatch(/Имейл|Парола|Ключ:|otpauth/);
@@ -56,25 +56,25 @@ describe("без вход (D-368)", () => {
 describe("localPreflight (D-302)", () => {
   const good = { docker: "29.1.0", cpus: 4, node: "24.22.0", git: "2.50.1", freeGb: 40, imagesPresent: false, webPortFree: true };
   it("всичко наред → ok, по един ред на проверка", () => {
-    const r = localPreflight(good);
+    const r = localPreflight(good, "bg");
     expect(r.ok).toBe(true);
     expect(r.lines.map((l) => l.startsWith("✓"))).toEqual([true, true, true, true, true, true]);
   });
   it("Docker не работи / стар; малко място за образите; зает порт → ясни причини и какво да направиш", () => {
-    expect(localPreflight({ ...good, docker: null }).lines[0]).toContain("Пусни Docker Desktop");
-    expect(localPreflight({ ...good, docker: "24.0.7" }).ok).toBe(false);
-    const disk = localPreflight({ ...good, freeGb: 6 });
+    expect(localPreflight({ ...good, docker: null }, "bg").lines[0]).toContain("Пусни Docker Desktop");
+    expect(localPreflight({ ...good, docker: "24.0.7" }, "bg").ok).toBe(false);
+    const disk = localPreflight({ ...good, freeGb: 6 }, "bg");
     expect(disk.ok).toBe(false);
     expect(disk.lines.join("\n")).toContain("нужни са ≥ 10 GB");
-    expect(localPreflight({ ...good, freeGb: 6, imagesPresent: true }).ok).toBe(true);
-    expect(localPreflight({ ...good, webPortFree: false }).lines.join("\n")).toContain("порт 3000 е зает");
-    expect(localPreflight({ ...good, node: "22.11.0" }).ok).toBe(false);
-    expect(localPreflight({ ...good, node: "26.4.0" }).lines.join("\n")).toContain("brew install node@24");
+    expect(localPreflight({ ...good, freeGb: 6, imagesPresent: true }, "bg").ok).toBe(true);
+    expect(localPreflight({ ...good, webPortFree: false }, "bg").lines.join("\n")).toContain("порт 3000 е зает");
+    expect(localPreflight({ ...good, node: "22.11.0" }, "bg").ok).toBe(false);
+    expect(localPreflight({ ...good, node: "26.4.0" }, "bg").lines.join("\n")).toContain("brew install node@24");
     // D-380: git is needed (the demo repo, the export); on a Mac without Command Line Tools /usr/bin/git is only a stub
-    const noGit = localPreflight({ ...good, git: null });
+    const noGit = localPreflight({ ...good, git: null }, "bg");
     expect(noGit.ok).toBe(false);
     expect(noGit.lines.join("\n")).toContain("xcode-select --install");
-    expect(localPreflight({ ...good, cpus: 1 }).ok).toBe(false);
+    expect(localPreflight({ ...good, cpus: 1 }, "bg").ok).toBe(false);
   });
   it("aptFailed: повторът без apt само ако не е изключен вече", () => {
     expect(retryWithoutApt({})).toBe(true);
@@ -115,5 +115,19 @@ describe("image build progress (D-387)", () => {
   it("one [3/4] line: image k of n, the step, the minutes and the usual time", () => {
     expect(imagesStep({ done: 0, total: 3, step: null, secs: 5 }, "bg")).toBe("[3/4] Образи на пясъчника: 1 от 3 · 0 мин (обикновено 5–15 мин)");
     expect(imagesStep({ done: 1, total: 3, step: { n: 4, of: 9 }, secs: 190 }, "en")).toBe("[3/4] Sandbox images: 2 of 3 · step 4/9 · 3 min (usually 5–15 min)");
+  });
+});
+
+// D-389: `pnpm local` speaks the language of the person (MANDAT_LANG / the system locale), so the English desktop app
+// no longer shows Bulgarian start-up lines; the desktop still finds the address in either language (banner.ts).
+describe("pnpm local in English (D-389)", () => {
+  it("the banner and the checks", () => {
+    const b = localBanner(2, "en").join("\n");
+    expect(b).toContain("  Open:     http://localhost:3000");
+    expect(b).toContain("no sign-in");
+    expect(b).not.toMatch(/[а-яА-Я]/);
+    const f = localPreflight({ docker: null, cpus: 1, node: "22.1.0", git: null, freeGb: 1, imagesPresent: false, webPortFree: false }, "en");
+    expect(f.lines.join("\n")).not.toMatch(/[а-яА-Я]/);
+    expect(f.lines[0]).toContain("Start Docker Desktop");
   });
 });

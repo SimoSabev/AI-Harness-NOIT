@@ -84,36 +84,27 @@ function cliRun(env: Record<string, string | undefined>): JobRun {
   };
 }
 
-export function localBanner(slots: number): string[] {
-  return [
-    "",
-    "  Харнесът работи локално (съдия: Мандат)",
-    `  Отвори:  http://localhost:${WEB_PORT}`,
-    "  Вход:    без вход — само от този компютър",
-    "",
-    `  Задачи едновременно: ${slots} (MANDAT_WORKER_SLOTS=1..8)`,
-    "  Демо агентите работят без ключ. За Claude Code и Codex: Ключове в менюто",
-    "  (ключът отива само в проксито; не се записва никъде)",
-    "  Спиране: Ctrl+C (базата остава; изтриване: docker rm -f mandat-local-db && docker volume rm mandat-local-db)",
-    "",
-  ];
+export function localBanner(slots: number, lang: Lang): string[] {
+  const t = (k: Parameters<typeof tt>[1], p?: Record<string, string | number>) => tt(lang, k, p);
+  return ["", t("local.banner.title"), t("local.banner.open", { url: `http://localhost:${WEB_PORT}` }), t("local.banner.signin"), "", t("local.banner.slots", { n: slots }), t("local.banner.agents"), t("local.banner.keys"), t("local.banner.stop"), ""];
 }
 
 /** D-302: what `pnpm local` needs, checked before anything is created; each line says what is wrong and what to do. */
 export interface PreflightFacts { docker: string | null; cpus: number; node: string; git: string | null; freeGb: number; imagesPresent: boolean; webPortFree: boolean }
-export function localPreflight(f: PreflightFacts): { ok: boolean; lines: string[] } {
+export function localPreflight(f: PreflightFacts, lang: Lang): { ok: boolean; lines: string[] } {
+  const t = (k: Parameters<typeof tt>[1], p?: Record<string, string | number>) => tt(lang, k, p);
   const out: { ok: boolean; text: string }[] = [];
   const add = (ok: boolean, text: string) => out.push({ ok, text });
-  if (f.docker === null) add(false, "Docker не отговаря. Пусни Docker Desktop (или dockerd) и опитай пак.");
-  else add(compareVersions(f.docker, "25.0.5") >= 0, compareVersions(f.docker, "25.0.5") >= 0 ? `Docker ${f.docker}` : `Docker ${f.docker} е стар: нужен е ≥ 25.0.5`);
-  add(f.cpus >= 2, f.cpus >= 2 ? `${f.cpus} CPU за Docker` : `Docker вижда ${f.cpus} CPU; нужни са ≥ 2 (Docker Desktop: Settings → Resources)`);
+  if (f.docker === null) add(false, t("local.pre.dockerDown"));
+  else add(compareVersions(f.docker, "25.0.5") >= 0, t(compareVersions(f.docker, "25.0.5") >= 0 ? "local.pre.dockerOk" : "local.pre.dockerOld", { v: f.docker }));
+  add(f.cpus >= 2, t(f.cpus >= 2 ? "local.pre.cpuOk" : "local.pre.cpuLow", { n: f.cpus }));
   const major = Number(f.node.split(".")[0]);
-  add(major === 24, major === 24 ? `Node ${f.node}` : `Node ${f.node}: нужен е Node 24 (brew install node@24 или nvm install 24)`);
+  add(major === 24, t(major === 24 ? "local.pre.nodeOk" : "local.pre.nodeBad", { v: f.node }));
   // D-380: git builds the demo repo and the export; on a Mac without Command Line Tools /usr/bin/git is only a stub
-  add(f.git !== null, f.git !== null ? `git ${f.git}` : "git липсва: на Mac пусни xcode-select --install (Command Line Tools) и опитай пак");
+  add(f.git !== null, f.git !== null ? t("local.pre.gitOk", { v: f.git }) : t("local.pre.gitMissing"));
   const need = f.imagesPresent ? 2 : 10;
-  add(f.freeGb >= need, f.freeGb >= need ? `${f.freeGb} GB свободно място` : `${f.freeGb} GB свободно място; нужни са ≥ ${need} GB${f.imagesPresent ? "" : " за образите"} (docker system prune освобождава)`);
-  add(f.webPortFree, f.webPortFree ? `порт ${WEB_PORT} е свободен` : `порт ${WEB_PORT} е зает: спри другото приложение (lsof -i :${WEB_PORT})`);
+  add(f.freeGb >= need, f.freeGb >= need ? t("local.pre.diskOk", { gb: f.freeGb }) : t("local.pre.diskLow", { gb: f.freeGb, need, forImages: f.imagesPresent ? "" : t("local.pre.forImages") }));
+  add(f.webPortFree, t(f.webPortFree ? "local.pre.portOk" : "local.pre.portBusy", { port: WEB_PORT }));
   return { ok: out.every((x) => x.ok), lines: out.map((x) => `${x.ok ? "✓" : "✗"} ${x.text}`) };
 }
 
@@ -175,17 +166,17 @@ async function gatherFacts(): Promise<PreflightFacts> {
 
 const docker = (args: string[]) => spawnSync("docker", args, { encoding: "utf8" });
 
-function ensureDb(io: Io, port: number): boolean {
+function ensureDb(io: Io, port: number, lang: Lang): boolean {
   if (docker(["info"]).status !== 0) {
-    io.stderr("Docker не работи. Пусни Docker Desktop (или dockerd) и опитай пак.\n");
+    io.stderr(`${tt(lang, "local.dockerDown")}\n`);
     return false;
   }
   const st = docker(["inspect", "-f", "{{.State.Running}}", LOCAL_DB.container]);
   if (st.status !== 0) {
-    io.stderr(`база: създавам ${LOCAL_DB.container} (${LOCAL_DB.image}) на 127.0.0.1:${port}\n`);
+    io.stderr(`${tt(lang, "local.db.create", { name: LOCAL_DB.container, image: LOCAL_DB.image, port })}\n`);
     const r = docker(dbRunArgs(port));
     if (r.status !== 0) {
-      io.stderr(`база: ${r.stderr.trim()}\n`);
+      io.stderr(`${tt(lang, "local.db.error", { error: r.stderr.trim() })}\n`);
       return false;
     }
   } else if (st.stdout.trim() !== "true") {
@@ -216,7 +207,7 @@ async function migrate(io: Io, db: ReturnType<typeof openDb>): Promise<void> {
     const sql = readFileSync(f === "shim" ? path.join(repoRoot, "supabase/shim/supabase-shim.sql") : path.join(dir, f), "utf8");
     await db.query(sql);
     await db.query("insert into mandat_local.migrations (name) values ($1)", [f]);
-    io.stderr(`база: приложено ${f}\n`);
+    io.stderr(`${tt(cliLang(io.env), "local.db.applied", { file: f })}\n`);
   }
 }
 
@@ -252,27 +243,28 @@ async function ensureImages(io: Io): Promise<boolean> {
   const lang = cliLang(io.env);
   if (await buildImages(io, env, lang)) return true;
   if (retryWithoutApt(env)) {
-    io.stderr("образи: строежът падна; пробвам пак без Debian огледалата (MANDAT_SANDBOX_APT=0)…\n");
+    io.stderr(`${tt(lang, "local.images.retry")}\n`);
     if (await buildImages(io, { ...env, MANDAT_SANDBOX_APT: "0" }, lang)) return true;
   }
-  io.stderr("образи: не станаха. Зад фирмен прокси: MANDAT_EXTRA_CA_CERTS=/път/до/ca.pem pnpm local\n");
+  io.stderr(`${tt(lang, "local.images.failed")}\n`);
   return false;
 }
 
 export async function localCommand(io: Io, o: { home: string; dbPort: number; signal?: AbortSignal }): Promise<number> {
-  io.stderr("[1/4] проверка на компютъра\n");
+  const lang = cliLang(io.env);
+  io.stderr(`${tt(lang, "local.step1")}\n`);
   // D-387: Docker that is not running yet is waited for, so the person can start it instead of starting over
   const up = () => spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], { encoding: "utf8" }).status === 0;
   await waitForDocker({ up, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), say: io.stderr, lang: cliLang(io.env), ...(o.signal ? { signal: o.signal } : {}) });
-  const pre = localPreflight(await gatherFacts());
+  const pre = localPreflight(await gatherFacts(), lang);
   for (const l of pre.lines) io.stderr(`      ${l}\n`);
   if (!pre.ok) return 3;
-  io.stderr("[2/4] база и демо репо\n");
-  if (!ensureDb(io, o.dbPort)) return 3;
+  io.stderr(`${tt(lang, "local.step2")}\n`);
+  if (!ensureDb(io, o.dbPort, lang)) return 3;
   const url = localDbUrl(o.dbPort);
   const db = await connect(url);
   if (!db) {
-    io.stderr("база: не отговаря след 60 s\n");
+    io.stderr(`${tt(lang, "local.db.timeout")}\n`);
     return 3;
   }
   try {
@@ -282,9 +274,9 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   } finally {
     await db.end();
   }
-  io.stderr("[3/4] образи на пясъчника\n");
+  io.stderr(`${tt(lang, "local.step3")}\n`);
   if (!(await ensureImages(io))) return 3;
-  io.stderr("[4/4] прокси, уеб интерфейс и worker\n");
+  io.stderr(`${tt(lang, "local.step4")}\n`);
 
   // D-293: keys go to the proxy only (from the UI through the control endpoint, or once from this command's env);
   // the web server and the worker never get them in their env.
@@ -294,13 +286,13 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   const startProxy = async (k: Keys) => (await proxyStart({ ...io, stdout: () => undefined, env: { ...clean, ANTHROPIC_API_KEY: k.anthropic, ...(k.openai ? { OPENAI_API_KEY: k.openai } : {}) } }, deps, { mandatHome: o.home, host, json: true, force: true })) === 0;
   const fromEnv = io.env.ANTHROPIC_API_KEY;
   if (fromEnv) {
-    io.stderr("прокси: пускам с ключа от env…\n");
+    io.stderr(`${tt(lang, "local.proxy.env")}\n`);
     await startProxy({ anthropic: fromEnv, ...(io.env.OPENAI_API_KEY ? { openai: io.env.OPENAI_API_KEY } : {}) });
   }
   // E7в (AC-3.8): the sealed keys survive a restart; a proxy that came back locked (its boot token is spent) is recreated
   const fromStore = async () => {
     if (!hasSealedKeys(o.home) || !(await proxyLocked(host.proxyAdminPort))) return;
-    io.stderr("прокси: пускам със запазените ключове…\n");
+    io.stderr(`${tt(lang, "local.proxy.saved")}\n`);
     await proxyStart({ ...io, stdout: () => undefined, env: clean }, deps, { mandatHome: o.home, host, json: true, force: true });
   };
   if (!fromEnv) await fromStore();
@@ -329,7 +321,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   web.on("exit", onSig);
 
   const slots = slotsFrom(io.env.MANDAT_WORKER_SLOTS, 2);
-  io.stdout(localBanner(slots).join("\n") + "\n");
+  io.stdout(localBanner(slots, lang).join("\n") + "\n");
   try {
     return await workerCommand({ ...io, env: { ...clean, MANDAT_DB_URL: url } }, { home: o.home, once: false, signal: stop.signal, slots });
   } finally {
