@@ -6,7 +6,7 @@ import type { Result } from "./actions";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
 
-// Демо промпт т. 8.3: /channels shows ONLY metadata (never keys: they live in the proxy's env, D-224);
+// Demo prompt §8.3: /channels shows ONLY metadata (never keys: they live in the proxy's env, D-224);
 // POST /api/tasks/:id/switch-channel (approver, while HELD) → channel_manual_switch.
 export interface ChannelView {
   id: string; label: string; provider: "anthropic" | "openai"; kind: "api_key" | "cli_profile" | "local"; model: string; enabled: boolean; health: Health;

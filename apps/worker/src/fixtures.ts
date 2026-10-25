@@ -26,15 +26,16 @@ function git(cwd: string, home: string, args: string[], extraEnv: Record<string,
   return r.stdout.trim();
 }
 
-export function buildShopFixture(o: { repoRoot: string; mandatHome: string; force: boolean }): { sha: string; state: "created" | "unchanged" | "recreated" } {
+export function buildShopFixture(o: { repoRoot: string; mandatHome: string; force: boolean }): { sha: string; state: "created" | "unchanged" | "advanced" | "recreated" } {
   return buildFixture({ ...o, name: "shop" });
 }
 
 /**
  * D-050 / D-133: deterministic mirror of fixtures/<name> in <home>/mirrors/<name>.git.
- * Same sha → "(unchanged)"; different sha → E_FIXTURE_MISMATCH unless force → "(recreated)".
+ * Same sha → "(unchanged)"; main moved forward from it by Mandat (D-367: a change applied by itself) → "(advanced)",
+ * kept as it is; any other sha → E_FIXTURE_MISMATCH unless force → "(recreated)".
  */
-export function buildFixture(o: { repoRoot: string; mandatHome: string; force: boolean; name: FixtureName }): { sha: string; state: "created" | "unchanged" | "recreated"; mirror: string } {
+export function buildFixture(o: { repoRoot: string; mandatHome: string; force: boolean; name: FixtureName }): { sha: string; state: "created" | "unchanged" | "advanced" | "recreated"; mirror: string } {
   const src = path.join(o.repoRoot, "fixtures", o.name);
   const tmp = mkdtempSync(path.join(os.tmpdir(), "mandat-fixture-"));
   try {
@@ -56,8 +57,10 @@ export function buildFixture(o: { repoRoot: string; mandatHome: string; force: b
     const mirror = path.join(o.mandatHome, "mirrors", `${o.name}.git`);
     let state: "created" | "unchanged" | "recreated" = "created";
     if (existsSync(mirror)) {
-      const cur = spawnSync("git", ["--git-dir", mirror, "rev-parse", "HEAD"], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: tmp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" } }).stdout.trim();
+      const genv = { PATH: process.env.PATH ?? "", HOME: tmp, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+      const cur = spawnSync("git", ["--git-dir", mirror, "rev-parse", "HEAD"], { encoding: "utf8", env: genv }).stdout.trim();
       if (cur === sha) return { sha, state: "unchanged", mirror };
+      if (!o.force && /^[0-9a-f]{40}$/.test(cur) && spawnSync("git", ["--git-dir", mirror, "merge-base", "--is-ancestor", sha, cur], { env: genv }).status === 0) return { sha, state: "advanced", mirror }; // T3-7: sha
       if (!o.force) throw new MandatError("E_FIXTURE_MISMATCH", "mirror-ът е с друг base_commit; пусни с --force", { mirror: cur, built: sha });
       rmSync(mirror, { recursive: true, force: true });
       state = "recreated";

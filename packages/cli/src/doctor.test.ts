@@ -35,6 +35,7 @@ const deps = (o: Parameters<typeof fakeDocker>[0], healthz = 200, proc = "Linux 
   procVersion: () => proc,
   toolVersion: (c) => Promise.resolve(c === "git" ? "2.47.1" : "12.14.0"),
   nodeVersion: "24.22.0",
+  bootProxy: () => Promise.resolve(true),
 });
 
 async function cli(args: string[], d: CliDeps, env: Record<string, string> = {}) {
@@ -87,5 +88,15 @@ describe("doctor", () => {
 
   it("невалиден MANDAT_PROXY_ADMIN_PORT → 2", async () => {
     expect((await cli(["proxy", "status"], deps({ proxyRunning: false }), { MANDAT_PROXY_ADMIN_PORT: "x" })).code).toBe(2);
+  });
+});
+
+describe("doctor --report (E7ж)", () => {
+  it("prints the anonymous JSON report; the exit code is the same as the plain doctor", async () => {
+    const r = await cli(["--home", home(), "doctor", "--report"], deps({ proxyRunning: false }));
+    const j = JSON.parse(r.stdout) as { os: string; checks: { name: string; code: string | null }[] };
+    expect(j.os).toMatch(/^[a-z0-9]+ \S+$/);
+    expect(j.checks.map((c) => c.name)).toContain("node");
+    expect(r.stdout).not.toContain((await import("node:os")).homedir());
   });
 });

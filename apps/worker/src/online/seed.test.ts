@@ -35,6 +35,16 @@ describe("mandat demo seed (т. 8 „Общо за E3“)", () => {
 });
 
 describe("seedLocal (D-292: pnpm local)", () => {
+  it("D-368: без парола и без TOTP — няма парола за вход, няма тайна", async () => {
+    const db = await pgliteDb();
+    try {
+      expect(await seedLocal(db, { remoteUrl: "file:///tmp/x" })).toEqual({ org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: true, totpSecret: null });
+      expect((await db.query<{ p: string | null }>("select encrypted_password as p from auth.users where email = $1", [LOCAL_EMAIL])).rows[0]?.p ?? null).toBeNull();
+      expect((await db.query<{ n: number }>("select count(*)::int as n from private.dev_totp")).rows[0]?.n).toBe(0);
+    } finally {
+      await db.end();
+    }
+  });
   it("един собственик с парола, 4 типа задачи, без карти; TOTP само първия път (D-297); повторно → само нова парола", async () => {
     const db = await pgliteDb();
     try {

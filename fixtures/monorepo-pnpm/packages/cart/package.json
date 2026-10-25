@@ -1,0 +1,1 @@
+{ "name": "@shop/cart", "version": "1.0.0", "private": true, "type": "module", "main": "src/cart.ts", "dependencies": { "@shop/money": "workspace:*" } }

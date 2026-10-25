@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises";
+import type { NightReport } from "./night-rules.js";
 import net from "node:net";
 
 // Демо промпт т. 8.4 (S18): the push endpoint is a URL from the client → checked on write AND on every send:
@@ -56,13 +57,21 @@ export async function checkPushEndpoint(raw: string, o: { env?: Record<string, s
 }
 
 // Payload (Ф4): no secrets — task_id, kind, a title ≤ 80 chars, the verdict word, the level.
-export type NotifyKind = "waiting" | "failed" | "merged";
+export type NotifyKind = "waiting" | "failed" | "merged" | "expired";
 const WORD: Record<string, string> = { VERIFIED: "ПРОВЕРЕНО", FAILED: "ПРОВАЛ", UNKNOWN: "НЕИЗВЕСТНО" };
 export function pushPayload(o: { task_id: string; kind: NotifyKind; text: string; result: string | null; level: number | null }): string {
-  const head = o.kind === "waiting" ? "Чака теб" : o.kind === "failed" ? "ПРОВАЛ" : "Слято само";
+  const head = o.kind === "waiting" ? "Чака теб" : o.kind === "failed" ? "ПРОВАЛ" : o.kind === "expired" ? "Изтече (затворена)" : "Слято само";
   const raw = `${head}: ${o.text.replace(/\s+/g, " ").trim()}`;
   const title = [...raw].length > 80 ? `${[...raw].slice(0, 79).join("")}…` : raw;
   return JSON.stringify({ task_id: o.task_id, kind: o.kind, title, verdict: o.result ? (WORD[o.result] ?? o.result) : null, level: o.level });
+}
+
+/** E9а: the morning report of a night shift — counts and spend only, never task texts or proposals */
+export function nightPushPayload(o: { shift_id: string; report: NightReport }): string {
+  const r = o.report;
+  const raw = `Нощен доклад: ${r.merged} слети · ${r.waiting} чакат · ${r.parked} паркирани · $${r.spent_usd.toFixed(2)}`;
+  const title = [...raw].length > 80 ? `${[...raw].slice(0, 79).join("")}…` : raw;
+  return JSON.stringify({ shift_id: o.shift_id, kind: "night_report", title });
 }
 
 // ---- sending (the worker only; outbox kind web_push). web-push builds the encrypted, VAPID-signed request; we send it
@@ -116,21 +125,35 @@ export function vapidFromEnv(env: Record<string, string | undefined>): Vapid | n
 export function webPushHandler(d: { db: { query<T = Record<string, unknown>>(t: string, p?: unknown[]): Promise<{ rows: T[] }> }; env?: Record<string, string | undefined>; resolve?: (h: string) => Promise<string[]>; log?: (l: string) => void }) {
   return async (row: { payload: Record<string, unknown> }): Promise<void> => {
     const vapid = vapidFromEnv(d.env ?? process.env);
+    if (row.payload.kind === "night_report") return nightPush(row.payload, vapid);
     const taskId = String(row.payload.task_id ?? "");
     const kind = String(row.payload.kind ?? "") as NotifyKind;
-    if (!/^t_[a-z0-9_]{1,40}$/.test(taskId) || !["waiting", "failed", "merged"].includes(kind)) throw new Error("web_push: bad payload");
+    if (!/^t_[a-z0-9_]{1,40}$/.test(taskId) || !["waiting", "failed", "merged", "expired"].includes(kind)) throw new Error("web_push: bad payload");
     if (!vapid) {
       d.log?.("[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)");
       return;
     }
     const t = (await d.db.query<{ org_id: string; text: string; last_result: string | null; effective_level: number | null }>("select org_id::text as org_id, text, last_result, effective_level from public.tasks where id = $1", [taskId])).rows[0];
     if (!t) return;
-    const subs = (await d.db.query<PushSub>("select id::text as id, endpoint, p256dh, auth from public.push_subscriptions where org_id = $1::uuid", [t.org_id])).rows;
-    const payload = pushPayload({ task_id: taskId, kind, text: t.text, result: t.last_result, level: t.effective_level });
+    await sendAll(t.org_id, pushPayload({ task_id: taskId, kind, text: t.text, result: t.last_result, level: t.effective_level }), `${taskId} ${kind}`, vapid);
+  };
+  async function sendAll(org: string, payload: string, label: string, vapid: Vapid): Promise<void> {
+    const subs = (await d.db.query<PushSub>("select id::text as id, endpoint, p256dh, auth from public.push_subscriptions where org_id = $1::uuid", [org])).rows;
     for (const s of subs) {
       const r = await sendWebPush(s, payload, { vapid, ...(d.env ? { env: d.env } : {}), ...(d.resolve ? { resolve: d.resolve } : {}) });
       if (!r.ok && r.gone) await d.db.query("delete from public.push_subscriptions where id = $1::uuid", [s.id]);
-      d.log?.(`[push] ${taskId} ${kind} → ${r.ok ? r.status : r.reason}`);
+      d.log?.(`[push] ${label} → ${r.ok ? r.status : r.reason}`);
     }
-  };
+  }
+  async function nightPush(payload: Record<string, unknown>, vapid: Vapid | null): Promise<void> {
+    const shiftId = String(payload.shift_id ?? "");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(shiftId)) throw new Error("web_push: bad payload");
+    if (!vapid) {
+      d.log?.("[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)");
+      return;
+    }
+    const s = (await d.db.query<{ org_id: string; report: NightReport | null }>("select org_id::text as org_id, report from public.night_shifts where id = $1::uuid", [shiftId])).rows[0];
+    if (!s?.report) return;
+    await sendAll(s.org_id, nightPushPayload({ shift_id: shiftId, report: s.report }), `night ${shiftId}`, vapid);
+  }
 }

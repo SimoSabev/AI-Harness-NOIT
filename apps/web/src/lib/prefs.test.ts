@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { THEMES, VIEWS, parseSample, parseTheme, parseView, prefCookie } from "./prefs";
+import { LANG_CHOICES, THEMES, VIEWS, parseTheme, parseView, prefCookie } from "./prefs";
 
 describe("prefs (D-305)", () => {
   it("тема и изглед: непозната стойност → по подразбиране (тъмна, карта)", () => {
@@ -18,16 +18,13 @@ describe("prefs (D-305)", () => {
     expect(THEMES.map((t) => t.id)).toEqual(["dark", "light", "system"]);
     expect(VIEWS.map((v) => v.id)).toEqual(["map", "columns", "project", "list"]);
   });
-  it("примерите са включени, докато не ги изключиш", () => {
-    expect(parseSample(undefined)).toBe(true);
-    expect(parseSample("1")).toBe(true);
-    expect(parseSample("0")).toBe(false);
-  });
   it("бисквитката е за цялия сайт, година, SameSite=Lax", () => {
     expect(prefCookie("theme", "light")).toBe("theme=light; Path=/; Max-Age=31536000; SameSite=Lax");
+    expect(prefCookie("lang", "bg")).toBe("lang=bg; Path=/; Max-Age=31536000; SameSite=Lax");
+    expect(LANG_CHOICES.map((l) => l.id)).toEqual(["en", "bg"]);
   });
   it("светлата тема и „като системата“ при светла система са едни и същи стойности", () => {
-    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/globals.css"), "utf8");
+    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/tokens.css"), "utf8");
     const block = (sel: string) => {
       const i = css.indexOf(sel);
       const body = css.slice(css.indexOf("{", i) + 1, css.indexOf("}", i));

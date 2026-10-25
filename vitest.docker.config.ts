@@ -1,3 +1,6 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import { workspaceAliases, EXCLUDE } from "./vitest.shared.js";
 
@@ -8,10 +11,16 @@ const project = (name: string, dir: string) => ({
   test: { name, include: [`${dir}/**/*.docker.test.ts`], exclude: EXCLUDE },
 });
 
+// D-389: the tests bind-mount folders they make with os.tmpdir(); macOS's /var/folders is not shared with Colima's VM
+// (only the home folder is), so the gate saw empty folders. Their temporary folder lives in the repo instead.
+const tmp = process.env.MANDAT_DOCKER_TMP ?? path.join(path.dirname(fileURLToPath(import.meta.url)), ".mandat", "tmp-docker");
+mkdirSync(tmp, { recursive: true });
+
 export const config = defineConfig({
   resolve: { alias: workspaceAliases() },
   test: {
     fileParallelism: false,
+    env: { TMPDIR: tmp },
     testTimeout: 600_000,
     hookTimeout: 600_000,
     passWithNoTests: false,

@@ -1,0 +1,429 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`compile for Claude Code (E8а) > snapshot 1`] = `
+{
+  "argv": [
+    "--settings",
+    "/m/in/harness/claude/settings.json",
+    "--mcp-config",
+    "/m/in/harness/claude/mcp.json",
+    "--strict-mcp-config",
+  ],
+  "enforced_by_harness": [
+    {
+      "rule": "net:registry.npmjs.org",
+      "why": "the egress gate allows only the declared hosts and routes",
+    },
+    {
+      "rule": "path:write outside allowed_paths",
+      "why": "D4 fails a change outside the contract's allowed paths after the export",
+    },
+    {
+      "rule": "control files changed by the agent",
+      "why": "D3 marks a changed .claude/, .codex/, .mcp.json, AGENTS.md or CLAUDE.md as UNKNOWN; the control layer itself is read-only",
+    },
+  ],
+  "env": {
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "2",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "CLAUDE_CODE_STOP_HOOK_BLOCK_CAP": "3",
+  },
+  "files": [
+    {
+      "bytes": "---
+name: reviewer
+description: Reads the diff and reports problems; never writes.
+tools: Read, Grep, Glob
+model: claude-haiku-5-5
+maxTurns: 20
+permissionMode: dontAsk
+---
+Reads the diff and reports problems; never writes.
+",
+      "mode": "0444",
+      "path": "claude/agents/reviewer.md",
+    },
+    {
+      "bytes": "{
+  "mcpServers": {
+    "mandat": {
+      "type": "http",
+      "url": "http://egress-gate/mcp/mandat"
+    }
+  }
+}
+",
+      "mode": "0444",
+      "path": "claude/mcp.json",
+    },
+    {
+      "bytes": "{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest run *)",
+      "Bash(npx vitest run)",
+      "Bash(npx tsc --noEmit *)",
+      "Bash(npx tsc --noEmit)",
+      "mcp__mandat__mandat_status",
+      "mcp__mandat__mandat_verify"
+    ],
+    "deny": [
+      "Bash(git push *)",
+      "Bash(curl *)",
+      "Edit(infra/**)",
+      "Write(infra/**)"
+    ],
+    "ask": [
+      "mcp__github__create_issue"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /opt/mandat/hooks/deny-by-policy.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /opt/mandat/hooks/typecheck-changed.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /opt/mandat/hooks/require-tests-ran.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "pluginConfigs": {
+    "cc-plugin-agents-md@builtin": {
+      "options": {
+        "instructionFiles": "managed-only"
+      }
+    }
+  }
+}
+",
+      "mode": "0444",
+      "path": "claude/settings.json",
+    },
+    {
+      "bytes": "---
+name: test-first
+description: Write the failing test first.
+---
+Write the failing test first.",
+      "mode": "0444",
+      "path": "claude/skills/test-first/SKILL.md",
+    },
+    {
+      "bytes": "# Project instructions (from the harness profile; the repo's own instruction files are not read)
+
+A small shop: cart, discounts, checkout.
+
+## Commands
+- install: \`npm ci --ignore-scripts\`
+- test: \`npx vitest run\`
+- test_one: \`npx vitest run {file}\`
+- lint: \`npx eslint {files}\`
+- typecheck: \`npx tsc --noEmit\`
+
+## Boundaries
+- Do not change tests for a bugfix.
+- Prices are integer cents.
+
+## Style
+- 2 spaces
+- double quotes
+
+## Conventions
+- commit title: <type>: <what>
+
+## Definition of done
+- bugfix: a test that failed before passes
+",
+      "mode": "0444",
+      "path": "instructions.md",
+    },
+    {
+      "bytes": "{
+  "version": 1,
+  "subjects": [
+    "agent:claude",
+    "any"
+  ],
+  "rules": [
+    {
+      "tool": "bash:git push *",
+      "decision": "deny",
+      "reason": "the harness delivers, never the agent"
+    },
+    {
+      "tool": "bash:curl *",
+      "decision": "deny",
+      "reason": "no network outside the gate"
+    },
+    {
+      "tool": "path:write:infra/**",
+      "decision": "deny",
+      "reason": "infrastructure is high risk"
+    },
+    {
+      "tool": "net:registry.npmjs.org",
+      "decision": "allow",
+      "reason": "installs go through the gate"
+    },
+    {
+      "tool": "mcp:github.create_issue",
+      "decision": "ask",
+      "reason": "a human decides on new issues"
+    }
+  ],
+  "commands": {
+    "install": "npm ci --ignore-scripts",
+    "test": "npx vitest run",
+    "test_one": "npx vitest run {file}",
+    "lint": "npx eslint {files}",
+    "typecheck": "npx tsc --noEmit"
+  },
+  "max_subagents": 2,
+  "max_depth": 1
+}
+",
+      "mode": "0444",
+      "path": "policy.json",
+    },
+  ],
+  "unsupported": [],
+}
+`;
+
+exports[`compile for Codex (E8а) > snapshot 1`] = `
+{
+  "argv": [
+    "-c",
+    "sandbox_mode="workspace-write"",
+    "-c",
+    "approval_policy="never"",
+    "-c",
+    "project_doc_max_bytes=0",
+  ],
+  "enforced_by_harness": [
+    {
+      "rule": "path:write:infra/**",
+      "why": "the workspace-write sandbox + D4 after the export",
+    },
+    {
+      "rule": "net:registry.npmjs.org",
+      "why": "the egress gate allows only the declared hosts and routes",
+    },
+    {
+      "rule": "path:write outside allowed_paths",
+      "why": "D4 fails a change outside the contract's allowed paths after the export",
+    },
+    {
+      "rule": "control files changed by the agent",
+      "why": "D3 marks a changed .claude/, .codex/, .mcp.json, AGENTS.md or CLAUDE.md as UNKNOWN; the control layer itself is read-only",
+    },
+    {
+      "rule": "codex config changed by the agent",
+      "why": "the worker hashes the seeded CODEX_HOME after the run; a difference = security_event config_change + UNKNOWN",
+    },
+  ],
+  "env": {
+    "CODEX_HOME": "/m/codex-home",
+  },
+  "files": [
+    {
+      "bytes": "model = "claude-haiku-5-5"
+developer_instructions = "Reads the diff and reports problems; never writes."
+",
+      "mode": "0444",
+      "path": "codex/agents/reviewer.toml",
+    },
+    {
+      "bytes": "approval_policy = "never"
+sandbox_mode = "workspace-write"
+project_doc_max_bytes = 0
+developer_instructions = """
+# Project instructions (from the harness profile; the repo's own instruction files are not read)
+
+A small shop: cart, discounts, checkout.
+
+## Commands
+- install: \`npm ci --ignore-scripts\`
+- test: \`npx vitest run\`
+- test_one: \`npx vitest run {file}\`
+- lint: \`npx eslint {files}\`
+- typecheck: \`npx tsc --noEmit\`
+
+## Boundaries
+- Do not change tests for a bugfix.
+- Prices are integer cents.
+
+## Style
+- 2 spaces
+- double quotes
+
+## Conventions
+- commit title: <type>: <what>
+
+## Definition of done
+- bugfix: a test that failed before passes
+
+"""
+
+[sandbox_workspace_write]
+writable_roots = ["/m/work"]
+network_access = false
+
+[mcp_servers.mandat]
+url = "http://egress-gate/mcp/mandat"
+enabled_tools = ["mandat_status", "mandat_verify"]
+
+[agents]
+max_concurrent_threads_per_session = 2
+
+[agents.reviewer]
+config_file = "agents/reviewer.toml"
+",
+      "mode": "0444",
+      "path": "codex/config.toml",
+    },
+    {
+      "bytes": "{
+  "hooks": {
+    "pre_tool_use": [
+      {
+        "command": [
+          "node",
+          "/opt/mandat/hooks/deny-by-policy.mjs"
+        ]
+      }
+    ],
+    "post_tool_use": [
+      {
+        "command": [
+          "node",
+          "/opt/mandat/hooks/typecheck-changed.mjs"
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    ],
+    "stop": [
+      {
+        "command": [
+          "node",
+          "/opt/mandat/hooks/require-tests-ran.mjs"
+        ]
+      }
+    ]
+  }
+}
+",
+      "mode": "0444",
+      "path": "codex/hooks.json",
+    },
+    {
+      "bytes": "---
+name: test-first
+description: Write the failing test first.
+---
+Write the failing test first.",
+      "mode": "0444",
+      "path": "codex/skills/test-first/SKILL.md",
+    },
+    {
+      "bytes": "# Project instructions (from the harness profile; the repo's own instruction files are not read)
+
+A small shop: cart, discounts, checkout.
+
+## Commands
+- install: \`npm ci --ignore-scripts\`
+- test: \`npx vitest run\`
+- test_one: \`npx vitest run {file}\`
+- lint: \`npx eslint {files}\`
+- typecheck: \`npx tsc --noEmit\`
+
+## Boundaries
+- Do not change tests for a bugfix.
+- Prices are integer cents.
+
+## Style
+- 2 spaces
+- double quotes
+
+## Conventions
+- commit title: <type>: <what>
+
+## Definition of done
+- bugfix: a test that failed before passes
+",
+      "mode": "0444",
+      "path": "instructions.md",
+    },
+    {
+      "bytes": "{
+  "version": 1,
+  "subjects": [
+    "agent:codex",
+    "any"
+  ],
+  "rules": [
+    {
+      "tool": "bash:git push *",
+      "decision": "deny",
+      "reason": "the harness delivers, never the agent"
+    },
+    {
+      "tool": "bash:curl *",
+      "decision": "deny",
+      "reason": "no network outside the gate"
+    },
+    {
+      "tool": "path:write:infra/**",
+      "decision": "deny",
+      "reason": "infrastructure is high risk"
+    },
+    {
+      "tool": "net:registry.npmjs.org",
+      "decision": "allow",
+      "reason": "installs go through the gate"
+    }
+  ],
+  "commands": {
+    "install": "npm ci --ignore-scripts",
+    "test": "npx vitest run",
+    "test_one": "npx vitest run {file}",
+    "lint": "npx eslint {files}",
+    "typecheck": "npx tsc --noEmit"
+  },
+  "max_subagents": 2,
+  "max_depth": 1
+}
+",
+      "mode": "0444",
+      "path": "policy.json",
+    },
+  ],
+  "unsupported": [],
+}
+`;

@@ -18,6 +18,8 @@ export function matchTunnel(p: GatePolicy, authority: string): { allow: true; ho
   return (p.tunnels ?? []).some((t) => t.host === host && t.port === port) ? { allow: true, host, port } : { allow: false };
 }
 
+const SCOPED_PACKUMENT = /^\/npm\/@[a-z0-9][a-z0-9._~-]*%2[fF][a-z0-9][a-z0-9._~-]*$/;
+
 export function matchPolicy(p: GatePolicy, method: string, rawPath: string): GateDecision {
   if (method.toUpperCase() === "CONNECT") return { allow: false, reason: "connect" };
   if (p.phase === "closed") return { allow: false, reason: "phase_closed" };
@@ -25,7 +27,9 @@ export function matchPolicy(p: GatePolicy, method: string, rawPath: string): Gat
   const pathOnly = q >= 0 ? rawPath.slice(0, q) : rawPath;
   const exact = p.routes.find((r) => r.match.kind === "exact" && r.method === method && r.match.path === pathOnly);
   if (exact) return { allow: true, route: exact };
-  if (/\.\.|\/\/|%2e|%2f/i.test(pathOnly)) return { allow: false, reason: "bad_path" };
+  // E8e (D-354): through an npm prefix route a scoped packument is /npm/@scope%2fname — exactly that %2f, nothing else
+  const scoped = SCOPED_PACKUMENT.test(pathOnly) && p.routes.some((r) => r.match.kind === "prefix" && r.upstream === "npm_registry" && r.method === method && pathOnly.startsWith(r.match.path));
+  if (!scoped && /\.\.|\/\/|%2e|%2f/i.test(pathOnly)) return { allow: false, reason: "bad_path" };
   const prefix = p.routes.find((r) => r.match.kind === "prefix" && r.method === method && pathOnly.startsWith(r.match.path));
   if (prefix) return { allow: true, route: prefix };
   return { allow: false, reason: "no_route" };

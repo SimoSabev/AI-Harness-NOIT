@@ -30,7 +30,7 @@ export async function login(req: Request): Promise<Response> {
 }
 
 export async function logout(req: Request): Promise<Response> {
-  if (!checkOrigin(req)) return back(req, "/");
+  if (!checkOrigin(req) || authMode() === "local") return back(req, "/");
   const jar = await cookies();
   if (authMode() === "supabase") await (await supabaseServer()).auth.signOut();
   jar.delete(SESSION_COOKIE);

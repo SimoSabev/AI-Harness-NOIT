@@ -1,0 +1,62 @@
+name: desktop-build
+
+# E9g A5 (D-376): the desktop installers for the 3 OS, UNSIGNED, as workflow artifacts only.
+# No release, no tag, no upload anywhere else (rule 3): electron-builder runs with `--publish never`, the job has
+# read-only repository rights and no secrets. Signing and notarization: docs/setup/signing.md (waits for Simo, Q-053).
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - ".github/workflows/desktop-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: mac
+          - os: windows-2022
+            target: win
+          - os: ubuntu-24.04
+            target: linux
+    runs-on: ${{ matrix.os }}
+    env:
+      MANDAT_DESKTOP_OUT: ${{ runner.temp }}/mandat-desktop
+      # unsigned on purpose: electron-builder must not look for a certificate in the runner's keychain
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7.0.1
+      # D-030: no `version` input; pnpm comes from packageManager "pnpm@12.14.0".
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/desktop install --frozen-lockfile
+      # Electron's binary (its own install.js, checksums in the package) + node-pty's spawn-helper bit (D-375)
+      - run: pnpm --dir apps/desktop run setup
+      # builds the harness (pnpm build), the bundle for resources/harness and the installers of this OS
+      - run: pnpm --dir apps/desktop run dist:${{ matrix.target }}
+      # the Electron e2e (fake harness, no Docker): macOS directly, Linux under a virtual display
+      - if: matrix.target == 'mac'
+        run: pnpm --dir apps/desktop e2e
+      - if: matrix.target == 'linux'
+        run: xvfb-run -a pnpm --dir apps/desktop e2e
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: harness-${{ matrix.target }}
+          path: |
+            ${{ env.MANDAT_DESKTOP_OUT }}/release/Harness-*.dmg
+            ${{ env.MANDAT_DESKTOP_OUT }}/release/Harness-*.exe
+            ${{ env.MANDAT_DESKTOP_OUT }}/release/Harness-*.AppImage
+            ${{ env.MANDAT_DESKTOP_OUT }}/release/Harness-*.deb
+          if-no-files-found: error
+          retention-days: 14

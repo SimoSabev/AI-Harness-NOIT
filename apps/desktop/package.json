@@ -2,18 +2,35 @@
   "name": "@mandat/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Harness desktop: an Electron window around `pnpm local` (D-303). Not in the pnpm workspace; installed on demand.",
+  "description": "Harness desktop: the same web UI in an Electron window, with a native layer (D-303, E9g). Not in the pnpm workspace; installed on demand.",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "setup": "node node_modules/electron/install.js",
-    "build": "tsc -p tsconfig.json",
-    "start": "electron ."
+    "setup": "node node_modules/electron/install.js && node scripts/setup-pty.mjs",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.preload.json && node -e \"require('fs').renameSync('dist-preload/preload.js','dist/preload.cjs')\"",
+    "test": "pnpm --dir ../.. exec vitest run apps/desktop/src",
+    "start": "electron .",
+    "smoke": "electron scripts/smoke-bridge.mjs",
+    "bundle": "node scripts/bundle-harness.mjs",
+    "dist:mac": "pnpm run build && node scripts/bundle-harness.mjs && electron-builder --config electron-builder.config.mjs --mac --publish never",
+    "dist:win": "pnpm run build && node scripts/bundle-harness.mjs && electron-builder --config electron-builder.config.mjs --win --publish never",
+    "dist:linux": "pnpm run build && node scripts/bundle-harness.mjs && electron-builder --config electron-builder.config.mjs --linux --publish never",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/node": "24.19.2",
     "electron": "44.9.0",
+    "electron-builder": "26.17.0",
     "typescript": "6.0.3"
+  },
+  "dependencies": {
+    "@mandat/contract": "link:../../packages/contract",
+    "canonicalize": "5.1.0",
+    "electron-updater": "6.8.10",
+    "node-pty": "1.1.0",
+    "yaml": "2.9.1",
+    "zod": "4.6.7"
   }
 }

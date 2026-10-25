@@ -1,7 +1,10 @@
 import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
+import { applyLocal } from "./commands/apply.js";
+import { ATTACKS, SCENARIOS } from "@mandat/bench";
 import { doctor } from "./commands/doctor.js";
+import { statsCommand } from "./commands/stats.js";
 import { imagesBuild } from "./commands/images.js";
 import { fixturesBuild } from "./commands/fixtures.js";
 import { runCommand } from "./commands/run.js";
@@ -19,8 +22,8 @@ import { accountsCommand, loginCommand, logoutCommand } from "./commands/account
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
-import { dbUrl, hostConfig, openDb } from "@mandat/worker";
-import { mandatHome } from "./paths.js";
+import { dbUrl, hostConfig, openDb, runBaseline } from "@mandat/worker";
+import { mandatHome, repoRoot } from "./paths.js";
 import type { Io } from "./output.js";
 import path from "node:path";
 
@@ -46,6 +49,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .exitOverride()
     .configureOutput({ writeOut: (s) => io.stdout(s), writeErr: (s) => io.stderr(s) })
     .showHelpAfterError();
+  // D-384: developer commands (bench, red team, fixtures, contracts, ladder, anchor, worker, demo) run as before but
+  // stay out of `mandat --help`, which lists only what a person runs.
+  const DEV = { hidden: true } as const;
   const globals = (): { home?: string; json?: boolean } => program.opts<{ home?: string; json?: boolean }>();
 
   program
@@ -65,7 +71,29 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = verifyLog(io, { ledger, org: "o_local", json: Boolean(o.json ?? g.json) });
     });
 
-  const contract = program.command("contract").description("seal or inspect a task contract");
+  // E8g (D-356, AC-9.3): bring Mandat's branch for a task into your working copy (merge --ff-only; it never overwrites your work)
+  program
+    .command("apply")
+    .description("merge Mandat's branch for a task into your working copy with --ff-only (refuses on divergence or local changes)")
+    .requiredOption("--task <id>", "task id (t_…)")
+    .option("--repo <path>", "your working copy", ".")
+    .option("--mirror <path>", "Mandat's mirror of the repo (default: from the task's repo in MANDAT_DB_URL)")
+    .action(async (o: { task: string; repo: string; mirror?: string }) => {
+      const g = globals();
+      let mirror = o.mirror;
+      if (!mirror) {
+        const db = depsIn?.db ?? openDb(dbUrl(io.env));
+        const r = (await db.query<{ remote_url: string }>("select r.remote_url from public.tasks t join public.repos r on r.id = t.repo_id where t.id = $1", [o.task])).rows[0];
+        mirror = r?.remote_url.startsWith("file://") ? r.remote_url.slice(7) : undefined;
+        if (!mirror) throw new MandatError("E_USAGE", "this task's repo has no local mirror; pass --mirror");
+      }
+      const r = await applyLocal({ mirror, repo: path.resolve(o.repo), taskId: o.task });
+      if (g.json ?? false) io.stdout(JSON.stringify(r) + "\n");
+      else io.stdout(r.ok ? `applied ${r.ref} (${r.files.length} file(s)): fast-forward to ${r.head.slice(0, 12)}\n` : `not applied: ${r.reason}${r.detail ? ` — ${r.detail}` : ""}\n`);
+      code = r.ok ? 0 : 3;
+    });
+
+  const contract = program.command("contract", DEV).description("seal or inspect a task contract");
   contract
     .command("seal <file>")
     .description("fill config_hash and contract_hash")
@@ -83,13 +111,26 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
   const json = (o: { json?: boolean }): boolean => Boolean(o.json ?? globals().json);
 
   program
+    .command("stats")
+    .description("calibration of the judge on real runs: results, UNKNOWN share, top reasons, cost and time")
+    .option("--all", "count the fake agents too (bench, red team)")
+    .option("--since <days>", "only the last N days")
+    .option("--json", "machine output")
+    .action((o: { all?: boolean; since?: string; json?: boolean }) => {
+      const days = o.since === undefined ? undefined : Number(o.since);
+      if (days !== undefined && !(Number.isFinite(days) && days > 0)) throw new MandatError("E_USAGE", "--since takes a number of days");
+      code = statsCommand(io, { mandatHome: home(), json: json(o), all: Boolean(o.all), ...(days !== undefined ? { sinceDays: days } : {}) });
+    });
+
+  program
     .command("doctor")
     .description("check the prerequisites (2), images and the proxy; --deep runs the R14 probes")
     .option("--deep", "run r14-netprobe in a temporary sandbox")
     .option("--keep", "keep the temporary run directory")
     .option("--json", "machine output")
-    .action(async (o: { deep?: boolean; keep?: boolean; json?: boolean }) => {
-      code = await doctor(io, deps(), { mandatHome: home(), host: hostConfig(io.env), deep: Boolean(o.deep), keep: Boolean(o.keep), json: json(o) });
+    .option("--report", "an anonymous JSON report (no paths, user name or IPs) for docs/setup (E7ж)")
+    .action(async (o: { deep?: boolean; keep?: boolean; json?: boolean; report?: boolean }) => {
+      code = await doctor(io, deps(), { mandatHome: home(), host: hostConfig(io.env), deep: Boolean(o.deep), keep: Boolean(o.keep), json: json(o), report: Boolean(o.report) });
     });
 
   program
@@ -97,25 +138,27 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("build the local images")
     .command("build")
     .option("--force", "docker build --no-cache even if the tag exists")
-    .action(async (o: { force?: boolean }) => {
-      code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env) });
+    .option("--ui", "also the D12 browser image (Playwright + Chromium, ~2 GB)")
+    .action(async (o: { force?: boolean; ui?: boolean }) => {
+      code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env), ui: Boolean(o.ui) });
     });
 
   program
     .command("run")
     .description("run one task: agent in a sandbox → export → verify → verdict → ledger")
     .requiredOption("--contract <file>", "sealed contract JSON")
-    .requiredOption("--agent <agent>", "claude | fake:<scenario>")
+    .requiredOption("--agent <agent>", "claude | fake:<scenario> | fake-codex:<scenario>")
+    .option("--profile <file>", "harness profile JSON: compiled into the agent's control layer (E8а)")
     .option("--keep", "keep the Docker volumes")
     .option("--json", "machine output (progress on stderr)")
-    .action(async (o: { contract: string; agent: string; keep?: boolean; json?: boolean }) => {
-      code = await runCommand(io, { mandatHome: home(), contract: o.contract, agent: o.agent, keep: Boolean(o.keep), json: json(o), ...(depsIn ? { docker: depsIn.docker } : {}) });
+    .action(async (o: { contract: string; agent: string; keep?: boolean; json?: boolean; profile?: string }) => {
+      code = await runCommand(io, { mandatHome: home(), contract: o.contract, agent: o.agent, keep: Boolean(o.keep), json: json(o), ...(o.profile ? { profile: o.profile } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
 
   const list = (v: string | undefined): string[] | undefined => (v === undefined ? undefined : v.split(",").map((s) => s.trim()).filter(Boolean));
   program
-    .command("bench")
-    .description("run the 8 bench scenarios (9.6)")
+    .command("bench", DEV)
+    .description("run the bench scenarios B1–B40 (9.6, E9b)")
     .option("--only <ids>", "e.g. B1,B5")
     .option("--fail-gate", "B1 with a broken verifier: must NOT be VERIFIED (exit 1 = caught, T3-3)")
     .option("--json", "machine output")
@@ -125,22 +168,22 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
         return;
       }
       const only = list(o.only);
-      if (only && only.some((x) => !/^B[1-8]$/.test(x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
+      if (only && only.some((x) => !SCENARIOS.some((s) => s.id === x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
       code = await benchCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
   program
-    .command("redteam")
-    .description("run the E0 red team: R5, R6, R8, R14 (8.7)")
+    .command("redteam", DEV)
+    .description("run the red team: R5, R6, R8, R14 (E0) and R15–R20 (v5 E8h)")
     .option("--only <ids>", "e.g. R5,R14")
     .option("--json", "machine output")
     .action(async (o: { only?: string; json?: boolean }) => {
       const only = list(o.only);
-      if (only && only.some((x) => !["R5", "R6", "R8", "R14"].includes(x))) throw new MandatError("E_USAGE", `unknown attack in --only: ${o.only}`);
+      if (only && only.some((x) => !Object.keys(ATTACKS).includes(x))) throw new MandatError("E_USAGE", `unknown attack in --only: ${o.only}`);
       code = await redteamCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
 
   program
-    .command("fixtures")
+    .command("fixtures", DEV)
     .description("build the deterministic demo repository mirror")
     .command("build")
     .option("--force", "recreate the mirror if its base_commit differs")
@@ -174,11 +217,13 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("propose .mandat.yml for a local repo (scanner without AI; never approves): writes .mandat.yml.proposed")
     .requiredOption("--repo <dir>", "repository directory")
     .option("--json", "machine output")
-    .action((o: { repo: string; json?: boolean }) => {
-      code = initCommand(io, { repo: o.repo, json: json(o) });
+    .option("--baseline", "run the tests of the tree twice in the sandbox (Docker) and propose with the baseline (E7г)")
+    .option("--profile", "also write the full harness profile (8 layers) to .mandat/profile.proposed.json (E8б)")
+    .action(async (o: { repo: string; json?: boolean; baseline?: boolean; profile?: boolean }) => {
+      code = await initCommand(io, { repo: o.repo, json: json(o), baseline: o.baseline === true, profile: o.profile === true, runBaseline: (dir, policy) => runBaseline(dir, policy, { mandatHome: home(), repoRoot, env: io.env }) });
     });
   program
-    .command("ladder")
+    .command("ladder", DEV)
     .description("trust ladder tools")
     .command("sim")
     .description("mean number of tasks until the first promotion (spec т. 7: ≈ 87)")
@@ -191,7 +236,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = ladderSim(io, { ...o, json: json(o) });
     });
   program
-    .command("anchor")
+    .command("anchor", DEV)
     .description("RFC 3161 timestamp of the last ledger hash (TSA_URLS)")
     .option("--org <org>", "o_local or an org uuid (Postgres)", "o_local")
     .option("--json", "machine output")
@@ -200,7 +245,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       code = await anchorCommand(io, { home: home(), org: o.org, json: json(o), ...(o.org !== "o_local" ? { db: depsIn?.db ?? openDb(dbUrl(io.env)) } : {}), ...(depsIn?.tsaFetcher ? { fetcher: depsIn.tsaFetcher } : {}) });
     });
   program
-    .command("worker")
+    .command("worker", DEV)
     .description("the online worker (MANDAT_MODE=worker): takes CREATED tasks from Postgres")
     .option("--once", "process at most one task and exit")
     .action(async (o: { once?: boolean }) => {
@@ -248,7 +293,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
       code = await tuiCommand(io, { dbPort, once: Boolean(o.once) });
     });
-  const demo = program.command("demo").description("demo data and scenes");
+  const demo = program.command("demo", DEV).description("demo data and scenes");
   demo
     .command("external-pr")
     .option("--fake", "fakeGitHub + local sandbox (no network)")

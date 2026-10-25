@@ -6,9 +6,10 @@ useDefault = true
 description = "redaction corpus"
 paths = ['''^fixtures/redaction/''']
 
-# D-291: two public false positives of generic-api-key, matched exactly on the captured secret:
-# the RFC 6455 §1.3 sample Sec-WebSocket-Key (egress-gate test) and SQL text in the demo seed.
+# D-291: public false positives of generic-api-key, matched exactly on the captured secret:
+# the RFC 6455 §1.3 sample Sec-WebSocket-Key (egress-gate test), SQL text in the demo seed, and (D-391) the made-up
+# Tavily key of the research spike test (scripts/rs-lib.test.ts checks that it never leaks into the output).
 [[allowlists]]
 description = "exact public false positives"
 regexTarget = "secret"
-regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''', '''^excluded\.secret_b32$''']
+regexes = ['''^dGhlIHNhbXBsZSBub25jZQ==$''', '''^excluded\.secret_b32$''', '''^tvly-secret-123$''']

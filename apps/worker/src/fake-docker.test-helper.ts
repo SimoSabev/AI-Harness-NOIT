@@ -21,12 +21,16 @@ export interface FakeOpts {
   notes?: (ctx: { canary: string; token: string }) => string;
   notesExit?: number;
   notesTimedOut?: boolean;
+  /** what the hooks wrote to /m/out/asks.jsonl (E8g) */
+  asks?: () => string;
 }
 
 export class FakeDocker implements DockerRunner {
   readonly calls: Call[] = [];
   canary = "";
   token = "";
+  /** what the agent container got on stdin (E8g steering) */
+  agentStdin = "";
   constructor(private readonly o: FakeOpts = {}) {}
 
   async run(args: string[], ro: Parameters<DockerRunner["run"]>[1]): Promise<{ exitCode: number; timedOut: boolean }> {
@@ -65,6 +69,7 @@ export class FakeDocker implements DockerRunner {
     if (cmd[0] === "npm") return { exitCode: this.o.installExit ?? 0, timedOut: false };
     if (cmd[0] === "node" && cmd[1]?.startsWith("/opt/mandat/fakes/")) {
       for (const l of this.o.agentLines?.(ctx) ?? ['{"type":"system","subtype":"init","session_id":"fake","model":"fake","tools":[],"mcp_servers":[]}', '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}']) out(l + "\n");
+      if (ro.stdin !== "closed") for await (const c of ro.stdin as AsyncIterable<Buffer>) this.agentStdin += c.toString("utf8");
       return { exitCode: this.o.agentExit ?? 0, timedOut: false };
     }
     if (cmd[0] === "tar" && cmd.includes("-cf")) {
@@ -73,6 +78,11 @@ export class FakeDocker implements DockerRunner {
       else if (head) for await (const c of packTree(head) as AsyncIterable<Buffer>) out(c);
       if (this.o.tarStderr) ro.onStderr?.(Buffer.from(this.o.tarStderr));
       return { exitCode: this.o.tarExit ?? 0, timedOut: false };
+    }
+    if (cmd[0] === "sh" && a.includes("/m/out/asks.jsonl")) {
+      const n = this.o.asks?.() ?? "";
+      if (n) out(n);
+      return { exitCode: n ? 0 : 1, timedOut: false };
     }
     if (cmd[0] === "sh" && a.includes("/m/out/notes.txt")) {
       if (this.o.notesTimedOut) return { exitCode: 137, timedOut: true };

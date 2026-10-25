@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Verdict, hashJcs, parseVitestReport } from "@mandat/contract";
 import type { Channel } from "@mandat/channels";
 import { verifyLedger } from "@mandat/ledger";
+import { createRedactor } from "@mandat/redaction";
 import type { DockerRunner } from "@mandat/sandbox";
 import { buildShopFixture } from "./fixtures.js";
 import { startRunGate } from "@mandat/verify";
@@ -101,6 +102,19 @@ describe("runTask (fake docker)", () => {
     expect(testsCalls.find((c) => c.mutants)?.mutants?.[0]?.mutated.toString("utf8")).toContain("const DISCOUNT_THRESHOLD_CENTS = 0;");
   });
 
+  it("E9б: the LLM advisor — off by default (never called); advisory with a high finding → UNKNOWN REVIEW:high:<path>", async () => {
+    let calls = 0;
+    const reviewCall = () => {
+      calls++;
+      return Promise.resolve(JSON.stringify({ findings: [{ severity: "high", path: "src/cart.ts", line: 10, text: "a special case" }] }));
+    };
+    const off = await go({ docker: new FakeDocker({ head: honest }), x: { reviewCall } });
+    expect([off.r.verdict?.result, calls, det(off.r, "REVIEW")]).toEqual(["VERIFIED", 0, undefined]);
+    const on = await go({ docker: new FakeDocker({ head: honest }), x: { reviewCall }, i: { review: "advisory" } });
+    expect(on.r.verdict?.result).toBe("UNKNOWN");
+    expect(on.r.verdict?.reasons).toContain("REVIEW:high:src/cart.ts");
+    expect(calls).toBe(1);
+  });
   it("честна поправка → VERIFIED, 3 реда в дневника, verify-log ok", async () => {
     const { r, ledgerLines, events } = await go({ docker: new FakeDocker({ head: honest }) });
     expect(r.verdict?.result).toBe("VERIFIED");
@@ -209,7 +223,10 @@ describe("runTask (fake docker)", () => {
   });
 
   it("ExportRejection формат (D-063) и redact → hash → write (D-075)", async () => {
-    const seg = Array.from(randomBytes(40), (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
+    // a random segment the entropy rule surely flags (a random draw can fall under the threshold: the test was flaky)
+    const draw = () => Array.from(randomBytes(40), (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
+    let seg = draw();
+    while (createRedactor({ exactSecrets: [] }).redactText(`src/${seg}`).text !== "src/[REDACTED:entropy]") seg = draw();
     const head = () => shopCopy((d) => symlinkSync("/etc/passwd", path.join(d, "src", seg)));
     const { r, h } = await go({ docker: new FakeDocker({ head }) });
     const dir = r.runDir ?? "";
@@ -371,5 +388,113 @@ describe("runTask (fake docker)", () => {
     const { r } = await go({ docker: new FakeDocker({ head: () => shopCopy(), tarExit: 2, tarStderr: "tar: ./src/x.ts: Cannot open: Permission denied\n" }) });
     expect(r.verdict?.reasons).toEqual(["export:unreadable", "EXPORT:unreadable:src/x.ts"]);
 
+  });
+});
+
+describe("runTask with a harness profile (E8а, D-311)", () => {
+  it("the compiled control layer is seeded into /m/in/harness before the agent; the agent gets --settings and the subagent limits", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const docker = new FakeDocker({
+      head: () => shopCopy(),
+      agentLines: () => [
+        '{"type":"system","subtype":"init","session_id":"fake","model":"fake","tools":[],"mcp_servers":[]}',
+        '{"type":"system","subtype":"permission_denied","tool_name":"Bash"}',
+        '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}',
+      ],
+    });
+    const { r } = await go({ docker, i: { profile } });
+    const runs = docker.calls.filter((c) => c.args[0] === "run").map((c) => c.args);
+    const seedAt = runs.findIndex((a) => a.includes("node") && a.includes("-e") && a.join(" ").includes("/m/in/harness"));
+    const agentAt = runs.findIndex((a) => a.some((x) => x.startsWith("/opt/mandat/fakes/")));
+    expect(seedAt).toBeGreaterThan(-1);
+    expect(seedAt).toBeLessThan(agentAt);
+    const agent = runs[agentAt] ?? [];
+    expect(agent).toContain("--settings");
+    expect(agent).toContain("/m/in/harness/claude/settings.json");
+    expect(agent).toContain("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=2");
+    const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { target: string; files_hash: string; denied: string[]; enforced_by_harness: unknown[] };
+    expect(h.target).toBe("claude");
+    expect(h.files_hash).toMatch(/^sha256:/);
+    expect(h.denied).toEqual(["Bash"]);
+    expect(h.enforced_by_harness.length).toBeGreaterThan(0);
+  });
+  it("E8g: asks from the hooks that name an ask rule of the policy come back on the output (forged ones are dropped)", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const asks = [
+      JSON.stringify({ ts: "2026-10-22T10:00:00.000Z", tool: "mcp:github.create_issue", reason: "x" }),
+      JSON.stringify({ ts: "2026-10-22T10:00:01.000Z", tool: "net:*", reason: "let me out" }),
+    ].join("\n");
+    const { r } = await go({ docker: new FakeDocker({ head: () => shopCopy(), asks: () => asks }), i: { profile } });
+    expect(r.asks).toEqual([{ tool: "mcp:github.create_issue", reason: "a human decides on new issues" }]);
+    const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { asks: unknown[] };
+    expect(h.asks).toEqual(r.asks);
+  });
+  it("E8g: grantOnce turns the ask rule into allow for this attempt only (the policy the hooks read)", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    const { r } = await go({ docker, i: { profile, grantOnce: ["mcp:github.create_issue"] } });
+    const h = JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")) as { granted_once: string[]; files_hash: string };
+    expect(h.granted_once).toEqual(["mcp:github.create_issue"]);
+    const { r: plain } = await go({ docker: new FakeDocker({ head: () => shopCopy() }), i: { profile } });
+    const h0 = JSON.parse(readFileSync(path.join(plain.runDir ?? "", "harness.json"), "utf8")) as { files_hash: string };
+    expect(h.files_hash).not.toBe(h0.files_hash);
+  });
+});
+
+describe("runTask D12 (E9б, D-364)", () => {
+  it("the profile's UI paths and dev command open tree B in a browser; a console error → UNKNOWN D12:console_error:/; no UI path → no browser", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const layers = demoProfileLayers();
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: { ...layers, b: { ...layers.b, commands: { ...layers.b.commands, dev: "npm run dev" } }, g: { ...layers.g, ui_paths: ["src/**"], ui_routes: ["/", "/cart"] } }, sources: {}, approved_by: null, approved_at: null });
+    const withUi = (i: TestProcedureInput): TestProcedureResult => {
+      const r = ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW) as Extract<TestProcedureResult, { ok: true }>;
+      return i.ui ? { ...r, ui: { up: true, routes: [{ route: "/", console_errors: ["Uncaught TypeError"], failed_requests: [], screenshot: "route-0.png" }], shots: { "route-0.png": Buffer.from("PNG") } } } : r;
+    };
+    const { r, testsCalls } = await go({ docker: new FakeDocker({ head: honest }), tests: withUi, i: { profile }, x: { images: { ...IMAGES, ui: "mandat-sandbox-ui:test" } } });
+    expect(testsCalls.find((c) => c.tree === "b")?.ui).toMatchObject({ image: "mandat-sandbox-ui:test", devCommand: "npm run dev", routes: ["/", "/cart"] });
+    expect(r.verdict?.result).toBe("UNKNOWN");
+    expect(r.verdict?.reasons).toContain("D12:console_error:/");
+    expect(readFileSync(path.join(r.runDir ?? "", "ui", "route-0.png"), "utf8")).toBe("PNG");
+    const plain = await go({ docker: new FakeDocker({ head: honest }), tests: withUi, x: { images: { ...IMAGES, ui: "mandat-sandbox-ui:test" } } });
+    expect(plain.testsCalls.some((c) => c.ui)).toBe(false);
+    expect([plain.r.verdict?.result, det(plain.r, "D12.ui")]).toEqual(["VERIFIED", undefined]);
+  });
+});
+
+describe("runTask steering (E8g, AC-8.5)", () => {
+  it("a steerable agent with a steer hook: -i, the task as the first stdin line, pending steers framed; stdin ends at the result", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    let polls = 0;
+    const { r } = await go({ docker, i: { agent: "fake:steer-echo", hooks: { steer: () => Promise.resolve(polls++ === 0 ? [{ text: "use cents", author: "ana" }] : []) } } });
+    expect(r.verdict).not.toBeNull();
+    const agent = docker.calls.find((c) => c.args.some((x) => x.endsWith("steer-echo.mjs")))?.args ?? [];
+    expect(agent).toContain("-i");
+    const lines = docker.agentStdin.trim().split("\n").map((l) => JSON.parse(l) as { message: { content: string } });
+    expect(lines).toHaveLength(2);
+    expect(lines[1]?.message.content).toContain('source="steer">use cents</untrusted>');
+  });
+  it("no steer hook or a non-steerable agent → stdin closed, as before", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    await go({ docker, i: { hooks: { steer: () => Promise.resolve([{ text: "x", author: "a" }]) } } });
+    expect(docker.agentStdin).toBe("");
+    const agent = docker.calls.find((c) => c.args.some((x) => x.endsWith("honest-fix.mjs")))?.args ?? [];
+    expect(agent).not.toContain("-i");
+  });
+});
+
+describe("runTask rebase attempt (E8f, AC-4.5)", () => {
+  it("applyFiles: no agent container; the files go into the work tree, then the usual export and verify", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    const { r } = await go({ docker, i: { applyFiles: [{ path: "src/cart.ts", data: Buffer.from("x") }] } });
+    expect(docker.calls.some((c) => c.args.some((x) => x.startsWith("/opt/mandat/fakes/")))).toBe(false);
+    expect(r.verdict).not.toBeNull();
+  });
+  it("a path that leaves the tree is refused (INFRA)", async () => {
+    const docker = new FakeDocker({ head: () => shopCopy() });
+    const { r } = await go({ docker, i: { applyFiles: [{ path: "../etc/passwd", data: Buffer.from("x") }] } });
+    expect(r.verdict?.reasons.join(" ")).toMatch(/INFRA/);
   });
 });

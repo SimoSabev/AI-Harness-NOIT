@@ -1,13 +1,20 @@
-import { randomBytes } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { randomBytes, randomUUID } from "node:crypto";
+import { reviewChange } from "@mandat/review";
+import type { ReviewCall } from "@mandat/review";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, lockAllowlist, packageManagerOf,
+  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, SecurityEvent } from "@mandat/contract";
+import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
+import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
+import { scanSkills } from "@mandat/onboard";
+import type { Ask } from "@mandat/profile";
+import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startSidecar, stopSidecars } from "./mcp-sidecar.js";
+import { seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
@@ -17,14 +24,24 @@ import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha }
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans } from "@mandat/sandbox";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { RunWriter, VerifyInfraError, acquireRunLock, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
-import type { RunGate, runTestProcedure } from "@mandat/verify";
+import { RunWriter, VerifyInfraError, acquireRunLock, checksFromCommands, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
+import type { HiddenTests, RunGate, UiCheck, runTestProcedure } from "@mandat/verify";
 
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
   onCanary?: (value: string) => void;
+  /** E7д (D-310): every line of the agent → the unified stream (redacted); never throws into the run */
+  onStream?: (ev: StreamEvent) => void;
+  /** E7д: the proxy usage poll (USD so far) for the live session */
+  onUsage?: (runId: string, usd: number) => void;
+  /** E8f (D-355): the daemon asks the run to stop the agent (a same-file conflict with an earlier task); polled every second */
+  stopRequested?: () => "conflict" | null;
+  /** E8e (D-354): an MCP sidecar refused to serve (another hash than the approved one, or tools/list_changed) */
+  onMcpBlocked?: (o: { name: string; reason: string; hash: string }) => void;
+  /** E8g (D-353): new steer texts from people since the last call; polled while a steerable agent runs */
+  steer?: () => Promise<{ text: string; author: string }[]>;
 }
 export interface RunTaskInput {
   home: string;
@@ -37,18 +54,38 @@ export interface RunTaskInput {
   now?: () => Date;
   /** mirror name under <home>/mirrors (default "shop"; the online worker uses "demo-shop") */
   mirror?: string;
+  /** v5 E8а: the approved harness profile of the repo → compiled into /m/in/harness for the agent */
+  profile?: HarnessProfile;
+  /** v5 E9б (D5): a person's hidden tests, copied into tree B at verification only (never into the agent's volume) */
+  hidden?: HiddenTests | null;
+  /** v5 E9б (AC-5.5): the LLM advisor (profile G.review); off by default */
+  review?: "off" | "advisory";
+  /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
+  subjects?: string[];
+  /** E8g: ask rules a person allowed once for this attempt (they become allow in the compiled policy) */
+  grantOnce?: string[];
+  /** E8e (D-354): the values of each MCP server's declared secrets (from the key store); only its sidecar gets them */
+  mcpSecrets?: Record<string, Record<string, string>>;
+  /** E8f (D-355): a rebase attempt — these files (null = deleted) are written into the work tree instead of running an agent */
+  applyFiles?: { path: string; data: Buffer | null }[];
+  /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
+  mcpBudgets?: Record<string, number>;
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
 export interface RunInternals {
+  /** E8e tests: a local package archive per MCP server name instead of the npm package */
+  mcpTarballs?: Record<string, Buffer>;
   repoRoot?: string;
   env?: Record<string, string | undefined>;
   progress?: (line: string) => void;
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
   recompute?: typeof recomputeTreeSha;
-  images?: { sandbox: string; gate: string; proxy: string };
+  images?: { sandbox: string; gate: string; proxy: string; ui?: string };
   gitVersion?: () => string | null;
+  /** E9б: the advisor's model call (through llm-proxy; none configured → the advisor is skipped) */
+  reviewCall?: ReviewCall;
   healthz?: (port: number) => Promise<boolean>;
   channel?: Channel;
   usagePollMs?: number;
@@ -68,6 +105,10 @@ export interface RunTaskOutput {
   limit?: TaskUsage["limit"];
   /** D-293: the provider rejected the key (upstream 401/403 seen by the proxy) */
   authFailed?: boolean;
+  /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
+  asks?: Ask[];
+  /** why the harness stopped the agent, if it did */
+  stopped?: "timeout" | "budget_stop" | "conflict";
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -236,12 +277,18 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
+    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
+    let asks: Ask[] = [];
+    let installRoutes: GateRoute[] = [];
+    const mcpRoutes: GateRoute[] = [];
+    const mcpStarted: string[] = [];
+    const mcpSkipped: { rule: string; why: string }[] = [];
     const set = (e: Evidence): void => {
       evd.set(e.detector, e);
     };
     const gateLogs: { tree: string; file: string }[] = [];
     let infraCode: ErrorCode | null = null;
-    let agentStop: "timeout" | "budget_stop" | null = null;
+    let agentStop: "timeout" | "budget_stop" | "conflict" | null = null;
     const startGate = x.startGate ?? startRunGate;
     const user = x.infraUser ?? (await infraUserFor(docker).catch(() => ({ user: "1000:1000" }))).user;
     const ipv6Sysctl = x.ipv6Sysctl ?? (await probeIpv6(docker, images.sandbox));
@@ -250,6 +297,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let baseDir = "";
 
     const pm = packageManagerOf(contract.repo_config); // D-301
+    let berry = false; // E8и (D-358): yarn.lock with __metadata
     try {
       // ---------- PROVISION (7.4)
       await timed("provision", async () => {
@@ -257,6 +305,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         baseDir = clone.dir;
         const b = readLockfile(baseDir, pm);
         const allow = lockAllowlist(pm, b ? b.toString("utf8") : null);
+        berry = isBerryLock(b ? b.toString("utf8") : null);
         if (!allow.ok) infra("E_LOCKFILE_BASE", `base lockfile rejected: ${allow.reason}`);
         if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
         const seed = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(baseDir), timeoutMs: 120_000 });
@@ -265,8 +314,24 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         await w.text("agent-contract.txt", text);
         const c = await runSandbox(sctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "cat > /m/in/contract.txt && chmod 0444 /m/in/contract.txt"], stdin: PassThrough.from([text]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000 });
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
+        // v5 E8а (D-311): the profile's control layer → /m/in/harness (root, read-only for the agent) before the agent
+        if (i.profile) {
+          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : "claude";
+          const base = target === "codex" ? "codex" : "claude";
+          const granted = i.grantOnce ?? [];
+          const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
+          // E8e (D-354): skills are materialized only when their text has the hash the profile was approved with
+          const sk = skillTexts(prof.layers.e.skills, Object.fromEntries(scanSkills(baseDir).filter((k) => k.blocked === null).map((k) => [k.name, k.text])));
+          const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])], skills: sk.texts });
+          harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: [...m.unsupported, ...sk.dropped], files: m.files, granted };
+          if (target === "codex") {
+            const cp = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/codex-home && cp -R /m/in/harness/codex/. /m/codex-home/ && chmod -R u+w /m/codex-home"], timeoutMs: 60_000 });
+            if (cp.exitCode !== 0) infra("E_DOCKER", "codex home seed failed");
+          }
+        }
         try {
-          gate = await startGate(gctx("agent"), { phase: "install", routes: allow.ok ? allow.routes : [] });
+          installRoutes = allow.ok ? allow.routes : [];
+          gate = await startGate(gctx("agent"), { phase: "install", routes: installRoutes });
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START", (e as Error).message);
         }
@@ -276,17 +341,67 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- INSTALL (7.5)
       await timed("install", async () => {
-        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm), timeoutMs: 300_000 });
+        const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm, berry), timeoutMs: 300_000 });
         if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `${pm} install exit ${r.exitCode}`);
         out(`[install]   ${contract.repo_config.runtime.install} via gate`);
+      });
+      if (interrupted) infra("E_INTERRUPTED", "interrupted");
+      // ---------- MCP sidecars (E8e, D-354): vetted stdio servers of the profile, each in its own container
+      await timed("install", async () => {
+        const refs = harness && i.profile ? i.profile.layers.e.mcp.filter((m) => m.transport === "stdio") : [];
+        if (refs.length === 0) return;
+        const g = gate as RunGate;
+        await g.setPolicy("install", [...installRoutes, NPM_PREFIX_ROUTE]);
+        for (const ref of refs) {
+          if (ref.tools_hash === null) {
+            mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "not vetted in the catalog; the agent does not get it" });
+            continue;
+          }
+          const installed = await installMcp(sctx, { volume: mcpNames.vol(runId, ref.name), network: g.net, ref, ...(x.mcpTarballs?.[ref.name] ? { tarball: x.mcpTarballs[ref.name] } : {}) });
+          if (ref.digest !== null && installed.integrity !== ref.digest) {
+            mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "the installed package is not the vetted one (digest)" });
+            continue;
+          }
+          const started = await startSidecar(sctx, { gate: g, ref, installed, secrets: i.mcpSecrets?.[ref.name] ?? {}, perMin: i.mcpBudgets?.[ref.name] ?? 60 });
+          mcpStarted.push(ref.name);
+          if (started.line.event === "blocked") {
+            i.hooks?.onMcpBlocked?.({ name: ref.name, reason: started.line.reason ?? "changed", hash: started.line.hash });
+            sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name: ref.name, reason: started.line.reason ?? "changed" }, source: "worker" });
+            mcpSkipped.push({ rule: `mcp:${ref.name}`, why: `blocked at start: ${started.line.reason ?? "changed"}` });
+          } else {
+            mcpRoutes.push(...started.route);
+          }
+        }
+        await g.setPolicy("install", installRoutes);
+        out(`[mcp]       ${mcpRoutes.length / 2} sidecar(s) serving${mcpSkipped.length ? `, ${mcpSkipped.length} not` : ""}`);
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- AGENT (7.6)
       await timed("agent", async () => {
         const g = gate as RunGate;
+        if (i.applyFiles) {
+          // E8f (D-355): the rebased change, computed 3-way on the host, takes the place of the agent; then the usual export + verify
+          const bad = i.applyFiles.find((f) => f.path.startsWith("/") || f.path.split("/").some((x) => x === ".." || x === ".git" || x === ""));
+          if (bad) infra("E_USAGE", `rebase: bad path ${bad.path.slice(0, 100)}`);
+          const dir = path.join(tmpRoot, "rebase");
+          for (const f of i.applyFiles.filter((x) => x.data !== null)) {
+            mkdirSync(path.dirname(path.join(dir, f.path)), { recursive: true });
+            writeFileSync(path.join(dir, f.path), f.data as Buffer);
+          }
+          let ok = true;
+          if (existsSync(dir)) ok = (await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(dir), timeoutMs: 120_000 })).exitCode === 0;
+          const gone = i.applyFiles.filter((x) => x.data === null).map((x) => `/m/work/${x.path}`);
+          if (ok && gone.length > 0) ok = (await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["rm", "-f", "--", ...gone], timeoutMs: 60_000 })).exitCode === 0;
+          agentExit = ok ? 0 : 1;
+          await g.setPolicy("closed", []).catch(() => undefined);
+          await g.stop();
+          gate = undefined;
+          out(`[agent]     rebase: ${i.applyFiles.length} file(s) applied onto the new base`);
+          return;
+        }
         try {
           channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret") });
-          await g.setPolicy("agent", channel.gateRoutes(), channel.gateTunnels?.());
+          await g.setPolicy("agent", [...channel.gateRoutes(), ...mcpRoutes], channel.gateTunnels?.());
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
         }
@@ -299,12 +414,16 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         } else {
           setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider === "openai" ? { p: "openai" as const } : {}) }));
         }
+        const steerHook = adapter.supportsSteering && adapter.steerLine ? i.hooks?.steer : undefined;
         const launch = adapter.launch(
-          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" },
+          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}), ...(steerHook ? { steer: { sessionId: randomUUID() } } : {}) },
           viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
+        const denied: string[] = [];
+        const streamCtx = createStreamCtx(runId);
+        const onStream = i.hooks?.onStream;
         let loginProblem = false;
         let lastTool = "";
         let pollWarned = false;
@@ -314,7 +433,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           queue = queue.then(fn, fn);
         };
         const agentName = names.agent(runId);
-        const stopAgent = async (why: "timeout" | "budget_stop"): Promise<void> => {
+        const stopAgent = async (why: "timeout" | "budget_stop" | "conflict"): Promise<void> => {
           if (agentStop) return;
           agentStop = why;
           await dockerText(docker, ["stop", "-t", "30", agentName], 90_000);
@@ -323,6 +442,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           ? setInterval(() => {
               ch.usage(runId).then((u) => {
                 usage = u;
+                i.hooks?.onUsage?.(runId, u.usd);
                 if (u.budgetStop) void stopAgent("budget_stop");
               }, () => {
                 if (!pollWarned) {
@@ -333,18 +453,51 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             }, x.usagePollMs ?? 2000)
           : undefined;
         const limit = setTimeout(() => void stopAgent("timeout"), contract.repo_config.budgets.task_minutes * 60_000);
+        const stopPoll = i.hooks?.stopRequested
+          ? setInterval(() => {
+              if (i.hooks?.stopRequested?.() === "conflict") void stopAgent("conflict");
+            }, 1000)
+          : undefined;
+        // E8g (D-353): steering = stream-json on stdin. The task is the first line; people's steer texts follow (framed by
+        // the adapter) until the agent's first result, then stdin ends and the agent finishes as before.
+        let stdin: PassThrough | undefined;
+        let steerPoll: NodeJS.Timeout | undefined;
+        if (launch.stdin === "pipe" && steerHook && adapter.steerLine) {
+          const line = adapter.steerLine.bind(adapter);
+          const pipe = new PassThrough();
+          stdin = pipe;
+          if (launch.firstStdinLine) pipe.write(launch.firstStdinLine + "\n");
+          const pump = async () => {
+            const xs = await steerHook().catch(() => []);
+            for (const s of xs) if (!pipe.writableEnded) pipe.write(line(s.text.slice(0, 2000), s.author.slice(0, 80)) + "\n");
+          };
+          await pump();
+          steerPoll = setInterval(() => void pump(), x.usagePollMs ?? 2000);
+        }
         try {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
             ...(viaProfile && ch.profileName ? { profile: profileVolume("claude", ch.profileName) } : {}),
-            env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}) },
+            env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}) },
             cmd: launch.argv,
             timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
+            ...(stdin ? { stdin: stdin as unknown as NodeJS.ReadableStream } : {}),
             onStdoutLine: (line) => {
               if (viaProfile && looksLikeLoginProblem(line)) loginProblem = true;
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
+                if (e.type === "result" && stdin && !stdin.writableEnded) stdin.end();
+              }
+              if (onStream || harness) {
+                try {
+                  for (const ev of adapter.toStream(line, streamCtx)) {
+                    if (ev.kind === "permission" && ev.tool) denied.push(ev.tool.name);
+                    onStream?.(ev);
+                  }
+                } catch {
+                  // the live view is best effort; the transcript and the verdict do not depend on it
+                }
               }
               let row: object;
               try {
@@ -365,6 +518,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         } finally {
           clearTimeout(limit);
           if (poll) clearInterval(poll);
+          if (stopPoll) clearInterval(stopPoll);
+          if (steerPoll) clearInterval(steerPoll);
+          if (stdin && !stdin.writableEnded) stdin.end();
           await queue;
         }
         if (useProxy) {
@@ -373,6 +529,33 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         }
         if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
+        // SH2-CX (D-312): Codex runs from a writable copy (CODEX_HOME); a changed config after the run = config_change → UNKNOWN
+        const tampered: string[] = [];
+        if (harness?.target === "codex") {
+          for (const f of harness.files.filter((x) => x.path.startsWith("codex/") && /\.(toml|json)$/.test(x.path))) {
+            const now = await safeReadVolume(sctx, { volume: vol, file: `/m/codex-home/${f.path.slice("codex/".length)}`, limit: 1_048_576, role: "export" });
+            if (now === null || now.toString("utf8") !== f.bytes) tampered.push(f.path);
+          }
+          if (tampered.length > 0) {
+            sec({ kind: "config_change", severity: "warn", detail: { files: tampered.join(", ").slice(0, 300) }, source: "worker" });
+            set(ev("AGENT", "unknown", `the agent changed its control layer: ${tampered.join(", ")}`.slice(0, 300), { files: tampered }, { cls: "config_change", id: tampered[0] ?? "-" }));
+          }
+        }
+        if (harness) {
+          // E8g (D-352): the hook's asks.jsonl is agent-writable; only asks naming an ask rule of the seeded policy count
+          const raw = await safeReadVolume(sctx, { volume: vol, file: "/m/out/asks.jsonl", limit: 65_536, role: "export" }).catch(() => null);
+          const policy = harness.files.find((f) => f.path === "policy.json");
+          if (raw && policy) asks = parseAsks(raw.toString("utf8"), JSON.parse(policy.bytes) as { rules: { tool: string; decision: string; reason?: string }[] });
+          // E8e: a rug pull during the run (tools/list_changed) is a later "blocked" line of the sidecar
+          for (const name of mcpStarted) {
+            const st = await sidecarStatus(sctx, mcpNames.container(runId, name));
+            if (st?.state === "blocked" && st.reason === "list_changed") {
+              i.hooks?.onMcpBlocked?.({ name, reason: "list_changed", hash: st.hash });
+              sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name, reason: "list_changed" }, source: "worker" });
+            }
+          }
+          await w.text("harness.json", { target: harness.target, files_hash: harness.hash, denied, tampered, enforced_by_harness: harness.enforced, unsupported: [...harness.unsupported, ...mcpSkipped], asks, granted_once: harness.granted, mcp_serving: mcpRoutes.filter((r) => r.method === "POST").map((r) => r.match.path.slice(5)) });
+        }
         await g.setPolicy("closed", []).catch(() => undefined);
         await g.stop();
         gate = undefined;
@@ -440,6 +623,16 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         await dockerText(docker, ["volume", "rm", "-f", vol], 60_000);
 
         // ---------- VERIFY (7.8)
+        // E9б (D8): the approved profile's lint and typecheck commands (layer B), when it has them
+        const profileChecks = checksFromCommands(i.profile?.layers.b.commands ?? {});
+        // E9б (D12, D-364): the profile's UI paths; the browser image is opt-in (missing → D12 unknown: not run)
+        const uiPaths = i.profile?.layers.g.ui_paths ?? [];
+        let uiCheck: UiCheck | null = null;
+        if (uiPaths.length > 0) {
+          const tag = x.images?.ui ?? (await uiImageTag(repoRoot));
+          const present = (await dockerText(docker, ["image", "inspect", tag])).exitCode === 0;
+          uiCheck = { paths: uiPaths, devCommand: i.profile?.layers.b.commands.dev ?? null, image: present ? tag : null, routes: i.profile?.layers.g.ui_routes ?? ["/"] };
+        }
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
           await timed("verify", async () => {
@@ -449,7 +642,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 docker, runId, runDir, mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
                 mirrorPath, baseSha: contract.base_commit, baseDir, diffPatch: diffPatch as Buffer, files: ex.files, rc: contract.repo_config,
                 allowedPaths: contract.allowed_paths, mayChangeTests: contract.may_change_tests, mustPass: contract.must_pass, external: false, tmpRoot,
-                startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
+                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(profileChecks.length > 0 ? { checks: profileChecks } : {}), ...(uiCheck ? { ui: uiCheck } : {}),
                 onReports: async (a, b) => {
                   w.raw("verify/report-a.json", redactReport(a.raw));
                   w.raw("verify/report-b.json", redactReport(b.raw));
@@ -513,9 +706,14 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       aliases.push(`infra:${infraCode.replace(/^E_/, "").toLowerCase()}`);
       set(ev("INFRA", "unknown", `infra: ${infraCode}`, {}, { cls: infraCode.replace(/^E_/, ""), id: "-" }));
     }
+    // E9б (AC-5.5): the advisor reads the verified change; it can only make a human look (REVIEW unknown), never lift
+    const reviewed = diffPatch as Buffer | null; // assigned inside the export step's closure
+    if (i.review === "advisory" && x.reviewCall && reviewed && reviewed.length > 0 && !evd.has("INFRA") && evd.get("EXPORT")?.status === "pass") {
+      set(await reviewChange({ diff: reviewed.toString("utf8"), task: contract.text, call: x.reviewCall }));
+    }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "D8.static", "D12.ui", "REVIEW", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }
@@ -540,6 +738,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     // ---------- cleanup (7.10)
     const ps = await dockerText(docker, ["ps", "-aq", "--filter", `label=mandat.run=${runId}`]);
     for (const c of ps.stdout.split("\n").filter(Boolean)) await dockerText(docker, ["rm", "-f", c]);
+    if (mcpStarted.length > 0) await stopSidecars(sctx, mcpStarted);
     for (const t of ["agent", "base", "a", "b"] as const) await dockerText(docker, ["network", "rm", names.net(runId, t)]);
     if (!i.keep) for (const t of ["agent", "base", "a", "b"] as const) await dockerText(docker, ["volume", "rm", "-f", names.vol(runId, t)]);
     rmSync(tmpRoot, { recursive: true, force: true });
@@ -550,6 +749,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       ledger: w.ledgerFrom !== null && w.ledgerTo !== null ? { from: w.ledgerFrom, to: w.ledgerTo } : null,
       ...(usage.limit ? { limit: usage.limit } : {}),
       ...(usage.authFailed ? { authFailed: true } : {}),
+      ...(asks.length > 0 ? { asks } : {}),
+      ...(agentStop ? { stopped: agentStop } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

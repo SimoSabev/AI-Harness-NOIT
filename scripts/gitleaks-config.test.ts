@@ -12,7 +12,7 @@ describe(".gitleaks.toml (D-095, D-291)", () => {
     expect(toml).toMatch(/\[extend\]\s*\nuseDefault = true/);
     expect([...toml.matchAll(/^paths = (.*)$/gm)].map((m) => m[1])).toEqual(["['''^fixtures/redaction/''']"]);
     const regexes = [...toml.matchAll(/'''(.*?)'''/g)].map((m) => m[1]).filter((r) => r !== "^fixtures/redaction/");
-    expect(regexes).toEqual(["^dGhlIHNhbXBsZSBub25jZQ==$", "^excluded\\.secret_b32$"]);
+    expect(regexes).toEqual(["^dGhlIHNhbXBsZSBub25jZQ==$", "^excluded\\.secret_b32$", "^tvly-secret-123$"]);
     for (const r of regexes) expect(r).toMatch(/^\^[^*+?]*\$$/);
     expect(toml).toMatch(/regexTarget = "secret"/);
   });

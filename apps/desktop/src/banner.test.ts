@@ -1,28 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { allowedUrl, childEnv, loginScript, parseBanner, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, parseBanner, startFailed, stepOf } from "./banner.js";
 
 const BANNER = [
   "",
   "  Харнесът работи локално (съдия: Мандат)",
   "  Отвори:  http://localhost:3000",
-  "  Имейл:   ti@mandat.local",
-  "  Парола:  Ab3_x-9   (нова при всяко пускане)",
-  "",
-  "  Двуфакторен код (само сега): добави в приложение за кодове (Google Authenticator, 1Password…)",
-  "  Ключ:    ABCDEFGHIJKLMNOP",
-  "  Адрес:   otpauth://totp/Mandat:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Mandat&algorithm=SHA1&digits=6&period=30",
+  "  Вход:    без вход — само от този компютър",
   "",
 ].join("\n");
 
-describe("desktop banner (D-303)", () => {
-  it("адрес, имейл, парола и TOTP от банера на pnpm local; непълен банер → null", () => {
-    expect(parseBanner(BANNER)).toEqual({
-      url: "http://localhost:3000", email: "ti@mandat.local", password: "Ab3_x-9",
-      totp: { secret: "ABCDEFGHIJKLMNOP", uri: "otpauth://totp/Mandat:ti%40mandat.local?secret=ABCDEFGHIJKLMNOP&issuer=Mandat&algorithm=SHA1&digits=6&period=30" },
-    });
-    expect(parseBanner(BANNER.replace(/ {2}Ключ:.*\n/, "").replace(/ {2}Адрес:.*\n/, ""))?.totp).toBeNull();
-    expect(parseBanner("  Отвори:  http://localhost:3000\n")).toBeNull();
+describe("desktop banner (D-303, D-368)", () => {
+  it("само адресът от банера на pnpm local (без вход); без адрес или с чужд адрес → null", () => {
+    expect(parseBanner(BANNER)).toEqual({ url: "http://localhost:3000" });
+    expect(parseBanner("  Харнесът работи локално\n")).toBeNull();
     expect(parseBanner(BANNER.replace("http://localhost:3000", "https://evil.example"))).toBeNull();
+    expect(parseBanner(BANNER.replace("http://localhost:3000", "http://192.168.1.5:3000"))).toBeNull();
+  });
+
+  it("the English banner (E7е) gives the same address", () => {
+    expect(parseBanner(BANNER.replace("Отвори:", "Open:   "))).toEqual(parseBanner(BANNER));
+  });
+
+  it("error lines of pnpm local in either language", () => {
+    expect(isErrorLine("✗ Docker не отговаря")).toBe(true);
+    expect(isErrorLine("Error: listen EADDRINUSE")).toBe(true);
+    expect(isErrorLine("[2/4] database")).toBe(false);
   });
 
   it("стъпките [n/4] за прозореца при пускане", () => {
@@ -31,7 +33,7 @@ describe("desktop banner (D-303)", () => {
   });
 
   it("env на детето без API ключове и без ELECTRON_RUN_AS_NODE", () => {
-    expect(childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "y", ELECTRON_RUN_AS_NODE: "1" })).toEqual({ PATH: "/bin" });
+    expect(childEnv({ PATH: "/bin", ANTHROPIC_API_KEY: "x", OPENAI_API_KEY: "y", ELECTRON_RUN_AS_NODE: "1", MANDAT_KEK: "k" })).toEqual({ PATH: "/bin" });
   });
 
   it("навигация само в локалния адрес", () => {
@@ -40,10 +42,17 @@ describe("desktop banner (D-303)", () => {
     expect(allowedUrl("https://example.com/", "http://localhost:3000")).toBe(false);
     expect(allowedUrl("not a url", "http://localhost:3000")).toBe(false);
   });
+});
 
-  it("скриптът за вход попълва формата с JSON низове (без инжекция)", () => {
-    const s = loginScript("a@b.c", 'p"w\');alert(1)//');
-    expect(s).toContain(JSON.stringify('p"w\');alert(1)//'));
-    expect(s).toContain('form[action="/api/auth/login"]');
+// D-387: when the harness stops before it opens, the window offers "Try again" instead of quitting.
+describe("startFailed (D-387)", () => {
+  it("the error lines as the detail, Try again first, Quit second", () => {
+    const f = startFailed("[1/4] check\n✗ Docker не отговаря\nsome noise\n", 3, "bg");
+    expect(f.detail).toBe("✗ Docker не отговаря");
+    expect(f.buttons).toEqual(["Опитай пак", "Изход"]);
+    expect(f.retry).toBe(0);
+  });
+  it("no error line → the exit code", () => {
+    expect(startFailed("", 7, "en").detail).toBe("the harness exited with 7");
   });
 });

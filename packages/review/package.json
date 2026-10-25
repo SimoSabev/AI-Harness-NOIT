@@ -1,0 +1,26 @@
+{
+  "name": "@mandat/review",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The LLM advisor of the verdict: a fixed prompt over the framed diff; it can only ask a human, never raise a verdict",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/review/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/core": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

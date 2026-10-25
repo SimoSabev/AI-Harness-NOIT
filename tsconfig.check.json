@@ -7,6 +7,9 @@
     "declarationMap": false,
     "rootDir": ".",
     "paths": {
+      "@mandat/mcp-bridge/registry": [
+        "./packages/mcp-bridge/src/registry.ts"
+      ],
       "@mandat/worker": [
         "./apps/worker/src/index.ts"
       ],
@@ -34,6 +37,7 @@
     "**/dist/**",
     "fixtures/**",
     "apps/web/**",
+    "apps/site/**",
     "apps/desktop/src/main.ts"
   ]
 }

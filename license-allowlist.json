@@ -70,6 +70,11 @@
         "package": "caniuse-lite",
         "license": "CC-BY-4.0",
         "reason": "browser-support data bundled by Next.js build tooling (browserslist); attribution-only, harness only (D-284)"
+      },
+      {
+        "package": "argparse",
+        "license": "Python-2.0",
+        "reason": "permissive PSF license; js-yaml dependency pulled by electron-updater in the desktop app (apps/desktop, own lockfile), D-376"
       }
     ]
   }

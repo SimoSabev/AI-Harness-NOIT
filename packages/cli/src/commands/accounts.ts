@@ -1,10 +1,11 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { z } from "zod";
 import { buildProfileArgs, dockerText, ensureUpstreamNetwork, imageTags, profileVolume } from "@mandat/sandbox";
 import type { CliDeps } from "../deps.js";
 import { printJson } from "../output.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
+import type { LoginDeps, LoginProc } from "./login-session.js";
 
 // D-295: subscription accounts, like T3 Code: the user signs in to the unmodified Claude Code through Anthropic's own
 // flow, one profile volume per account. The harness reads only `claude auth status` (who, which plan), never a token.
@@ -64,30 +65,78 @@ export async function accountsCommand(io: Io, deps: CliDeps, o: { json: boolean 
   return 0;
 }
 
+/** Image present, upstream network, the profile volume created and owned by the agent user (terminal and web login). */
+export async function prepareProfile(deps: CliDeps, name: string): Promise<{ ok: true; image: string; volume: string; created: boolean } | { ok: false; reason: "images_missing" | "failed"; image: string }> {
+  const volume = profileVolume("claude", name);
+  const image = (await imageTags(repoRoot)).sandbox;
+  if ((await dockerText(deps.docker, ["image", "inspect", image])).exitCode !== 0) return { ok: false, reason: "images_missing", image };
+  await ensureUpstreamNetwork(deps.docker);
+  const created = (await dockerText(deps.docker, ["volume", "inspect", volume])).exitCode !== 0;
+  if ((await dockerText(deps.docker, ["volume", "create", "--label", "mandat.profile=1", volume])).exitCode !== 0) return { ok: false, reason: "failed", image };
+  if ((await dockerText(deps.docker, buildProfileArgs("init", { image, volume }), 60_000)).exitCode !== 0) return { ok: false, reason: "failed", image };
+  return { ok: true, image, volume, created };
+}
+
+async function profileStatus(deps: CliDeps, name: string): Promise<ProfileStatus> {
+  const image = (await imageTags(repoRoot)).sandbox;
+  return parseClaudeStatus((await dockerText(deps.docker, buildProfileArgs("status", { image, volume: profileVolume("claude", name) }), 60_000)).stdout);
+}
+
+/** D-369: the real process behind a web login — `docker run -i` with pipes; nothing it prints is logged here. */
+export function loginDeps(deps: CliDeps): LoginDeps {
+  let image = "";
+  return {
+    prepare: async (name) => {
+      const p = await prepareProfile(deps, name);
+      image = p.image;
+      return p.ok ? (p.created ? "created" : "ok") : p.reason;
+    },
+    discard: async (name) => void (await dockerText(deps.docker, ["volume", "rm", profileVolume("claude", name)], 60_000)),
+    spawn: (name): LoginProc => {
+      const child = spawn("docker", buildProfileArgs("login-web", { image, volume: profileVolume("claude", name) }), { stdio: ["pipe", "pipe", "pipe"] });
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+      child.stdin.on("error", () => undefined);
+      return {
+        onOutput: (f) => {
+          child.stdout.on("data", f);
+          child.stderr.on("data", f);
+        },
+        onExit: (f) => void child.on("close", (code) => f(code)),
+        write: (s) => void child.stdin.write(s),
+        kill: () => void child.kill("SIGTERM"),
+      };
+    },
+    status: (name) => profileStatus(deps, name),
+    timeoutMs: 10 * 60_000,
+  };
+}
+
 /** Interactive: needs the user's terminal (the browser flow prints a URL and asks for the code). */
 export async function loginCommand(io: Io, deps: CliDeps, o: { name: string }): Promise<number> {
-  const vol = profileVolume("claude", o.name);
-  const image = (await imageTags(repoRoot)).sandbox;
-  if ((await dockerText(deps.docker, ["image", "inspect", image])).exitCode !== 0) {
-    io.stderr(`E_IMAGES_MISSING: ${image}; пусни pnpm mandat images build\n`);
+  const p = await prepareProfile(deps, o.name);
+  if (!p.ok) {
+    if (p.reason === "images_missing") io.stderr(`E_IMAGES_MISSING: ${p.image}; пусни pnpm mandat images build\n`);
     return 3;
   }
-  await ensureUpstreamNetwork(deps.docker);
-  if ((await dockerText(deps.docker, ["volume", "create", "--label", "mandat.profile=1", vol])).exitCode !== 0) return 3;
-  if ((await dockerText(deps.docker, buildProfileArgs("init", { image, volume: vol }), 60_000)).exitCode !== 0) return 3;
   io.stderr(`Акаунт „${o.name}“: стартирам Claude Code. Отвори адреса, който ще покаже, влез в claude.ai и постави кода тук.\n`);
-  const r = spawnSync("docker", buildProfileArgs("login", { image, volume: vol }), { stdio: "inherit" });
+  const r = spawnSync("docker", buildProfileArgs("login", { image: p.image, volume: p.volume }), { stdio: "inherit" });
   if (r.status !== 0) return 3;
-  const s = parseClaudeStatus((await dockerText(deps.docker, buildProfileArgs("status", { image, volume: vol }), 60_000)).stdout);
+  const s = await profileStatus(deps, o.name);
   io.stdout(s.loggedIn ? `Готово: ${s.email ?? o.name} · ${s.plan ?? "абонамент"} → агент claude@${o.name}\n` : "Входът не завърши.\n");
   return s.loggedIn ? 0 : 3;
 }
 
-export async function logoutCommand(io: Io, deps: CliDeps, o: { name: string }): Promise<number> {
-  const vol = profileVolume("claude", o.name);
+/** Signs the account out and removes its profile volume (terminal and web). */
+export async function logoutProfile(deps: CliDeps, name: string): Promise<boolean> {
+  const vol = profileVolume("claude", name);
   const image = (await imageTags(repoRoot)).sandbox;
   await dockerText(deps.docker, buildProfileArgs("logout", { image, volume: vol }), 60_000);
-  const rm = await dockerText(deps.docker, ["volume", "rm", vol], 60_000);
-  io.stdout(rm.exitCode === 0 ? `Акаунт „${o.name}“ е махнат.\n` : `Няма акаунт „${o.name}“.\n`);
-  return rm.exitCode === 0 ? 0 : 3;
+  return (await dockerText(deps.docker, ["volume", "rm", vol], 60_000)).exitCode === 0;
+}
+
+export async function logoutCommand(io: Io, deps: CliDeps, o: { name: string }): Promise<number> {
+  const ok = await logoutProfile(deps, o.name);
+  io.stdout(ok ? `Акаунт „${o.name}“ е махнат.\n` : `Няма акаунт „${o.name}“.\n`);
+  return ok ? 0 : 3;
 }

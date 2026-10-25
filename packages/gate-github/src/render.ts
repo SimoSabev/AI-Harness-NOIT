@@ -7,17 +7,23 @@ export const SUMMARY_MAX = 65535;
 const SIGN: Record<string, string> = { VERIFIED: "✅", FAILED: "❌", UNKNOWN: "⚠️" };
 const cell = (s: string) => s.replace(/[\r\n]+/g, " ").replace(/\|/g, "\\|");
 
-export function conclusionOf(result: Verdict["result"]): CheckConclusion {
-  return result === "VERIFIED" ? "success" : result === "FAILED" ? "failure" : "action_required";
+/** D-209: UNKNOWN is action_required; the fallback (if live L3 shows it does not block a merge) is failure. */
+export type UnknownConclusion = "action_required" | "failure";
+export function conclusionOf(result: Verdict["result"], unknownAs: UnknownConclusion = "action_required"): CheckConclusion {
+  return result === "VERIFIED" ? "success" : result === "FAILED" ? "failure" : unknownAs;
+}
+/** MANDAT_UNKNOWN_CONCLUSION=failure switches on the D-209 fallback; anything else keeps action_required. */
+export function unknownConclusionFrom(env: Record<string, string | undefined>): UnknownConclusion {
+  return env.MANDAT_UNKNOWN_CONCLUSION === "failure" ? "failure" : "action_required";
 }
 
-export function renderCheck(v: Verdict, o: { effectiveLevel: number; levelReasons?: string[]; mode: VerifyMode; ledgerSeq: number | null; appUrl?: string | null; taskId?: string }): {
+export function renderCheck(v: Verdict, o: { effectiveLevel: number; levelReasons?: string[]; mode: VerifyMode; ledgerSeq: number | null; appUrl?: string | null; taskId?: string; unknownAs?: UnknownConclusion }): {
   conclusion: CheckConclusion;
   title: string;
   summary: string;
   details_url?: string;
 } {
-  const conclusion = conclusionOf(v.result);
+  const conclusion = conclusionOf(v.result, o.unknownAs ?? unknownConclusionFrom(process.env));
   const first = v.reasons[0] ?? "-";
   const title = v.result === "UNKNOWN" ? `UNKNOWN: ${first}`.slice(0, 200) : v.result === "FAILED" ? `FAILED: ${first}`.slice(0, 200) : "VERIFIED";
   const lines: string[] = [];

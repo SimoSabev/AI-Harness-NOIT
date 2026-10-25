@@ -1,6 +1,8 @@
 export * from "./adapter.js";
-export { buildClaudeArgv, steeringFirstLine } from "./claude/argv.js";
-export type { ClaudeArgvOptions } from "./claude/argv.js";
+export { CLAUDE_HARNESS_DIR, CLAUDE_HARNESS_SETTINGS, buildClaudeArgv, steeringFirstLine } from "./claude/argv.js";
+export type { ClaudeArgvOptions, ClaudeControl } from "./claude/argv.js";
+export { HOOKS_DIR, sh2Settings } from "./claude/control-layer.js";
+export type { ClaudeSettings } from "./claude/control-layer.js";
 export { parseStreamLine } from "./claude/stream.js";
 export { claudeAdapter } from "./claude/adapter.js";
 export { fakeAdapter } from "./fake/adapter.js";
@@ -9,3 +11,5 @@ export type { CodexArgvOptions } from "./codex/argv.js";
 export { codexClaimedDone, parseCodexLine } from "./codex/stream.js";
 export { codexAdapter } from "./codex/adapter.js";
 export { fakeCodexAdapter } from "./fake/adapter.js";
+export { claudeTool, claudeToStream } from "./claude/to-stream.js";
+export { codexToStream } from "./codex/to-stream.js";

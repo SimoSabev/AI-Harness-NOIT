@@ -34,12 +34,14 @@
     "@mandat/ledger": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",
     "@mandat/onboard": "workspace:*",
+    "@mandat/profile": "workspace:*",
     "@mandat/redaction": "workspace:*",
     "@mandat/sandbox": "workspace:*",
     "@mandat/verify": "workspace:*",
     "@octokit/webhooks": "14.2.0",
     "pg": "8.23.1",
-    "web-push": "3.6.7"
+    "web-push": "3.6.7",
+    "@mandat/review": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",

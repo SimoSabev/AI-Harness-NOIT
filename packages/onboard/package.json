@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@mandat/contract": "workspace:*",
+    "@mandat/profile": "workspace:*",
     "yaml": "2.9.1"
   }
 }

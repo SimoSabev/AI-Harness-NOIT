@@ -2,14 +2,16 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
+import { useT } from "../i18n/client";
 
-// Ф4 / спец. т. 11: private Broadcast `org:<id>:board` (or `task:<id>`); reconnect → GET /api/board?since=;
+// F4 / spec §11: private Broadcast `org:<id>:board` (or `task:<id>`); reconnect → GET /api/board?since=;
 // Realtime unavailable > 30 s (or the dev login without Supabase) → polling every 15 s (3 s while a task runs, D-292). ONE aria-live="polite" region;
-// "assertive" only for ПРОВАЛ / БЛОКИРАНО (WCAG 4.1.3).
+// "assertive" only for FAILED / BLOCKED (WCAG 4.1.3).
 type Msg = { task_id?: string; state?: string; verdict?: string | null; result?: string | null };
 
 export function Live({ topic, since, realtime, fast = false }: { topic: string; since: string; realtime: { url: string; anonKey: string } | null; fast?: boolean }) {
   const router = useRouter();
+  const t = useT();
   const [polite, setPolite] = useState("");
   const [assertive, setAssertive] = useState("");
   const sinceRef = useRef(since);
@@ -22,8 +24,8 @@ export function Live({ topic, since, realtime, fast = false }: { topic: string; 
     let poll: ReturnType<typeof setInterval> | null = null;
     const announce = (m: Msg) => {
       const bad = m.state === "BLOCKED" || m.verdict === "FAILED" || m.result === "FAILED";
-      const text = `Обновено: ${m.task_id ?? "задача"}${m.state ? ` → ${m.state}` : ""}`;
-      if (bad) setAssertive(`${text} (ПРОВАЛ или БЛОКИРАНО)`);
+      const text = `${t("live.updated", { task: m.task_id ?? t("live.task") })}${m.state ? ` → ${m.state}` : ""}`;
+      if (bad) setAssertive(t("live.bad", { text }));
       else setPolite(text);
     };
     const check = async () => {
@@ -75,7 +77,7 @@ export function Live({ topic, since, realtime, fast = false }: { topic: string; 
       if (poll) clearInterval(poll);
       void sb.removeChannel(ch);
     };
-  }, [topic, realtime, router, fast]);
+  }, [topic, realtime, router, fast, t]);
 
   return (
     <>

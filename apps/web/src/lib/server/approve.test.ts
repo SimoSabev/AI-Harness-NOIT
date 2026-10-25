@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { approve } from "./actions";
+import { localPresence } from "./local-auth";
 import { devSecondFactor } from "./session";
 import { totpAt } from "./totp";
 import { TEST_TOTP, U, changesetOf, webDb } from "./web-db.test-helper";
@@ -76,5 +77,21 @@ describe("approve-totp", () => {
     await expect(approve(db, { uid: U.approver, changesetId: cs.id, body: { head_sha: cs.head_sha, decision: "approved", client: "web" }, secondFactor: noMfa })).resolves.toMatchObject({ status: 409 });
     expect(await counts()).toEqual({ a: 0, l: 0, o: 1 });
     expect((await db.query<{ state: string }>("select state from public.tasks where id = 't_seed_bugfix'")).rows[0]?.state).toBe("HELD");
+  });
+});
+
+describe("approve-local (D-368: pnpm local without a login)", () => {
+  it("requires_second_factor + the local presence → no code, method local, recorded as local", async () => {
+    const cs = await changesetOf(db, "t_seed_feature");
+    const r = await approve(db, { uid: U.approver, changesetId: cs.id, body: { head_sha: cs.head_sha, decision: "approved", client: "web" }, secondFactor: localPresence });
+    expect(r).toMatchObject({ status: 200, body: { method: "local" } });
+    expect((await db.query<{ method: string }>("select method from public.approvals")).rows).toEqual([{ method: "local" }]);
+  });
+  it("the trigger: method local needs a fresh timestamp too", async () => {
+    const cs = await changesetOf(db, "t_seed_feature");
+    const stale = Object.assign(() => Promise.resolve(new Date(Date.now() - 3 * 60_000)), { local: true as const });
+    const r = await approve(db, { uid: U.approver, changesetId: cs.id, body: { head_sha: cs.head_sha, decision: "approved", client: "web" }, secondFactor: stale });
+    expect(r).toEqual({ status: 403, body: { error: "second_factor_rejected" } });
+    expect(await counts()).toEqual({ a: 0, l: 0, o: 0 });
   });
 });

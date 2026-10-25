@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-preload/
 coverage/
 .mandat/
 .env
@@ -16,3 +17,11 @@ demo/recordings/playwright/
 demo/screenshots/*.tmp.png
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+.claude/worktrees/
+apps/site/out/
+apps/site/public/fonts/
+apps/site/public/icon-192.png
+apps/site/public/logo.png
+# a local build of the download site (scripts/site-local-release.mjs): the installers and their manifest
+apps/site/public/downloads/
+apps/site/releases.local.json

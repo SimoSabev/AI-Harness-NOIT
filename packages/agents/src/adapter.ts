@@ -1,3 +1,5 @@
+import { frameUntrusted } from "@mandat/contract";
+import type { StreamCtx, StreamEvent } from "@mandat/contract";
 export interface AgentRunContext {
   runId: string;
   taskId: string;
@@ -7,6 +9,10 @@ export interface AgentRunContext {
   contractFile: "/m/in/contract.txt";
   workdir: "/m/work";
   notesPath: "/m/out/notes.txt";
+  /** v5 E8а: the compiled control layer (Materialized.argv/env) — the files are already under /m/in/harness */
+  harness?: { argv: string[]; env: Record<string, string> };
+  /** E8g (D-353): steering on — the prompt goes as the first stdin line and stdin stays open for steer lines */
+  steer?: { sessionId: string };
 }
 export interface AnthropicChannelEnv {
   ANTHROPIC_BASE_URL: "http://egress-gate";
@@ -27,6 +33,15 @@ export interface AgentLaunchSpec {
   argv: string[];
   env: Record<string, string>;
   stdin: "closed" | "pipe";
+  /** public env (never a secret) for the agent container, e.g. CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS */
+  publicEnv?: Record<string, string>;
+  /** E8g: with stdin "pipe", the first line the agent gets (the task in stream-json) */
+  firstStdinLine?: string;
+}
+/** The value after a flag in an argv (e.g. --settings <file>). */
+export function argAfter(argv: readonly string[], flag: string): string | null {
+  const i = argv.indexOf(flag);
+  return i >= 0 && i + 1 < argv.length ? (argv[i + 1] as string) : null;
 }
 export type AgentEvent =
   | { type: "init"; sessionId: string; model: string; tools: string[]; mcpServers: { name: string; status: string }[]; capabilities: string[] }
@@ -41,16 +56,27 @@ export type AgentEvent =
 export interface AgentAdapter {
   readonly id: string;
   readonly supportsSteering: boolean;
+  /** v5 2.1: one line of the agent's stdout → the unified stream (D-310) */
+  toStream(line: string, ctx: StreamCtx, windows?: Readonly<Record<string, number>>): StreamEvent[];
   launch(ctx: AgentRunContext, channel: SandboxChannelEnv, canary: { name: "AWS_SECRET_ACCESS_KEY"; value: string }): AgentLaunchSpec;
   parseLine(line: string): AgentEvent[];
+  /** E8g (D-353): one stdin line carrying a person's steer text (framed as untrusted input); only when supportsSteering */
+  steerLine?(text: string, author: string): string;
+}
+
+/** A user message in Claude Code's stream-json input with the steer text framed (D-227: never raw into a prompt). */
+export function claudeSteerLine(text: string, author: string): string {
+  return JSON.stringify({ type: "user", message: { role: "user", content: frameUntrusted({ author, association: "member", source: "steer", text }) }, parent_tool_use_id: null });
 }
 export const FAKE_SCENARIOS = [
   "honest-fix", "skip-test", "delete-test", "delete-and-add-empty", "echo-pass", "out-of-contract", "partial-fix", "it-only",
-  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude", "untested-extra",
+  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude", "untested-extra", "sh2-probe", "steer-echo", "ask-probe", "mcp-probe", "slow-edit",
+  "b9-special-case", "b10-ci-change", "b11-dep-no-lock", "b12-empty", "b13-rename-test", "b14-mandat-yml", "b15-remove-expect", "b16-weak-same-count",
+  "b17-vitest-config", "b18-mocks", "b19-todo", "b20-claude-settings", "b34-type-error", "b35-console-log", "b36-test-env", "b37-snapshot", "b38-npmrc", "b39-agents-md", "r15-injection", "r17-control-files", "r18-foreign-registry", "r19-dns-exfil", "r20-tunnel", "d5-probe",
 ] as const;
 export type FakeScenario = (typeof FAKE_SCENARIOS)[number];
 /** E3в: fake Codex scenarios (JSONL in the Codex format), `fake-codex:<scenario>`. */
-export const FAKE_CODEX_SCENARIOS = ["honest-fix", "delete-test", "replay"] as const;
+export const FAKE_CODEX_SCENARIOS = ["honest-fix", "delete-test", "replay", "hook-probe"] as const;
 export type FakeCodexScenario = (typeof FAKE_CODEX_SCENARIOS)[number];
 export const isFakeCodexScenario = (s: string): s is FakeCodexScenario => (FAKE_CODEX_SCENARIOS as readonly string[]).includes(s);
 export const isFakeScenario = (s: string): s is FakeScenario => (FAKE_SCENARIOS as readonly string[]).includes(s);

@@ -1,7 +1,8 @@
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 
-export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate";
+// v5 E9б (D-364): "ui-app" runs tree B's dev server, "ui" the browser that visits it — both on the run's internal UI network
+export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate" | "mcp" | "ui-app" | "ui";
 export interface MountSpec {
   kind: "volume" | "bind";
   source: string;
@@ -99,8 +100,18 @@ const SPEC_KEYS = new Set([
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const SECRET_LOOKING = /mdt_|sk-ant-/;
 
-function checkEnv(envNames: string[], publicEnv: Record<string, string>): void {
+// E9g A4 (D-374): host-only names — the KEK of the key envelope lives in the harness on the host, never in a container.
+const HOST_ONLY: ReadonlySet<string> = new Set(["MANDAT_KEK"]);
+
+function checkEnv(envNames: string[], publicEnv: Record<string, string>, role: RunRole): void {
+  for (const n of [...envNames, ...Object.keys(publicEnv)]) if (HOST_ONLY.has(n)) forbid("a host-only name never goes into a container (D-374)", { name: n });
   for (const n of envNames) {
+    // E8e (D-354): the MCP sidecar carries the secrets its catalog row names — never an LLM key
+    if (role === "mcp") {
+      if (!/^[A-Z_][A-Z0-9_]*$/.test(n) || SECRETS.has(n)) forbid("an MCP sidecar gets only its own declared secrets, never an LLM key", { name: n });
+      continue;
+    }
+    if (role === "ui-app" || role === "ui") forbid("the UI check gets no secrets (D-364)", { name: n });
     if (!SECRETS.has(n)) forbid(`envNames may only contain secret names (${SECRET_ENV_NAMES.join(", ")})`, { name: n });
   }
   for (const [k, v] of Object.entries(publicEnv)) {
@@ -163,7 +174,7 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
     if (!okUser) forbid("the sandbox always runs as 1000:1000 (seed of contract.txt: 0:0)", { user: spec.user });
   }
   if (!/^\d+:\d+$/.test(spec.user)) forbid("invalid user");
-  checkEnv(spec.envNames, spec.publicEnv);
+  checkEnv(spec.envNames, spec.publicEnv, spec.role);
 
   const args = ["run"];
   args.push(spec.detach ? "-d" : "--rm");
@@ -179,6 +190,9 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
   for (const m of spec.mounts) {
     if (m.kind === "volume") {
       if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(m.source)) forbid("invalid volume name", { source: m.source });
+      if (spec.role === "mcp" && (!m.source.startsWith("mandat-mcp-") || !(m.target === "/m/mcp" || m.target.startsWith("/m/mcp/")))) {
+        forbid("an MCP sidecar mounts only its own mandat-mcp-* volume under /m/mcp (D-354)", { source: m.source, target: m.target });
+      }
       if ((m.source.startsWith(PROFILE_PREFIX) || m.target === PROFILE_DIR) && !(spec.role === "agent" && m.source.startsWith(PROFILE_PREFIX) && m.target === PROFILE_DIR)) {
         forbid("a subscription profile volume is only for the agent, at PROFILE_DIR (D-295)", { source: m.source, target: m.target });
       }
@@ -200,7 +214,7 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
  * login is interactive (the user's own terminal) and runs the unmodified `claude auth login` — the provider's flow;
  * status reads the volume read-only without network; init is the one root step (chown of the fresh volume).
  */
-export function buildProfileArgs(kind: "init" | "login" | "status" | "logout", o: { image: string; volume: string }): string[] {
+export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status" | "logout", o: { image: string; volume: string }): string[] {
   if (!o.volume.startsWith(PROFILE_PREFIX) || !/^[a-z0-9-]+$/.test(o.volume)) forbid("not a profile volume", { volume: o.volume });
   if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
   const base = ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m", "--pids-limit=256", "--memory=1g", "--label", "mandat.profile=1"];
@@ -210,7 +224,8 @@ export function buildProfileArgs(kind: "init" | "login" | "status" | "logout", o
   }
   if (kind === "status") return ["run", "--rm", "--network", "none", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}:ro`, "--entrypoint", "claude", o.image, "auth", "status", "--json"];
   if (kind === "logout") return ["run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "logout"];
-  return ["run", "--rm", "-it", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "login", "--claudeai"];
+  // D-369: login-web = the same flow with pipes (the web hands the pasted code to stdin), no TTY
+  return ["run", "--rm", kind === "login-web" ? "-i" : "-it", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "login", "--claudeai"];
 }
 
 export interface ProxyRunOptions {
@@ -233,7 +248,8 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
   if (!/^(mandat-llm-proxy|mandat-llm-proxy-test-[a-z0-9-]+|mandat-test-stub-[a-z0-9-]+)$/.test(o.name)) forbid("invalid proxy name");
   if (!/^\d+:\d+$/.test(o.user)) forbid("invalid user");
   if (o.image.startsWith("-")) forbid("invalid image");
-  checkEnv(o.envNames, o.publicEnv);
+  // E7в / D-345: the proxy gets only the one-time boot token by name (the key names stay allowed for the old path)
+  checkEnv(o.envNames.filter((n) => n !== "MANDAT_PROXY_BOOT_TOKEN"), o.publicEnv, "gate");
   const args = ["run", "-d", "--name", o.name];
   if (o.name === "mandat-llm-proxy") args.push("--restart", "unless-stopped");
   args.push(

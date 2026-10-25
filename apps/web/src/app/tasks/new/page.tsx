@@ -1,34 +1,8 @@
-import type { Metadata } from "next";
-import { pageName } from "../../../lib/brand";
-import Link from "next/link";
-import { NewTaskForm } from "../../../components/new-task-form";
-import { Shell } from "../../../components/shell";
-import { card } from "../../../components/ui";
-import { db } from "../../../lib/server/db";
-import { controlKeys } from "../../../lib/server/keys";
-import { canAct, pageCtx } from "../../../lib/server/page";
-import { firstRepo } from "../../../lib/server/queries";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: pageName("Нова задача") };
-
-export default async function NewTaskPage() {
-  const c = await pageCtx();
-  const repo = await firstRepo(db(), c.uid, c.org);
-  const ctl = controlKeys(process.env);
-  const k = (await ctl?.status())?.providers ?? [];
-  const accounts = ((await ctl?.accounts()) ?? []).filter((a) => a.loggedIn);
-  return (
-    <Shell current="new" waiting={c.waiting}>
-      <Link href="/" className="text-sm text-mute hover:text-ink">← Задачи</Link>
-      <h1 className="font-display mt-3 text-2xl font-semibold tracking-tight">Нова задача</h1>
-      {!canAct(c.role) ? (
-        <p className={`${card} mt-6 p-5 text-sm`}>Само собственик или одобряващ може да дава задачи.</p>
-      ) : !repo ? (
-        <p className={`${card} mt-6 p-5 text-sm`}>Няма свързано хранилище. Пусни харнеса с <code className="font-mono">pnpm local</code>.</p>
-      ) : (
-        <NewTaskForm repo={repo} ready={{ anthropic: k.includes("anthropic"), openai: k.includes("openai") }} accounts={accounts} />
-      )}
-    </Shell>
-  );
+// D-384: one way to start a task — the box on the tasks page. The old link (desktop ⌘N, a night question's "Make a
+// task" with ?text=) lands there, the text kept.
+export default async function NewTaskPage({ searchParams }: { searchParams: Promise<{ text?: string | string[] }> }) {
+  const q = (await searchParams).text;
+  redirect(typeof q === "string" && q !== "" ? `/?text=${encodeURIComponent(q.slice(0, 4000))}` : "/");
 }

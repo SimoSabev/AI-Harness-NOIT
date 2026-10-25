@@ -1,24 +1,43 @@
 import { expect, test } from "@playwright/test";
 import { EMAIL, login } from "./fixtures";
 
-// D-307: the workbench screens exist with the design; without records they show the sample, marked; it can be switched off.
-test("агенти, инструменти, нощна смяна, ресърч и сесията на задачата: дизайнът с ПРИМЕР", async ({ page }) => {
+// D-384: three sections in the side bar; the other screens still open by link and show only real data (no samples).
+test("the side bar has tasks, projects and settings", async ({ page }) => {
   await login(page, EMAIL.approver);
-  for (const [url, h] of [["/agents", /Агенти/], ["/tools", "Инструменти"], ["/night", "Нощна смяна"], ["/research", "Ресърч"]] as const) {
-    await page.goto(url);
-    await expect(page.getByRole("heading", { level: 1, name: h })).toBeVisible();
-    await expect(page.getByRole("note").filter({ hasText: "ПРИМЕР" })).toBeVisible();
-  }
-  await page.goto("/tasks/t_seed_bugfix");
-  await expect(page.getByRole("heading", { name: "Сесията отвътре" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Повиквания на инструменти" })).toBeVisible();
+  const nav = page.getByRole("navigation", { name: "Main" });
+  await expect(nav.getByRole("link")).toHaveText([/Tasks/, "Projects", "Settings"]);
+  await nav.getByRole("link", { name: "Projects" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Projects" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "+ Add project" })).toBeVisible();
+  await nav.getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("link", { name: "Open accounts" })).toBeVisible();
+  await page.getByText("Advanced").click();
+  await expect(page.getByRole("link", { name: "System" })).toBeVisible();
 });
 
-test("примерите се изключват от Настройки", async ({ page }) => {
+test("agents, tools, night shift, research: real data only, no SAMPLE", async ({ page }) => {
   await login(page, EMAIL.approver);
-  await page.goto("/settings");
-  await page.getByLabel("Показвай пример, където още няма истински данни").uncheck();
+  for (const [url, h] of [["/agents", /Agents/], ["/tools", "Tools"], ["/night", "Night shift"], ["/research", "Research"]] as const) {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { level: 1, name: h })).toBeVisible();
+    await expect(page.getByText("SAMPLE")).toHaveCount(0);
+  }
   await page.goto("/agents");
-  await expect(page.getByRole("note").filter({ hasText: "ПРИМЕР" })).toHaveCount(0);
-  await expect(page.getByText("Няма агенти в момента.")).toBeVisible();
+  await expect(page.getByText("No agents right now.", { exact: false })).toBeVisible();
+});
+
+test("a task without a recorded session shows no empty session panels", async ({ page }) => {
+  await login(page, EMAIL.approver);
+  await page.goto("/tasks/t_seed_bugfix");
+  await expect(page.getByRole("heading", { name: "The session inside" })).toHaveCount(0);
+});
+
+// D-387: accounts — the subscription first; an API key waits folded underneath.
+test("accounts: the API key form is folded under one question", async ({ page }) => {
+  await login(page, EMAIL.owner);
+  await page.goto("/keys");
+  await expect(page.getByText("Have an API key instead of a subscription?")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "API keys (pay per token)" })).toBeHidden();
+  await page.getByText("Have an API key instead of a subscription?").click();
+  await expect(page.getByRole("heading", { name: "API keys (pay per token)" })).toBeVisible();
 });
