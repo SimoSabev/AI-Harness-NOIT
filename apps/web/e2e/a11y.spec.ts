@@ -10,7 +10,7 @@ for (const [scheme, lang] of [["light", "en"], ["dark", "en"], ["light", "bg"], 
     await context.addCookies([{ name: "theme", value: scheme, url: baseURL ?? "http://localhost:3000" }, { name: "lang", value: lang, url: baseURL ?? "http://localhost:3000" }]);
     await page.emulateMedia({ colorScheme: scheme });
     await login(page, EMAIL.approver);
-    for (const url of ["/", "/board", "/harness", "/tasks/new", "/tasks/t_seed_failed", "/tasks/t_seed_bugfix", "/keys", "/settings", "/?project=mandat-demo%2Fshop", "/agents", "/tools", "/night", "/research", "/login"]) {
+    for (const url of ["/", "/board", "/harness", "/tasks/new", "/tasks/t_seed_failed", "/tasks/t_seed_bugfix", "/keys", "/settings", "/?project=mandat-demo%2Fshop", "/agents", "/tools", "/night", "/research", "/system", "/login"]) {
       await page.goto(url);
       await expect(page.locator("html")).toHaveAttribute("lang", lang);
       const r = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"]).analyze();

@@ -47,6 +47,10 @@ export async function membership(db: Db, uid: string): Promise<{ org_id: string;
 async function tasks(sql: Sql, org: string, extra = "", params: unknown[] = []): Promise<TaskRow[]> {
   return (await sql.query<TaskRow>(`${TASKS} ${extra}`, [org, ...params])).rows;
 }
+/** One task inside a caller's transaction (the workspace feed). */
+export async function taskRow(sql: Sql, org: string, id: string): Promise<TaskRow | null> {
+  return (await tasks(sql, org, "and t.id = $2", [id]))[0] ?? null;
+}
 
 export interface Inbox { items: TaskRow[]; summary: Summary }
 export async function inbox(db: Db, uid: string, org: string, now: Date = new Date()): Promise<Inbox> {
@@ -85,7 +89,9 @@ export interface Evidence { detector: string; status: string; summary: string; d
 export interface TaskDetail {
   task: TaskRow; role: Role; evidence: Evidence[]; ladder: { level: number; s_up: number; pinned: boolean } | null;
   ladderEvents: { input: string; level_before: number; level_after: number; created_at: string }[];
-  ledger: { seq: number; kind: string; ts: string; hash: string }[]; diff: string | null; activities: { kind: string; text: string }[];
+  ledger: { seq: number; kind: string; ts: string; hash: string }[]; diff: string | null;
+  /** a change over 1 MB: only its size is stored (approver+ like the diff) */
+  diffOmitted: number | null; activities: { kind: string; text: string }[];
   approvals: { decision: string; method: string; decided_at: string }[]; label: { layer: string; label: string } | null;
   /** E8g: what the agent asked for (the cards of a HELD tool_approval task) */
   asks: { id: string; attempt: number; tool: string; reason: string; status: string }[];
@@ -102,13 +108,15 @@ export async function taskDetail(db: Db, uid: string, org: string, role: Role, i
     const ladder = (await sql.query<{ level: number; s_up: number; pinned: boolean }>("select level, s_up::float8 as s_up, pinned from public.ladder_state where repo_id = $1::uuid and task_type = $2 and agent = $3", [task.repo_id, task.type, task.agent])).rows[0] ?? null;
     const ladderEvents = (await sql.query<{ input: string; level_before: number; level_after: number; created_at: string }>("select input, level_before, level_after, to_char(created_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') as created_at from public.ladder_events where repo_id = $1::uuid and task_type = $2 and agent = $3 order by id desc limit 20", [task.repo_id, task.type, task.agent])).rows;
     const ledger = (await sql.query<{ seq: number; kind: string; ts: string; hash: string }>("select seq::int as seq, kind, ts, hash from public.ledger where org_id = $1::uuid and task_id = $2 order by seq", [org, id])).rows;
-    const diff = task.changeset_id ? ((await sql.query<{ diff: string }>("select diff from public.changeset_diffs where changeset_id = $1::uuid", [task.changeset_id])).rows[0]?.diff ?? null) : null;
+    const d = task.changeset_id ? (await sql.query<{ diff: string; omitted_bytes: number | null }>("select diff, omitted_bytes::float8 as omitted_bytes from public.changeset_diffs where changeset_id = $1::uuid", [task.changeset_id])).rows[0] : undefined;
+    const diff = d && d.diff !== "" ? d.diff : null;
+    const diffOmitted = d?.omitted_bytes ?? null;
     const activities = (await sql.query<{ kind: string; text: string }>("select kind, text from public.task_activities where task_id = $1 order by id limit 200", [id])).rows;
     const approvals = task.changeset_id ? (await sql.query<{ decision: string; method: string; decided_at: string }>("select decision, method, to_char(decided_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') as decided_at from public.approvals where changeset_id = $1::uuid order by decided_at", [task.changeset_id])).rows : [];
     const label = task.verdict_id ? ((await sql.query<{ layer: string; label: string }>("select layer, label from public.failure_labels where verdict_id = $1::uuid order by id desc limit 1", [task.verdict_id])).rows[0] ?? null) : null;
     const asks = (await sql.query<TaskDetail["asks"][number]>("select id::text as id, attempt, tool, reason, status from public.tool_asks where task_id = $1 order by attempt desc, tool limit 50", [id])).rows;
     const shots = task.changeset_id ? (await sql.query<{ name: string }>("select name from public.changeset_shots where changeset_id = $1::uuid order by name", [task.changeset_id])).rows.map((r) => r.name) : [];
-    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label, asks, shots };
+    return { task, role, evidence, ladder, ladderEvents, ledger, diff, diffOmitted, activities, approvals, label, asks, shots };
   });
 }
 

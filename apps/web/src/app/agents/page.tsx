@@ -1,19 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Shell } from "../../components/shell";
-import { AgentHex, Meter, Panel, SampleNote, agentTone, initialsOf } from "../../components/workbench-parts";
+import { AgentHex, Meter, Panel, agentTone, initialsOf } from "../../components/workbench-parts";
 import { card } from "../../components/ui";
 import { rich } from "../../i18n/rich";
 import { getT } from "../../i18n/server";
 import type { Key } from "../../i18n/t";
 import { pageName } from "../../lib/brand";
-import { SAMPLE } from "../../lib/sample";
-import { withSample } from "../../lib/workbench";
 import type { FleetRow } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
-import { sampleOn } from "../../lib/server/sample-pref";
 import { fleet } from "../../lib/server/workbench";
+import { taskHref } from "../../lib/nav";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,8 +28,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   const noAccount = t("agents.noAccount");
   const q = (await searchParams).by;
   const by: By = BY.find((b) => b.id === q)?.id ?? "project";
-  const src = withSample(await fleet(db(), c.uid, c.org), SAMPLE.fleet.map((r, i, a) => ({ ...r, depth: r.parent_id && a.some((x) => x.id === r.parent_id) ? 1 : 0 })), (x) => x.length === 0, await sampleOn());
-  const rows = src.data as (FleetRow & { depth: number })[];
+  const rows = (await fleet(db(), c.uid, c.org)) as (FleetRow & { depth: number })[];
   const count = (s: FleetRow["state"]) => rows.filter((r) => r.state === s && r.role !== "judge").length;
   const key = (r: FleetRow) => (by === "model" ? r.model : by === "account" ? (r.account ?? noAccount) : (r.repo ?? t("agents.noProject")));
   const shown = by === "problems" ? rows.filter((r) => r.state === "failed" || r.state === "waiting" || (r.context_pct ?? 0) > 80) : rows;
@@ -50,7 +47,6 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
           {BY.map((b) => <Link key={b.id} href={`/agents?by=${b.id}`} aria-current={by === b.id ? "page" : undefined} className="rounded-md px-3 py-1.5 font-display text-xs tracking-wide text-mute hover:text-ink aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent-text">{t(b.l)}</Link>)}
         </nav>
       </div>
-      {src.sample && <SampleNote what={t("agents.sample")} table="agent_sessions" t={t} />}
       {rows.length === 0 ? (
         <p className={`${card} mt-6 p-6 text-sm text-mute`}>{t("agents.none")}</p>
       ) : (
@@ -67,7 +63,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                       <tr key={r.id} className="border-b border-line last:border-0">
                         <td className="px-4 py-2"><AgentHex s={r.state} role={r.role} initials={initialsOf(r.agent, r.role)} size="sm" /></td>
                         <td className="py-2" style={{ paddingLeft: r.depth * 18 }}>
-                          {r.task_id ? <Link href={`/tasks/${r.task_id}`} className="font-medium">{r.agent}</Link> : <span className="font-medium">{r.agent}</span>}
+                          {r.task_id ? <Link href={taskHref(r.task_id)} className="font-medium">{r.agent}</Link> : <span className="font-medium">{r.agent}</span>}
                           <span className="block font-mono text-[10px] text-mute">{r.model}{r.account ? ` · ${r.account}` : ""}</span>
                         </td>
                         <td className="max-w-[280px] py-2"><span className={`block truncate ${tone.text}`}>{t(tone.label)}</span><span className="block truncate text-xs text-mute">{r.step}</span></td>

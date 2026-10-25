@@ -4,6 +4,7 @@ import type { ApiDeps } from "./api";
 import { authMode, currentUser, supabaseServer } from "./auth";
 import { db } from "./db";
 import { controlKeys } from "./keys";
+import { localPresence } from "./local-auth";
 import { devSecondFactor } from "./session";
 
 // Demo prompt §8 "Common to E3": the ONLY web module that reads SUPABASE_SERVICE_ROLE_KEY; imported only by
@@ -36,7 +37,7 @@ export function routeDeps(): ApiDeps {
   return {
     db: d,
     user: () => currentUser(),
-    secondFactor: authMode() === "dev" ? devSecondFactor(d) : supabaseFactor,
+    secondFactor: { local: localPresence, dev: devSecondFactor(d), supabase: supabaseFactor, none: supabaseFactor }[authMode()],
     ...(b ? { broadcast: b } : {}),
     ...(keys ? { keys } : {}),
     createLimiter,

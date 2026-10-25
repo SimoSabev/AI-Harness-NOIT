@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
-import { decideDelivery, ladderStepFor } from "@mandat/core";
+import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
 import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
 import type { LadderState } from "@mandat/core";
@@ -13,6 +13,8 @@ import { forbidAtNight } from "@mandat/profile";
 import type { SqlClient } from "@mandat/ledger";
 import { autoMerge, commitMessage, deliver } from "@mandat/gate-github";
 import type { GitHubPort } from "@mandat/gate-github";
+import { ghFor } from "./gh-target.js";
+import type { GhDeps } from "./gh-target.js";
 import { readAtBase } from "@mandat/verify";
 import { runTask } from "../run.js";
 import { sessionRecorder } from "./session-recorder.js";
@@ -24,7 +26,7 @@ import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 import { mainHead, rebaseOnto } from "./rebase.js";
 import { ciNote } from "./ci.js";
-import { deliverLocal } from "./deliver-local.js";
+import { deliverLocal, mergeLocal } from "./deliver-local.js";
 
 const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
 import type { Db } from "./db.js";
@@ -32,11 +34,11 @@ import type { Db } from "./db.js";
 // Демо промпт т. 5.8 + 8.1 (D-275, D-280): the online worker. One task at a time per process; every state change +
 // ledger row (+ outbox row) in one transaction. Effects on GitHub go through the GitHubPort (fakeGitHub offline).
 
-export interface DaemonDeps {
+export interface DaemonDeps extends GhDeps {
   db: Db;
   home: string;
   gh: GitHubPort;
-  /** GitHub repo name for the demo (fakeGitHub offline) */
+  /** GitHub repo name for the demo (fakeGitHub offline); every other project goes to its own (gh-target.ts, D-388) */
   ghRepo: string;
   broadcast?: (topic: string, event: string, payload: Record<string, unknown>) => Promise<void>;
   run?: (i: RunTaskInput) => Promise<RunTaskOutput>;
@@ -443,8 +445,17 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // E9а: at night only what the shift allows merges by itself (level ≥ min_level, changed lines ≤ max_lines); the rest waits
   if (night && action.kind === "pr_then_auto_merge" && (lvl.level < night.auto_merge.min_level || patchLines(diffPatch) > night.auto_merge.max_lines)) action = { kind: "draft_pr" };
   const usd = v.usage.usd;
-  const needsHuman = v.result !== "FAILED" && (action.kind === "draft_pr" || action.kind === "hold" || action.kind === "branch_only");
-  const requires2fa = v.result === "VERIFIED" && lvl.level === 1;
+  // D-367 (Симо: „питай ме само ако е абсолютно нужно“): a verified safe change in a local project goes into main by
+  // itself (mergeLocal below); every other case keeps the person, with the reasons written down for the card
+  const aa = autoApply({ result: v.result, origin: "mandat", files: diffStat(diffPatch.toString("utf8")) });
+  const willAuto = t.provider === "local" && !night && aa.auto && diffPatch.length > 0;
+  // D-388: an own local project goes into main only through its mirror (above); a fake PR's auto-merge would not touch
+  // it, so whatever is not applied by itself waits for the person
+  const target = ghFor(d, t);
+  if (target.own && !willAuto && action.kind === "pr_then_auto_merge") action = { kind: "draft_pr" };
+  const needsHuman = !willAuto && v.result !== "FAILED" && (action.kind === "draft_pr" || action.kind === "hold" || action.kind === "branch_only");
+  const requires2fa = !willAuto && v.result === "VERIFIED" && lvl.level === 1;
+  const askWhy = aa.why.length > 0 ? aa.why : night ? ["night"] : [];
   const changesetId = await inTransaction(d.db, async (tx) => {
     const cs = await tx.query<{ id: string }>(
       "insert into public.changesets (org_id, task_id, attempt, base_sha, tree_sha, diff_hash, mode, integrity, effective_level, requires_second_factor, approval_needed, risk_class) values ($1::uuid, $2, $3, $4, $5, $6, 'full', $7, $8, $9, $10, $11) returning id::text as id",
@@ -452,7 +463,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     );
     const csId = cs.rows[0]?.id as string;
     // E3а: the diff for the card (approver+ by RLS); only the non-redacted patch, which exists only without a secret hit
-    if (diffPatch.length > 0 && diffPatch.length <= 1048576) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff) values ($1::uuid, $2::uuid, $3)", [csId, t.org_id, diffPatch.toString("utf8")]);
+    // over 1 MB only the size stays, so the task does not vanish from the library and the card says why nothing is shown
+    if (diffPatch.length > 1048576) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff, omitted_bytes) values ($1::uuid, $2::uuid, '', $3)", [csId, t.org_id, diffPatch.length]);
+    else if (diffPatch.length > 0) await tx.query("insert into public.changeset_diffs (changeset_id, org_id, diff) values ($1::uuid, $2::uuid, $3)", [csId, t.org_id, diffPatch.toString("utf8")]);
     const vr = await tx.query<{ id: string }>(
       "insert into public.verdicts (org_id, task_id, changeset_id, run_id, attempt, mode, agent, result, reasons, base_sha, tree_sha, config_hash, verdict_hash) values ($1::uuid, $2, $3::uuid, $4, $5, 'full', $6, $7, $8::jsonb, $9, $10, $11, $12) returning id::text as id",
       [t.org_id, t.id, csId, v.run_id, t.attempt, t.agent, v.result, JSON.stringify(v.reasons), v.base_sha, v.tree_sha, contract.config_hash, hashJcs(v)],
@@ -463,9 +476,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     // E9б (D12, D-364): the before/after screenshots for the card — only names D12 gave, only from runs/<id>/ui
     for (const [name, file] of uiShots(v.evidence, out.runDir)) await tx.query("insert into public.changeset_shots (changeset_id, org_id, name, png) values ($1::uuid, $2::uuid, $3, $4)", [csId, t.org_id, name, readFileSync(file)]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "verdict", task_id: t.id, payload: { run_id: v.run_id, result: v.result, reasons: v.reasons, verdict_hash: hashJcs(v) } });
-    await appendLedgerOnline(tx, { org_id: t.org_id, kind: "gated", task_id: t.id, payload: { action: action.kind, level: lvl.level, reasons: lvl.reasons } });
-    const state = v.result === "FAILED" ? "BLOCKED" : action.kind === "pr_then_auto_merge" ? "GATED" : "HELD";
-    const wait = v.result === "FAILED" ? "failed" : action.kind === "hold" ? action.wait_reason : action.kind === "pr_then_auto_merge" ? null : "approval";
+    await appendLedgerOnline(tx, { org_id: t.org_id, kind: "gated", task_id: t.id, payload: { action: action.kind, level: lvl.level, reasons: lvl.reasons, auto_apply: willAuto, ...(needsHuman && askWhy.length > 0 ? { ask: askWhy } : {}) } });
+    if (t.provider === "local" && needsHuman && askWhy.length > 0) await tx.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'needs_you', $3)", [t.org_id, t.id, askWhy.join(", ").slice(0, 500)]);
+    const state = v.result === "FAILED" ? "BLOCKED" : willAuto || action.kind === "pr_then_auto_merge" ? "GATED" : "HELD";
+    const wait = v.result === "FAILED" ? "failed" : willAuto ? null : action.kind === "hold" ? action.wait_reason : action.kind === "pr_then_auto_merge" ? null : "approval";
     seq = await setState(tx, t, state, { wait_reason: wait, usd, minutes, effective_level: lvl.level, last_result: v.result });
     return csId;
   });
@@ -507,13 +521,35 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     }
   }
   // E8g (D-356, AC-9.3): a local project gets the verified change as a branch in Mandat's mirror (`mandat apply` brings it in)
+  let applied: { from: string; to: string } | null = null;
+  let applyFail = "no_branch";
   if (t.provider === "local" && v.result === "VERIFIED" && diffPatch.length > 0) {
     const lb = await deliverLocal({ mirror, taskId: t.id, attempt: t.attempt, baseSha: v.base_sha, patch: diffPatch, message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }) }).catch(() => null);
-    if (lb?.ok) await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'local_branch', $3)", [t.org_id, t.id, lb.ref]);
-    else log(`[daemon] ${t.id}: no local branch (${lb ? lb.reason : "error"})`);
+    if (lb?.ok) {
+      await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'local_branch', $3)", [t.org_id, t.id, lb.ref]);
+      if (willAuto) {
+        const m = await mergeLocal({ mirror, sha: lb.sha }).catch(() => null);
+        if (m?.ok) applied = m;
+        else applyFail = m ? m.reason : "error";
+      }
+    } else {
+      applyFail = lb ? lb.reason : "error";
+      log(`[daemon] ${t.id}: no local branch (${applyFail})`);
+    }
+  }
+  // D-367: it could not go in by itself → back to the person, with the reason and the usual notification
+  if (willAuto && !applied) {
+    seq = await inTransaction(d.db, async (tx) => {
+      await tx.query("update public.changesets set approval_needed = true, requires_second_factor = $2 where id = $1::uuid", [changesetId, v.result === "VERIFIED" && lvl.level === 1]);
+      await tx.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'needs_you', $3)", [t.org_id, t.id, `apply_failed:${applyFail}`]);
+      return setState(tx, t, "HELD", { wait_reason: "approval" });
+    });
+    await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:waiting`, payload: { task_id: t.id, kind: "waiting" } });
+    await bc("HELD", seq, { wait_reason: "approval" });
+    log(`[daemon] ${t.id}: not applied by itself (${applyFail}) → a person decides`);
   }
   // Delivery through the gate (fakeGitHub offline; Writer App online)
-  const delivered = await deliver(d.gh, { repo: d.ghRepo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full", task: { type: t.type, text: t.text }, appUrl: process.env.MANDAT_APP_URL ?? null }, action);
+  const delivered = await deliver(target.gh, { repo: target.repo, base: "main", task_id: t.id, attempt: t.attempt, base_sha: v.base_sha, tree_sha: v.tree_sha ?? "", diffPatch, verdict: v, effectiveLevel: lvl.level, levelReasons: lvl.reasons, ledgerSeq: out.ledger?.to ?? null, mode: "full", task: { type: t.type, text: t.text }, appUrl: process.env.MANDAT_APP_URL ?? null }, action);
   if (delivered.kind === "pr" || delivered.kind === "branch") {
     await d.db.query("update public.changesets set head_sha = $2 where id = $1::uuid", [changesetId, delivered.head_sha]);
     // the delivery itself (branch / draft PR / PR): the card's „Отвори PR“ and the approval effects need its number
@@ -521,8 +557,15 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       t.org_id, changesetId, lvl.level, delivered.kind === "branch" ? "branch_only" : delivered.draft ? "draft_pr" : "pr", delivered.ref, delivered.kind === "pr" ? delivered.number : null, delivered.head_sha,
     ]);
   }
+  if (applied) {
+    await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'auto_applied', $3)", [t.org_id, t.id, `main ${applied.from.slice(0, 12)} → ${applied.to.slice(0, 12)}`]);
+    await finishOutcome(d, t, ladder, "success", changesetId, null, applied.to);
+    await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:merged`, payload: { task_id: t.id, kind: "merged" } });
+    log(`[daemon] ${t.id}: applied by itself (D-367) · main → ${applied.to.slice(0, 7)}`);
+    return { state: "CLOSED", verdict: v };
+  }
   if (delivered.kind === "pr" && delivered.auto_merge && (lvl.level === 2 || lvl.level === 3)) {
-    const m = await autoMerge(d.gh, { repo: d.ghRepo, base: "main", number: delivered.number, head_sha: delivered.head_sha, base_sha: (await d.gh.getPull(d.ghRepo, delivered.number)).base_sha, tree_sha_expected: "", task_id: t.id, level: lvl.level, verdictSeq: out.ledger?.to ?? null, redact: (s) => s });
+    const m = await autoMerge(target.gh, { repo: target.repo, base: "main", number: delivered.number, head_sha: delivered.head_sha, base_sha: (await target.gh.getPull(target.repo, delivered.number)).base_sha, tree_sha_expected: "", task_id: t.id, level: lvl.level, verdictSeq: out.ledger?.to ?? null, redact: (s) => s });
     if (m.kind === "merged") {
       await finishOutcome(d, t, ladder, "success", changesetId, delivered.number, m.merge_commit_sha);
       if (lvl.level >= 2) await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:merged`, payload: { task_id: t.id, kind: "merged" } });
@@ -536,7 +579,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
 }
 
 /** OUTCOME (спец. т. 7): in a demo org the window is 0 min (D-217) → ladder step right away, then CLOSED. */
-export async function finishOutcome(d: DaemonDeps, t: { id: string; org_id: string; repo_id: string; type: string; agent: string; is_demo: boolean }, ladder: LadderState, result: "success" | "failure" | "hard_fail" | "neutral", changesetId: string, prNumber: number, mergeSha: string): Promise<void> {
+export async function finishOutcome(d: Pick<DaemonDeps, "db" | "broadcast">, t: { id: string; org_id: string; repo_id: string; type: string; agent: string; is_demo: boolean }, ladder: LadderState, result: "success" | "failure" | "hard_fail" | "neutral", changesetId: string, prNumber: number | null, mergeSha: string): Promise<void> {
   const step = ladderStepFor(t.agent, ladder, result);
   const seq = await inTransaction(d.db, async (tx) => {
     await tx.query("insert into public.deliveries (org_id, changeset_id, level, kind, pr_number, head_sha) values ($1::uuid, $2::uuid, $3, 'merge', $4, $5)", [t.org_id, changesetId, step.next.level, prNumber, mergeSha]);

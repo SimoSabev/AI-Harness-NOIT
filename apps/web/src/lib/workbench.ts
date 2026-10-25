@@ -29,12 +29,6 @@ export interface ResearchView {
 }
 export interface HomeExtras { mcpPerMin: number; denied24h: number; costToday: number; conflicts: { repo: string; path: string; sessions: number }[]; windows: WindowRow[] }
 
-export type Sourced<T> = { data: T; sample: boolean };
-/** Real data when there is any; otherwise the sample (if the person keeps samples on), always marked. */
-export function withSample<T>(real: T, sample: T, empty: (x: T) => boolean, show: boolean): Sourced<T> {
-  return !empty(real) || !show ? { data: real, sample: false } : { data: sample, sample: true };
-}
-
 /** Two live sessions in one repo touching one file = a merge conflict waiting to happen (design H1). */
 export function conflicts(rows: { repo: string | null; state: AgentState; touching: string[] }[]): { repo: string; path: string; sessions: number }[] {
   const m = new Map<string, number>();

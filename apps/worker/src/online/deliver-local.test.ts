@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildFixture } from "../fixtures.js";
 import { repoRoot } from "../testing.js";
-import { deliverLocal } from "./deliver-local.js";
+import { deliverLocal, mergeLocal } from "./deliver-local.js";
 
 // E8g (v5 p. 4.7 (5), AC-9.3, D-356): a project without GitHub — the verified change becomes a branch mandat/<task>-a<n> in
 // Mandat's own mirror (one commit with the template message); a branch that exists is never overwritten.
@@ -27,5 +27,22 @@ describe("deliverLocal (AC-9.3)", () => {
     expect(git("log", "-1", "--format=%B", "mandat/t_x-a1")).toContain("Mandat-Task: t_x");
     expect(git("show", "mandat/t_x-a1:src/cart.ts")).toContain("const DISCOUNT_THRESHOLD_CENTS = 5000;");
     expect(await deliverLocal({ mirror: fx.mirror, taskId: "t_x", attempt: 1, baseSha: fx.sha, patch: agentPatch(fx.mirror), message: "x" })).toEqual({ ok: false, reason: "branch_exists" });
+  });
+
+  it("D-367: mergeLocal премества main само напред до клона на задачата; разклонен main → отказ, нищо не се пипа", async () => {
+    const fx = buildFixture({ repoRoot, mandatHome: mkdtempSync(path.join(os.tmpdir(), "mandat-ml-")), force: false, name: "demo-shop" });
+    const git = (...a: string[]) => execFileSync("git", ["--git-dir", fx.mirror, ...a], { env, encoding: "utf8" }).trim();
+    const patch = agentPatch(fx.mirror);
+    const r = await deliverLocal({ mirror: fx.mirror, taskId: "t_y", attempt: 1, baseSha: fx.sha, patch, message: "fix\n\nMandat-Task: t_y" });
+    if (!r.ok) throw new Error(r.reason);
+    expect(await mergeLocal({ mirror: fx.mirror, sha: r.sha })).toEqual({ ok: true, from: fx.sha, to: r.sha });
+    expect(git("rev-parse", "main")).toBe(r.sha);
+    expect(await mergeLocal({ mirror: fx.mirror, sha: r.sha })).toEqual({ ok: true, from: r.sha, to: r.sha });
+    // a branch from the old base cannot move main back or sideways
+    const r2 = await deliverLocal({ mirror: fx.mirror, taskId: "t_z", attempt: 1, baseSha: fx.sha, patch, message: "other\n\nMandat-Task: t_z" });
+    if (!r2.ok) throw new Error(r2.reason);
+    expect(await mergeLocal({ mirror: fx.mirror, sha: r2.sha })).toEqual({ ok: false, reason: "not_fast_forward" });
+    expect(git("rev-parse", "main")).toBe(r.sha);
+    expect(await mergeLocal({ mirror: fx.mirror, sha: "0".repeat(40) })).toEqual({ ok: false, reason: "unknown_commit" });
   });
 });

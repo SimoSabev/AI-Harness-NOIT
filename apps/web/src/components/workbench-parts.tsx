@@ -1,21 +1,8 @@
-import Link from "next/link";
-import { rich } from "../i18n/rich";
 import type { Key, T } from "../i18n/t";
-import type { FleetRow, TerminalLine, ToolCallRow, WindowRow } from "../lib/workbench";
-import { ago } from "../lib/status";
+import type { FleetRow, TerminalLine, ToolCallRow } from "../lib/workbench";
 import { card, label } from "./ui";
 
 // D-307: the pieces shared by the workbench screens (design H1–H6).
-export function SampleNote({ what, table, t }: { what: string; table: string; t: T }) {
-  return (
-    <p role="note" className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-dashed border-line-strong bg-raised px-4 py-2.5 text-sm text-mute">
-      <span className="rounded bg-warn-soft px-1.5 py-0.5 font-display text-[11px] font-semibold tracking-[0.12em] text-warn">{t("sample.badge")}</span>
-      <span className="flex-1">{rich(t("sample.note", { what }), { table: <code className="font-mono text-ink">{table}</code> })}</span>
-      <Link href="/settings" className="text-xs underline">{t("sample.hideAll")}</Link>
-    </p>
-  );
-}
-
 const AGENT: Record<FleetRow["state"], { ring: string; fill: string; text: string; label: Key }> = {
   running: { ring: "bg-ok", fill: "bg-ok-soft", text: "text-ok", label: "wb.state.running" },
   waiting: { ring: "bg-warn", fill: "bg-warn-soft", text: "text-warn", label: "wb.state.waiting" },
@@ -77,29 +64,6 @@ export function ToolCalls({ calls, t, withAgent = true }: { calls: ToolCallRow[]
   );
 }
 
-const WIN: Record<WindowRow["kind"], string> = { terminal: ">_", preview: "◐", server: "●", log: "≡" };
-export function Windows({ windows, t }: { windows: WindowRow[]; t: T }) {
-  const groups = (["terminal", "preview", "server", "log"] as const).map((k) => ({ k, items: windows.filter((w) => w.kind === k) })).filter((g) => g.items.length > 0);
-  if (groups.length === 0) return <p className="px-1 text-sm text-mute">{t("wb.noWindows")}</p>;
-  return (
-    <div className="space-y-3">
-      {groups.map((g) => (
-        <div key={g.k}>
-          <p className="px-1 pb-1 text-xs text-mute">{t(`wb.win.${g.k}`)} · {g.items.length}</p>
-          <ul className="space-y-1">
-            {g.items.map((w) => (
-              <li key={w.id} className="flex items-center gap-2 rounded-lg bg-raised px-2.5 py-1.5 text-xs">
-                <span aria-hidden="true" className={`w-5 font-mono ${w.status === "live" ? "text-ok" : w.status === "slow" ? "text-warn" : "text-mute"}`}>{WIN[g.k]}</span>
-                {w.url ? <a href={w.url} className="min-w-0 flex-1 truncate text-ink no-underline hover:underline" target="_blank" rel="noreferrer">{w.title}</a> : <span className="min-w-0 flex-1 truncate">{w.title}</span>}
-                <span className="font-mono text-[10px] text-mute">{w.status === "live" ? t("wb.live") : w.status === "slow" ? t("wb.slow") : ago(w.last_seen_at, new Date(), t.lang)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 export function SessionTree({ sessions, t }: { sessions: (FleetRow & { depth: number })[]; t: T }) {
   return (

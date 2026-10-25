@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import { JobRunner } from "./jobs.js";
 import { startVerifyd } from "./verifyd.js";
 
 // т. 7.3: the socket protocol (one JSON line each way), only verify/status/explain, remote never from the client (D-281).
-const d = mkdtempSync(path.join(os.tmpdir(), "mandat-vd-"));
+const d = realpathSync(mkdtempSync(path.join(os.tmpdir(), "mandat-vd-"))); // macOS: tmpdir is a symlink (/var → /private/var)
 execFileSync("git", ["init", "-q", path.join(d, "r")]);
 const seen: string[][] = [];
 const runner = new JobRunner({ home: path.join(d, "h"), sameUid: false, spawnVerify: (args) => (seen.push(args), Promise.resolve({ code: 0, stdout: '{"verdict":{"result":"VERIFIED","reasons":[]},"effective_level":1,"level_reasons":["external_cap"],"ledger":null}\n', stderr: "" })) });

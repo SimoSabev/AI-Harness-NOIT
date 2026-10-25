@@ -12,7 +12,7 @@ test.afterAll(async () => {
 
 // E8g (v5 p. 4.4, AC-8.1/8.5): a task waiting for a tool permission shows one card per ask; "Allow once" starts a new
 // attempt. The data is made here and removed after the file (the inbox counts of the other specs stay).
-test("ask card: Needs permission → Allow once → the task is queued again; the Steer box is there while it waits to run", async ({ page }) => {
+test("ask card: Needs permission → Allow once → the task is queued again; the steer box is there while it waits to run", async ({ page }) => {
   const c = new pg.Client({ connectionString: E2E_DB });
   await c.connect();
   try {
@@ -28,8 +28,8 @@ test("ask card: Needs permission → Allow once → the task is queued again; th
   await expect(page.getByText("Needs permission").first()).toBeVisible();
   await expect(page.getByText("mcp:github.create_issue")).toBeVisible();
   await page.getByRole("button", { name: "Allow once" }).click();
-  await expect(page.getByText("Decided: allowed once")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Steer the agent" })).toBeVisible();
+  // D-386: the one task view — the task is queued again, the cards give way to the box that steers the agent
+  await expect(page.getByText("Queued").first()).toBeVisible();
   await page.getByLabel("Your note to the agent").fill("keep the amounts in cents");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("Saved; it goes into the next attempt.")).toBeVisible();

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { btn, card, input } from "../../components/ui";
 import { rich } from "../../i18n/rich";
 import { getT } from "../../i18n/server";
 import type { Key } from "../../i18n/t";
 import { HARNESS, pageName } from "../../lib/brand";
-import { authMode } from "../../lib/server/auth";
+import { authMode, currentUser } from "../../lib/server/auth";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -17,6 +18,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const e = (await searchParams).e;
   const t = await getT();
   const mode = authMode();
+  // D-368: `pnpm local` has no login; from this computer the user is already in, from anywhere else never
+  if (mode === "local" && (await currentUser())) redirect("/");
   const local = <code className="font-mono">pnpm local</code>;
   return (
     <main id="main" className="flex min-h-screen items-center justify-center px-4">
@@ -26,7 +29,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <h1 className="font-display mt-4 text-2xl font-semibold tracking-tight">{HARNESS ? t("login.titleNamed", { name: HARNESS }) : t("login.title")}</h1>
           <p className="mt-1 text-sm text-mute">{t("login.tagline")}</p>
         </div>
-        {mode === "none" ? (
+        {mode === "local" ? (
+          <p className={`${card} p-5 text-sm`} role="alert">{rich(t("login.localOnly"), { url: <code className="font-mono">http://localhost:3000</code> })}</p>
+        ) : mode === "none" ? (
           <p className={`${card} p-5 text-sm`}>{rich(t("login.notSetUp"), { cmd: local })}</p>
         ) : (
           <form className={`${card} space-y-4 p-6`} action="/api/auth/login" method="post">

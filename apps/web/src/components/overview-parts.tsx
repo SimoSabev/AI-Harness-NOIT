@@ -9,6 +9,7 @@ import type { Tone } from "../lib/status";
 import { HEALTH } from "./shell";
 import { StatusBadge, TONE, card, label } from "./ui";
 import { FlowLines } from "./workbench-parts";
+import { taskHref } from "../lib/nav";
 
 // D-305: the pieces of the start page (design H1): the flow map, the swarm, project tiles / columns, the rhythm.
 export function FlowMap({ flow, t }: { flow: Flow; t: T }) {
@@ -45,7 +46,7 @@ export function Swarm({ swarm, t }: { swarm: { id: string; tone: Tone; label: st
       <p className={label}>{t("swarm.title", { n: swarm.length })}</p>
       <ul className="flex flex-wrap gap-0.5">
         {swarm.map((s) => (
-          <li key={s.id}><Link href={`/tasks/${s.id}`} aria-label={`${s.label}: ${s.id}`} title={s.label} className="flex size-6 items-center justify-center rounded transition hover:bg-raised"><span aria-hidden="true" className={`hex block h-4 w-[18px] ${TONE[s.tone].mark.replace(" animate-pulse", "")} ${s.tone === "blue" ? "beat" : ""}`} /></Link></li>
+          <li key={s.id}><Link href={taskHref(s.id)} aria-label={`${s.label}: ${s.id}`} title={s.label} className="flex size-6 items-center justify-center rounded transition hover:bg-raised"><span aria-hidden="true" className={`hex block h-4 w-[18px] ${TONE[s.tone].mark.replace(" animate-pulse", "")} ${s.tone === "blue" ? "beat" : ""}`} /></Link></li>
         ))}
       </ul>
     </div>
@@ -57,7 +58,7 @@ type P = ProjectSummary<OverviewTask & { reasons?: string[] }>;
 function ItemLine({ t: task, tr, stacked = false }: { t: P["items"][number]; tr: T; stacked?: boolean }) {
   return (
     <li>
-      <Link href={`/tasks/${task.id}`} className={`flex gap-2 rounded-lg border border-line bg-canvas px-3 py-2 transition hover:border-line-strong ${stacked ? "flex-col-reverse items-start" : "items-center gap-3"}`}>
+      <Link href={taskHref(task.id)} className={`flex gap-2 rounded-lg border border-line bg-canvas px-3 py-2 transition hover:border-line-strong ${stacked ? "flex-col-reverse items-start" : "items-center gap-3"}`}>
         <span className="min-w-0 w-full flex-1">
           <span className="block truncate text-sm">{task.text}</span>
           <span className="block text-xs text-mute">{agentLabel(task.agent, tr.lang)} · {ago(task.updated_at, new Date(), tr.lang)}</span>
@@ -73,7 +74,7 @@ export function ProjectTiles({ projects, t }: { projects: P[]; t: T }) {
     <ul className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {projects.map((p) => (
         <li key={p.full_name} className={`${card} flex flex-col gap-3 p-4 ${p.health === "bad" ? "border-bad/40" : p.health === "warn" ? "border-warn/40" : ""}`}>
-          <Link href={`/?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2">
+          <Link href={`/overview?project=${encodeURIComponent(p.full_name)}`} className="flex items-center gap-2">
             <span aria-hidden="true" className={`hex inline-block h-3.5 w-4 ${HEALTH[p.health].mark}`} />
             <span className="font-display text-base font-semibold">{p.name}</span>
             <span className="ml-auto truncate font-mono text-[11px] text-mute">{p.full_name}</span>
@@ -98,7 +99,7 @@ export function ProjectColumns({ projects, t }: { projects: P[]; t: T }) {
             <span className={`ml-auto text-xs ${HEALTH[p.health].text}`}>{p.word}</span>
           </h2>
           {p.items.length === 0 ? <p className="px-1 py-2 text-xs text-mute">{t("tile.nothing", { n: p.done24h })}</p> : <ul className="space-y-1.5">{p.items.map((x) => <ItemLine key={x.id} t={x} tr={t} stacked />)}</ul>}
-          <Link href="/tasks/new" className="mt-auto rounded-lg border border-dashed border-line-strong px-3 py-2 text-center text-xs text-mute hover:text-ink">{t("tile.addTask")}</Link>
+          <Link href="/" className="mt-auto rounded-lg border border-dashed border-line-strong px-3 py-2 text-center text-xs text-mute hover:text-ink">{t("tile.addTask")}</Link>
         </section>
       ))}
     </div>

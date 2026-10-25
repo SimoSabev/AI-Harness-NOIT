@@ -5,7 +5,7 @@ packages:
   - "!apps/desktop"
   - "bench"
   - "spikes"
-# D-367: scripts like `NEXT_TELEMETRY_DISABLED=1 next build` run through pnpm's own POSIX shell, so they work under Windows cmd too.
+# D-392: scripts like `NEXT_TELEMETRY_DISABLED=1 next build` run through pnpm's own POSIX shell, so they work under Windows cmd too.
 shellEmulator: true
 # D-036: 3 days (in minutes); applies to transitive dependencies too.
 minimumReleaseAge: 4320

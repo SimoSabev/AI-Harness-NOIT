@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AGENTS, AGENT_IDS, agentHint, agentLabel } from "./agents";
+import { AGENTS, AGENT_IDS, agentChoices, agentHint, agentLabel } from "./agents";
 import { CreateTaskBody } from "./server/actions";
 
 // D-292: the minimal harness — real agents (key in the proxy) + demo agents (no key) that show each verdict.
@@ -16,6 +16,10 @@ describe("agents (D-292)", () => {
     for (const agent of AGENT_IDS) expect(CreateTaskBody.safeParse({ type: "bugfix", agent, text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "bugfix", agent: "fake:r8-canary-leak", text: "x" }).success).toBe(false);
   });
+  it("D-387: an optional repo id (a uuid) for the project picker", () => {
+    expect(CreateTaskBody.safeParse({ type: "free", agent: "claude", text: "x", repo: "d0000000-0000-4000-8000-0000000000b1" }).success).toBe(true);
+    expect(CreateTaskBody.safeParse({ type: "free", agent: "claude", text: "x", repo: "shop" }).success).toBe(false);
+  });
   it("D-360: every task type, the free one too; nothing else", () => {
     for (const type of ["bugfix", "feature", "css", "docs", "free"]) expect(CreateTaskBody.safeParse({ type, agent: "claude", text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "anything", agent: "claude", text: "x" }).success).toBe(false);
@@ -29,5 +33,19 @@ describe("agents (D-292)", () => {
     expect(agentLabel("fake:delete-test")).toBe("Demo: deletes a test");
     expect(agentLabel("fake:delete-test", "bg")).toMatch(/трие тест/);
     expect(agentLabel("fake-codex:replay")).toBe("fake-codex:replay");
+  });
+});
+
+// D-384: the picker shows only agents that can run now; the scripted demo agents only when asked for (MANDAT_DEMO_AGENTS).
+describe("agentChoices (D-384)", () => {
+  it("signed-in accounts first, then the agents whose key is set; nothing that cannot run", () => {
+    expect(agentChoices({ accounts: ["claude@lichno"], keys: ["openai"], demo: false })).toEqual(["claude@lichno", "codex"]);
+    expect(agentChoices({ accounts: [], keys: ["anthropic", "openai"], demo: false })).toEqual(["claude", "codex"]);
+  });
+  it("no account and no key: an empty list, never a demo agent in its place", () => {
+    expect(agentChoices({ accounts: [], keys: [], demo: false })).toEqual([]);
+  });
+  it("the demo agents come last, and only with the demo switch", () => {
+    expect(agentChoices({ accounts: ["claude@work"], keys: [], demo: true })).toEqual(["claude@work", "fake:honest-fix", "fake:delete-test", "fake:skip-test", "fake:untested-extra"]);
   });
 });

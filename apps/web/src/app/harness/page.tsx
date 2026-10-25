@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { HarnessActions } from "../../components/harness-actions";
 import { ProfileActions } from "../../components/profile-actions";
 import { HiddenTestsPanel } from "../../components/hidden-tests-panel";
 import { hiddenSets } from "../../lib/server/hidden";
 import { Live } from "../../components/live";
 import { Shell } from "../../components/shell";
-import { StatusBadge, card } from "../../components/ui";
+import { StatusBadge, btn, card } from "../../components/ui";
 import { rich } from "../../i18n/rich";
 import { getT } from "../../i18n/server";
 import { fieldLabel, humanFields, proposalStatus, sourceLabel } from "../../lib/harness-view";
@@ -21,9 +22,10 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
   const [c, t] = await Promise.all([pageCtx(), getT()]);
-  return { title: `${t("nav.harness")} · ${pageTitle(c.waiting, t.lang)}` };
+  return { title: `${t("nav.projects")} · ${pageTitle(c.waiting, t.lang)}` };
 }
 
+// D-384: the projects page — each repo with its rules; the profile and hidden tests stay under "Advanced".
 // §8.2 / D-298: the auto-harness. The scanner reads the repo WITHOUT an LLM and proposes .mandat.yml; every field says
 // where it came from; the owner approves with a fresh TOTP code. The approved rules are what Mandat checks against.
 export default async function HarnessPage() {
@@ -37,10 +39,11 @@ export default async function HarnessPage() {
   for (const r of v.repos) hidden.set(r.id, await hiddenSets(db(), c.uid, r.id));
   return (
     <Shell current="harness" waiting={c.waiting}>
-      <h1 className="font-display text-2xl font-semibold tracking-tight">{t("harness.title")}</h1>
-      <p className="mt-1 max-w-2xl text-sm text-mute">
-        {t("harness.intro")} {t("harness.intro2")}
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">{t("nav.projects")}</h1>
+        <Link href="/projects/add" className={`${btn.secondary} ml-auto`}>+ {t("add.title")}</Link>
+      </div>
+      <p className="mt-1 max-w-2xl text-sm text-mute">{t("harness.intro")}</p>
       {v.repos.length === 0 && <p className={`${card} mt-6 p-5 text-sm`}>{rich(t("common.noRepo"), { cmd: <code className="font-mono">pnpm local</code> })}</p>}
       {v.repos.map((r) => {
         const p = r.proposal;
@@ -93,8 +96,11 @@ export default async function HarnessPage() {
             ) : (
               <p className="mt-3 text-sm">{t("harness.noProposal")}</p>
             )}
-            <ProfilePanel t={t} repoId={r.id} view={profiles.get(r.id)} canApprove={c.role === "owner"} />
-            <HiddenTestsPanel repoId={r.id} sets={hidden.get(r.id) ?? []} canUpload={c.role === "owner"} />
+            <details className="mt-5 border-t border-line pt-4">
+              <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">{t("harness.advanced")}</summary>
+              <ProfilePanel t={t} repoId={r.id} view={profiles.get(r.id)} canApprove={c.role === "owner"} />
+              <HiddenTestsPanel repoId={r.id} sets={hidden.get(r.id) ?? []} canUpload={c.role === "owner"} />
+            </details>
             {c.role === "owner" ? (
               <div className="mt-5">
                 <HarnessActions repoId={r.id} proposalId={p?.status === "proposed" && p.blocked.length === 0 ? p.id : null} hasProposal={p !== null} />

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
+import { useNeedsCode } from "./second-factor";
 import { btn, input } from "./ui";
 
 export interface CatalogRow { id: string; name: string; version: string | null; source: string; vet_status: string; vet_findings: { tool: string; reason: string }[]; egress_hosts: string[] }
@@ -14,6 +15,7 @@ interface Found { name: string; description: string; versions: string[] }
 export function McpCatalog({ rows }: { rows: CatalogRow[] }) {
   const router = useRouter();
   const t = useT();
+  const needsCode = useNeedsCode();
   const [q, setQ] = useState("");
   const [found, setFound] = useState<Found[] | null>(null);
   const [pick, setPick] = useState<{ server: Found; version: string; name: string } | null>(null);
@@ -62,7 +64,7 @@ export function McpCatalog({ rows }: { rows: CatalogRow[] }) {
           </li>
         ))}
       </ul>
-      <label className="block max-w-xs text-xs">{t("mcp.code")}<input className={`${input} mt-1 font-mono tracking-widest`} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></label>
+      {needsCode && <label className="block max-w-xs text-xs">{t("mcp.code")}<input className={`${input} mt-1 font-mono tracking-widest`} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /></label>}
       <form onSubmit={(e) => void search(e)} className="flex gap-2">
         <input className={`${input} flex-1`} value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("mcp.searchPlaceholder")} aria-label={t("mcp.search")} />
         <button type="submit" className={btn.secondary} disabled={busy}>{t("mcp.search")}</button>

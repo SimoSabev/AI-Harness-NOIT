@@ -1,0 +1,20 @@
+/* E9g B (D-377): the download site has the same design as the app: Tailwind v4 + THE token file of apps/web (AC-12.4).
+   The site follows the visitor's system theme (<html data-theme="system">); dark is the default. */
+@import "tailwindcss";
+@import "../../../web/src/app/tokens.css";
+
+body {
+  @apply bg-canvas font-sans text-ink antialiased;
+}
+
+:focus-visible {
+  @apply outline-2 outline-offset-2 outline-accent-text;
+}
+
+.hex {
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}

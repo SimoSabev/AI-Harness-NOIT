@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ORG_ID } from "../../../../worker/src/online/seed";
 import { board, inbox, membership, taskDetail } from "./queries";
-import { U, webDb } from "./web-db.test-helper";
+import { asService } from "./sql";
+import { U, changesetOf, webDb } from "./web-db.test-helper";
 
 // Демо промпт т. 8.1: rls-web (viewer does not see diff/task_activities) + the inbox of the seed (3 cards + summary).
 let db: Awaited<ReturnType<typeof webDb>>;
@@ -19,6 +20,12 @@ describe("rls-web", () => {
     expect(asApprover?.diff).toContain("diff --git");
     expect(asApprover?.activities.length).toBe(2);
     expect(asApprover?.ledger.length).toBeGreaterThan(0);
+  });
+  it("промяна над 1 MB: approver вижда размера (diffOmitted) вместо празен diff; viewer — нищо", async () => {
+    const cs = await changesetOf(db, "t_seed_bugfix");
+    await asService(db, (sql) => sql.query("update public.changeset_diffs set diff = '', omitted_bytes = 3000000 where changeset_id = $1::uuid", [cs.id]));
+    expect(await taskDetail(db, U.approver, DEMO_ORG_ID, "approver", "t_seed_bugfix")).toMatchObject({ diff: null, diffOmitted: 3000000 });
+    expect(await taskDetail(db, U.viewer, DEMO_ORG_ID, "viewer", "t_seed_bugfix")).toMatchObject({ diff: null, diffOmitted: null });
   });
   it("чужд потребител: без org, без задачи", async () => {
     const stranger = "e0000000-0000-4000-8000-000000000001";

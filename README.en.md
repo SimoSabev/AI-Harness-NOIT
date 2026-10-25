@@ -19,7 +19,9 @@ pnpm install --frozen-lockfile
 pnpm local            # build, database, sandbox images (5–15 min the first time), web UI and worker
 ```
 
-`pnpm local` prints the address, email and password. Open it, then **+ New task** → pick an agent → **Run the agent**.
+`pnpm local` prints the address. There is no sign-in (D-368): on this computer you are the owner; the web listens on
+127.0.0.1 only and approvals are a click, without a two-factor code. Sign in to a Claude subscription from **Accounts**
+(D-369) and run the CLI commands (doctor, images, demo repos, stats, ledger) from **System** (D-370). Open it, then **+ New task** → pick an agent → **Run the agent**.
 The demo agents need no key:
 
 | Agent | What it does | Expected |

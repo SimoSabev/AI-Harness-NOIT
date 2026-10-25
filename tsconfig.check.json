@@ -37,6 +37,7 @@
     "**/dist/**",
     "fixtures/**",
     "apps/web/**",
+    "apps/site/**",
     "apps/desktop/src/main.ts"
   ]
 }

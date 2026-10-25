@@ -30,13 +30,13 @@ export function DiffView({ files, t }: { files: DiffFile[]; t: T }) {
               <span className="text-xs text-mute">{t(`diff.kind.${f.kind}`)}</span>
               <span className="font-mono text-xs"><span className="text-ok">+{f.added}</span> <span className="text-bad">−{f.removed}</span></span>
             </summary>
-            <pre className="overflow-x-auto border-t border-line font-mono text-xs leading-5">
+            {f.binary ? <p className="border-t border-line px-4 py-3 text-xs text-mute">{t("res.binary")}</p> : <pre className="overflow-x-auto border-t border-line font-mono text-xs leading-5">
               <code className="block py-2">
                 {f.lines.map((l, k) => (
                   <span key={k} className={`block px-4 ${LINE[l.kind]}`}>{l.text || " "}</span>
                 ))}
               </code>
-            </pre>
+            </pre>}
           </details>
         );
       })}

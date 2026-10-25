@@ -1652,7 +1652,7 @@ docker CLI процеса, D-043). (2) Проксито стартира зак�
 не стига до 127.0.0.1 на хоста; обратната посока (CLI → публикувания админ порт на 127.0.0.1) дава същите свойства без host
 мрежа: ключът само в паметта, токенът еднократен и с TTL, `docker inspect` без ключ.
 Алтернативи: `--network host` за проксито (разширява достъпа му); ключ във файл, монтиран ro (ключът на диска в чист вид).
-[НП] Electron safeStorage за KEK — проверява се в E9ж (документацията на Electron 44, линк + дата тогава).
+Electron safeStorage за KEK — проверено в E9ж, вж. D-374 (документацията на Electron, прочетена 24.10.2026).
 Източник: v5 т. 3.3. Статус: решено.
 
 ## D-346 Базова линия, flaky и рисков профил v1 (22.10.2026)
@@ -2003,7 +2003,744 @@ SHA-тата: `git ls-remote` на github.com/actions/setup-node, actions/checko
 Източник: https://docs.github.com/actions/creating-actions/creating-a-composite-action (23.10.2026). Статус: решено; първото
 пускане на истински runner чака Симо (чеклист 24).
 
-## D-367 Скриптовете вървят и под Windows: `shellEmulator: true` в pnpm-workspace.yaml (22.10.2026)
+## D-367 Питай човека само при нужда: проверена безопасна промяна влиза сама (23.10.2026)
+Решение (Симо, 23.10.2026: „трябва да е САМО ако е абсолютно нужно“; избра вариант А): в локален проект (`provider = local`,
+`pnpm local`) VERIFIED промяна влиза в `main` на огледалото сама — без одобрение, без втори фактор — когато
+`autoApply` (packages/core/src/auto-apply.ts, чиста функция) не намери причина за човек. Причините (кодове в
+`task_activities` „needs_you“ и в `gated` реда на дневника): не е VERIFIED; агент отвън (D-207); празна; изтрит или
+преименуван файл; чувствителен път — зависимости и lockfile-ове, CI/инфраструктура (.github, Dockerfile, deploy/, infra/, *.tf),
+правилата на агентите (.mandat.yml, AGENTS.md, CLAUDE.md, .claude/, .mcp.json…), тайни (.env*, *.pem, *.key, .npmrc…), git куки,
+миграции; над 300 променени реда или над 15 файла (`AUTO_APPLY_LIMITS`); нощна смяна (нейните правила, D-361, остават).
+Сливането е само напред (`mergeLocal`: update-ref с очакваното старо `main`); ако не стане — обратно при човека
+(`apply_failed:<причина>`) с обичайното известие. Влязла сама → CLOSED, доставка `merge`, успех за стълбата, известие „merged“;
+статус „Приложена сама“. Одобрение от човек на локална задача вече също слива клона в `main` и дава успех на стълбата
+(преди одобрението само маркираше задачата, а стълбата локално не мърдаше никога).
+Какво остава: съдията (D1–D12) и всички врати преди доставката (ask правила, key_rejected, empty_change, base_moved) са
+непроменени; UNKNOWN винаги пита. GitHub проектите остават на стълбата (D-231: ниво ≥ 2 иска ruleset) — следващ ход, ако Симо иска.
+Защо: всяка задача чакаше одобрение (ниво 0 за всяка нова двойка агент × вид, таван 1 без ruleset, стълбата локално не
+расте), а човекът одобряваше промени, които Мандат вече е проверил. Отменя за локалните проекти частта от D-360
+„рисков клас medium, за да има човек пред сливането“: човекът остава там, където `autoApply` казва защо.
+Риск: агентът може да вкара безопасна на вид, но грешна промяна в `main`; смекчено от присъдата (тестове, скрити тестове,
+мутанти), лимита по размер и това, че `main` на огледалото се връща с git (клонът и дневникът пазят всичко).
+
+## D-368 Локалният режим без вход; Better Auth за истински профили по-късно (23.10.2026)
+Решение (Симо, 23.10.2026: „не мисля, че за сега ни трябва логин … теглиш, връзваш към своите неща и си ти без да ти е
+нужен профил при нас“): (1) `pnpm local` и `pnpm desktop` нямат вход. Уебът получава `MANDAT_LOCAL_OWNER` (локалният
+собственик, DEMO_OWNER_ID) вместо `MANDAT_DEMO_DEV_AUTH`; `authMode() = "local"`; `currentUser()` връща собственика само при
+loopback Host (`localhost`, `127.0.0.1`, `[::1]`, с или без порт; apps/web/src/lib/server/local-auth.ts). CSRF бисквитката
+(double submit) я слага самата страница в браузъра (`LocalCsrf`, 32 случайни байта, 30 дни) — първоначално беше пренасочка
+през `GET /api/auth/local`, но тя губеше дълбоката връзка (проба в браузъра, 23.10.2026). Няма парола (старата от предишно пускане се
+изтрива, `seedLocal` без `password`), няма TOTP, няма „Изход“. (2) Уебът слуша само на 127.0.0.1: `pnpm --filter
+@mandat/web exec next start -p 3000 -H 127.0.0.1` — `next start` по подразбиране е 0.0.0.0 (`next start --help`, Next.js
+16.3.8: „-H, --hostname <hostname> … (default: 0.0.0.0)“; https://nextjs.org/docs/app/api-reference/cli/next, 23.10.2026).
+(3) Одобренията локално са клик („локално присъствие“, `localPresence`): `factorAt` (actions.ts) е единственото място,
+което решава кода — TOTP иска код, локалното присъствие не; формите не показват поле за код (`SecondFactorProvider`).
+Одобрението се записва честно с `method = 'local'` (миграция 20261023000025: check-ът и тригерът приемат 'local' със
+същия срок ≤ 2 мин за mfa_verified_at), не като TOTP, който не е бил. (4) Десктопът чете само адреса от банера и го отваря;
+скриптът за вход и диалогът за TOTP са махнати. (5) Supabase Auth (хостнатият режим) и демо входът (e2e) са непроменени.
+Защо: целта е лесно ползване без профил при нас; харнесът върви на машината на човека с неговите абонаменти и ключове.
+Без вход единствената граница е „този компютър“, затова 127.0.0.1 + проверка на Host (чужда страница, пренасочила името си
+към 127.0.0.1 — DNS rebinding — запазва своя Host и не получава нищо) + проверката на Origin и CSRF за POST (D-285).
+Профили по-късно (E10, екипи или споделен сървър): Better Auth (MIT, в нашия Postgres, работи офлайн; плъгин `anonymous`
+дава сесия без лични данни и после свързване с истински профил чрез `onLinkAccount` — https://better-auth.com/docs/plugins/anonymous,
+23.10.2026) — локалният собственик става анонимният потребител. Нова зависимост тогава по правило 8.
+Алтернативи: Clerk (затворена услуга в облака: вход през интернет, publishable + secret ключ в env срещу правило 4, данни
+извън машината; безплатно до 50 000 потребители на месец — https://clerk.com/articles/clerk-pricing-explained, 23.10.2026);
+Supabase Auth локално (GoTrue — тежко, D-292 го махна от `pnpm local`); парола без TOTP (пак триене без полза на една машина).
+Риск: всеки процес на същата машина може да ползва харнеса (както и досега базата на 127.0.0.1:54329); в мрежата — нищо.
+Статус: решено; командите от уеба/десктопа — D-369 (вход в абонамент), D-370 (страница „Система“).
+
+## D-369 Вход в абонамент от уеба (`mandat login` от „Акаунти“) (23.10.2026)
+Решение: (1) В `pnpm local` „Акаунти“ има форма вместо командата за терминал: име → `mandat local` пуска непроменения
+`claude auth login --claudeai` в контейнер (`buildProfileArgs("login-web")` = същите аргументи като `login`, но `-i` с тръби
+вместо `-it`), показва адреса на Anthropic като връзка, а кодът, който човекът постави, отива в stdin на процеса — само
+там: не се пази, не се логва, не се връща в отговор (тестове). След изход: `claude auth status --json` → готово/не.
+(2) Състоянието минава през контролната точка (D-293: 127.0.0.1 + bearer токен): `GET|POST|DELETE /accounts/login`,
+`POST /accounts/login/code`, `POST /accounts/logout`; схемата е в packages/contract (`LoginState`, `AccountName`,
+`LoginCode`, `findLoginUrl`) — уебът отказва адрес извън claude.com, claude.ai, platform.claude.com, console.anthropic.com
+(https, път …/oauth/authorize). Един вход наведнъж; забравен вход спира след 10 мин. (3) Уеб API: `/api/accounts/login`,
+`/api/accounts/login/code`, `/api/accounts/logout` — право `accounts.manage`, Origin + CSRF. „Махни“ до всеки акаунт.
+(4) Хостнатият режим (без контролна точка) остава с командата за терминал.
+Факт (спайк на живо, 23.10.2026, образ mandat-sandbox cc2.1.302): Claude Code 2.1.302 без TTY печата „Opening browser to sign in…“,
+„If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&…&code_challenge_method=S256&…“ и
+„Paste code here if prompted >“, после чете един ред; грешен код → „Invalid code. Please make sure the full code was copied.“
+(проверено и през `LoginSessions` с истинския Docker: waiting_code → invalid_code, контейнерът спира).
+Защо: Симо: „всяка команда да бъде направена от уеба/десктопа“. Входът остава потокът на Anthropic в непроменения Claude
+Code (D-295); потокът е PKCE (S256), затова кодът без verifier-а в контейнера е безполезен, а харнесът никога не вижда токена —
+уебът прави каквото прави терминалът: препраща реда, който човекът пише. [НП: дали Anthropic гледа на това като на
+„посредничество“ — по нашия прочит не, защото токенът не минава през харнеса; Симо да потвърди.]
+Алтернативи: вграден терминал (xterm.js + pty — нова зависимост, същото препращане); само командата (сегашното, трудно).
+
+## D-370 Страница „Система“: командите на CLI-то от уеба (23.10.2026)
+Решение: нова страница „Система“ (/system, в менюто) с бутони за затворен списък от задачи (`SystemJob` в contract):
+doctor (`doctor --json`), images (`images build`), images-ui (`images build --ui`), fixtures (`fixtures build` и
+`--name demo-shop`), fixtures-force (същото с `--force`, след потвърждение), stats (`stats --json`), verify-log
+(`verify-log --org <локалната org> --json`). argv е фиксиран в contract (`SYSTEM_JOB_ARGV`); от уеба идва само името на
+задачата. `mandat local` пуска себе си (`node main.js …`) без API ключовете в env (D-293); по една задача от вид наведнъж;
+страницата вижда последните 200 реда (без ANSI и контролни знаци) и JSON резултата (проверките на doctor, числата на stats,
+веригата). Контролна точка: `GET /system`, `POST /system/<job>`; уеб API `/api/system`, `/api/system/<job>` — право
+`tools.manage`. Проверено на живо през `SystemJobs` с истинските команди: doctor (Node 26 ≠ 24.22.0, липсващи образи),
+stats (3 VERIFIED), verify-log (веригата е цяла, 19 реда), fixtures (E_FIXTURE_MISMATCH → затова fixtures-force).
+Защо: Симо: „всяка команда да бъде направена от уеба/десктопа, за да е лесна за ползване“; десктопът е прозорец около уеба,
+затова получава същото. Не са в уеба: run (задачите вече са от „Нова задача“), bench/redteam (дълги, за разработчици),
+proxy (ключовете са в „Акаунти“), init/contract/anchor/tui — при нужда следващ ход.
+Не е проверено: страниците в браузър (локалният `pnpm local` на Симо върви със старата версия; нов `next build` би
+презаписал `.next` под него).
+
+
+## D-371 Мостът десктоп ↔ уеб: тесен, типизиран, със zod в двата края (24.10.2026)
+Решение: прозорецът на десктопа и уебът говорят само през `window.harnessDesktop`. Съобщенията са в
+`packages/contract/src/desktop.ts`: 9 метода (уеб → main, отговор `{ok, value} | {ok:false, error{code, message}}`):
+`pickFolder`, `grantsList`, `grant`, `revoke` (`LocalGrant {path, scopes: read|apply|open_editor|terminal, granted_at}`),
+`openInEditor` (vscode|cursor|zed), `applyLocal` (`mandat apply --task <id>`, само fast-forward), `notify`, `badge`,
+`inboxCount`; и един канал main → уеб (`harness:event`) за команди (`DesktopCommand`: меню, клавиши, клик на известие →
+`open_task`). Каналите са `harness:<метод>`; друг канал няма handler.
+Трите слоя: (1) **preload** (`apps/desktop/src/preload.ts` → `dist/preload.cjs`) е sandboxed, затова не внася нищо
+(нито zod, нито contract): пуска само изброените методи, само обикновен JSON обект ≤ 64 KiB, събитието на IPC никога не
+стига до страницата, обектът е замразен; тест държи списъка равен на този в contract. (2) **main** (`bridge-main.ts`)
+отговаря само на страница от локалния адрес (`senderFrame.url`; преди банера — на никого), парсва заявката и **своя**
+отговор с contract, изключение на handler не се препраща (може да носи пътища). (3) **уебът**
+(`apps/web/src/lib/client/desktop.ts`) парсва заявката преди изпращане, отговора и командите след получаване; без мост
+(браузър, PWA) `desktopBridge()` е null и уебът е като досега.
+Прозорецът (D-303 остава): contextIsolation, sandbox, без nodeIntegration, `webSecurity`; нови прозорци — отказ винаги;
+`will-navigate`, `will-frame-navigate`, `will-redirect` извън локалния адрес — отказ; `<webview>` — отказ; уеб
+разрешения — само `clipboard-sanitized-write` от локалната страница; CSP (`DESKTOP_CSP`) заменя каквото прати страницата:
+`default-src 'self'`, без `unsafe-eval`, `object-src/frame-src/frame-ancestors 'none'`, `form-action/base-uri 'self'`,
+`connect-src 'self'`. `script-src` и `style-src` имат `'unsafe-inline'`, защото Next App Router слага flight данните си в
+inline скриптове без nonce [НП: https://nextjs.org/docs/app/guides/content-security-policy — не е отворено днес; с
+истинския UI под CSP-то ще се провери в e2e на А5]. Днес работят `pickFolder`, `notify`, `badge`, `inboxCount`;
+`grants*`, `openInEditor`, `applyLocal` отговарят `not_ready` до А3. Агентът в пясъчника не получава нищо от моста
+(няма нови mount-ове, env или ключове).
+Проверено (24.10.2026, Electron 44.9.0 на macOS): имената и подписите в `node_modules/electron/electron.d.ts`
+(`contextBridge.exposeInMainWorld`, `ipcRenderer.invoke`, `ipcMain.handle`, `senderFrame: WebFrameMain | null`,
+`webRequest.onHeadersReceived`, `setPermissionRequestHandler`, `will-frame-navigate`, `will-redirect`,
+`will-attach-webview`, `app.setBadgeCount`); и на живо — `pnpm --dir apps/desktop smoke`: sandboxed CommonJS preload с
+`exports` се зарежда, мостът има точно изброените методи, страницата няма `require`/`process`, main отказва невалидна
+заявка, `window.open` и външна навигация се отказват, CSP-то заменя това на страницата, inline скрипт върви.
+Че sandboxed preload може да `require` само "electron" и няколко вградени модула [НП: https://www.electronjs.org/docs/latest/tutorial/sandbox —
+не е отворено днес]; затова preload-ът е един файл без импорти.
+`apps/desktop` внася `@mandat/contract` като `link:../../packages/contract` (вътрешен пакет, не нова външна зависимост);
+`pnpm build` в корена строи contract преди `pnpm desktop`. Тестовете на `apps/desktop` вървят в коренния vitest
+(`pnpm test`, значи и в `pnpm check`); поотделно: `pnpm --dir apps/desktop test`.
+Защо: тесен мост е единственото място, където страницата може да стигне до диска и до OS-а; затова е затворен списък,
+описан на едно място (правило 11), и се проверява в трите слоя — ако един слой сгреши, другите два пак отказват.
+Preload без импорти, защото sandbox не позволява bundle-нати зависимости без bundler, а нов bundler е нова зависимост
+(правило 8) за ~100 реда код.
+
+## D-372 Нативното поведение на десктопа: менюта, клавиши, tray брояч, известия, вход при стартиране (24.10.2026)
+Решение: менютата и картата на клавишите са чисти данни, тествани без Electron: `apps/desktop/src/shortcuts.ts`
+(`shortcutMap()`: ⌘/Ctrl+N нова задача, ⌘/Ctrl+Enter одобри, ⌘/Ctrl+K търсене, ⌘/Ctrl+1..9 проект, глобално
+⌘/Ctrl+Shift+Space бързо въвеждане) и `apps/desktop/src/menu.ts` (`appMenu`, `trayMenu`, `trayState`, `toTemplate`).
+Меню: (macOS: менюто на приложението с About, „Стартирай при вход“, Hide, „Спри и излез“), File (Нова задача, Добави
+проект, Приложи локално), Edit (само роли: undo/redo/cut/copy/paste/selectAll — копирането работи в прозореца), View
+(Входящи `/`, Дъска `/board`, Агенти `/agents`, Инструменти `/tools`, Нощна смяна `/night`, Ресърч `/research` + reload и
+zoom), Клавиши (всички комбинации; Help → „Клавишни комбинации“ ги показва в прозорец), Window, Help. Всяка комбинация на
+прозореца е регистрирана **точно веднъж** — в менюто „Клавиши“ (тест); глобалната — само през `globalShortcut`, затова в
+менюто е в текста на реда. Елемент на менюто или клавиш праща `DesktopCommand` към уеба (`harness:event`, D-371);
+уебът (`apps/web/src/lib/client/desktop-commands.ts` + `components/desktop-commands.tsx`) го превежда в навигация или
+натискане на бутон на страницата. **Одобри** само натиска собствения бутон „Одобри“ на картата (`data-desktop-approve`),
+който отваря потвърждението със TOTP кода, когато промяната го иска; main не одобрява нищо. Докато човекът пише в
+поле, ⌘/Ctrl+Enter не прави нищо от наша страна, за да остане „изпрати“ на полето (workspace го ползва). ⌘/Ctrl+1..9
+натиска n-тия проект в страничната лента (`data-desktop-project`). „Добави проект“ води към `/harness` до А3.
+Броячът „чака теб“: main чете съществуващото `GET /api/inbox` на `pnpm local` на всеки 15 s (локалният собственик през
+loopback адреса, D-368); от отговора пази само `id` и `text` (`DesktopInboxSnapshot` в contract). Броячът е в tooltip-а и
+менюто на tray, до иконата в менюлентата на macOS (`tray.setTitle`) и в баджа (`app.setBadgeCount`). Нов елемент → едно
+системно известие (няколко нови → едно с броя), само ако прозорецът не е на фокус; първото четене не известява (без залп
+при старт); клик → прозорецът излиза и уебът отваря картата `/tasks/<id>` (няколко → входящите). Затворен прозорец не
+спира харнеса (D-303), затова броячът и известията работят и тогава.
+„Стартирай при вход“: отметка в менюто на приложението и в tray, **изключена по подразбиране** — само кликът извиква
+`app.setLoginItemSettings({ openAtLogin })`; настройката я пази OS-ът. Има я само на macOS и Windows.
+Проверено (24.10.2026, Electron 44.9.0, `node_modules/electron/electron.d.ts`): `setLoginItemSettings` е `@platform
+darwin,win32`; `setBadgeCount` е `@platform linux,darwin` — на Windows бадж няма, броячът е в tooltip-а на tray;
+`registerAccelerator` е само linux/win32, затова на macOS не може да има „показан, но нерегистриран“ клавиш и всяка
+комбинация е само на едно място; `globalShortcut.register(accelerator, cb): boolean`. На живо (`pnpm --dir apps/desktop
+smoke`, macOS): менютата на трите платформи се строят с `Menu.buildFromTemplate` (ролите и комбинациите се приемат),
+`CommandOrControl+Shift+Space` се регистрира глобално (true). Синтаксисът на комбинациите
+[НП: https://www.electronjs.org/docs/latest/api/accelerator — не е отворено днес; приет от истинския Electron в smoke].
+Дали ключовите събития стигат първо до страницата и после до менюто на macOS [НП — ще се види в e2e на А5].
+Защо: картата като чиста функция е единственият начин AC-12.7 да има unit тест и менюто, помощта и регистрацията да не
+се разминат; одобрението остава в уеба, защото там е TOTP проверката — клавиш, който одобрява директно, би я заобиколил.
+Броячът се чете от main, а не се праща от страницата, защото трябва да работи и при затворен прозорец (AC-12.5).
+## D-373 Локален достъп с разрешения и локални редакции в десктопа (24.10.2026)
+Решение: десктоп приложението не вижда нищо на диска, докато човекът не даде папка. Разрешението (`LocalGrant {path,
+scopes, granted_at}`, contract) е за папка и за изброени права: `read` (папката може да стане проект), `apply` („Приложи
+локално“), `open_editor` („Отвори в редактора“), `terminal` (запазено за А4). Разрешенията живеят **само в main процеса**,
+във файл `MANDAT_HOME/local-grants.json` (`LOCAL_GRANTS_FILE`, `LocalGrantsFile {version: 1, grants}`) — същата профилна
+папка, която ползва `pnpm local` (`MANDAT_HOME`, иначе `<repo>/.mandat`, `packages/cli/src/paths.ts`). Запис атомарно:
+временен файл в същата папка (`wx`, 0600), fsync, rename; папката се създава с 0700. Файл, който не се чете или не минава
+zod, значи **няма разрешения** (безопасната страна); новото даване го заменя. Уебът само пита през моста (D-371).
+Даване: нативен диалог за папка (`pickFolder`), drag-and-drop на папка върху прозореца, „Отвори с“ / папка върху иконата
+(macOS `open-file`) или втори старт с път (`second-instance` argv, `folderArgs`) → екран „Добави проект“
+(`/projects/add?path=…`) с предложение: името на папката и само `read` по подразбиране (останалите права са по избор;
+нищо на диска не се чете преди даването) → бутон „Дай достъп“ → **нативно потвърждение** в main (Разреши / Отказ, Отказ
+по подразбиране), което изброява правата с думи. Пускането на папка само показва екрана — нищо не се дава.
+Drop: preload-ът слуша `dragover`/`drop` на прозореца (само ако страницата не е поела събитието), взима пътя с
+`webUtils.getPathForFile` и го праща по отделен канал `harness:drop` (`DESKTOP_DROP_CHANNEL`, `DesktopDrop`), който не е
+метод на моста — страницата не може да го извика; main го приема само от локалната страница. Проверено на живо
+(`pnpm --dir apps/desktop smoke`, Electron 44.9.0, macOS): слушателят е инсталиран в sandbox preload-а (значи `webUtils` и
+`ipcRenderer.send` са налични), синтетичен File без локален път не праща нищо. Дали истинска папка, пусната от Finder/
+Explorer, дава пътя си през `getPathForFile` [НП — e2e на А5 под Playwright Electron].
+Проверки (`apps/desktop/src/local-access.ts`, чисти функции): пътят се прекарва през `realpathSync.native` (без бягство
+през symlink) и се пази истинският път; отказ за `/` и корен на диск, за домашната папка като цяло и нейните предци, за
+системни папки (POSIX: /bin, /sbin, /usr, /etc, /dev, /proc, /sys, /boot, /lib*, /root, /run, /snap, /var/{lib,log,db,root},
+/System, /Library, /Applications, /private/{etc,var/db,var/root,var/log}; Windows: Windows, Program Files (x86), ProgramData,
+Recovery, $Recycle.Bin, System Volume Information на всеки диск), за папки с тайни в дома (.ssh, .gnupg, .aws, .azure,
+.kube, .docker, .config, .password-store, .local/share/keyrings, Library, AppData) и за самия `MANDAT_HOME` (там са
+запечатаните ключове); само папка, не файл. На macOS/Windows отказите сравняват без значение на главни/малки букви.
+Всяка употреба: истинският път трябва да е вътре в дадена папка (по цели сегменти) с нужното право.
+„Приложи локално“ (`apply`): main пуска `node packages/cli/dist/main.js --json apply --task <id> --repo <истинския път>`
+без shell и без API ключове в env (`childEnv`), с 120 s лимит; `mandat apply` (D-356) прави само `merge --ff-only` и
+отказва при разклонение или локална промяна на засегнат файл — никога reset или checkout -f. Изходът се чете със zod
+(`MandatApplyJson`) и трябва да съвпада с exit кода; `files: []` → „вече актуално“.
+„Отвори в редактора“ (`open_editor`): `vscode://file/<път>:<ред>` (документирано:
+https://code.visualstudio.com/docs/configure/command-line, „Open a file to line and column“, прочетено 24.10.2026), със
+същата форма `cursor://file/…` и `zed://file/…` [НП — документацията на Cursor и Zed не е отворена; zed.dev/docs/
+command-line-interface даде 404 на 24.10.2026]. Сегментите се кодират поотделно (`#`, `?`, `%`, интервал не могат да
+сменят URL-а); преди `shell.openExternal` URL-ът минава последна проверка (само трите схеми с `file/`). Изборът на
+редактор е в Настройки → Локален достъп (localStorage на устройството).
+Следа: всяка употреба (`apply`, `open_editor`) → ред в `task_activities` (`kind` local_apply / local_editor, авторът)
+през `POST /api/tasks/:id/local-activity` (Origin + CSRF като всеки POST, `diff.view`, тяло `LocalActivityBody` — сървърът
+сам пише текста; локалната папка не се праща), **не в дневника**: това е действие на човека на неговия компютър, извън
+пясъчника и присъдата. Отказ от потвърждението не оставя ред (нищо не е станало).
+Уеб: `/projects/add` (екранът), `/settings/local` (списък, отнемане на право или папка, редактор), връзка в Настройки и
+блок „На този компютър“ под diff-а на задачата (избор на работно копие от дадените папки, „Приложи локално“ с
+`data-desktop-apply` — File → Приложи локално го натиска, „Отвори в редактора“ за всеки файл). Всичко това се показва само
+когато мостът го има; в браузър връзката и блокът ги няма, а страниците казват „само в десктоп приложението“.
+Агентът в пясъчника не получава нищо: тест `packages/sandbox/src/local-grants-isolation.test.ts` — даването не мени нито
+един аргумент на `docker run` (mount-ове, env), дадена папка и файлът с разрешенията пак не могат да се mount-нат, и никой
+код от страната на пясъчника/агента/worker-а не чете файла.
+Защо: разрешение по папка и по право е най-малкото, което върши работа (P4); истинският път и отказите за системни, домашни
+и тайни папки затварят най-честите грешки „дадох твърде много“; потвърждението е нативно, защото диалог в страницата може
+да бъде подправен от съдържанието ѝ; файлът е в профилната папка, защото там харнесът вече пази своето и няма втори
+източник; следата е в task_activities, защото дневникът е за присъди, а това не е присъда. Регистрирането на дадената
+папка като проект на харнеса (ред в repos + огледало) от уеба не съществува днес — Q-061.
+
+## D-374 KEK на ключовете в OS keychain през Electron safeStorage (24.10.2026)
+Решение: десктоп приложението пази KEK-а на плика с ключовете (D-313, D-345) в OS keychain чрез Electron `safeStorage`.
+На диска е само запечатаният KEK: `MANDAT_HOME/kek.keychain` (0600, атомарен запис: временен файл `wx`, fsync, rename).
+При старт main (`apps/desktop/src/kek-keychain.ts`, `resolveDesktopKek`) го отваря и подава KEK-а на детето `pnpm local`
+като env `MANDAT_KEK` (base64 на 32 байта) — точно това, което `loadKek` в `packages/llm-proxy` вече чете първо; кодът на
+CLI-то и проксито не се мени. Ползва се **асинхронното** API: `isAsyncEncryptionAvailable`, `encryptStringAsync`,
+`decryptStringAsync` (при `shouldReEncrypt` същият KEK се запечатва наново), защото синхронното (`isEncryptionAvailable`
+и др.) е отбелязано като остаряло. Първи старт с keychain: ако има обикновен `MANDAT_HOME/kek` (направен от `pnpm local`),
+той се приема (вече запечатаните ключове остават четими) и **файлът се оставя** (Q-062); иначе нов KEK от `randomBytes(32)`.
+Безопасни откази: няма keychain (`isAsyncEncryptionAvailable` → false или грешка; на Linux `getSelectedStorageBackend()`
+е `basic_text` или `unknown`, т.е. криптиране с вградена парола) → `source: "file"`, env не се пипа и `loadKek` си ползва
+файла 0600 както досега. Запечатан KEK, който keychain-ът не отваря (друг keychain, отказан достъп, повреда, не е 32 байта)
+→ също `file` с причина `keychain_locked`, и запечатаният файл **никога не се заменя** с нов KEK (иначе всички ключове
+стават нечетими).
+Изолация: `childEnv` маха `MANDAT_KEK` (`mandat apply` и другите деца не го получават); само `harnessEnv` го добавя за
+`pnpm local`. Пясъчникът: docker CLI-то получава само своите ключове (D-084), а `buildRunArgs` вече отказва `MANDAT_KEK`
+в `envNames` и в `publicEnv` на всеки контейнер (нов списък HOST_ONLY в `packages/sandbox/src/hardening.ts`; тест
+`packages/sandbox/src/kek-isolation.test.ts`). Нищо не се логва.
+Тестове: `apps/desktop/src/kek-keychain.test.ts` с фалшив keychain (XOR с тайна, която знае само той): първи старт,
+ключовете оцеляват рестарт (запечатан с `FileKeyStore`, отворен след нов `resolveDesktopKek` със същия keychain), приемане
+на стария файл, няма keychain, чужд keychain не заменя KEK-а, повреден запис, `shouldReEncrypt`, env-ът. Истински Electron
+(`pnpm --dir apps/desktop smoke`, 44.9.0, macOS arm64): асинхронното API съществува; `getSelectedStorageBackend` по време
+на работа е `undefined` на macOS (въпреки типа), затова кодът го вика само на Linux и с `?.`. Истинско криптиране не е
+правено в smoke-а: неподписан build на macOS може да поиска достъп до keychain, а нощем няма кой да отговори.
+Факти (документацията https://www.electronjs.org/docs/latest/api/safe-storage, прочетена 24.10.2026): macOS — ключът е в
+Keychain и е защитен от други потребители и от други приложения на същия потребител; Windows — DPAPI, защитен от други
+потребители, **не** от други приложения на същия потребител; Linux — kwallet/kwallet5/kwallet6/gnome-libsecret според
+средата, а без хранилище (`basic_text`) данните са незащитени; `isEncryptionAvailable` и `getSelectedStorageBackend` имат
+смисъл след `ready`; асинхронното API се инициализира лениво при първото извикване след `ready`.
+[НП] дали `getSelectedStorageBackend` отразява и доставчика на асинхронното API на Linux (документацията изрежда за него
+Portal Secret / Secret Service / резервен доставчик) — проверка на Linux машина или в CI на А5.
+Защо: AC-12.9 иска KEK-ът да е в keychain и ключовете да са налични след рестарт без ново въвеждане; env `MANDAT_KEK` вече
+е договореният вход на `loadKek`, така че нищо в CLI/проксито/worker-а не се мени и терминалният `pnpm local` без
+десктопа работи както преди. Отказът да се замени неотварящ се KEK пази ключовете от тиха загуба; на Windows защитата е
+по-слаба (DPAPI), но пак по-добра от файл 0600 и е същата като на всички Electron приложения.
+Алтернативи: синхронното API (остаряло); keytar (отделен native модул и нова зависимост); KEK-ът да остане само във файла (не изпълнява AC-12.9).
+Статус: решено.
+
+## D-375 Вграденият терминал на хоста в десктопа: node-pty + xterm.js, само с право `terminal` (24.10.2026)
+Решение: в блока „На този компютър“ под diff-а на задачата има бутон „Отвори терминал“, само когато избраното работно
+копие е дадено с право `terminal` (D-373). Панелът казва първо „Не е пясъчникът: командите вървят на този компютър, в
+<папка>, с твоите права…“ (жълта рамка). Обвивката я пуска main процесът с node-pty (`apps/desktop/src/terminal-sessions.ts`,
+чист модул с подадени отвън проверка, зареждане на node-pty и изпращане); уебът рисува с xterm.js
+(`apps/web/src/components/host-terminal.tsx`, зареден динамично само в браузъра).
+Мост (contract, D-371): методи `terminalOpen {task_id, path, cols, rows} → {id}`, `terminalWrite {id, data ≤ 16 KiB}`,
+`terminalResize`, `terminalClose`; main → уеб по същия канал `harness:event`: `terminal_output {id, data ≤ 64 KiB}` (на
+партиди от 16 ms, на парчета ≤ 32 KiB), `terminal_exit {id, code}`, `terminal_line {id, task_id, line}`. `TerminalId` =
+`term_<16 hex>` (randomBytes). Всяко отваряне минава `authorizeUse(…, "terminal")` наново (истински път, вътре в дадена
+папка, с правото); най-много 4 терминала; отнемане на правото `terminal` (или на папката) затваря веднага терминалите там
+(`onRevoked` → `closeWhere`); пълно презареждане на страницата (`did-navigate`) и изход от приложението ги затварят всички.
+Обвивката: `$SHELL -l` на macOS/Linux (login, за да има PATH-а на човека; GUI приложение тръгва с къс PATH), иначе `/bin/sh`;
+на Windows `COMSPEC`, иначе `powershell.exe`. Env: `childEnv` (без API ключове, без `MANDAT_KEK`, без
+`ELECTRON_RUN_AS_NODE`) + `TERM=xterm-256color`, `COLORTERM=truecolor`, `MANDAT_HOST_TERMINAL=1`.
+Следа (AC-12.8): `LineTracker` (`apps/desktop/src/terminal-lines.ts`) следи натиснатите клавиши: печатни знаци, backspace,
+Ctrl+U/Ctrl+C чистят реда, escape последователностите (стрелки, история, маркери на paste, OSC) се пропускат; Enter дава
+ред. Tab-допълването и историята стават в обвивката и не се виждат — следата е приблизителна по замисъл. Всеки ред →
+`terminal_line` → уебът праща `POST /api/tasks/:id/local-activity` с `{kind: "local_terminal", outcome: "command",
+detail ≤ 300}`; отварянето → `outcome: "opened"`. Сървърът минава detail-а през `@mandat/redaction` (`createRedactor`,
+същите правила като навсякъде; напр. `export ANTHROPIC_API_KEY=sk-ant-…` → `[REDACTED:anthropic]`) преди да го запише
+в `task_activities`, **не в дневника**. Изходът на терминала не отива никъде освен в прозореца.
+Агентът в пясъчника не получава нищо: нови mount-ове, env или канали към контейнерите няма; терминалът е на човека.
+Зависимости (правило 8, проверено с `npm view <пакет> time` на 24.10.2026): `node-pty` 1.1.0 (MIT, публикуван 22.12.2025)
+само в `apps/desktop` (извън workspace, собствен lockfile); `@xterm/xterm` 6.0.0 (MIT, 22.12.2025, без зависимости) в
+`apps/web`. node-pty е native: собствените му install скриптове не се пускат (`allowBuilds: node-pty: false` в
+`apps/desktop/pnpm-workspace.yaml`), ползват се готовите двоични файлове в пакета. Факти от самия пакет (`npm pack
+node-pty@1.1.0` + `tar tvzf`, 24.10.2026): `prebuilds/` има darwin-arm64, darwin-x64, win32-arm64, win32-x64 — **няма Linux**;
+`spawn-helper` е с права 644, а без изпълнимия бит всяко пускане пада с „posix_spawnp failed“ (видяно в Electron 44.9.0) —
+затова `pnpm --dir apps/desktop run setup` вика и `scripts/setup-pty.mjs`, който прави `spawn-helper` 0755 (pnpm държи
+файловете като твърди връзки към общото си хранилище, така че битът се сменя и там — безвредно). Без двоичен файл за
+платформата `terminalOpen` отговаря `not_ready` („Терминалът не е наличен в тази версия“), а останалото приложение работи.
+Проверено: unit (contract, LineTracker, сесиите с фалшив pty, revoke → затваряне, env/обвивка, сървърът с редакция),
+e2e под Playwright (`apps/web/e2e/local-access.spec.ts`: без право няма бутон; с право — надписът „Not the sandbox“,
+`terminalOpen` с task_id и папката, написан ред → POST local-activity, затваряне → `terminalClose`; axe 0 serious/critical
+на отворения панел в двете теми; мостът е фалшив) и истински Electron (`pnpm --dir apps/desktop smoke`, 23/23 на macOS
+arm64): без право → `not_granted`; с право истинската обвивка в дадената папка изпълни `echo SMOKE_$((40+2)); pwd`,
+редовете се върнаха, изходът от обвивката се отчете с код 0.
+[НП] Linux: build на node-pty (node-addon-api / N-API, значи един двоичен файл и за Node, и за Electron — по документацията
+на N-API, не е пробвано) — в А5 (CI файла). [НП] Windows (conpty) не е пускан. [НП] Истинският Next UI в Electron със CSP
+(D-371) и xterm.js — в e2e на А5 под Playwright Electron.
+Защо: AC-12.8 иска терминал върху работното копие на хоста, ясно обозначен „не е пясъчник“, с команди в task_activities;
+node-pty + xterm.js вървят с Electron без промени по прозореца; правото
+`terminal` по папка и проверката при всяко отваряне пазят модела на А3; редакцията на сървъра пази правило 5, защото човек
+лесно пише ключ в терминал.
+Алтернативи: `child_process` без pty (без интерактивни програми, без цветове); терминал в пясъчника (друго нещо — агентът
+има своя); следа от изхода вместо от клавишите (шум и тайни в изхода).
+Статус: решено (Linux/Windows — [НП] до А5).
+
+
+## D-376 Самостоятелен пакет на десктопа: харнесът в resources, Node-ът на Electron, electron-builder за 3 ОС (24.10.2026)
+Решение: инсталираното приложение носи целия харнес в `resources/harness` и го пуска със собствения Node на Electron
+(`ELECTRON_RUN_AS_NODE=1`, Electron 44.9.0 = Node 24.22.0, проверено с `process.versions`), не с `pnpm local` от репо.
+Dev (`pnpm desktop`, `app.isPackaged === false`) остава както беше: репото и `pnpm local`.
+- `apps/desktop/src/harness-launch.ts` (чист, с тестове): в пакета — команда `process.execPath`, аргументи
+  `[resources/harness/packages/cli/dist/main.js, "local"]`, `MANDAT_HOME = <userData>/mandat` (ресурсите са само за четене и
+  по-късно подписани), PATH + обичайните места на docker (`/usr/local/bin`, `/opt/homebrew/bin`,
+  `/Applications/Docker.app/Contents/Resources/bin`, `~/.docker/bin`; Linux `/usr/local/bin`, `/snap/bin`), защото приложение,
+  пуснато от Finder, има къс PATH. `mandat apply` минава през същото (`cliSpawn`), без KEK. Docker остава задължителен:
+  проверката е същата (`[1/4] проверка на компютъра` на `mandat local`, D-302) и грешката излиза в диалога на десктопа.
+- `packages/cli`: `mandat local` пуска уеба с `process.execPath <next>/dist/bin/next start -p 3000 -H 127.0.0.1` (cwd
+  apps/web), не с `pnpm --filter @mandat/web exec next start`. Така и пакетът, и `pnpm local` вървят без pnpm по време на
+  работа; `pnpm local` все още прави `pnpm build` първо.
+- Пакетът (`apps/desktop/scripts/bundle-harness.mjs`, чистата част `src/bundle-plan.ts` с тестове) има подредбата на репото:
+  следените от git файлове без `docs/`, `.github/`, `.claude/`, `apps/desktop/` (нужни са за образите — Dockerfile-ите
+  копират контекста, D-078 — за миграциите и за демо фикстурата), `dist/` на всеки workspace пакет, `apps/web/.next` без
+  `cache/`, и production `node_modules` (`pnpm install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted
+  --filter @mandat/cli... --filter @mandat/web...`). В пакета **няма връзки** (symlinks): инсталаторите не ги носят надеждно
+  (electron-builder прави junction-и с абсолютния път на build машината на Windows — видяно в `builder-util/out/fs.js`),
+  а копие би преместило кода и repoRoot (изчислен от `import.meta.url`) би сочил грешно. Затова: `node_modules/@mandat/<x>` е
+  малък пакет-посредник, който `export *` от истинския файл в истинската папка (`workspaceShim`); вложените `@mandat` връзки
+  отпадат (отговаря коренният посредник); `.bin` отпада; външните пакети на Next (`.next/node_modules/pg-<hash>`,
+  `typescript-<hash>`, връзки към store-а на build машината) стават истински копия. Скриптът отказва, ако остане връзка или
+  native addon извън компилатора на Next (`@next/swc-*`, само за `next build`, изтрива се) — така пакетът е еднакъв за всяка
+  ОС/arch. Размер на тази машина: ~420 MB пакет, dmg ~220 MB (arm64 и x64).
+- electron-builder 26.17.0 (`apps/desktop/electron-builder.config.mjs`): dmg arm64 + x64, nsis x64, AppImage + deb x64, имена
+  `Harness-${version}-${os}-${arch}.${ext}` (macOS дава `mac`, Windows `win`), `identity: null` (без подпис, Q-053),
+  `npmRebuild: false` (node-pty е с prebuilds), `asarUnpack` за node-pty, `extraMetadata.productName = "Harness"` (своя
+  userData и свой запис в keychain, отделно от dev; Q-063). Всичко се строи извън репото (`$MANDAT_DESKTOP_OUT`, по
+  подразбиране `<tmp>/mandat-desktop/{harness,release}`), за да не влиза в Docker контекста на репото и в тестовете.
+  Факти от самия пакет (прочетени 24.10.2026): `app-builder-lib/out/util/filter.js` винаги изпуска горния `node_modules` на
+  копирана папка → `node_modules` на пакета е втори запис в `extraResources`; electron-builder не взема зависимостите на
+  `link:` пакет → `zod`, `yaml`, `canonicalize` (зависимостите на `@mandat/contract`) са изрични зависимости на apps/desktop.
+- electron-updater 6.8.10 (`src/updater.ts`): свързан, но **изключен**, докато няма feed: `MANDAT_UPDATE_FEED=github` →
+  GitHub Releases на SimoSabev/AI-Harness-NOIT (Q-054), https URL → generic feed (схема `DesktopUpdateFeedUrl` в contract),
+  иначе модулът изобщо не се зарежда; в dev — никога. Записът `publish` в конфигурацията само пише `app-update.yml`;
+  build-ът е винаги с `--publish never`. [НП] Squirrel.Mac обновява само подписано приложение — до подписа auto-update на
+  macOS не е проверен.
+- CI: `.github/workflows/desktop-build.yml` строи трите ОС (macos-14, windows-2022, ubuntu-24.04) и качва **само workflow
+  artifacts** (`actions/upload-artifact@v7.0.2`, таговете видени с `git ls-remote` 24.10.2026), права `contents: read`,
+  без секрети, `CSC_IDENTITY_AUTO_DISCOVERY=false`. Подписът и нотаризацията: `docs/setup/signing.md` (променливите са
+  прочетени от `app-builder-lib/out/mac/MacTargetHelper.js` и `options/winOptions.d.ts` 26.17.0, 24.10.2026).
+- e2e (`apps/desktop/e2e/desktop.spec.ts`, Playwright 1.63.0 Electron, `pnpm --dir apps/desktop e2e`): срещу собрания,
+  непакетиран app с фалшив харнес (`e2e/fake-harness.mjs`, `MANDAT_DESKTOP_FAKE_HARNESS`, уважава се само при
+  `app.isPackaged === false`): старт → inbox и броячът (бадж 2 на macOS), мостът без require/process, applyLocal и
+  terminalOpen без право → `not_granted`, менюто File → New task → `/tasks/new`, пуснат файл → „Add project“ с пътя и без
+  дадено право. 5/5 на macOS arm64.
+Проверено на тази машина (macOS arm64, Docker 29.5.2): двата dmg-а се строят; пакетът пуснат с Node-а на Electron мина
+целия `mandat local` (образите се строиха от пакета, банерът дойде, `/api/inbox` отговори); Harness.app от
+`release/mac-arm64`, пуснат с PATH `/usr/bin:/bin:/usr/sbin:/sbin`, вдигна харнеса и прозорецът показа inbox-а (заглавие
+„2 waiting“, прочетено през System Events); спиране на харнеса затвори и приложението, и next-server, порт 3000 се освободи.
+[НП] x64 dmg не е пускан (няма Intel Mac); Windows и Linux — само от CI файла, непускан; Linux e2e под xvfb на ubuntu-24.04
+може да иска `--no-sandbox` (user namespaces); node-pty на Linux няма prebuild → терминалът отговаря not_ready (D-375).
+[НП] Истинският Next UI с CSP в Electron е видян само като заглавие на прозореца, не с e2e срещу истинския уеб (иска Docker и база).
+Защо: AC-12.1 иска инсталатор, който работи без репо, pnpm и Node; Node-ът на Electron е същата версия като на харнеса,
+затова няма втори runtime; подредбата на репото пази repoRoot, образите и миграциите без промени по CLI-я; без връзки
+пакетът оцелява в dmg, nsis и AppImage еднакво.
+Алтернативи: Next `output: "standalone"` (сменя build-а на `pnpm local` и пак иска контекста за образите); втори вграден Node
+(двойно по-голямо, още един runtime); архив, разпакетиран при първо пускане (бавно, връзките на Windows пак са проблем).
+Статус: решено (подпис — Q-053; име — Q-063; Linux/Windows — [НП] до първия CI run).
+
+## D-377 Сайтът за изтегляне `apps/site`: статичен Next, общите токени, манифест на изданията (24.10.2026)
+Решение: (1) `apps/site` е Next 16 с `output: "export"` и `trailingSlash: true` (всяка страница е `<път>/index.html`, излиза
+в `apps/site/out`); без нови зависимости — next, react, tailwind и @tailwindcss/postcss са със същите версии като в apps/web,
+pnpm-lock.yaml получава само нов importer. В workspace-а е (apps/*), затова `pnpm build` (turbo) го строи, а `pnpm check` пуска
+тестовете му; `apps/site/turbo.json` пази `out/**` в кеша и следи `tokens.css` и шрифтовете на уеба през `$TURBO_ROOT$`.
+(2) Един файл с токени (AC-12.4): шрифтовете и цветовете на двете теми са изнесени от `apps/web/src/app/globals.css` в
+`apps/web/src/app/tokens.css`; уебът го внася с `@import "./tokens.css"`, сайтът с `@import "../../../web/src/app/tokens.css"`.
+Тест (`apps/web/src/app/tokens.test.ts`) пада, ако друг CSS файл под apps/ дефинира цветовете или някой спре да го внася.
+Шрифтовете и иконата се копират от `apps/web/public` при build (`apps/site/scripts/copy-assets.mjs`; копието е в .gitignore).
+(3) Езици: английски на `/`, български на `/bg/` (статичен export няма сървър за Accept-Language); два root layout-а
+(`(en)` и `(bg)/bg`), за да е `<html lang>` верен; 404 е `app/global-not-found.tsx` с `experimental.globalNotFound`
+(Next docs, „not-found.js“ → global-not-found, експериментално от v15.4.0, прочетено 24.10.2026:
+https://nextjs.org/docs/app/api-reference/file-conventions/not-found). Каталогът е като на уеба (`apps/site/src/i18n`,
+en изворът, bg преводът, тест за същите ключове и за кирилица извън каталога). Темата следва системата (`data-theme="system"`).
+(4) „Изтегли за <твоята ОС>“: чиста функция `detectOs` (User-Agent Client Hints, после User-Agent; iPad, който се представя
+като Mac, по maxTouchPoints) в браузъра; статичният HTML казва „Изтегли“ → `/download/`; телефон → `/download/#phone` (PWA, D-289).
+(5) `/download`: петте инсталатора (mac arm64/x64 dmg, win x64 exe, linux AppImage/deb) с SHA-256 и размер от
+`apps/site/releases.json`; схемата е `SiteReleaseManifest` в packages/contract (правило 11) и се проверява при build — счупен
+манифест чупи build-а. Без издание (`version: null`) всеки ред казва „Скоро“, без линк. Линкът е
+`https://github.com/SimoSabev/AI-Harness-NOIT/releases/latest/download/<файл>` (Q-054) — GitHub документира
+`/releases/latest/download/<asset>` като линк към файл от последното издание (https://docs.github.com/en/repositories/releasing-projects-on-github/linking-to-releases,
+прочетено 24.10.2026). Имената носят версията (`Harness-<версия>-<ос>-<arch>.<ext>`, D-376), затова манифестът трябва да е
+на последното издание: `node scripts/release-manifest.mjs [--dir] [--out] [--version]` чете папката на electron-builder
+(`$MANDAT_DESKTOP_OUT/release`), хешира файловете и пише JSON-а; само чете локални файлове, не качва нищо.
+Проверено: върху двата истински dmg от А5 дава 0.1.0 с два файла; сайтът, построен с него, показва двата линка и хешовете,
+останалите три реда — „Скоро“. В репото манифестът остава празен, докато няма издание (иначе линковете биха били 404).
+(6) Изисквания на страницата: Docker ≥ 25.0.5 и ≥ 2 CPU, ≥ 10 GB свободно (D-302); приложението ~1 GB (измерено:
+Harness.app arm64 731 MB), образите ~5 GB (измерено: sandbox 1,66 GB + proxy и gate по 361 MB + база).
+(7) Без аналитика, бисквитки и външни заявки (PRD-15): тестът `apps/site/src/export.test.ts` минава по `out/` — всички страници
+и в двата езика, всеки вътрешен линк, `#котва` и `url()` в CSS-а съществуват, няма script/link/img/iframe към друг хост,
+`<a>` навън само към репото, няма `document.cookie`/storage/beacon. Клиентският бандъл на бутона не внася zod/манифеста.
+Защо: една и съща визия без втори източник на цветове; статичният сайт може да седи на всеки хостинг и не праща нищо към нас;
+„Скоро“ вместо счупен линк, докато Симо не публикува издание.
+Алтернативи: копие на токените в сайта (два източника, AC-12.4 пада); `[lang]` сегмент с redirect от `/` (статичен export
+няма redirect, а `/` трябва да е страница); линк към конкретен tag (иска версията в URL-а и пак манифест).
+[НП] Хостингът (GitHub Pages под под-път `/AI-Harness-NOIT/` чупи абсолютните `/fonts/` и `/_next/`) — Q-064; axe и
+снимките на UI-я са в следващата стъпка (документацията).
+Статус: решено (хостингът — Q-064).
+
+## D-378 Документацията на сайта: `/docs` като данни, SVG с токените, истински снимки на UI-я, axe (24.10.2026)
+Решение: (1) Осем страници под `/docs/<slug>/` и `/bg/docs/<slug>/` плюс индекс `/docs/`: Първи стъпки, Как работи, Присъдите,
+Десктоп и локален достъп, Нощна смяна, Сигурност, Абонамент и ключове, ЧЗВ. Всяка страница е списък от блокове
+(`apps/site/src/lib/docs.ts`: заглавие, абзац, списък, команда, таблица, диаграма, снимка, ЧЗВ), а един рендер
+(`views/doc-page.tsx`) ги прави на HTML за двата езика; текстът е само ключ от каталога (`i18n/docs-en.ts` изворът,
+`docs-bg.ts` преводът; статичният тест за кирилица ги допуска), командите са код и не се превеждат. `generateStaticParams` +
+`dynamicParams = false` → всичко е статично.
+(2) Съдържанието не измисля поведение: фактите са от PRD (F1, F3, F6, F11, F12, 6.10, известните граници 10.2), D-292…D-377,
+docs/glossary.md и кода (SANDBOX_HARDENING, `decideVerdict`, детекторите). Примерите в таблицата D1–D12 са изреченията на
+`explain()` от packages/contract (сайтът го вика при build, рамката `<untrusted>` става «…» като на картата — `lib/reasons.ts`,
+същата логика като `apps/web/src/lib/verdict-view.ts`); D7 и D10 нямат explain текст → резюмето от `d7.ts`/`d10.ts`.
+D6 („тресчотка“ за suppressions) и D9 нямат реализация → „Няма го в тази версия“, не измислен пример.
+(3) Диаграми: ръчни inline SVG (`components/diagrams.tsx`) — пътят на задачата, правата върху папки, цикълът на нощната смяна,
+къде е ключът. Само класове от токените (fill-/stroke-/text-), затова следват двете теми; надписите са в `<foreignObject>`,
+за да се пренасят сами на английски и български. Всяка е `role="img"` с `<title>` и `<desc>` (пълното значение), тест в
+`export.test.ts` пада при SVG без тях или с твърд цвят.
+(4) Снимки: `scripts/site-shots.mjs` (Playwright от apps/web) снима 5 екрана (`apps/site/shots.json`, схема `SiteShotList`
+в contract) × en/bg × тъмна/светла в `apps/site/public/shots` (20 PNG, ~2,4 MB, 1280×800). По подразбиране пуска същия уеб
+сървър като `pnpm local` (`next start`, локалният собственик без вход, D-368) на порт 3210 срещу временна база `mandat_shots`
+на Postgres-а на `pnpm local` (127.0.0.1:54329) с демо данните (`seedDemo`) и етикетирания пример (`sample=1`), после я трие.
+Защо не базата на `pnpm local`: в нея са истинските задачи и репота на човека, а снимките се комитват (Q-065); `--url` снима
+работещ `pnpm local`, ако Симо иска. Уеб сървърът не получава ключове и KEK (тест). Екранът „Акаунти“ не е сниман: без
+control endpoint показва „Ключовете се задават при pnpm local“ — подвеждащо в документацията; вместо него е Дъската.
+На страницата `<picture>` дава светлата снимка при `prefers-color-scheme: light`, иначе тъмната. Тест: и четирите варианта на
+всеки екран съществуват; липсваща снимка е провал, не фалшиво изображение.
+(5) Тестове: export тестът знае новите страници (двата езика, всяка докс страница линква всяка друга, един h1, alt ≥ 12 знака,
+`srcset` в проверката на линковете; имената на атрибутите вече са без значение за регистъра — React пише `srcSet`).
+axe: `apps/site/e2e/a11y.spec.ts` (`pnpm --filter @mandat/site e2e`) пуска `scripts/serve.mjs` (само 127.0.0.1, като статичен
+хостинг) и проверява всички 22 страници в тъмна и светла тема → 0 serious/critical, без хоризонтален скрол на 375 px, и че
+светлата снимка се ползва в светла тема. Минава 4/4 (24.10.2026). Не е в `pnpm check`, защото иска браузър — като e2e на уеба.
+@playwright/test 1.63.0 и @axe-core/playwright 4.13.0 са същите версии като в apps/web (без нов пакет в lockfile-а).
+(6) Деплой: `docs/setup/site.md` (локално, издание, снимки, GitHub Pages, Vercel, проверки след деплой); нищо не е деплойнато.
+Защо: една структура за двата езика пази страниците еднакви; изреченията от contract не могат да се разминат с картата;
+истинските снимки показват точно това, което човек ще види, без чужди данни.
+Алтернативи: MDX (нова зависимост и втори източник на текст извън каталога); снимки с ръка (остаряват, няма двете теми);
+снимки от базата на `pnpm local` (лични данни в репото).
+[НП] Пътищата в системните предупреждения (macOS: System Settings → Privacy & Security; Windows: SmartScreen → More info) и
+менютата на GitHub Pages/Vercel в site.md не са проверени нощес.
+Статус: решено (хостингът — Q-064; базата за снимките — Q-065).
+
+## D-379 Преглед от скептик на E9g: KEK само в процеса на CLI, папки над системни, линкове към изданието на версията, линкове навън в браузъра (24.10.2026)
+Решение: прегледът на целия diff на `phase/e9g-desktop-pro` (от 7b4523a) намери и поправи (тест първо, отделни комити):
+(1) KEK-ът от keychain (D-374) стигаше до уеб сървъра (`next start`) и до системните задачи (D-370): `mandat local` им даваше
+env-а си с `MANDAT_KEK`. Нито едното не го ползва (ключовете се отварят в прокси старта и в worker-а — в процеса на CLI).
+Сега `localWebEnv` и новата `localJobEnv` (packages/cli/src/commands/local.ts) го махат; тест в local.test.ts.
+(2) Можеше да се даде папка, която СЪДЪРЖА системна: `/var` (над `/var/lib`, `/var/log`), `/private` и `/private/var`
+на macOS (над `/private/etc`). `checkGrantable` вече отказва и предците на системните папки (причина `system`); `/var/www`,
+`/private/tmp/...` остават позволени. Освен това `authorize` брои запазено право само докато папката му още може да се
+даде — ръчно редактиран или по-стар `local-grants.json` с `/`, домашната или `/etc` не дава нищо. Предците на профила
+(MANDAT_HOME) остават позволени нарочно: в dev профилът е `<репо>/.mandat` и човек трябва да може да даде самото репо
+(тестът от А3 го пази).
+(3) Линковете на `/download` бяха `releases/latest/download/<файл>`, а имената носят версията (D-376): след по-ново издание
+линкът към стария файл става 404, а SHA-256 на страницата описва друг файл, докато сайтът не се построи отново. Сега
+`siteDownloadUrl` сочи изданието на версията на файла: `https://github.com/SimoSabev/AI-Harness-NOIT/releases/download/v<версия>/<файл>`
+(`siteReleaseTag`). Тагът `v<версия>` е по подразбиране на GitHub публикуването на electron-builder: `tagNamePrefix`
+/ `vPrefixedTagName` „@default true“ в builder-util-runtime 9.7.0 `out/publishOptions.d.ts` (зависимост на electron-builder
+26.17.0, прочетено 24.10.2026). [НП] Формата `releases/download/<таг>/<файл>` е този, който GitHub дава за всеки файл на
+издание; страницата на GitHub за него не е отваряна нощес. site.md е обновен.
+(4) Прозорецът отказваше всеки нов прозорец (D-303) и така линковете с `target=_blank` не правеха нищо — сред тях входът в
+абонамент (account-login.tsx, D-369), източниците в Проучване и линковете в текста на задача. Сега `attachGuards` подава
+такъв линк на `shell.openExternal` (системния браузър) само ако `outsideUrl` го пусне: http(s), друг origin, без
+`user:pass@`, ≤ 2048 знака; `file:`, `javascript:`, `data:`, `vscode://`, `smb://` и локалният адрес не излизат. Прозорец в
+приложението пак не се отваря никога. Smoke-ът в истински Electron записва линка, без да го отваря (всички проверки минават на този Mac, Electron 44.9.0).
+Документацията (Десктоп → „Прозорецът е заключен“) го казва на двата езика.
+Само докладвано (без промяна): виж docs/reports при стъпка 9 и Q-066 (доверието в страницата: XSS → терминал без
+потвърждение); `'unsafe-inline'` в CSP остава [НП] (D-371); пакетът носи и `apps/site` (изходниците и снимките, ~2,5 MB) —
+безвредно, не е махнато, за да не се пипа frozen lockfile-ът на пакета без изпробване.
+Защо: ключът и правата са най-ценното на десктопа — всяко място, до което стигат, без да трябва, е излишен риск; линк и
+хеш трябва да описват един и същ файл; входът в абонамент трябва да работи и в десктопа, без прозорецът да губи заключването.
+Алтернативи: KEK в env на всички деца (както беше — по-широко от нужното); отказ само на системните папки (`/var` пропуска);
+`latest` линкове с повторно строене при всяко издание (лесно се забравя); вграден прозорец за входа (нарушава D-303).
+Статус: решено.
+
+## D-380 Десктопът тръгва на този Mac: Node-ът на Electron и в dev, проверка за git, ad-hoc подпис на Mac (24.10.2026)
+Повод: `pnpm desktop` на Mac-а на Симо спря на [1/4] с „Node 26.4.0: нужен е Node 24“ (exit 3). Преглед от скептик
+на целия път на пускане (dev и инсталираното приложение) намери три блокера; поправени са с тестове първо.
+(1) В dev десктопът пускаше `pnpm local`, а той — `node` от PATH (тук Homebrew 26.4.0), който `mandat local` отказва
+(D-302 иска Node 24). Сега и в dev, както в инсталираното приложение (D-376), харнесът се пуска с Node-а на Electron
+(`ELECTRON_RUN_AS_NODE=1`, Electron 44.9.0 носи Node 24.22.0 — проверено: `ELECTRON_RUN_AS_NODE=1 electron -e` →
+`24.22.0`), директно `packages/cli/dist/main.js local`; същото за еднократните пускания (apply). `pnpm desktop` строи
+харнеса първо (`pnpm build`), защото `pnpm local` вече не го прави вместо него. Подсказката на CLI казва
+`brew install node@24 или nvm install 24` (nvm липсваше на този Mac).
+(2) `mandat local` вика git (демо хранилището, износът), но не го проверяваше: на Mac без Command Line Tools `/usr/bin/git`
+е само заместител и грешката идва на [2/4], след като базата вече е създадена. Сега предварителната проверка има ред за
+git с „xcode-select --install“.
+(3) `mac.identity: null` в electron-builder 26.17.0 значи „без никакъв подпис“ (`MacTargetHelper.handleNullIdentity`,
+прочетено в `app-builder-lib/out/mac/MacTargetHelper.js` 24.10.2026); Electron.app е само linker-signed и след
+промените на electron-builder подписът не покрива ресурсите. На Apple Silicon такова приложение, свалено от браузър
+(с quarantine), macOS обявява за „повредено“ без изход през настройките. Сега `identity: "-"` (ad-hoc — същият файл,
+клонът `qualifier === "-"`) и `hardenedRuntime: false` (с ad-hoc и hardened runtime electron-builder предупреждава за
+нужни entitlements). Тогава macOS казва, че не може да провери приложението, и предлага System Settings → Privacy &
+Security → Open Anyway, без терминал. Това не е подпис с Developer ID (Q-053 остава): нищо не е качено, нищо не е
+нотаризирано (правило 3). [НП] Точният текст и бутонът на macOS 26 за ad-hoc приложение — проверка на живо от Симо
+(local-live-checklist, ред 25).
+(4) При проверката на живо dev прозорецът не се появи: десктопът чакаше keychain-а (`safeStorage.decryptStringAsync`)
+преди да отвори прозорец, а macOS не отговаряше (процесът стоеше в mach_msg, без прозорец). Сега прозорецът, tray-ят и
+менютата идват първи; ако keychain-ът не отговори за 1,5 s, редът на зареждане казва какво става, а след 30 s
+диалог пита „Чакай още“ или „Изход“. Междувременно нов ключ не се прави никога (запазените ключове остават четими).
+При повторното пускане keychain-ът отговори и харнесът тръгна за около 8 s.
+`MANDAT_MAC_ARCH` избира архитектурата на dmg (`arm64` за `pnpm site:mac`; по подразбиране arm64 и x64).
+Докладвано, не поправено: първото пускане строи 3 образа от изходния код (минути, нужен е интернет); dev и
+инсталираното приложение делят една база и порт 3000; в x64 приложението spawn-helper на node-pty не е изпълним
+(терминалът там ще откаже); не е проверено пускане направо от dmg-то без копиране в Applications.
+Защо: целта е човек да свали един файл, да го отвори и харнесът да тръгне, с възможно най-малко команди.
+Алтернативи: да се иска Node 24 на машината (още една инсталация за човека); без подпис (не се отваря изобщо);
+hardened runtime с entitlements файл (повече части без полза до нотаризация).
+Статус: решено.
+
+## D-381 Сайтът може сам да раздава инсталатора: `pnpm site:mac` (24.10.2026)
+Симо поиска от сайта да се изтегля инсталатор, засега само за Mac с Apple Silicon (това, което може да се пробва тук).
+Публикуване в GitHub Releases не е позволено без Симо (правило 3), затова манифестът на сайта получи `host`:
+`github` (по подразбиране, линк към изданието, D-379) или `site` — файлът е в самия сайт под `/downloads/`.
+`pnpm site:mac` (scripts/site-local-release.mjs) с една команда: строи dmg-то за arm64 (`--publish never`), копира го в
+`apps/site/public/downloads` и пише `apps/site/releases.local.json` (и двете са в .gitignore — 220 MB не влизат в git),
+строи сайта, пуска го на 127.0.0.1:3101 и отваря `/download/`. Ако `releases.local.json` има, той печели пред
+`releases.json`; сайтът отказва да се построи, ако файл от него липсва или е с друг размер (никога счупен линк).
+Локалният сървър дава инсталатора с `Content-Disposition: attachment`. Страницата за изтегляне показва стъпките за Mac
+без терминал (Docker Desktop → плъзни в Applications → Done → Privacy & Security → Open Anyway → първото пускане
+строи образите). Windows и Linux остават „Скоро“ (CI файлът ги строи, когато Симо реши, Q-064).
+Защо: Симо иска да изтегли и пусне приложението от сайта с минимум команди, без да се публикува нищо.
+Алтернативи: да се качи издание в GitHub (забранено без Симо); dmg-то в git (огромно); линк към файл извън сайта
+(file:// не се тегли от браузъра като нормално изтегляне).
+Статус: решено.
+
+## D-382 Логото: кутия, от която излиза само проверената отметка (24.10.2026)
+Симо избра от ChatGPT Images изометрична кутия с отметка и верига вътре. Картинката е растер с текстура и релеф и не
+става на 16 px, затова е прерисувана като точна геометрия в `scripts/brand-icons.mjs` (единственият източник):
+шестоъгълник с връх нагоре, разрязан по трите вътрешни ръба на кутията (горе вляво, горе вдясно, долу); отметката стои
+в нея и излиза през горната страна. `node scripts/brand-icons.mjs` (Chromium на Playwright от apps/web, MANDAT_CHROMIUM
+като в site-shots) пише в apps/web/public: `logo-mark.svg` (един цвят — CSS маска), `favicon.svg` (акцентът на
+системната тема), `icon-192/512.png` (плочка по мрежата на Apple: 824 от 1024, радиус 185), `icon-maskable-512.png`
+(PWA: цял фон, знакът в безопасния кръг от 40 %) и `trayTemplate.png` + `@2x` (менюлентата на macOS).
+(1) Логото в горната лента на уеба и на сайта е `.logo-mark` от tokens.css (маска + bg-accent), затова следва темата;
+шестоъгълникът `.hex` остава за статусите, агентите и проектите. (2) Пълната икона (Dock, лентата със задачи, PWA) е в
+тъмните токени, осветена отгоре: горната страна = accent, лявата и дясната по-тъмни към canvas, отметката в accent-text;
+веригата е само в нея (на 16–32 px се слива). (3) Faviconът е SVG за двете теми + icon-192 за браузъри без SVG; сайтът го
+копира от apps/web/public (copy-assets.mjs). (4) PWA: theme_color и background_color = тъмният canvas (беше синьото
+#1f5fd1 от старата икона). (5) Десктопът: иконата на приложението си остава icon-512 (вече новата); в менюлентата на
+macOS е шаблонно изображение — „черно и алфа канал“, името завършва на `Template`, `@2x` за Retina
+(https://www.electronjs.org/docs/latest/api/native-image, 24.10.2026); на Windows и Linux е icon-192, както беше.
+Тестове: scripts/brand-icons.test.ts (SVG-ите са изходът на скрипта, цветовете = токените, само отметката излиза от
+кутията, размерите на PNG), tokens.test.ts (`.logo-mark`), brand.test.ts (PWA), export.test.ts на сайта (лого и favicon на
+всяка страница), harness-launch.test.ts (иконата в менюлентата).
+Защо: Симо, 24.10.2026 — лого „хем за харнеса, хем за сайта, хем за десктоп приложението“; избра варианта с кутията.
+Геометрията пази идеята (кутия, три среза, отметка навън, верига) в плоски тонове, които вървят с приглушения дизайн (D-305).
+Алтернативи: картинката както е (размазва се малка, текстурата не пасва на D-305); плътен шестоъгълник с изрязана отметка
+(по-прост, но прилича на обикновена значка „потвърдено“).
+Не е проверено на живо: иконата в Dock-а на собран dmg и в менюлентата (иска `pnpm site:mac` или пуснат десктоп).
+Статус: решено.
+
+## D-383 Логото е самата картинка с текстурата, не прерисовката (24.10.2026)
+Решение: отменя плоската прерисовка от D-382. Логото е картинката, която Симо избра, както е:
+`scripts/brand/logo-source.webp` (ChatGPT Images, 1254 × 1254, с текстурата и релефа). `scripts/brand-icons.mjs` само я
+реже: `logo.png` (256 px, кутията отблизо със заоблени ъгли: горната лента на уеба и сайта чрез `.logo-mark` в tokens.css и
+иконката в раздела на браузъра), `icon-192/512.png` (плочка по мрежата на Apple: Dock, лентата със задачи, PWA) и
+`icon-maskable-512.png`. `logo-mark.svg` и `favicon.svg` са махнати; иконката в раздела вече не следва темата (картинката
+е с тъмен фон и в двете). Изключение: менюлентата на macOS остава едноцветният силует на същата кутия
+(`trayTemplate.png`), защото шаблонното изображение е „черно и алфа канал“ (D-382); цветна картинка там системата не
+оцветява и на тъмна лента е тъмен квадрат.
+Тестове: scripts/brand-icons.test.ts (източникът е WebP 1254 × 1254, изрезите са изцяло в картинката, шаблонът е един цвят,
+размерите на PNG), tokens.test.ts, brand.test.ts, export.test.ts на сайта.
+Защо: Симо, 24.10.2026 — „към това с най-тежката текстура, точно това, което аз ти пратих, а не това лекото“.
+Цена: на 16–28 px текстурата и веригата се сливат; в светлата тема логото е тъмна плочка.
+[НП] Правата върху картинката: генерирана е от Симо с ChatGPT Images; условията на OpenAI за изхода не са проверени тук.
+Статус: решено.
+
+## D-384 Опростяване, фаза 1: три раздела, един вход за задача, без примери (24.10.2026)
+Решение (docs/reports/ui-ux-simplify.md, фаза 1):
+(1) Страничната лента има три раздела: Задачи (`/`), Проекти (`/harness`), Настройки (`/settings`) — `apps/web/src/lib/nav.ts`.
+Останалите страници (Преглед, Дъска, Документи, Агенти, Инструменти, Нощна смяна, Проучване, Акаунти, Система) не са
+изтрити: отварят се по линк и светват раздела, под който живеят. Проекти = правилата на всеки проект + „Добави проект“;
+профилът на агентите и скритите тестове са под „Разширени“. Настройки = Акаунти, Език, Тема, Локален достъп и „Разширени“
+(Система, Инструменти, Роли — ролите само извън локалния режим). Махнати: горната лента с втори „+ Нова задача“, списъкът с
+проекти в лентата (и с него ⌘1–9), бутонът за тема в лентата (темата е в Настройки), „Изглед на главната“, картата с TUI.
+(2) Един вход за задача: полето на `/`. `/tasks/new` пренасочва към `/` (с `?text=` от нощен въпрос); формата
+`new-task-form.tsx` е махната. Изборът на обхват остава в CLI и в правилата на проекта (.mandat.yml); от полето реален агент
+тръгва „без ограничения“ (D-360), както и досега.
+(3) Демо агентите (`fake:*`) не са в избора по подразбиране: `agentChoices` дава влезлите акаунти и агентите с ключ; демото
+само с `MANDAT_DEMO_AGENTS=1` (e2e го пуска). Без нито един агент полето показва „Влез в акаунт“ вместо бутон, който пуска
+сценарий. Един агент → само името му; под полето — само проектът (без имейл и план).
+(4) Примерният режим (D-307, D-332) е махнат: `lib/sample.ts`, `withSample`, „ПРИМЕР“ бележките и превключвателят.
+Страниците показват само истински данни; панелите „Отворени прозорци“ (нищо не пише в `open_windows`) и празната
+„Сесията отвътре“ на задача без записана сесия не се показват.
+(5) Текст: без D-номера и вътрешни имена в UI (D5, D12, D-367, „слоеве A–H“, worker, base, износ, „вратата“, прокси,
+ANTHROPIC_API_KEY, 429, „Ресърч“, „Тулове“); едно име за състояние („Не можа да се провери“, „Няма промени“, „Добавена
+автоматично“, „Кодът се промени междувременно“); без „Присъда · VERIFIED“ (английски enum в bg) и без id на детектора до
+всяка проверка. „Харнесът“ в текстовете стана „приложението“ — името на продукта остава празно по D-296.
+(6) Десктоп: без менюто „Клавиши“, без ⌘K (търсенето нямаше поле, винаги отваряше Дъската) и без ⌘1–9; ⌘N и ⌘↩ са на
+своите редове във „Файл“; „Изглед“ = Задачи / Проекти / Настройки; „Нова задача“ отваря `/`. Договорът (DesktopView,
+DesktopCommand) е свит съответно.
+(7) CLI: bench, redteam, fixtures, contract, ladder, anchor, worker и demo работят, но не са в `mandat --help`.
+Тестове: lib/nav.test.ts, lib/agents.test.ts (agentChoices), desktop-commands.test.ts, contract desktop.test.ts, desktop
+menu/shortcuts/bridge-main тестове, cli.test.ts (help), e2e workbench/inbox/night/settings.
+Защо: Симо, 24.10.2026 — „всичко да е абсолютно елементарно, бързо и лесно… без излишни менюта, бутони“; четирима критици
+намериха 12 раздела за поток от 3 стъпки, три „+ Нова задача“ на един екран, примерни данни в инструмент за доверие и
+демо агент по подразбиране, който пренебрегва написаното.
+Алтернативи: да се изтрият и страниците (Проучване, Агенти, Нощна смяна, Дъска, Документи) — чака отговор (фаза 4).
+Статус: решено.
+
+## D-385 Преглед на файловете: бинарни файлове и промяна над 1 MB (24.10.2026)
+Решение: (1) `splitDiff` (apps/web/src/lib/diff-view.ts) брои заглавките на git (`index`, `---`, `+++`, режими) само преди
+първия `@@` на файла; в hunk ред „-- коментар“ е изтрит ред, а „++ …“ е добавен. (2) Файл с „GIT binary patch“ или
+„Binary files … differ“ е `binary: true` и е без редове (base85 не се пази за четене); прегледът и картата казват
+„бинарен файл — без преглед“, а `addedContent` връща null. (3) Промяна над 1 MB: worker-ът пише ред в `changeset_diffs`
+с `diff = ''` и `omitted_bytes` = размера на patch-а (миграция 20261024000026; check: omitted_bytes > 1 MB и само с празен
+текст). Библиотеката показва задачата без файлове, а картата и задачата на живо (`TaskDetail.diffOmitted`) пишат колко MB е
+промяната и че е в клона на задачата. Видимостта е като на diff-а (approver+ по RLS). Задача без ред в changeset_diffs
+(няма промяна или има изтекла тайна) остава извън Библиотеката, както беше.
+Тестове: diff-view.test.ts, markdown.test.ts, library.test.ts, rls-web.test.ts, worker daemon.test.ts, pgTAP diff_omitted.test.sql.
+Защо: прегледът с критик (24.10.2026) намери, че при промяна над 1 MB задачата тихо изчезва от Библиотеката, че нов PNG дава
+празен „Преглед“ и че SQL коментар в изтрит ред се губи и броячите лъжат.
+Алтернативи: да се пазят пълните файлове след промяната в Storage (дава преглед на променени и бинарни файлове и изтегляне),
+но това е отделна стъпка (M), не бърза поправка.
+Статус: решено.
+
+## D-386 Опростяване, фаза 2: една страница за задача (24.10.2026)
+Решение (docs/reports/ui-ux-simplify.md, фаза 2):
+(1) Една страница за задача: `/?task=<id>` (списъкът вляво, задачата в средата). `/tasks/<id>` пренасочва там
+(`taskHref` в lib/nav.ts — и линковете от преглед, дъска, агенти и известията на десктопа). Махнати: втората страница
+със стъпките „агентът работи → проверява → решение“, страничната колона „Как се строи / Файлове / Числа / Проверки“,
+линкът „Подробно“ към другата страница, `steer-box.tsx` (насочването е полето под разговора, докато агентът работи).
+(2) Докато агентът работи: разговорът на живо, „Спри“ и поле за насочване. Когато свърши — отгоре надолу: едно изречение
+с присъдата и причините (цветът е на присъдата: ПРОВЕРЕНО зелено, ПРОВАЛ червено, НЕПРОВЕРЕНО кехлибарено) → промяната
+→ снимките преди/след (D12) → бутоните (и „Приложи локално“ в десктопа) → картите за разрешение. Под тях, свити: „Какво
+направи агентът · N стъпки“ (разговорът) и „Подробно“ (време, разход, токени, контекст, всички проверки, доверие, сесията,
+дневникът) — `components/task-details.tsx`, рендерирани на сървъра.
+(3) „Чака теб“ е кехлибарено: статусът „Чака одобрение“ вече не е зелен като „Одобрена“ (`TONES.review = amber`); всичко,
+което чака човека, е кехлибарено или червено.
+(4) Пусни отново с бележка: при провал / непроверено / няма промени / изместен код има поле „Бележка към агента (по
+желание)“ и „Пусни отново“ — без бележка е досегашният retry, с бележка е apply-comments (нов опит; работникът подава
+бележката на агента като „Notes from a person“, apps/worker/src/online/daemon.ts). Промяна, която чака одобрение, има
+„Върни с бележка“ (беше „Приложи коментари“). Бележката се вижда в разговора като насочване (chat-feed: kind steer|review).
+Кое действие има всеки статус е чистата функция `actionsOf` (lib/status.ts).
+Тестове: lib/status.test.ts (тонове, outcomeTone, actionsOf), lib/nav.test.ts (taskHref), chat-feed.test.ts (бележката в
+разговора), desktop-commands.test.ts (open_task), e2e inbox/asks/board/lang-bg/ui-shots на новата страница.
+Защо: критиците (docs/reports/ui-ux-simplify.md) — две различни страници за една задача, „Одобри“ над промяната (одобряваш
+на сляпо), едно състояние в три формулировки, „чака теб“ в зелено като „готово“, провал без следваща стъпка.
+Отворено: UNKNOWN още не може да се одобри ръчно (въпрос 1 в доклада) — само „Пусни отново“ или бележка.
+Статус: решено.
+
+## D-387 Опростяване, фаза 3: първо пускане (24.10.2026)
+Решение (docs/reports/ui-ux-simplify.md, фаза 3):
+(1) Docker, който не отговаря, се чака: `mandat local` пише една стъпка „[1/4] Чакам Docker: пусни Docker Desktop
+(продължавам сам, щом тръгне)“ и пита на 3 s до ~10 мин (`waitForDocker`); десктопът я показва в прозореца за пускане.
+(2) Ако харнесът спре, преди да се отвори (Docker, зает порт…), десктопът показва причината с „Опитай пак“ (по
+подразбиране) и „Изход“ вместо прозорец с грешка и изход (`startFailed` в banner.ts; „Опитай пак“ пуска `local` отново).
+(3) Образите на пясъчника: `mandat images build` е дете на `local`; изходът му става един ред „[3/4] Образи на пясъчника:
+2 от 3 · стъпка 4/9 · 3 мин (обикновено 5–15 мин)“, обновяван при всяка стъпка на BuildKit и на 15 s (`imageEvent`,
+`imagesStep`). Новите текстове минават през каталога на CLI (MANDAT_LANG).
+(4) Вход в акаунт: един бутон „Влез с Claude“; името на акаунта има стойност по подразбиране и се сменя само под „Друго
+име на акаунта (по желание)“. „Отвори страницата за вход“ вместо „Отвори claude.com“ до „Влез в claude.ai“. API ключовете
+и каналите са свити под „Имаш API ключ вместо абонамент?“.
+(5) Изборът на проект: в полето за задача, само ако проектите са повече от един; `CreateTaskBody.repo` (uuid, по желание) —
+задачата отива в избрания проект на организацията, чужд или несъществуващ → 404 `unknown_repo`.
+Не е направено: „Добави проект“ от браузъра (Q-061). Регистрацията (огледало + ред в repos + сканиране) е лесна, но в
+локалния режим работникът доставя одобрените правила (`harness_pr`) и задачите през един настроен `ghRepo` (демото) —
+правилата на нов проект биха отишли в чуждо хранилище, а без тях задачите спират с `policy_missing`. Нужна е доставка по
+проект в работника; чака решение на Симо.
+Тестове: local.test.ts (waitForDocker, imageEvent, imagesStep), banner.test.ts (startFailed), free-task.test.ts (избраният
+проект), agents.test.ts (CreateTaskBody.repo), e2e workbench (свитите API ключове).
+Не е проверено на живо: чакането на Docker и прогресът на образите в собран десктоп (иска спрян Docker / изтрити образи).
+Статус: решено (без т. Q-061).
+
+## D-388 „Добави проект“ от браузъра и доставка по проект в работника (24.10.2026, отговор на Q-061)
+Решение:
+(1) Работникът вече няма едно хранилище за всичко. `ghFor` (apps/worker/src/online/gh-target.ts) решава за всеки проект:
+GitHub проект → неговото хранилище през GitHub на работника; демо хранилището (`GITHUB_DEMO_REPO`) → както досега (fake
+офлайн, Writer App онлайн); локален проект, добавен на този компютър → само офлайн GitHub (`localGh`, fakeGitHub с
+`autoRepos`) под собственото си име, никога истински GitHub. По проект са доставката на задачата, авто-сливането, CI
+кръговете, одобрителните ефекти (`approval_check`, `ready_for_review`) и правилата на хранилището (ruleset) при сканиране.
+(2) Собствен локален проект се доставя само през огледалото си: одобрените правила стават клон
+`mandat/harness-<proposal>` с един комит върху сканираната база и main се мести напред до него (fast-forward, както D-367;
+повторно пускане не прави нищо; main, който се е изместил, е отказ — сканирай отново). Ниво 2–3 без автоматично прилагане
+по D-367 не „слива“ фалшив PR: чака човека (HELD approval). Задачата намира `.mandat.yml` в базата си.
+(3) Добавяне (`addLocalProject`, apps/worker/src/online/add-project.ts): папката на git проект на този компютър (пълен
+път) → голо огледало `MANDAT_HOME/projects/<име>.git` (main = текущият комит на папката, каквото и да е името на клона ѝ;
+`mandat.source` пази папката, така че същата папка втори път е същият проект) → ред в repos (`local/<име>`, main) →
+сканирането на правилата е на опашката. Папката само се чете. Отказ с причина: няма папка, не е git, няма комит, папка на
+самото приложение. Пътят минава zod три пъти: уеб API (`POST /api/repos`, право `projects.manage`, CSRF), контролният
+endpoint на `pnpm local` (`POST /projects`, 127.0.0.1 + токен) и `AddProjectBody` в договора.
+(4) Уеб: „Добави проект“ в браузъра е поле за пълния път + „Добави проекта“; в десктопа — избор на папка, права, после
+същото добавяне само (вместо „пусни pnpm mandat init“). След добавяне: „Към проектите“, където правилата чакат одобрение.
+Тестове: gh-target.test.ts, gh-target-effects.test.ts, daemon.test.ts („own local project“), harness-local.test.ts,
+add-project.test.ts, fake-auto.test.ts (gate-github), contract local-control.test.ts, cli local-control.test.ts, web
+keys.test.ts (postProject), e2e local-access (браузърът).
+Ограничение: огледалото не следи новите комити в папката сама — одобрените промени влизат в main на огледалото, а в
+папката се взимат с „Приложи локално“ (десктоп) или `git pull <огледалото> main`. Синхронизация от папката → огледалото е
+отделна стъпка, ако потрябва.
+Не е проверено на живо: добавяне на истински проект в пуснат `pnpm local` и първа задача в него.
+Статус: решено.
+
+## D-389 Docker тестовете на Mac с Colima; по-бърз строеж на образите; `pnpm local` на двата езика (25.10.2026)
+Решение:
+(1) Причина за падащите Docker тестове на този Mac: Docker е Colima (контекст `colima`, vmType vz, mountType virtiofs,
+Colima 0.10.3), който споделя с виртуалната машина само `$HOME` — в `~/.colima/default/colima.yaml`: „Colima default
+behaviour: $HOME is mounted as writable“, `mounts: []` (проверено на живо на 25.10.2026 с `docker run -v`: папка от
+`/Users/…` се вижда, от `/var/folders/…`, `/private/var/…` и `/tmp` — празна; https://github.com/abiosoft/colima). Тестовете
+правят папките на пясъчника с `os.tmpdir()` (`/var/folders/…`), така че мрежовият филтър получаваше празна папка с
+правила и никога не пишеше `policy_loaded`. Истинските пускания не са засегнати: `pnpm local` държи всичко в
+`<repo>/.mandat` (под `$HOME`). Поправка: `vitest.docker.config.ts` дава на Docker тестовете `TMPDIR=<repo>/.mandat/tmp-docker`
+(или `MANDAT_DOCKER_TMP`); `.mandat/` е в `.gitignore` и `.dockerignore`.
+(2) Строеж на образите: `COPY . .` + `pnpm install` за целия workspace теглеше всичко наново при всяка промяна в кода
+(18,5 мин за образа на филтъра). Сега: кеш на pnpm хранилището между строежите (`RUN --mount=type=cache,id=mandat-pnpm-store`)
+и инсталиране само на нужните пакети (`--filter "<пакет>..."`, както пясъчникът вече правеше) в egress-gate, llm-proxy и
+worker; `.dockerignore` изключва `**/.next`, `apps/site/out`, `apps/site/public/downloads`, `**/test-results` (~770 MB,
+които никой образ не ползва).
+(3) `pnpm local` пише на езика на човека (MANDAT_LANG / системния език): банерът, проверките, стъпките [n/4] — каталогът на
+CLI; десктопът намира адреса и грешките и на двата езика. Банерът вече казва „Настройки → Акаунти → Влез с Claude“.
+(4) Дребни: в списъка на SQL тестовете липсваше `diff_omitted.test.sql` (от D-385); типовете на два теста от D-388.
+Тестове: scripts/docker-tmp.test.ts (TMPDIR, .dockerignore), local.test.ts (двата езика), test-db.test.ts.
+Бележка за нощни пускания: Mac-ът спи (DarkWake на ~16 мин за 45 s) и дългите Docker тестове изтичат; пускай ги с
+`caffeinate -i pnpm test:docker` или с отворен капак на захранване.
+(5) Трите теста с истински Postgres (db, conflict-wait, night-park) се свързват през публикуван порт на 127.0.0.1
+(`pg-container.test-helper.ts`): IP-то на контейнер не се вижда от Mac. `conflict-wait` проверява поведението след D-367
+(първата задача влиза в main сама; втората, същата промяна, е празна → HELD empty_change).
+Резултат (25.10.2026, буден Mac): `pnpm test:docker` 61 минали / 0 паднали (1 пропуснат), bench 40/40 и 0 лъжливо VERIFIED,
+red team 10/10, D12 с UI образа; `pnpm check` CHECK OK; e2e 35/35. Отчет: docs/reports/night-2026-10-25.md.
+Статус: решено.
+
+## D-390 Нощен режим: какво остава за решение на Симо и какво избрах по подразбиране (25.10.2026)
+Решение: в нощния режим („свърши цялата работа без да чакаш одобрение, само без комити“) трите отворени въпроса от
+docs/reports/ui-ux-simplify.md остават с най-безопасния избор, без код, който трудно се връща:
+(1) UNKNOWN не се одобрява ръчно — остава „Пусни отново“ / „Върни с бележка“ (по-строгото; D-386).
+(2) Фаза 4 (изтриване на Проучване, Агенти, Нощна смяна, Дъска, Документи, `mandat tui`, терминала в десктопа) не е
+направена: страниците са скрити от менюто (D-384) и се отварят само по линк; изтриването е необратимо като продуктово
+решение и чака „да“.
+(3) Правилата на нов проект не се одобряват сами — сканирането ги предлага, собственикът одобрява (D-388).
+Статус: по подразбиране до отговор.
+
+## D-391 Иконата в Dock-а при пускане от кода (25.10.2026)
+Решение: `pnpm desktop` (без пакет) на macOS е `Electron.app` и Dock-ът показва иконата на Electron — опцията `icon` на
+BrowserWindow не се ползва за Dock-а в macOS. Затова при `!packaged` на macOS десктопът задава `app.dock.setIcon(...)` с
+`apps/web/public/icon-512.png` (`HarnessLayout.dockIcon`; https://www.electronjs.org/docs/latest/api/dock, 25.10.2026).
+Инсталираният `.dmg` не се пипа: иконата му идва от пакета (`electron-builder.config.mjs` → icon-512, D-382/D-383).
+Тестове: harness-launch.test.ts (dockIcon само за macOS от кода).
+Статус: решено.
+
+## D-392 Скриптовете вървят и под Windows: `shellEmulator: true` в pnpm-workspace.yaml (22.10.2026)
 Решение: pnpm пуска всички package.json скриптове през собствената си POSIX обвивка, не през cmd. Така
 `NEXT_TELEMETRY_DISABLED=1 next build|dev|start` в apps/web работи и в PowerShell/cmd, без cross-env и без нова зависимост.
 Тест: scripts/scripts.test.ts („скриптовете с `VAR=…` вървят и под Windows“) намира скриптовете с `VAR=…` отпред и проверява,
@@ -2023,4 +2760,5 @@ is not recognized“ в @mandat/web). Емулаторът важи и под Li
 Защо: Симо, 22.10.2026 — `pnpm local` падна на Windows; „направи поправката за Windows постоянна в хранилището“.
 Алтернативи: cross-env в apps/web (нова зависимост, правило 8); WSL за всички (у Симо няма Linux дистрибуция).
 Източник: https://pnpm.io/settings#shellemulator (22.10.2026), проверено с pnpm 12.14.0. Статус: решено.
-Номер: първоначално D-309 в клона new-session; при сливането с exciting-heisenberg (25.10.2026) номерът беше зает, затова D-367.
+Номер: първоначално D-309 в клона new-session; при сливането с exciting-heisenberg (25.10.2026) номерът беше зает, затова D-367; при второто сливане (25.10.2026, PR #1) и D-367 беше заето, затова D-392.
+Допълнение (25.10.2026, сливане с PR #1): новият десктоп (D-376) пуска CLI-я направо с Node-а на Electron и уебът тръгва с node + next (D-376), затова localSpawn и webStartSpawn отпаднаха. Остана само спирането на цялото дърво под Windows (stopCommand в apps/desktop/src/banner.ts).

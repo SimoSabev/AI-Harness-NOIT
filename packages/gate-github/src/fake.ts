@@ -46,6 +46,8 @@ export interface FakeSeed {
   pulls?: { repo: string; pull: Partial<PullInfo> & { number: number; head_sha: string } }[];
   /** app id the fake acts as for check runs (Writer by default) */
   actingAppId?: number;
+  /** D-388: an unknown repo is created on first use (the worker's offline GitHub for local projects added later) */
+  autoRepos?: boolean;
 }
 
 const DEFAULT_RULES: RulesInfo = { strict: true, requiredContexts: ["Мандат verdict", "Мандат approval"], mergeQueue: false, integrationIds: { "Мандат verdict": WRITER_APP_ID, "Мандат approval": WRITER_APP_ID } };
@@ -53,12 +55,13 @@ const DEFAULT_RULES: RulesInfo = { strict: true, requiredContexts: ["Манда�
 export function fakeGitHub(seed: FakeSeed = {}): GitHubPort & { state: FakeGitHubState; humanMerge(repo: string, n: number): Promise<MergeResult>; addCheck(repo: string, c: Omit<FakeCheck, "id">): void; pushToPull(repo: string, n: number, sha: string): void } {
   const st: FakeGitHubState = { repos: new Map(), pulls: new Map(), refs: new Map(), commits: new Map(), checks: [], statuses: [], calls: [] };
   const acting = seed.actingAppId ?? WRITER_APP_ID;
-  for (const [name, r] of Object.entries(seed.repos ?? {})) {
+  const addRepo = (name: string, r: Partial<FakeRepo>) => {
     const head = r.head ?? sha1(`${name}:root`);
     st.repos.set(name, { default_branch: r.default_branch ?? "main", head, rules: r.rules ?? DEFAULT_RULES, ...(r.gitPath ? { gitPath: r.gitPath } : {}) });
     st.commits.set(head, { tree: sha1(`tree:${head}`), parent: null });
     st.refs.set(`${name}:refs/heads/${r.default_branch ?? "main"}`, head);
-  }
+  };
+  for (const [name, r] of Object.entries(seed.repos ?? {})) addRepo(name, r);
   let nextPull = 1;
   for (const p of seed.pulls ?? []) {
     const repo = st.repos.get(p.repo);
@@ -70,6 +73,7 @@ export function fakeGitHub(seed: FakeSeed = {}): GitHubPort & { state: FakeGitHu
   }
   let nextCheck = 1;
   const repoOf = (repo: string) => {
+    if (seed.autoRepos && !st.repos.has(repo)) addRepo(repo, {});
     const r = st.repos.get(repo);
     if (!r) throw Object.assign(new Error(`404 repo ${repo}`), { status: 404 });
     return r;

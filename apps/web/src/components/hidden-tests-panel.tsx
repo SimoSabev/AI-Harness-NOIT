@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
+import { useNeedsCode } from "./second-factor";
 import { btn, input } from "./ui";
 
 // v5 E9b (D5, D-362): a person's hidden tests — Mandat copies them into the checked tree only; the agent never sees them.
@@ -10,6 +11,7 @@ import { btn, input } from "./ui";
 export function HiddenTestsPanel({ repoId, sets, canUpload }: { repoId: string; sets: { version: number; files: number; hash: string; created_at: string }[]; canUpload: boolean }) {
   const router = useRouter();
   const t = useT();
+  const needsCode = useNeedsCode();
   const [files, setFiles] = useState<{ path: string; content: string }[]>([]);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -26,7 +28,7 @@ export function HiddenTestsPanel({ repoId, sets, canUpload }: { repoId: string; 
   const upload = async () => {
     setBusy(true);
     setMsg(null);
-    const r = await postJson(`/api/repos/${repoId}/hidden`, { files, code });
+    const r = await postJson(`/api/repos/${repoId}/hidden`, { files, ...(code ? { code } : {}) });
     setBusy(false);
     if (r.status !== 201) {
       setMsg({ ok: false, text: errorText(t, r) });
@@ -50,10 +52,10 @@ export function HiddenTestsPanel({ repoId, sets, canUpload }: { repoId: string; 
             <input className={`${input} mt-1`} type="file" multiple accept=".ts,.tsx,.js,.mjs,.cjs,.jsx" onChange={(e) => void pick(e.target.files)} />
           </label>
           {files.length > 0 && <p className="text-xs text-mute">{t("hidden.selected", { n: files.length })}</p>}
-          <label className="block"><span className="font-medium">{t("hidden.code")}</span>
+          {needsCode && <label className="block"><span className="font-medium">{t("hidden.code")}</span>
             <input className={`${input} mt-1 max-w-40 font-mono tracking-widest`} inputMode="numeric" autoComplete="one-time-code" pattern="\d{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
-          </label>
-          <button type="button" className={btn.primary} disabled={busy || files.length === 0 || code.length !== 6} onClick={() => void upload()}>{t("hidden.upload")}</button>
+          </label>}
+          <button type="button" className={btn.primary} disabled={busy || files.length === 0 || (needsCode && code.length !== 6)} onClick={() => void upload()}>{t("hidden.upload")}</button>
         </div>
       )}
       {msg && <p role={msg.ok ? "status" : "alert"} className={`mt-2 ${msg.ok ? "text-ok" : "text-bad"}`}>{msg.text}</p>}

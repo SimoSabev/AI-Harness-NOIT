@@ -31,3 +31,14 @@ export function agentLabel(id: string, lang: Lang = "en"): string {
 export function agentHint(id: string, lang: Lang = "en"): string {
   return isAgentId(id) ? translate(lang, `agent.${id}.hint`) : "";
 }
+
+const KEY_OF: Partial<Record<AgentId, string>> = { claude: "anthropic", codex: "openai" };
+
+/** D-384: who the new-task box offers — the signed-in accounts, then each agent whose key is set; the demo agents only
+ * with the demo switch (`MANDAT_DEMO_AGENTS=1`), so a newcomer never runs a scripted change by accident. */
+export function agentChoices(o: { accounts: string[]; keys: string[]; demo: boolean }): string[] {
+  return [
+    ...o.accounts,
+    ...AGENTS.filter((a) => (a.needsKey ? o.keys.includes(KEY_OF[a.id] ?? "") : o.demo)).map((a) => a.id),
+  ];
+}

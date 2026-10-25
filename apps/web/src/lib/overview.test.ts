@@ -18,7 +18,7 @@ describe("overview (D-305)", () => {
       t("old", "r1", "DONE", { approved_by_human: true, last_result: "VERIFIED", updated_at: "2026-10-19T10:00:00Z" }),
     ], repos, now);
     expect(o.flow).toEqual({ queued: 1, running: 1, checking: 1, waiting: 2, done24h: 1 });
-    expect(o.swarm.map((s) => s.tone)).toEqual(["red", "green", "blue", "blue", "gray"]);
+    expect(o.swarm.map((s) => s.tone)).toEqual(["red", "amber", "blue", "blue", "gray"]);
   });
 
   it("проектите: провал → bad, чакащо → warn, работа → ok, нищо → idle; подредени по тежест", () => {

@@ -9,7 +9,7 @@ import { btn, input } from "./ui";
 
 // v5 E9a (5.1 (2)): the morning — a parked task's question (what stopped it, what was tried, Mandat's proposal) with
 // "Answer and continue" (a new attempt with the answer), "Close" and "Make a task".
-function Question({ q, sample }: { q: NightView["questions"][number]; sample: boolean }) {
+function Question({ q }: { q: NightView["questions"][number] }) {
   const router = useRouter();
   const t = useT();
   const [answer, setAnswer] = useState("");
@@ -23,7 +23,7 @@ function Question({ q, sample }: { q: NightView["questions"][number]; sample: bo
     if (r.status !== 200) setError(errorText(t, r));
     else router.refresh();
   };
-  const open = q.status === "open" && !sample;
+  const open = q.status === "open";
   return (
     <li className="space-y-2 rounded-lg bg-raised p-3 text-sm">
       <p className="font-medium">{q.text}</p>
@@ -37,7 +37,7 @@ function Question({ q, sample }: { q: NightView["questions"][number]; sample: bo
           <div className="flex flex-wrap gap-2">
             <button type="submit" className={btn.primary} disabled={busy || answer.trim() === ""}>{t("night.q.continue")}</button>
             <button type="button" className={btn.ghost} disabled={busy} onClick={() => void act("close", {})}>{t("night.q.close")}</button>
-            <Link className={btn.secondary} href={`/tasks/new?text=${encodeURIComponent(`${q.text}\n\n${q.proposal}`.slice(0, 4000))}`}>{t("night.q.makeTask")}</Link>
+            <Link className={btn.secondary} href={`/?text=${encodeURIComponent(`${q.text}\n\n${q.proposal}`.slice(0, 4000))}`}>{t("night.q.makeTask")}</Link>
           </div>
         </form>
       )}
@@ -46,8 +46,8 @@ function Question({ q, sample }: { q: NightView["questions"][number]; sample: bo
   );
 }
 
-export function NightQuestions({ questions, sample }: { questions: NightView["questions"]; sample: boolean }) {
+export function NightQuestions({ questions }: { questions: NightView["questions"] }) {
   const t = useT();
   if (questions.length === 0) return <p className="p-4 text-sm text-mute">{t("night.q.none")}</p>;
-  return <ul className="space-y-2 p-4">{questions.map((q) => <Question key={q.id} q={q} sample={sample} />)}</ul>;
+  return <ul className="space-y-2 p-4">{questions.map((q) => <Question key={q.id} q={q} />)}</ul>;
 }

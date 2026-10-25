@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { demoProfileLayers, sealProfile } from "@mandat/contract";
 import { DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { approveProfile, profileView, rollbackProfile } from "./profile";
+import { localPresence } from "./local-auth";
 import { devSecondFactor } from "./session";
 import { totpAt } from "./totp";
 import { TEST_TOTP, U, webDb } from "./web-db.test-helper";
@@ -48,5 +49,9 @@ describe("harness profile approve / rollback (E8б, AC-2.5)", () => {
     const v = await profileView(db, U.viewer, org, DEMO_REPO_ID);
     expect(v.versions.map((x) => [x.version, x.status])).toEqual([[3, "approved"], [2, "superseded"], [1, "superseded"]]);
     expect((v.versions[0]?.layers as { g: { mutants: number } }).g.mutants).toBe(3);
+  });
+  it("D-368: the local presence approves without a code", async () => {
+    const id4 = await insert(4, 7);
+    expect(await approveProfile(db, { uid: U.owner, repoId: DEMO_REPO_ID, body: { profile_id: id4 }, secondFactor: localPresence })).toEqual({ status: 200, body: { version: 4 } });
   });
 });

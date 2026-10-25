@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Shell } from "../../components/shell";
-import { Panel, SampleNote } from "../../components/workbench-parts";
+import { Panel } from "../../components/workbench-parts";
 import { card } from "../../components/ui";
 import { getT } from "../../i18n/server";
 import { pageName } from "../../lib/brand";
-import { SAMPLE } from "../../lib/sample";
-import { withSample } from "../../lib/workbench";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
-import { sampleOn } from "../../lib/server/sample-pref";
 import { researchView } from "../../lib/server/workbench";
 
 export const dynamic = "force-dynamic";
@@ -25,15 +22,13 @@ export default async function ResearchPage({ searchParams }: { searchParams: Pro
   const c = await pageCtx();
   const t = await getT();
   const qid = (await searchParams).q;
-  const src = withSample(await researchView(db(), c.uid, c.org, qid), SAMPLE.research, (x) => x.questions.length === 0, await sampleOn());
-  const r = src.data;
+  const r = await researchView(db(), c.uid, c.org, qid);
   const cur = r.current;
   const count = (v: keyof typeof V) => cur?.claims.filter((x) => x.verdict === v).length ?? 0;
   return (
     <Shell current="research" waiting={c.waiting} wide>
       <h1 className="font-display text-2xl font-semibold tracking-tight">{t("research.title")}</h1>
       <p className="mt-1 text-sm text-mute">{t("research.intro")}</p>
-      {src.sample && <SampleNote what={t("research.sample")} table="research_questions, research_sources, research_claims" t={t} />}
       {r.questions.length === 0 ? (
         <p className={`${card} mt-6 p-6 text-sm text-mute`}>{t("research.none")}</p>
       ) : (

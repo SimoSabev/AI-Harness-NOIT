@@ -7,3 +7,13 @@ export const JUDGE = "Mandat";
 export function pageName(page: string): string {
   return HARNESS ? `${page} · ${HARNESS}` : page;
 }
+
+// D-382, D-383: the installed app (PWA) and the browser tab: the dark canvas of tokens.css and the logo icons, which
+// scripts/brand-icons.mjs cuts from the chosen image into public/.
+export const APP_COLOR = "#0c0f0d";
+export const APP_ICONS: { src: string; sizes: string; type: string; purpose?: "maskable" }[] = [
+  { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+  { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+  { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+];
+export const FAVICON = { url: "/logo.png", type: "image/png" };

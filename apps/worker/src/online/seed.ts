@@ -25,9 +25,11 @@ export const LOCAL_EMAIL = "ti@mandat.local";
  * D-292 (`pnpm local`): one owner with a password, the 4 task types, the 2 channels, no cards, no TOTP, ladder level 0.
  * Called on every start: a fresh password each time (printed once to the terminal, stored only as a bcrypt hash).
  */
-export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password: string; totpSecret?: () => string }): Promise<{ org: string; email: string; created: boolean; totpSecret: string | null }> {
+export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password?: string; totpSecret?: () => string }): Promise<{ org: string; email: string; created: boolean; totpSecret: string | null }> {
   const m = await seedMinimal(db, { remoteUrl: o.remoteUrl, ownerEmail: LOCAL_EMAIL });
-  await db.query("update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')), email_confirmed_at = coalesce(email_confirmed_at, now()) where id = $1", [DEMO_OWNER_ID, o.password]);
+  // D-368: `pnpm local` has no login — no password (an old one from an earlier run is cleared); the demo login keeps one
+  if (o.password === undefined) await db.query("update auth.users set encrypted_password = null where id = $1", [DEMO_OWNER_ID]);
+  else await db.query("update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')), email_confirmed_at = coalesce(email_confirmed_at, now()) where id = $1", [DEMO_OWNER_ID, o.password]);
   await db.query("update public.repos set remote_url = $2 where id = $1", [DEMO_REPO_ID, o.remoteUrl]);
   for (const [name, risk] of [["bugfix", "low"], ["feature", "medium"], ["css", "low"], ["docs", "low"]] as const) {
     await db.query("insert into public.task_types (org_id, repo_id, name, risk_class) values ($1, $2, $3, $4) on conflict do nothing", [DEMO_ORG_ID, DEMO_REPO_ID, name, risk]);

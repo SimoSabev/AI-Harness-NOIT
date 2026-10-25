@@ -12,21 +12,22 @@ import { openDb } from "./db.js";
 import type { Db } from "./db.js";
 import { nightShiftTick } from "./night.js";
 import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
+import { startPostgres } from "./pg-container.test-helper.js";
 
 // v5 E9а (5.1, AC-4.4 with parking): a night of two tasks on real sandboxes and real Postgres, one slot. The first task's
 // agent always fails (fake:delete-test → FAILED D2:missing_test): attempt 1, Mandat's retry, attempt 2 → parked with a
 // question; the second task starts in the same tick and runs to a verdict; the shift ends with a report.
 const NAME = `mandat-pgnight-${process.pid}`;
+let pgUrl = "";
 const docker = (...a: string[]) => spawnSync("docker", a, { encoding: "utf8" });
 let db: Db;
 const home = mkdtempSync(path.join(os.tmpdir(), "mandat-night-"));
 const SHIFT = "50000000-0000-4000-8000-0000000000e1";
 beforeAll(async () => {
   await dockerEnv();
-  const r = docker("run", "-d", "--rm", "--name", NAME, "-e", "POSTGRES_PASSWORD=postgres", "postgres:17.6-alpine");
-  if (r.status !== 0) throw new Error(`postgres container: ${r.stderr}`);
-  const ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.trim();
-  db = openDb(`postgresql://postgres:postgres@${ip}:5432/postgres`);
+  // D-389: the published 127.0.0.1 port, so it works on a Mac too (pg-container.test-helper.ts)
+  pgUrl = startPostgres(NAME).url;
+  db = openDb(pgUrl);
   for (let k = 0; k < 60; k++) {
     try {
       await db.query("select 1");

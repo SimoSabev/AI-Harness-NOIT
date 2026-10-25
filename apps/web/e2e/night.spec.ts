@@ -4,7 +4,7 @@ import { E2E_DB } from "../playwright.config";
 import { EMAIL, login } from "./fixtures";
 
 // v5 E9a (5.1 (2)): plan → the morning question of a parked task → "Answer and continue" starts a new attempt. The data
-// is removed after the file (the other specs see the sample night again).
+// is removed after the file.
 const db = async <T>(f: (c: pg.Client) => Promise<T>): Promise<T> => {
   const c = new pg.Client({ connectionString: E2E_DB });
   await c.connect();
@@ -37,7 +37,7 @@ test("night: plan a night → it is planned with its queue; a parked task's ques
   });
   await page.reload();
   await expect(page.getByText("FAILED after 2 attempt(s): `D4:out_of_contract:infra/**`")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Make a task" })).toHaveAttribute("href", /\/tasks\/new\?text=Cache%20the%20embeddings/);
+  await expect(page.getByRole("link", { name: "Make a task" })).toHaveAttribute("href", /^\/\?text=Cache%20the%20embeddings/);
   await page.getByLabel("Your answer").fill("infra/** is fine for this task");
   await page.getByRole("button", { name: "Answer and continue" }).click();
   await expect(page.getByText("Answered: infra/** is fine for this task")).toBeVisible();

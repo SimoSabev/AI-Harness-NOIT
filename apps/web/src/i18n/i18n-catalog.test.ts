@@ -10,6 +10,10 @@ describe("i18n catalog (E7е)", () => {
   it("en and bg have the same keys", () => {
     expect(Object.keys(bg).sort()).toEqual(Object.keys(en).sort());
   });
+  it("the research page does not claim checks that do not run yet (E9г is not built)", () => {
+    expect(en["research.intro"]).toMatch(/not (built|ready) yet/);
+    expect(bg["research.intro"]).toMatch(/още не е (готова|направена)/);
+  });
   it("no empty values in either language", () => {
     for (const [k, v] of [...Object.entries(en), ...Object.entries(bg)]) expect(v.trim(), k).not.toBe("");
   });
@@ -41,8 +45,8 @@ describe("language choice (E7е)", () => {
     expect(parseLang(undefined, "bg;q=0")).toBe("en");
   });
   it("templates fill {params}; a missing param stays visible", () => {
-    expect(translate("en", "inbox.summary", { merged: 1, failed: 2, waiting: "3 waiting for you" })).toBe("1 VERIFIED and merged on their own · 2 FAILED · 3 waiting for you");
-    expect(translate("bg", "inbox.summary", { merged: 1, failed: 2, waiting: "3 чакат теб" })).toBe("1 ПРОВЕРЕНО и слети сами · 2 ПРОВАЛ · 3 чакат теб");
+    expect(translate("en", "inbox.summary", { merged: 1, failed: 2, waiting: "3 waiting for you" })).toBe("1 added automatically · 2 failed · 3 waiting for you");
+    expect(translate("bg", "inbox.summary", { merged: 1, failed: 2, waiting: "3 чакат теб" })).toBe("1 добавени автоматично · 2 провал · 3 чакат теб");
     expect(translate("en", "harness.blocked", {})).toBe("Blocked: {reason}");
   });
   it("plurals follow the language (Intl.PluralRules)", () => {

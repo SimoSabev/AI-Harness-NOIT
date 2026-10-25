@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { EMAIL, login } from "./fixtures";
 
-// D-305: the theme is chosen in Settings, applies at once and stays after a reload; the view switch on the start page.
+// D-305: the theme is chosen in Settings, applies at once and stays after a reload; the view switch on the overview.
 test("theme: dark by default → light from Settings → stays after a reload", async ({ page }) => {
   await login(page, EMAIL.approver);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -13,8 +13,9 @@ test("theme: dark by default → light from Settings → stays after a reload", 
   await expect(page.getByRole("radio", { name: "Light" })).toBeChecked();
 });
 
-test("start page views: map, columns, project, list", async ({ page }) => {
+test("overview views: map, columns, project, list", async ({ page }) => {
   await login(page, EMAIL.approver);
+  await page.goto("/overview");
   await expect(page.getByRole("list", { name: "Where the tasks are" })).toBeVisible();
   await page.getByRole("button", { name: "Map + columns" }).click();
   await expect(page.getByRole("button", { name: "Map + columns" })).toHaveAttribute("aria-pressed", "true");

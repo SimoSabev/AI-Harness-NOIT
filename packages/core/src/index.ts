@@ -32,3 +32,5 @@ export type { CheckRunInfo, CommitStatusInfo } from "./d7.js";
 export { addedLines, applySite, d11Mutation, mutationSites, specialCases, testEnvChecks } from "./d11.js";
 export type { MutantRun, MutationSite, SpecialCase, TestEnvCheck } from "./d11.js";
 export { citationInSource, goldenHit, normalizeForCitation, substringShare } from "./citations.js";
+export { AUTO_APPLY_LIMITS, autoApply, diffStat } from "./auto-apply.js";
+export type { AutoApplyInput, AutoApplyWhy } from "./auto-apply.js";
