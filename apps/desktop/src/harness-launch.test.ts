@@ -29,6 +29,11 @@ describe("harness layout (E9g A5, D-376)", () => {
     expect(l.cliMain).toBe(path.join(app.resourcesPath, "harness/packages/cli/dist/main.js"));
     expect(l.mandatHome).toBe(path.resolve(app.userData, "mandat"));
   });
+  it("the Dock icon (D-391): only when started from the code on macOS — the installed app's bundle has its own icon", () => {
+    expect(harnessLayout({ ...dev, platform: "darwin" }).dockIcon).toBe(path.join("/repo", "apps/web/public/icon-512.png"));
+    expect(harnessLayout({ ...app, platform: "darwin" }).dockIcon).toBeNull();
+    expect(harnessLayout({ ...dev, platform: "linux" }).dockIcon).toBeNull();
+  });
   it("the menu-bar icon: a black template image on macOS (the system tints it), the app icon elsewhere (D-382)", () => {
     expect(harnessLayout(dev).trayIcon).toBe(path.join("/repo", "apps/web/public/trayTemplate.png"));
     expect(harnessLayout({ ...dev, platform: "win32" }).trayIcon).toBe(path.join("/repo", "apps/web/public/icon-192.png"));

@@ -409,6 +409,8 @@ else {
   });
   app.on("will-quit", () => globalShortcut.unregisterAll());
   void app.whenReady().then(async () => {
+    // D-391: macOS ignores the window icon for the Dock; started from the code, the app is Electron.app, so set it here
+    if (layout.dockIcon) app.dock?.setIcon(nativeImage.createFromPath(layout.dockIcon));
     registerBridge(ipcMain, handlers, () => base);
     registerDrop(ipcMain, () => base, addProject);
     openWindow();

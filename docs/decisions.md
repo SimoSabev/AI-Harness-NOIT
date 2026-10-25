@@ -2731,3 +2731,11 @@ docs/reports/ui-ux-simplify.md остават с най-безопасния и�
 решение и чака „да“.
 (3) Правилата на нов проект не се одобряват сами — сканирането ги предлага, собственикът одобрява (D-388).
 Статус: по подразбиране до отговор.
+
+## D-391 Иконата в Dock-а при пускане от кода (25.10.2026)
+Решение: `pnpm desktop` (без пакет) на macOS е `Electron.app` и Dock-ът показва иконата на Electron — опцията `icon` на
+BrowserWindow не се ползва за Dock-а в macOS. Затова при `!packaged` на macOS десктопът задава `app.dock.setIcon(...)` с
+`apps/web/public/icon-512.png` (`HarnessLayout.dockIcon`; https://www.electronjs.org/docs/latest/api/dock, 25.10.2026).
+Инсталираният `.dmg` не се пипа: иконата му идва от пакета (`electron-builder.config.mjs` → icon-512, D-382/D-383).
+Тестове: harness-launch.test.ts (dockIcon само за macOS от кода).
+Статус: решено.
