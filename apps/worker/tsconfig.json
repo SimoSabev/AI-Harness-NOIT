@@ -52,6 +52,12 @@
     },
     {
       "path": "../../packages/onboard"
+    },
+    {
+      "path": "../../packages/profile"
+    },
+    {
+      "path": "../../packages/review"
     }
   ]
 }

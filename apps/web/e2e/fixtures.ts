@@ -8,9 +8,10 @@ export const EMAIL = { owner: "owner@demo.mandat.invalid", approver: "approver@d
 
 export async function login(page: Page, email: string): Promise<void> {
   await page.goto("/login");
-  await page.getByLabel("Имейл").fill(email);
-  await page.getByLabel("Парола").fill(PASSWORD);
-  await page.getByRole("button", { name: "Влез" }).click();
+  // by field name, so the same helper signs in whatever the language of the page (E7е)
+  await page.locator('form[action="/api/auth/login"] input[name="email"]').fill(email);
+  await page.locator('form[action="/api/auth/login"] input[name="password"]').fill(PASSWORD);
+  await page.locator('form[action="/api/auth/login"] button[type="submit"]').click();
   await page.waitForURL("**/");
 }
 

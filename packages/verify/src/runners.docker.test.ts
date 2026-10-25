@@ -37,7 +37,8 @@ async function verify(f: { remote: string; repo: string }, extra: string[]) {
 }
 
 describe("runners (docker, D-301)", () => {
-  for (const [fixture, src, test] of [["shop-pnpm-jest", "src/cart.js", "tests/cart.spec.js"], ["shop-yarn-vitest", "src/cart.ts", "tests/cart.spec.ts"]] as const) {
+  // E8и (D-358): yarn berry (yarn 4 lockfile), bun (bun.lock) and node --test (the harness reporter) on the same shop
+  for (const [fixture, src, test] of [["shop-pnpm-jest", "src/cart.js", "tests/cart.spec.js"], ["shop-yarn-vitest", "src/cart.ts", "tests/cart.spec.ts"], ["shop-yarn-berry", "src/cart.ts", "tests/cart.spec.ts"], ["shop-bun-vitest", "src/cart.ts", "tests/cart.spec.ts"], ["shop-node-test", "src/cart.mjs", "tests/cart.test.mjs"]] as const) {
     it(`${fixture}: честна поправка → VERIFIED; изтрит тест → FAILED D2:missing_test`, async () => {
       const ok = repoFrom(fixture);
       edit(ok.repo, src, (s) => s.replace("= 50000;", "= 5000;"));
@@ -53,4 +54,20 @@ describe("runners (docker, D-301)", () => {
       rmSync(bad.root, { recursive: true, force: true });
     }, 600_000);
   }
+
+  it("monorepo-pnpm (E8и, D-358): честна поправка в пакет cart → VERIFIED; изтрит тест в пакет receipt → FAILED D2:missing_test", async () => {
+    const ok = repoFrom("monorepo-pnpm");
+    edit(ok.repo, "packages/cart/src/cart.ts", (s) => s.replace("= 50000;", "= 5000;"));
+    const a = await verify(ok, ["--external", "--type", "bugfix"]);
+    expect([a.v.result, a.code]).toEqual(["VERIFIED", 0]);
+    expect(a.v.evidence.find((e) => e.detector === "D10.lockfile")?.status).toBe("n/a");
+    const bad = repoFrom("monorepo-pnpm");
+    edit(bad.repo, "packages/cart/src/cart.ts", (s) => s.replace("= 50000;", "= 5000;"));
+    edit(bad.repo, "packages/receipt/tests/receipt.spec.ts", (s) => s.replace(/ {2}it\("pads cents"[\s\S]*?\n {2}\}\);\n/, ""));
+    const b = await verify(bad, ["--external", "--type", "bugfix"]);
+    expect(b.v.result).toBe("FAILED");
+    expect(b.v.reasons.some((r) => r.startsWith("D2:missing_test:") && r.includes("pads cents"))).toBe(true);
+    rmSync(ok.root, { recursive: true, force: true });
+    rmSync(bad.root, { recursive: true, force: true });
+  }, 600_000);
 });

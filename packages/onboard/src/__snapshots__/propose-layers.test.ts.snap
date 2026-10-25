@@ -1,0 +1,1878 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-jest → a valid unapproved HarnessProfile with sources; deterministic (snapshot) 1`] = `
+{
+  "approved_at": null,
+  "approved_by": null,
+  "layers": {
+    "a": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "ci": {
+        "provider": "github_actions",
+        "required_checks": [
+          "test",
+        ],
+        "workflow": ".github/workflows/ci.yml",
+      },
+      "config_paths": [
+        ".mandat.yml",
+        ".claude/**",
+        ".codex/**",
+        ".npmrc",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "harness": {
+        "max_level": 3,
+        "required_detectors": [
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D10",
+        ],
+      },
+      "models": {
+        "allowed": [
+          "claude",
+          "codex",
+        ],
+        "default": "claude",
+      },
+      "protected_json_fields": {
+        "package.json": [
+          "scripts",
+          "overrides",
+          "workspaces",
+          "imports",
+        ],
+      },
+      "protected_paths": [
+        ".github/**",
+        ".mandat.yml",
+        ".claude/**",
+        ".mcp.json",
+        ".codex/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".npmrc",
+        "**/__snapshots__/**",
+      ],
+      "risk_classes": {
+        "high": {
+          "level_cap": 1,
+          "requires_second_factor": true,
+        },
+        "low": {
+          "level_cap": 3,
+          "requires_second_factor": false,
+        },
+        "medium": {
+          "level_cap": 2,
+          "requires_second_factor": false,
+        },
+      },
+      "runtime": {
+        "install": "npm ci --ignore-scripts",
+        "node": "24",
+        "package_manager": "npm",
+      },
+      "security": {
+        "max_diff_mb": 20,
+        "max_file_mb": 5,
+        "max_files": 500,
+      },
+      "task_types": {
+        "bugfix": {
+          "allowed_paths": [
+            "src/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "medium",
+        },
+        "docs": {
+          "allowed_paths": [
+            "README.md",
+            "docs/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "low",
+        },
+        "feature": {
+          "allowed_paths": [
+            "src/**",
+            "tests/**",
+          ],
+          "may_change_tests": true,
+          "risk_class": "medium",
+        },
+      },
+      "tests": {
+        "command": "npx jest --json --outputFile=$MANDAT_REPORT",
+        "env": {
+          "CI": "true",
+        },
+        "framework": "jest",
+        "test_globs": [
+          "tests/**",
+          "**/*.spec.ts",
+          "**/*.test.ts",
+          "**/*.spec.js",
+          "**/*.test.js",
+        ],
+      },
+      "version": 2,
+    },
+    "b": {
+      "boundaries": [
+        "Do not change .github/** (high risk: github).",
+        "Never push, never call the network; the harness delivers the change.",
+      ],
+      "commands": {
+        "install": "npm ci --ignore-scripts",
+        "lint": "npm run lint",
+        "test": "npm test",
+        "test_one": "npx jest {file}",
+      },
+      "conventions": [
+        "commit titles: conventional (<type>: <what>) in 4/4",
+        "median change: 10 lines",
+      ],
+      "links": [],
+      "style": [
+        "indent: 2 spaces (.editorconfig)",
+        "formatter: prettier (.prettierrc)",
+      ],
+      "summary": "",
+      "task_types": [
+        "bugfix",
+        "feature",
+        "docs",
+      ],
+    },
+    "c": [
+      {
+        "decision": "deny",
+        "reason": "the harness delivers, never the agent",
+        "subject": "any",
+        "tool": "bash:git push *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:curl *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:wget *",
+      },
+      {
+        "decision": "deny",
+        "reason": "high-risk folder (rule:github)",
+        "subject": "any",
+        "tool": "path:write:.github/**",
+      },
+    ],
+    "d": [
+      {
+        "args": {},
+        "event": "pre_tool",
+        "matcher": "Bash",
+        "script": "deny-by-policy",
+      },
+      {
+        "args": {},
+        "event": "stop",
+        "matcher": null,
+        "script": "require-tests-ran",
+      },
+    ],
+    "e": {
+      "mcp": [
+        {
+          "digest": null,
+          "egress_hosts": [],
+          "enabled_tools": [
+            "mandat_status",
+            "mandat_verify",
+            "mandat_explain",
+          ],
+          "name": "mandat",
+          "package": null,
+          "secrets": [],
+          "tools_hash": null,
+          "transport": "http",
+          "url": "http://egress-gate/mcp/mandat",
+          "version": "1",
+        },
+      ],
+      "plugins": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
+    },
+    "f": {
+      "roles": [
+        {
+          "description": "Reads the change and reports problems; never writes.",
+          "max_turns": 20,
+          "model": "claude-haiku-5-5",
+          "role": "reviewer",
+          "tools": [
+            "path:read:**",
+          ],
+        },
+      ],
+    },
+    "g": {
+      "ci_rounds": 2,
+      "definition_of_done": {
+        "bugfix": [
+          "a test that failed before passes",
+          "no test removed or weakened",
+        ],
+        "docs": [
+          "only documentation files change",
+        ],
+      },
+      "hidden_tests_dir": "tests/__hidden__",
+      "max_depth": 1,
+      "max_diff_lines": 400,
+      "max_subagents": 2,
+      "mutants": 3,
+      "required_detectors": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D10",
+      ],
+      "requires_research": [],
+      "review": "off",
+      "same_file": "wait",
+      "ui_paths": [],
+      "wip_limit": 3,
+    },
+    "h": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "routing": [
+        {
+          "channel": null,
+          "fallback": [],
+          "mode": "auto",
+          "role": "lead",
+          "task_type": null,
+        },
+      ],
+    },
+  },
+  "profile_hash": "sha256:f37b0a1b2230068ef9ff5f2689aefa68c68095c9cf406d4178e4a7ab59b7f395",
+  "repo_id": "local",
+  "sources": {
+    "a.ci.required_checks": "ci",
+    "a.ci.workflow": "ci",
+    "a.protected_paths..github/**": "rule",
+    "a.risk_classes": "human",
+    "a.runtime.install": "lockfile",
+    "a.runtime.node": "human",
+    "a.runtime.package_manager": "lockfile",
+    "a.task_types": "human",
+    "a.task_types.bugfix.risk_class": "rule",
+    "a.task_types.docs.risk_class": "rule",
+    "a.tests.command": "package_json",
+    "a.tests.framework": "package_json",
+    "a.tests.test_globs": "package_json",
+    "b.boundaries": "rule",
+    "b.commands": "package_json",
+    "b.conventions": "git_history",
+    "b.style": "repo_file",
+    "c": "rule",
+    "d": "rule",
+    "e": "rule",
+    "f": "rule",
+    "g": "rule",
+    "h": "rule",
+  },
+  "version": 1,
+}
+`;
+
+exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-jest-turbo → a valid unapproved HarnessProfile with sources; deterministic (snapshot) 1`] = `
+{
+  "approved_at": null,
+  "approved_by": null,
+  "layers": {
+    "a": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "ci": {
+        "provider": "github_actions",
+        "required_checks": [
+          "test",
+        ],
+        "workflow": ".github/workflows/ci.yml",
+      },
+      "config_paths": [
+        ".mandat.yml",
+        ".claude/**",
+        ".codex/**",
+        ".npmrc",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "harness": {
+        "max_level": 3,
+        "required_detectors": [
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D10",
+        ],
+      },
+      "models": {
+        "allowed": [
+          "claude",
+          "codex",
+        ],
+        "default": "claude",
+      },
+      "protected_json_fields": {
+        "package.json": [
+          "scripts",
+          "overrides",
+          "workspaces",
+          "imports",
+        ],
+      },
+      "protected_paths": [
+        ".github/**",
+        ".mandat.yml",
+        ".claude/**",
+        ".mcp.json",
+        ".codex/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".npmrc",
+        "**/__snapshots__/**",
+        "pnpm-workspace.yaml",
+        "turbo.json",
+      ],
+      "risk_classes": {
+        "high": {
+          "level_cap": 1,
+          "requires_second_factor": true,
+        },
+        "low": {
+          "level_cap": 3,
+          "requires_second_factor": false,
+        },
+        "medium": {
+          "level_cap": 2,
+          "requires_second_factor": false,
+        },
+      },
+      "runtime": {
+        "install": "npm ci --ignore-scripts",
+        "node": "24",
+        "package_manager": "npm",
+      },
+      "security": {
+        "max_diff_mb": 20,
+        "max_file_mb": 5,
+        "max_files": 500,
+      },
+      "task_types": {
+        "bugfix": {
+          "allowed_paths": [
+            "src/**",
+            "packages/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "medium",
+        },
+        "docs": {
+          "allowed_paths": [
+            "README.md",
+            "docs/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "low",
+        },
+        "feature": {
+          "allowed_paths": [
+            "src/**",
+            "packages/**",
+            "tests/**",
+          ],
+          "may_change_tests": true,
+          "risk_class": "medium",
+        },
+      },
+      "tests": {
+        "command": "npx jest --json --outputFile=$MANDAT_REPORT",
+        "env": {
+          "CI": "true",
+        },
+        "framework": "jest",
+        "test_globs": [
+          "tests/**",
+          "**/*.spec.ts",
+          "**/*.test.ts",
+          "**/*.spec.js",
+          "**/*.test.js",
+        ],
+      },
+      "version": 2,
+    },
+    "b": {
+      "boundaries": [
+        "Do not change .github/** (high risk: github).",
+        "Never push, never call the network; the harness delivers the change.",
+      ],
+      "commands": {
+        "install": "npm ci --ignore-scripts",
+        "lint": "npm run lint",
+        "test": "npm test",
+        "test_one": "npx jest {file}",
+      },
+      "conventions": [
+        "commit titles: conventional (<type>: <what>) in 4/4",
+        "median change: 10 lines",
+      ],
+      "links": [],
+      "style": [
+        "indent: 2 spaces (.editorconfig)",
+        "formatter: prettier (.prettierrc)",
+      ],
+      "summary": "",
+      "task_types": [
+        "bugfix",
+        "feature",
+        "docs",
+      ],
+    },
+    "c": [
+      {
+        "decision": "deny",
+        "reason": "the harness delivers, never the agent",
+        "subject": "any",
+        "tool": "bash:git push *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:curl *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:wget *",
+      },
+      {
+        "decision": "deny",
+        "reason": "high-risk folder (rule:github)",
+        "subject": "any",
+        "tool": "path:write:.github/**",
+      },
+    ],
+    "d": [
+      {
+        "args": {},
+        "event": "pre_tool",
+        "matcher": "Bash",
+        "script": "deny-by-policy",
+      },
+      {
+        "args": {},
+        "event": "stop",
+        "matcher": null,
+        "script": "require-tests-ran",
+      },
+    ],
+    "e": {
+      "mcp": [
+        {
+          "digest": null,
+          "egress_hosts": [],
+          "enabled_tools": [
+            "mandat_status",
+            "mandat_verify",
+            "mandat_explain",
+          ],
+          "name": "mandat",
+          "package": null,
+          "secrets": [],
+          "tools_hash": null,
+          "transport": "http",
+          "url": "http://egress-gate/mcp/mandat",
+          "version": "1",
+        },
+      ],
+      "plugins": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
+    },
+    "f": {
+      "roles": [
+        {
+          "description": "Reads the change and reports problems; never writes.",
+          "max_turns": 20,
+          "model": "claude-haiku-5-5",
+          "role": "reviewer",
+          "tools": [
+            "path:read:**",
+          ],
+        },
+      ],
+    },
+    "g": {
+      "ci_rounds": 2,
+      "definition_of_done": {
+        "bugfix": [
+          "a test that failed before passes",
+          "no test removed or weakened",
+        ],
+        "docs": [
+          "only documentation files change",
+        ],
+      },
+      "hidden_tests_dir": "tests/__hidden__",
+      "max_depth": 1,
+      "max_diff_lines": 400,
+      "max_subagents": 2,
+      "mutants": 3,
+      "required_detectors": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D10",
+      ],
+      "requires_research": [],
+      "review": "off",
+      "same_file": "wait",
+      "ui_paths": [],
+      "wip_limit": 3,
+    },
+    "h": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "routing": [
+        {
+          "channel": null,
+          "fallback": [],
+          "mode": "auto",
+          "role": "lead",
+          "task_type": null,
+        },
+      ],
+    },
+  },
+  "profile_hash": "sha256:4ba5610b66a5386d4eac5e719c68eebebd0b92f082f30a55f17e2ac42c26238e",
+  "repo_id": "local",
+  "sources": {
+    "a.ci.required_checks": "ci",
+    "a.ci.workflow": "ci",
+    "a.protected_paths..github/**": "rule",
+    "a.risk_classes": "human",
+    "a.runtime.install": "lockfile",
+    "a.runtime.node": "human",
+    "a.runtime.package_manager": "lockfile",
+    "a.task_types": "human",
+    "a.task_types.bugfix.risk_class": "rule",
+    "a.task_types.docs.risk_class": "rule",
+    "a.tests.command": "package_json",
+    "a.tests.framework": "package_json",
+    "a.tests.test_globs": "package_json",
+    "b.boundaries": "rule",
+    "b.commands": "package_json",
+    "b.conventions": "git_history",
+    "b.style": "repo_file",
+    "c": "rule",
+    "d": "rule",
+    "e": "rule",
+    "f": "rule",
+    "g": "rule",
+    "h": "rule",
+  },
+  "version": 1,
+}
+`;
+
+exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > npm-vitest → a valid unapproved HarnessProfile with sources; deterministic (snapshot) 1`] = `
+{
+  "approved_at": null,
+  "approved_by": null,
+  "layers": {
+    "a": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "ci": {
+        "provider": "github_actions",
+        "required_checks": [
+          "test",
+        ],
+        "workflow": ".github/workflows/ci.yml",
+      },
+      "config_paths": [
+        ".mandat.yml",
+        ".claude/**",
+        ".codex/**",
+        ".npmrc",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "harness": {
+        "max_level": 3,
+        "required_detectors": [
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D10",
+        ],
+      },
+      "models": {
+        "allowed": [
+          "claude",
+          "codex",
+        ],
+        "default": "claude",
+      },
+      "protected_json_fields": {
+        "package.json": [
+          "scripts",
+          "overrides",
+          "workspaces",
+          "imports",
+        ],
+      },
+      "protected_paths": [
+        ".github/**",
+        ".mandat.yml",
+        ".claude/**",
+        ".mcp.json",
+        ".codex/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".npmrc",
+        "**/__snapshots__/**",
+        "vitest.config.ts",
+      ],
+      "risk_classes": {
+        "high": {
+          "level_cap": 1,
+          "requires_second_factor": true,
+        },
+        "low": {
+          "level_cap": 3,
+          "requires_second_factor": false,
+        },
+        "medium": {
+          "level_cap": 2,
+          "requires_second_factor": false,
+        },
+      },
+      "runtime": {
+        "install": "npm ci --ignore-scripts",
+        "node": "24",
+        "package_manager": "npm",
+      },
+      "security": {
+        "max_diff_mb": 20,
+        "max_file_mb": 5,
+        "max_files": 500,
+      },
+      "task_types": {
+        "bugfix": {
+          "allowed_paths": [
+            "src/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "medium",
+        },
+        "docs": {
+          "allowed_paths": [
+            "README.md",
+            "docs/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "low",
+        },
+        "feature": {
+          "allowed_paths": [
+            "src/**",
+            "tests/**",
+          ],
+          "may_change_tests": true,
+          "risk_class": "medium",
+        },
+      },
+      "tests": {
+        "command": "npx vitest run --reporter=json --outputFile=$MANDAT_REPORT",
+        "env": {
+          "CI": "true",
+        },
+        "framework": "vitest",
+        "test_globs": [
+          "tests/**",
+          "**/*.spec.ts",
+          "**/*.test.ts",
+          "**/*.spec.js",
+          "**/*.test.js",
+        ],
+      },
+      "version": 2,
+    },
+    "b": {
+      "boundaries": [
+        "Do not change .github/** (high risk: github).",
+        "Never push, never call the network; the harness delivers the change.",
+      ],
+      "commands": {
+        "install": "npm ci --ignore-scripts",
+        "lint": "npm run lint",
+        "test": "npm test",
+        "test_one": "npx vitest run {file}",
+      },
+      "conventions": [
+        "commit titles: conventional (<type>: <what>) in 4/4",
+        "median change: 10 lines",
+      ],
+      "links": [],
+      "style": [
+        "indent: 2 spaces (.editorconfig)",
+        "formatter: prettier (.prettierrc)",
+      ],
+      "summary": "",
+      "task_types": [
+        "bugfix",
+        "feature",
+        "docs",
+      ],
+    },
+    "c": [
+      {
+        "decision": "deny",
+        "reason": "the harness delivers, never the agent",
+        "subject": "any",
+        "tool": "bash:git push *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:curl *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:wget *",
+      },
+      {
+        "decision": "deny",
+        "reason": "high-risk folder (rule:github)",
+        "subject": "any",
+        "tool": "path:write:.github/**",
+      },
+    ],
+    "d": [
+      {
+        "args": {},
+        "event": "pre_tool",
+        "matcher": "Bash",
+        "script": "deny-by-policy",
+      },
+      {
+        "args": {},
+        "event": "stop",
+        "matcher": null,
+        "script": "require-tests-ran",
+      },
+    ],
+    "e": {
+      "mcp": [
+        {
+          "digest": null,
+          "egress_hosts": [],
+          "enabled_tools": [
+            "mandat_status",
+            "mandat_verify",
+            "mandat_explain",
+          ],
+          "name": "mandat",
+          "package": null,
+          "secrets": [],
+          "tools_hash": null,
+          "transport": "http",
+          "url": "http://egress-gate/mcp/mandat",
+          "version": "1",
+        },
+      ],
+      "plugins": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
+    },
+    "f": {
+      "roles": [
+        {
+          "description": "Reads the change and reports problems; never writes.",
+          "max_turns": 20,
+          "model": "claude-haiku-5-5",
+          "role": "reviewer",
+          "tools": [
+            "path:read:**",
+          ],
+        },
+      ],
+    },
+    "g": {
+      "ci_rounds": 2,
+      "definition_of_done": {
+        "bugfix": [
+          "a test that failed before passes",
+          "no test removed or weakened",
+        ],
+        "docs": [
+          "only documentation files change",
+        ],
+      },
+      "hidden_tests_dir": "tests/__hidden__",
+      "max_depth": 1,
+      "max_diff_lines": 400,
+      "max_subagents": 2,
+      "mutants": 3,
+      "required_detectors": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D10",
+      ],
+      "requires_research": [],
+      "review": "off",
+      "same_file": "wait",
+      "ui_paths": [],
+      "wip_limit": 3,
+    },
+    "h": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "routing": [
+        {
+          "channel": null,
+          "fallback": [],
+          "mode": "auto",
+          "role": "lead",
+          "task_type": null,
+        },
+      ],
+    },
+  },
+  "profile_hash": "sha256:f73292500f18d8e3a01beed4d26570b89e812f1871b0fdb10d17790cb96f3fea",
+  "repo_id": "local",
+  "sources": {
+    "a.ci.required_checks": "ci",
+    "a.ci.workflow": "ci",
+    "a.protected_paths..github/**": "rule",
+    "a.risk_classes": "human",
+    "a.runtime.install": "lockfile",
+    "a.runtime.node": "human",
+    "a.runtime.package_manager": "lockfile",
+    "a.task_types": "human",
+    "a.task_types.bugfix.risk_class": "rule",
+    "a.task_types.docs.risk_class": "rule",
+    "a.tests.command": "package_json",
+    "a.tests.framework": "package_json",
+    "a.tests.test_globs": "package_json",
+    "b.boundaries": "rule",
+    "b.commands": "package_json",
+    "b.conventions": "git_history",
+    "b.style": "repo_file",
+    "c": "rule",
+    "d": "rule",
+    "e": "rule",
+    "f": "rule",
+    "g": "rule",
+    "h": "rule",
+  },
+  "version": 1,
+}
+`;
+
+exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-jest → a valid unapproved HarnessProfile with sources; deterministic (snapshot) 1`] = `
+{
+  "approved_at": null,
+  "approved_by": null,
+  "layers": {
+    "a": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "ci": {
+        "provider": "github_actions",
+        "required_checks": [
+          "test",
+        ],
+        "workflow": ".github/workflows/ci.yml",
+      },
+      "config_paths": [
+        ".mandat.yml",
+        ".claude/**",
+        ".codex/**",
+        ".npmrc",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "harness": {
+        "max_level": 3,
+        "required_detectors": [
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D10",
+        ],
+      },
+      "models": {
+        "allowed": [
+          "claude",
+          "codex",
+        ],
+        "default": "claude",
+      },
+      "protected_json_fields": {
+        "package.json": [
+          "scripts",
+          "overrides",
+          "workspaces",
+          "imports",
+        ],
+      },
+      "protected_paths": [
+        ".github/**",
+        ".mandat.yml",
+        ".claude/**",
+        ".mcp.json",
+        ".codex/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".npmrc",
+        "**/__snapshots__/**",
+      ],
+      "risk_classes": {
+        "high": {
+          "level_cap": 1,
+          "requires_second_factor": true,
+        },
+        "low": {
+          "level_cap": 3,
+          "requires_second_factor": false,
+        },
+        "medium": {
+          "level_cap": 2,
+          "requires_second_factor": false,
+        },
+      },
+      "runtime": {
+        "install": "pnpm install --frozen-lockfile --ignore-scripts",
+        "node": "24",
+        "package_manager": "pnpm",
+      },
+      "security": {
+        "max_diff_mb": 20,
+        "max_file_mb": 5,
+        "max_files": 500,
+      },
+      "task_types": {
+        "bugfix": {
+          "allowed_paths": [
+            "src/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "medium",
+        },
+        "docs": {
+          "allowed_paths": [
+            "README.md",
+            "docs/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "low",
+        },
+        "feature": {
+          "allowed_paths": [
+            "src/**",
+            "tests/**",
+          ],
+          "may_change_tests": true,
+          "risk_class": "medium",
+        },
+      },
+      "tests": {
+        "command": "npx jest --json --outputFile=$MANDAT_REPORT",
+        "env": {
+          "CI": "true",
+        },
+        "framework": "jest",
+        "test_globs": [
+          "tests/**",
+          "**/*.spec.ts",
+          "**/*.test.ts",
+          "**/*.spec.js",
+          "**/*.test.js",
+        ],
+      },
+      "version": 2,
+    },
+    "b": {
+      "boundaries": [
+        "Do not change .github/** (high risk: github).",
+        "Never push, never call the network; the harness delivers the change.",
+      ],
+      "commands": {
+        "install": "pnpm install --frozen-lockfile --ignore-scripts",
+        "lint": "pnpm lint",
+        "test": "pnpm test",
+        "test_one": "npx jest {file}",
+      },
+      "conventions": [
+        "commit titles: conventional (<type>: <what>) in 4/4",
+        "median change: 10 lines",
+      ],
+      "links": [],
+      "style": [
+        "indent: 2 spaces (.editorconfig)",
+        "formatter: prettier (.prettierrc)",
+      ],
+      "summary": "",
+      "task_types": [
+        "bugfix",
+        "feature",
+        "docs",
+      ],
+    },
+    "c": [
+      {
+        "decision": "deny",
+        "reason": "the harness delivers, never the agent",
+        "subject": "any",
+        "tool": "bash:git push *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:curl *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:wget *",
+      },
+      {
+        "decision": "deny",
+        "reason": "high-risk folder (rule:github)",
+        "subject": "any",
+        "tool": "path:write:.github/**",
+      },
+    ],
+    "d": [
+      {
+        "args": {},
+        "event": "pre_tool",
+        "matcher": "Bash",
+        "script": "deny-by-policy",
+      },
+      {
+        "args": {},
+        "event": "stop",
+        "matcher": null,
+        "script": "require-tests-ran",
+      },
+    ],
+    "e": {
+      "mcp": [
+        {
+          "digest": null,
+          "egress_hosts": [],
+          "enabled_tools": [
+            "mandat_status",
+            "mandat_verify",
+            "mandat_explain",
+          ],
+          "name": "mandat",
+          "package": null,
+          "secrets": [],
+          "tools_hash": null,
+          "transport": "http",
+          "url": "http://egress-gate/mcp/mandat",
+          "version": "1",
+        },
+      ],
+      "plugins": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
+    },
+    "f": {
+      "roles": [
+        {
+          "description": "Reads the change and reports problems; never writes.",
+          "max_turns": 20,
+          "model": "claude-haiku-5-5",
+          "role": "reviewer",
+          "tools": [
+            "path:read:**",
+          ],
+        },
+      ],
+    },
+    "g": {
+      "ci_rounds": 2,
+      "definition_of_done": {
+        "bugfix": [
+          "a test that failed before passes",
+          "no test removed or weakened",
+        ],
+        "docs": [
+          "only documentation files change",
+        ],
+      },
+      "hidden_tests_dir": "tests/__hidden__",
+      "max_depth": 1,
+      "max_diff_lines": 400,
+      "max_subagents": 2,
+      "mutants": 3,
+      "required_detectors": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D10",
+      ],
+      "requires_research": [],
+      "review": "off",
+      "same_file": "wait",
+      "ui_paths": [],
+      "wip_limit": 3,
+    },
+    "h": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "routing": [
+        {
+          "channel": null,
+          "fallback": [],
+          "mode": "auto",
+          "role": "lead",
+          "task_type": null,
+        },
+      ],
+    },
+  },
+  "profile_hash": "sha256:4b1b79c707715c8270ccf221d2901a73af1e34ee1a80bab5ae1993cd8ffb9ba1",
+  "repo_id": "local",
+  "sources": {
+    "a.ci.required_checks": "ci",
+    "a.ci.workflow": "ci",
+    "a.protected_paths..github/**": "rule",
+    "a.risk_classes": "human",
+    "a.runtime.install": "lockfile",
+    "a.runtime.node": "human",
+    "a.runtime.package_manager": "lockfile",
+    "a.task_types": "human",
+    "a.task_types.bugfix.risk_class": "rule",
+    "a.task_types.docs.risk_class": "rule",
+    "a.tests.command": "package_json",
+    "a.tests.framework": "package_json",
+    "a.tests.test_globs": "package_json",
+    "b.boundaries": "rule",
+    "b.commands": "package_json",
+    "b.conventions": "git_history",
+    "b.style": "repo_file",
+    "c": "rule",
+    "d": "rule",
+    "e": "rule",
+    "f": "rule",
+    "g": "rule",
+    "h": "rule",
+  },
+  "version": 1,
+}
+`;
+
+exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-vitest → a valid unapproved HarnessProfile with sources; deterministic (snapshot) 1`] = `
+{
+  "approved_at": null,
+  "approved_by": null,
+  "layers": {
+    "a": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "ci": {
+        "provider": "github_actions",
+        "required_checks": [
+          "test",
+        ],
+        "workflow": ".github/workflows/ci.yml",
+      },
+      "config_paths": [
+        ".mandat.yml",
+        ".claude/**",
+        ".codex/**",
+        ".npmrc",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "harness": {
+        "max_level": 3,
+        "required_detectors": [
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D10",
+        ],
+      },
+      "models": {
+        "allowed": [
+          "claude",
+          "codex",
+        ],
+        "default": "claude",
+      },
+      "protected_json_fields": {
+        "package.json": [
+          "scripts",
+          "overrides",
+          "workspaces",
+          "imports",
+        ],
+      },
+      "protected_paths": [
+        ".github/**",
+        ".mandat.yml",
+        ".claude/**",
+        ".mcp.json",
+        ".codex/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".npmrc",
+        "**/__snapshots__/**",
+        "vitest.config.ts",
+      ],
+      "risk_classes": {
+        "high": {
+          "level_cap": 1,
+          "requires_second_factor": true,
+        },
+        "low": {
+          "level_cap": 3,
+          "requires_second_factor": false,
+        },
+        "medium": {
+          "level_cap": 2,
+          "requires_second_factor": false,
+        },
+      },
+      "runtime": {
+        "install": "pnpm install --frozen-lockfile --ignore-scripts",
+        "node": "24",
+        "package_manager": "pnpm",
+      },
+      "security": {
+        "max_diff_mb": 20,
+        "max_file_mb": 5,
+        "max_files": 500,
+      },
+      "task_types": {
+        "bugfix": {
+          "allowed_paths": [
+            "src/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "medium",
+        },
+        "docs": {
+          "allowed_paths": [
+            "README.md",
+            "docs/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "low",
+        },
+        "feature": {
+          "allowed_paths": [
+            "src/**",
+            "tests/**",
+          ],
+          "may_change_tests": true,
+          "risk_class": "medium",
+        },
+      },
+      "tests": {
+        "command": "npx vitest run --reporter=json --outputFile=$MANDAT_REPORT",
+        "env": {
+          "CI": "true",
+        },
+        "framework": "vitest",
+        "test_globs": [
+          "tests/**",
+          "**/*.spec.ts",
+          "**/*.test.ts",
+          "**/*.spec.js",
+          "**/*.test.js",
+        ],
+      },
+      "version": 2,
+    },
+    "b": {
+      "boundaries": [
+        "Do not change .github/** (high risk: github).",
+        "Never push, never call the network; the harness delivers the change.",
+      ],
+      "commands": {
+        "install": "pnpm install --frozen-lockfile --ignore-scripts",
+        "lint": "pnpm lint",
+        "test": "pnpm test",
+        "test_one": "npx vitest run {file}",
+      },
+      "conventions": [
+        "commit titles: conventional (<type>: <what>) in 4/4",
+        "median change: 10 lines",
+      ],
+      "links": [],
+      "style": [
+        "indent: 2 spaces (.editorconfig)",
+        "formatter: prettier (.prettierrc)",
+      ],
+      "summary": "",
+      "task_types": [
+        "bugfix",
+        "feature",
+        "docs",
+      ],
+    },
+    "c": [
+      {
+        "decision": "deny",
+        "reason": "the harness delivers, never the agent",
+        "subject": "any",
+        "tool": "bash:git push *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:curl *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:wget *",
+      },
+      {
+        "decision": "deny",
+        "reason": "high-risk folder (rule:github)",
+        "subject": "any",
+        "tool": "path:write:.github/**",
+      },
+    ],
+    "d": [
+      {
+        "args": {},
+        "event": "pre_tool",
+        "matcher": "Bash",
+        "script": "deny-by-policy",
+      },
+      {
+        "args": {},
+        "event": "stop",
+        "matcher": null,
+        "script": "require-tests-ran",
+      },
+    ],
+    "e": {
+      "mcp": [
+        {
+          "digest": null,
+          "egress_hosts": [],
+          "enabled_tools": [
+            "mandat_status",
+            "mandat_verify",
+            "mandat_explain",
+          ],
+          "name": "mandat",
+          "package": null,
+          "secrets": [],
+          "tools_hash": null,
+          "transport": "http",
+          "url": "http://egress-gate/mcp/mandat",
+          "version": "1",
+        },
+      ],
+      "plugins": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
+    },
+    "f": {
+      "roles": [
+        {
+          "description": "Reads the change and reports problems; never writes.",
+          "max_turns": 20,
+          "model": "claude-haiku-5-5",
+          "role": "reviewer",
+          "tools": [
+            "path:read:**",
+          ],
+        },
+      ],
+    },
+    "g": {
+      "ci_rounds": 2,
+      "definition_of_done": {
+        "bugfix": [
+          "a test that failed before passes",
+          "no test removed or weakened",
+        ],
+        "docs": [
+          "only documentation files change",
+        ],
+      },
+      "hidden_tests_dir": "tests/__hidden__",
+      "max_depth": 1,
+      "max_diff_lines": 400,
+      "max_subagents": 2,
+      "mutants": 3,
+      "required_detectors": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D10",
+      ],
+      "requires_research": [],
+      "review": "off",
+      "same_file": "wait",
+      "ui_paths": [],
+      "wip_limit": 3,
+    },
+    "h": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "routing": [
+        {
+          "channel": null,
+          "fallback": [],
+          "mode": "auto",
+          "role": "lead",
+          "task_type": null,
+        },
+      ],
+    },
+  },
+  "profile_hash": "sha256:6ca928437b102fa9db06d68a1b1565bb26f309c96546ded0e44075b1209ed522",
+  "repo_id": "local",
+  "sources": {
+    "a.ci.required_checks": "ci",
+    "a.ci.workflow": "ci",
+    "a.protected_paths..github/**": "rule",
+    "a.risk_classes": "human",
+    "a.runtime.install": "lockfile",
+    "a.runtime.node": "human",
+    "a.runtime.package_manager": "lockfile",
+    "a.task_types": "human",
+    "a.task_types.bugfix.risk_class": "rule",
+    "a.task_types.docs.risk_class": "rule",
+    "a.tests.command": "package_json",
+    "a.tests.framework": "package_json",
+    "a.tests.test_globs": "package_json",
+    "b.boundaries": "rule",
+    "b.commands": "package_json",
+    "b.conventions": "git_history",
+    "b.style": "repo_file",
+    "c": "rule",
+    "d": "rule",
+    "e": "rule",
+    "f": "rule",
+    "g": "rule",
+    "h": "rule",
+  },
+  "version": 1,
+}
+`;
+
+exports[`proposeProfile: all 8 layers without AI (E8б, AC-2.1) > pnpm-vitest-turbo → a valid unapproved HarnessProfile with sources; deterministic (snapshot) 1`] = `
+{
+  "approved_at": null,
+  "approved_by": null,
+  "layers": {
+    "a": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "ci": {
+        "provider": "github_actions",
+        "required_checks": [
+          "test",
+        ],
+        "workflow": ".github/workflows/ci.yml",
+      },
+      "config_paths": [
+        ".mandat.yml",
+        ".claude/**",
+        ".codex/**",
+        ".npmrc",
+        "AGENTS.md",
+        "CLAUDE.md",
+      ],
+      "harness": {
+        "max_level": 3,
+        "required_detectors": [
+          "D1",
+          "D2",
+          "D3",
+          "D4",
+          "D10",
+        ],
+      },
+      "models": {
+        "allowed": [
+          "claude",
+          "codex",
+        ],
+        "default": "claude",
+      },
+      "protected_json_fields": {
+        "package.json": [
+          "scripts",
+          "overrides",
+          "workspaces",
+          "imports",
+        ],
+      },
+      "protected_paths": [
+        ".github/**",
+        ".mandat.yml",
+        ".claude/**",
+        ".mcp.json",
+        ".codex/**",
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".npmrc",
+        "**/__snapshots__/**",
+        "pnpm-workspace.yaml",
+        "turbo.json",
+        "vitest.config.ts",
+      ],
+      "risk_classes": {
+        "high": {
+          "level_cap": 1,
+          "requires_second_factor": true,
+        },
+        "low": {
+          "level_cap": 3,
+          "requires_second_factor": false,
+        },
+        "medium": {
+          "level_cap": 2,
+          "requires_second_factor": false,
+        },
+      },
+      "runtime": {
+        "install": "pnpm install --frozen-lockfile --ignore-scripts",
+        "node": "24",
+        "package_manager": "pnpm",
+      },
+      "security": {
+        "max_diff_mb": 20,
+        "max_file_mb": 5,
+        "max_files": 500,
+      },
+      "task_types": {
+        "bugfix": {
+          "allowed_paths": [
+            "src/**",
+            "packages/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "medium",
+        },
+        "docs": {
+          "allowed_paths": [
+            "README.md",
+            "docs/**",
+          ],
+          "may_change_tests": false,
+          "risk_class": "low",
+        },
+        "feature": {
+          "allowed_paths": [
+            "src/**",
+            "packages/**",
+            "tests/**",
+          ],
+          "may_change_tests": true,
+          "risk_class": "medium",
+        },
+      },
+      "tests": {
+        "command": "npx vitest run --reporter=json --outputFile=$MANDAT_REPORT",
+        "env": {
+          "CI": "true",
+        },
+        "framework": "vitest",
+        "test_globs": [
+          "tests/**",
+          "**/*.spec.ts",
+          "**/*.test.ts",
+          "**/*.spec.js",
+          "**/*.test.js",
+        ],
+      },
+      "version": 2,
+    },
+    "b": {
+      "boundaries": [
+        "Do not change .github/** (high risk: github).",
+        "Never push, never call the network; the harness delivers the change.",
+      ],
+      "commands": {
+        "install": "pnpm install --frozen-lockfile --ignore-scripts",
+        "lint": "pnpm lint",
+        "test": "pnpm test",
+        "test_one": "npx vitest run {file}",
+      },
+      "conventions": [
+        "commit titles: conventional (<type>: <what>) in 4/4",
+        "median change: 10 lines",
+      ],
+      "links": [],
+      "style": [
+        "indent: 2 spaces (.editorconfig)",
+        "formatter: prettier (.prettierrc)",
+      ],
+      "summary": "",
+      "task_types": [
+        "bugfix",
+        "feature",
+        "docs",
+      ],
+    },
+    "c": [
+      {
+        "decision": "deny",
+        "reason": "the harness delivers, never the agent",
+        "subject": "any",
+        "tool": "bash:git push *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:curl *",
+      },
+      {
+        "decision": "deny",
+        "reason": "no network outside the gate",
+        "subject": "any",
+        "tool": "bash:wget *",
+      },
+      {
+        "decision": "deny",
+        "reason": "high-risk folder (rule:github)",
+        "subject": "any",
+        "tool": "path:write:.github/**",
+      },
+    ],
+    "d": [
+      {
+        "args": {},
+        "event": "pre_tool",
+        "matcher": "Bash",
+        "script": "deny-by-policy",
+      },
+      {
+        "args": {},
+        "event": "stop",
+        "matcher": null,
+        "script": "require-tests-ran",
+      },
+    ],
+    "e": {
+      "mcp": [
+        {
+          "digest": null,
+          "egress_hosts": [],
+          "enabled_tools": [
+            "mandat_status",
+            "mandat_verify",
+            "mandat_explain",
+          ],
+          "name": "mandat",
+          "package": null,
+          "secrets": [],
+          "tools_hash": null,
+          "transport": "http",
+          "url": "http://egress-gate/mcp/mandat",
+          "version": "1",
+        },
+      ],
+      "plugins": [],
+      "skills": [
+        {
+          "content_hash": "sha256:a30804daebffdb6a6bf489779cd82d89dd421cf971971334ea8dbe782b931450",
+          "description": "Write the failing test first, then the smallest change that makes it pass.",
+          "name": "test-first",
+          "source": "builtin",
+        },
+      ],
+    },
+    "f": {
+      "roles": [
+        {
+          "description": "Reads the change and reports problems; never writes.",
+          "max_turns": 20,
+          "model": "claude-haiku-5-5",
+          "role": "reviewer",
+          "tools": [
+            "path:read:**",
+          ],
+        },
+      ],
+    },
+    "g": {
+      "ci_rounds": 2,
+      "definition_of_done": {
+        "bugfix": [
+          "a test that failed before passes",
+          "no test removed or weakened",
+        ],
+        "docs": [
+          "only documentation files change",
+        ],
+      },
+      "hidden_tests_dir": "tests/__hidden__",
+      "max_depth": 1,
+      "max_diff_lines": 400,
+      "max_subagents": 2,
+      "mutants": 3,
+      "required_detectors": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D10",
+      ],
+      "requires_research": [],
+      "review": "off",
+      "same_file": "wait",
+      "ui_paths": [],
+      "wip_limit": 3,
+    },
+    "h": {
+      "budgets": {
+        "task_minutes": 30,
+        "task_usd": 2,
+      },
+      "routing": [
+        {
+          "channel": null,
+          "fallback": [],
+          "mode": "auto",
+          "role": "lead",
+          "task_type": null,
+        },
+      ],
+    },
+  },
+  "profile_hash": "sha256:1c5eb7d7c91ebccfce47188004bb236d9a5e95bce7ca52abb9e160d8a0077b45",
+  "repo_id": "local",
+  "sources": {
+    "a.ci.required_checks": "ci",
+    "a.ci.workflow": "ci",
+    "a.protected_paths..github/**": "rule",
+    "a.risk_classes": "human",
+    "a.runtime.install": "lockfile",
+    "a.runtime.node": "human",
+    "a.runtime.package_manager": "lockfile",
+    "a.task_types": "human",
+    "a.task_types.bugfix.risk_class": "rule",
+    "a.task_types.docs.risk_class": "rule",
+    "a.tests.command": "package_json",
+    "a.tests.framework": "package_json",
+    "a.tests.test_globs": "package_json",
+    "b.boundaries": "rule",
+    "b.commands": "package_json",
+    "b.conventions": "git_history",
+    "b.style": "repo_file",
+    "c": "rule",
+    "d": "rule",
+    "e": "rule",
+    "f": "rule",
+    "g": "rule",
+    "h": "rule",
+  },
+  "version": 1,
+}
+`;

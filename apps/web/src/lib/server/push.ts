@@ -4,7 +4,7 @@ import type { Result } from "./actions";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
 
-// Демо промпт т. 8.4: POST /api/push/subscribe → push_subscriptions; the endpoint passes the SSRF check on write
+// Demo prompt §8.4: POST /api/push/subscribe → push_subscriptions; the endpoint passes the SSRF check on write
 // (the worker checks it again on every send). Only the subscription's public parts are stored.
 export const SubscribeBody = z.object({
   endpoint: z.string().max(2048),

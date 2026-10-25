@@ -11,7 +11,8 @@
     "NOTICE"
   ],
   "bin": {
-    "mandat-verify": "dist/main.js"
+    "mandat-verify": "dist/main.js",
+    "mandat-verify-action": "dist/action-main.js"
   },
   "exports": {
     ".": {

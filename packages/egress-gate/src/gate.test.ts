@@ -39,6 +39,18 @@ describe("matchPolicy (6.8, D-100)", () => {
   });
 });
 
+describe("npm prefix route and scoped packages (E8e, D-354)", () => {
+  it("a scoped packument (/npm/@scope%2fname) passes an npm prefix route; any other %2f, %2e or .. does not", () => {
+    const p = pol("install", [{ id: "mcp-npm", method: "GET", match: { kind: "prefix", path: "/npm/" }, upstream: "npm_registry" }]);
+    expect(matchPolicy(p, "GET", "/npm/@modelcontextprotocol%2fserver").allow).toBe(true);
+    expect(matchPolicy(p, "GET", "/npm/@modelcontextprotocol%2Fserver").allow).toBe(true);
+    expect(matchPolicy(p, "GET", "/npm/@modelcontextprotocol/server/-/server-2.3.1.tgz").allow).toBe(true);
+    for (const bad of ["/npm/@a%2fb%2fc", "/npm/@a%2f..%2fb", "/npm/x%2fy", "/npm/@a%2f%2e%2e", "/npm/@a%2fb/../../v1/messages"]) expect(matchPolicy(p, "GET", bad)).toEqual({ allow: false, reason: "bad_path" });
+    const llm = pol("install", [{ id: "p", method: "GET", match: { kind: "prefix", path: "/v1/" }, upstream: "llm_proxy" }]);
+    expect(matchPolicy(llm, "GET", "/v1/@a%2fb")).toEqual({ allow: false, reason: "bad_path" });
+  });
+});
+
 describe("matchTunnel (D-294)", () => {
   it("only exact host:port from tunnels, only in the agent phase; no tunnels → never", () => {
     const p: GatePolicy = { ...pol("agent", []), tunnels: [{ host: "api.anthropic.com", port: 443 }] };
@@ -364,5 +376,34 @@ describe("gate server", () => {
       s.send(Buffer.from([1, 2, 3]), g.dnsPort, "127.0.0.1");
     });
     expect(junk).toBeNull();
+  });
+});
+
+describe("MCP routes to the sidecar (E8e, D-354)", () => {
+  it("the schema: an mcp route needs its target (http://<host>:<port>) and a per-minute budget; others must not have one", () => {
+    const ok = { id: "mcp-issues", method: "POST", match: { kind: "exact", path: "/mcp/issues" }, upstream: "mcp", mcp: { target: "http://mandat-mcp-r_x-issues:8080", per_min: 60 } };
+    expect(GateRouteSchema.safeParse(ok).success).toBe(true);
+    // the sidecar's name carries the run id (a ULID, upper case)
+    expect(GateRouteSchema.safeParse({ ...ok, mcp: { target: "http://mandat-mcp-r_01M5J8Z8WAZR4N0TBGC94C4A66-probe:8080", per_min: 60 } }).success).toBe(true);
+    expect(GateRouteSchema.safeParse({ ...ok, mcp: undefined }).success).toBe(false);
+    expect(GateRouteSchema.safeParse({ ...ok, mcp: { target: "https://evil.example.com", per_min: 60 } }).success).toBe(false);
+    expect(GateRouteSchema.safeParse({ ...LLM[0], mcp: ok.mcp }).success).toBe(false);
+  });
+  it("forwards /mcp/<name> to the sidecar's /mcp; over the budget → 429 and a proxy_block line", async () => {
+    let seen = "";
+    const up = await stub((req, res) => {
+      seen = req.url ?? "";
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end('{"ok":true}');
+    });
+    const route = (method: "POST" | "GET") => ({ id: `mcp-issues-${method}`, method, match: { kind: "exact" as const, path: "/mcp/issues" }, upstream: "mcp" as const, mcp: { target: up.url, per_min: 2 } });
+    const { base, lines } = await gate(pol("agent", [route("POST"), route("GET")]));
+    const post = () => fetch(`${base}/mcp/issues`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    expect((await post()).status).toBe(200);
+    expect(seen).toBe("/mcp");
+    expect((await post()).status).toBe(200);
+    expect((await post()).status).toBe(429);
+    expect(up.calls()).toBe(2);
+    await waitFor(() => lines().some((l) => l.kind === "proxy_block" && l.status === 429));
   });
 });

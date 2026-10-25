@@ -1,5 +1,5 @@
-import type { FleetRow, HomeExtras, McpRow, NightView, PermissionCell, PluginRow, ResearchView, SkillRow, ToolCallRow, WindowRow } from "../workbench";
-import { conflicts, tree } from "../workbench";
+import type { TerminalLine, FleetRow, HomeExtras, McpRow, NightView, PermissionCell, PluginRow, ResearchView, SkillRow, ToolCallRow, WindowRow } from "../workbench";
+import { conflicts, terminalLines, tree } from "../workbench";
 import { asUser } from "./sql";
 import type { Db } from "./sql";
 
@@ -24,7 +24,7 @@ export async function tools(db: Db, uid: string, org: string): Promise<{ mcp: Mc
               (select count(*)::int from public.tool_calls c where c.org_id = m.org_id and c.kind = 'mcp' and split_part(c.tool, '.', 1) = m.name and c.at > now() - interval '1 hour') as calls_hour
          from public.mcp_servers m where m.org_id = $1::uuid order by calls_hour desc, m.name`, [org])).rows;
     const skills = (await sql.query<SkillRow>(
-      `select k.name, k.description, k.source, k.version, (select count(distinct c.session_id)::int from public.tool_calls c where c.org_id = k.org_id and c.kind = 'skill' and c.tool = k.name and c.at > now() - interval '7 days') as used_by
+      `select k.name, k.description, k.source, k.version, k.blocked_reason, (select count(distinct c.session_id)::int from public.tool_calls c where c.org_id = k.org_id and c.kind = 'skill' and c.tool = k.name and c.at > now() - interval '7 days') as used_by
          from public.skills k where k.org_id = $1::uuid order by used_by desc, k.name`, [org])).rows;
     const plugins = (await sql.query<PluginRow>("select name, description, kind, enabled from public.plugins where org_id = $1::uuid order by name", [org])).rows;
     const permissions = (await sql.query<PermissionCell>("select subject, tool, decision from public.tool_permissions where org_id = $1::uuid order by subject, tool", [org])).rows;
@@ -46,11 +46,20 @@ async function windowsOf(sql: { query: Db["query"] }, org: string, task: string 
       where w.org_id = $1::uuid and ($2::text is null or s.task_id = $2) order by w.kind, w.last_seen_at desc limit 100`, [org, task])).rows;
 }
 
-export async function sessionOf(db: Db, uid: string, org: string, task: string): Promise<{ sessions: (FleetRow & { depth: number })[]; calls: ToolCallRow[]; windows: WindowRow[] }> {
+export async function sessionOf(db: Db, uid: string, org: string, task: string): Promise<{ sessions: (FleetRow & { depth: number })[]; calls: ToolCallRow[]; windows: WindowRow[]; lines: TerminalLine[] }> {
   return asUser(db, uid, async (sql) => ({
     sessions: tree((await sql.query<FleetRow>(`${FLEET} and s.task_id = $2 order by s.started_at`, [org, task])).rows),
     calls: await recentCalls(sql, org, task, 200),
     windows: await windowsOf(sql, org, task),
+    // E7e: the terminal = the lines of the latest leader session of the task (RLS: members of the org)
+    lines: terminalLines(
+      (await sql.query<{ seq: number; kind: string; text: string }>(
+        `select l.seq, l.kind, l.text from public.session_lines l
+          where l.session_id = (select id from public.agent_sessions where org_id = $1::uuid and task_id = $2 and role = 'lead' order by started_at desc limit 1)
+          order by l.seq limit 50000`,
+        [org, task],
+      )).rows,
+    ),
   }));
 }
 
@@ -73,9 +82,13 @@ export async function nightView(db: Db, uid: string, org: string): Promise<Night
     let last: NightView["last"] = null;
     if (lastRow) {
       const items = (await sql.query<{ text: string; repo: string; status: string }>("select q.text, r.full_name as repo, q.status from public.night_queue q join public.repos r on r.id = q.repo_id where q.shift_id = $1::uuid order by q.position", [lastRow.id])).rows;
-      last = { starts_at: lastRow.starts_at, spent_usd: lastRow.spent_usd, budget_usd: lastRow.budget_usd, merged: items.filter((i) => i.status === "merged").length, waiting: items.filter((i) => i.status === "waiting").length, failed: items.filter((i) => i.status === "failed").length, items };
+      last = { starts_at: lastRow.starts_at, spent_usd: lastRow.spent_usd, budget_usd: lastRow.budget_usd, merged: items.filter((i) => i.status === "merged").length, waiting: items.filter((i) => i.status === "waiting").length, failed: items.filter((i) => i.status === "failed").length, parked: items.filter((i) => i.status === "parked").length, items };
     }
-    return { shift, queue, last };
+    // E9a: the questions of the running shift, else of the last one; the repos for the plan form
+    const qShift = shift?.status === "running" ? shift.id : lastRow?.id;
+    const questions = qShift ? (await sql.query<NightView["questions"][number]>("select q.id::text as id, q.task_id, t.text, q.what_stopped, q.tried, q.proposal, q.status, q.answer from public.night_questions q join public.tasks t on t.id = q.task_id where q.shift_id = $1::uuid order by q.created_at", [qShift])).rows : [];
+    const repos = (await sql.query<NightView["repos"][number]>("select id::text as id, full_name as name from public.repos where org_id = $1::uuid order by created_at", [org])).rows;
+    return { shift, queue, last, questions, repos };
   });
 }
 

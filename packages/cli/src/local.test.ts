@@ -21,7 +21,7 @@ describe("mandat local (D-292)", () => {
     expect(pendingMigrations(["b.sql", "a.sql", "c.sql"], new Set(["shim", "a.sql"]))).toEqual(["b.sql", "c.sql"]);
     expect(pendingMigrations(["a.sql"], new Set(["shim", "a.sql"]))).toEqual([]);
   });
-  it("the web server: node runs next directly, no pnpm and no shell, so it starts on Windows and Ctrl+C stops it (D-309)", () => {
+  it("the web server: node runs next directly, no pnpm and no shell, so it starts on Windows and Ctrl+C stops it (D-367)", () => {
     const s = webStartSpawn(repoRoot);
     expect(s.cmd).toBe(process.execPath);
     expect(existsSync(s.args[0] ?? "")).toBe(true);

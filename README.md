@@ -1,5 +1,7 @@
 # Харнес (без име засега) и Мандат
 
+[English](README.en.md)
+
 **Харнесът** (приложението: задачи, агенти, акаунти, пясъчник) още няма име. **Мандат** е съдията в него: присъда D1–D4,
 стълба на доверие, дневник (D-296). Мандат работи и отделно: `mandat verify`, MCP сървър, GitHub врата.
 
@@ -8,8 +10,9 @@
 излизат само през безопасен износ, а проверката върви в нов пясъчник. Всяка присъда е ред във верижен дневник, чиято
 подмяна `mandat verify-log` хваща.
 
-> Състояние: **E0 (ходещ скелет)** — bench 8/8, redteam 4/4 на fake агенти. Пускането с истински Claude
-> (`--agent claude`) иска твоя ключ в проксито и още не е изпробвано (docs/progress.md).
+> Състояние: продуктът се строи по **PRD v1.1** (docs/prd/PRD.md, D-308) във фази E7–E11 (docs/spec/Харнес_v5_имплементация_промпт_кодер.md).
+> Текуща фаза: **E7а — живи спайкове и общи договори** (docs/progress.md). Живите части (истински ключ, абонамент, GitHub App-ове)
+> чакат локалното пускане по docs/setup/local-live-checklist.md.
 
 ## Агентът няма ключ; ключът е само в проксито
 
@@ -25,6 +28,14 @@
                                     └───────────────────────────┘
 ```
 
+### Ключове (E7в, D-313/D-345)
+- Ключът се въвежда веднъж: в „Ключове“ в UI или `ANTHROPIC_API_KEY=… pnpm mandat proxy start`. Пази се запечатан с
+  AES-256-GCM в `$MANDAT_HOME/keys.sealed.json` (0600) под ключ за криптиране (KEK): `$MANDAT_HOME/kek` (0600) или env
+  `MANDAT_KEK` (VPS; десктопът го държи в Electron safeStorage). В онлайн режим — в `private.api_keys` (само service role).
+- Проксито НЕ получава ключа в env: стартира заключено с еднократен `mdt_boot_…` токен (60 s); CLI-то му подава ключовете
+  веднъж през локалния админ порт. `docker inspect` показва само изразходвания токен.
+- След рестарт на компютъра/контейнера `pnpm local` пуска проксито отново със запазените ключове (без ново въвеждане).
+
 ## Предусловия
 | Инструмент | Изискване | Проверка |
 | --- | --- | --- |
@@ -37,6 +48,16 @@
 
 Хранилище или `MANDAT_HOME` под `/mnt/<буква>/` в WSL не се поддържа: клонирай в WSL файловата система (`~/`), D-094.
 Всичко без ключ (тестовете, fake агентите, bench, redteam) работи без `ANTHROPIC_API_KEY`.
+
+## Бърз старт по ОС (E7ж)
+| ОС | Подготовка | Пускане |
+| --- | --- | --- |
+| macOS (Apple Silicon/Intel) | Docker Desktop (Settings → Resources: ≥ 2 CPU); `brew install git node@24`; `npm i -g pnpm@12.14.0` | `pnpm install --frozen-lockfile && pnpm local` (или `pnpm desktop`) |
+| Windows | WSL2 + Ubuntu; Docker Desktop с WSL2 backend; клонирай в `~/` на WSL (не под `/mnt/c`, D-094); в WSL: node 24, pnpm 12.14.0, git ≥ 2.43 | в WSL: `pnpm install --frozen-lockfile && pnpm local` |
+| Linux | Docker Engine ≥ 25.0.5 (rootless препоръчано); node 24, pnpm 12.14.0, git ≥ 2.43 | `pnpm install --frozen-lockfile && pnpm local` |
+
+Ако нещо не тръгне: `pnpm mandat doctor` казва какво да се поправи; `pnpm mandat doctor --report` печата анонимен отчет (без пътища,
+потребител и IP), който можеш да пратиш. Ако Docker регистърът не е достъпен, `pnpm local` повтаря строежа без apt (D-302).
 
 ## Как се пуска (от нулата)
 ```sh
@@ -95,6 +116,9 @@ pnpm local
 **Тема и изглед** (D-305): тъмна по подразбиране, светла или като системата, в „Настройки“. Главната има 4 изгледа
 (Карта + проекти, Карта + колони, Проект, Списък). **В терминала** (D-306): `pnpm mandat tui`.
 
+**Език** (E7е, D-348): интерфейсът е на английски по подразбиране; български от „Settings → Language“ (бисквитка `lang`;
+без нея решава Accept-Language на браузъра). Терминалът и десктопът: `MANDAT_LANG=bg` или системният локал. Речник: docs/glossary.md.
+
 **Десктоп прозорец** (D-303): `pnpm desktop` — същото като `pnpm local`, но в собствен прозорец с икона в tray; влиза сам
 и показва двуфакторния ключ веднъж. Electron се сваля само при първото `pnpm desktop`.
 
@@ -141,7 +165,7 @@ E2e тестовете (`pnpm test:e2e`) търсят браузъра в `MANDA
 | Група | Лиценз | Пакети | Позволени зависимости (prod, транзитивно) |
 | --- | --- | --- | --- |
 | Ядро | Apache-2.0 (`packages/<p>/LICENSE`, `NOTICE`) | contract, core, ledger, export, sandbox, redaction; от E1б–E2: verify, gate-github, mcp | MIT, Apache-2.0, BSD-2/3-Clause, ISC, 0BSD, BlueOak-1.0.0 (без MPL, без GPL) |
-| Харнес | GPL-3.0-or-later (коренът `LICENSE`) | egress-gate, llm-proxy, channels, agents, cli, apps/worker, apps/web, onboard, bench, spikes | ядрото + MPL-2.0 |
+| Харнес | GPL-3.0-or-later (коренът `LICENSE`) | egress-gate, llm-proxy, channels, agents, cli, apps/worker, apps/web, onboard, profile, bench, spikes | ядрото + MPL-2.0 |
 
 Защо така: Apache-2.0 код може да се ползва от GPL-3.0 проект, обратното не може
 ([apache.org/licenses/GPL-compatibility.html](https://www.apache.org/licenses/GPL-compatibility.html);

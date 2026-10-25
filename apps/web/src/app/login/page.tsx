@@ -1,39 +1,46 @@
 import type { Metadata } from "next";
-import { HARNESS, pageName } from "../../lib/brand";
 import { btn, card, input } from "../../components/ui";
+import { rich } from "../../i18n/rich";
+import { getT } from "../../i18n/server";
+import type { Key } from "../../i18n/t";
+import { HARNESS, pageName } from "../../lib/brand";
 import { authMode } from "../../lib/server/auth";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: pageName("Вход") };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: pageName((await getT())("login.title")) };
+}
 
-const ERR: Record<string, string> = { bad: "Грешен имейл или парола.", no_org: "Акаунтът не е член на организация.", origin: "Заявката не идва от този сайт.", off: "Входът не е настроен." };
+const ERR: Record<string, Key> = { bad: "login.err.bad", no_org: "login.err.no_org", origin: "login.err.origin", off: "login.err.off" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
   const e = (await searchParams).e;
+  const t = await getT();
   const mode = authMode();
+  const local = <code className="font-mono">pnpm local</code>;
   return (
     <main id="main" className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <span aria-hidden="true" className="hex inline-block h-10 w-12 bg-accent" />
-          <h1 className="font-display mt-4 text-2xl font-semibold tracking-tight">{HARNESS ? `Вход в ${HARNESS}` : "Вход"}</h1>
-          <p className="mt-1 text-sm text-mute">AI агенти, които не могат да излъжат за тестовете.</p>
+          <h1 className="font-display mt-4 text-2xl font-semibold tracking-tight">{HARNESS ? t("login.titleNamed", { name: HARNESS }) : t("login.title")}</h1>
+          <p className="mt-1 text-sm text-mute">{t("login.tagline")}</p>
         </div>
         {mode === "none" ? (
-          <p className={`${card} p-5 text-sm`}>Входът не е настроен. Пусни харнеса с <code className="font-mono">pnpm local</code>.</p>
+          <p className={`${card} p-5 text-sm`}>{rich(t("login.notSetUp"), { cmd: local })}</p>
         ) : (
           <form className={`${card} space-y-4 p-6`} action="/api/auth/login" method="post">
-            {e && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad" role="alert">{ERR[e] ?? "Входът не успя."}</p>}
+            {e && <p className="rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad" role="alert">{t(ERR[e] ?? "login.err.generic")}</p>}
             <label className="block">
-              <span className="text-sm font-medium">Имейл</span>
+              <span className="text-sm font-medium">{t("login.email")}</span>
               <input className={`${input} mt-1.5`} name="email" type="email" autoComplete="username" required />
             </label>
             <label className="block">
-              <span className="text-sm font-medium">Парола</span>
+              <span className="text-sm font-medium">{t("login.password")}</span>
               <input className={`${input} mt-1.5`} name="password" type="password" autoComplete="current-password" required />
             </label>
-            <button className={`${btn.primary} w-full`} type="submit">Влез</button>
-            {mode === "dev" && <p className="text-center text-xs text-mute">Имейлът и паролата са в терминала, където пусна <code className="font-mono">pnpm local</code>.</p>}
+            <button className={`${btn.primary} w-full`} type="submit">{t("login.submit")}</button>
+            {mode === "dev" && <p className="text-center text-xs text-mute">{rich(t("login.devHint"), { cmd: local })}</p>}
           </form>
         )}
       </div>

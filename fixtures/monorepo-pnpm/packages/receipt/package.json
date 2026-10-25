@@ -1,0 +1,1 @@
+{ "name": "@shop/receipt", "version": "1.0.0", "private": true, "type": "module", "main": "src/receipt.ts", "dependencies": { "@shop/cart": "workspace:*" } }

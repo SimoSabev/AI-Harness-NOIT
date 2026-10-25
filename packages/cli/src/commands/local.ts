@@ -12,6 +12,7 @@ import { repoRoot } from "../paths.js";
 import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
 import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
+import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
 import { listAccounts } from "./accounts.js";
 import { newBase32Secret } from "./demo.js";
 import { slotsFrom, workerCommand } from "./worker.js";
@@ -25,7 +26,7 @@ export function dbRunArgs(port: number): string[] {
   return ["run", "-d", "--name", LOCAL_DB.container, "-v", `${LOCAL_DB.volume}:/var/lib/postgresql/data`, "-e", "POSTGRES_PASSWORD=postgres", "-p", `127.0.0.1:${port}:5432`, LOCAL_DB.image];
 }
 
-// D-309: node runs next's own bin, not `pnpm --filter … start`: pnpm is pnpm.cmd on Windows (spawn needs a shell for
+// D-367: node runs next's own bin, not `pnpm --filter … start`: pnpm is pnpm.cmd on Windows (spawn needs a shell for
 // it), and through a shell kill() would stop cmd.exe and leave the server holding the port.
 export function webStartSpawn(root: string): { cmd: string; args: string[]; cwd: string } {
   const cwd = path.join(root, "apps", "web");
@@ -199,6 +200,15 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     io.stderr("прокси: пускам с ключа от env…\n");
     await startProxy({ anthropic: fromEnv, ...(io.env.OPENAI_API_KEY ? { openai: io.env.OPENAI_API_KEY } : {}) });
   }
+  // E7в (AC-3.8): the sealed keys survive a restart; a proxy that came back locked (its boot token is spent) is recreated
+  const fromStore = async () => {
+    if (!hasSealedKeys(o.home) || !(await proxyLocked(host.proxyAdminPort))) return;
+    io.stderr("прокси: пускам със запазените ключове…\n");
+    await proxyStart({ ...io, stdout: () => undefined, env: clean }, deps, { mandatHome: o.home, host, json: true, force: true });
+  };
+  if (!fromEnv) await fromStore();
+  const healer = setInterval(() => void fromStore().catch(() => undefined), 30_000);
+  healer.unref();
   const control = await startControl({
     start: startProxy,
     stop: async () => void (await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort })),
@@ -236,6 +246,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   try {
     return await workerCommand({ ...io, env: { ...clean, MANDAT_DB_URL: url } }, { home: o.home, once: false, signal: stop.signal, slots });
   } finally {
+    clearInterval(healer);
     web.kill("SIGTERM");
     await control.close();
   }

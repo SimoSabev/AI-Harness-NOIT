@@ -1,0 +1,78 @@
+# Mandat verify — the verdict on an AI agent's pull request (VERIFIED / UNKNOWN / FAILED).
+# Runs the PR's tests in Mandat's sandbox (Docker on the runner) against the PR's base branch and catches deleted, skipped or
+# weakened tests, out-of-scope and protected-file changes, test-only special cases, and more. See docs/setup/github-action.md.
+name: Mandat verify
+description: Independent verdict on a pull request written by an AI agent — catches tests deleted, skipped or weakened to pass.
+author: Mandat
+branding:
+  icon: shield
+  color: green
+inputs:
+  type:
+    description: "Task type from .mandat.yml (bugfix, feature, css, docs, free). Empty: the strict policy defaults (a deleted test fails)."
+    required: false
+    default: ""
+  fail-on:
+    description: "FAILED (default): only FAILED turns the check red. UNKNOWN: also red when a human should look."
+    required: false
+    default: FAILED
+  lint:
+    description: "The project's lint command (D8); counted only when it passes on the base branch."
+    required: false
+    default: ""
+  typecheck:
+    description: "The project's typecheck command (D8); counted only when it passes on the base branch."
+    required: false
+    default: ""
+  ui-paths:
+    description: "Globs of UI files (comma or newline). A change that touches them is opened in a browser (D12); builds a 3.6 GB image."
+    required: false
+    default: ""
+  dev:
+    description: "The dev server command for D12 (must listen on $HOST:$PORT)."
+    required: false
+    default: ""
+  ui-routes:
+    description: "Routes D12 opens (comma or newline, at most 5). Default: /"
+    required: false
+    default: ""
+outputs:
+  result:
+    description: VERIFIED, UNKNOWN or FAILED
+    value: ${{ steps.verify.outputs.result }}
+  level:
+    description: The effective level (0–3)
+    value: ${{ steps.verify.outputs.level }}
+  reasons:
+    description: The reasons as a JSON array
+    value: ${{ steps.verify.outputs.reasons }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24.22.0
+    - name: Build Mandat
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: |
+        corepack enable
+        pnpm install --frozen-lockfile
+        pnpm exec turbo run build --filter=@mandat/cli... --filter=@mandat/verify...
+    - name: Build the sandbox images
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: node packages/cli/dist/main.js images build ${{ inputs.ui-paths != '' && '--ui' || '' }}
+    - name: Verify the pull request
+      id: verify
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        INPUT_TYPE: ${{ inputs.type }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_LINT: ${{ inputs.lint }}
+        INPUT_TYPECHECK: ${{ inputs.typecheck }}
+        INPUT_UI_PATHS: ${{ inputs.ui-paths }}
+        INPUT_DEV: ${{ inputs.dev }}
+        INPUT_UI_ROUTES: ${{ inputs.ui-routes }}
+      run: node packages/verify/dist/action-main.js

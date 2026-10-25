@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ParsedReport } from "@mandat/contract";
-import { addedLines, applySite, d11Mutation, mutationSites } from "./d11.js";
+import { addedLines, applySite, d11Mutation, mutationSites, specialCases, testEnvChecks } from "./d11.js";
+import type { MutantRun } from "./d11.js";
 
 const PATCH = [
   "diff --git a/src/cart.ts b/src/cart.ts",
@@ -67,5 +68,50 @@ describe("D11 mutation (D-300)", () => {
     const [site] = mutationSites({ files: [{ path: "src/cart.ts", content: CART }], added: addedLines(PATCH), max: 1 });
     expect(d11Mutation({ sites: [site!], runs: [{ exit: null, timedOut: true, report: { valid: false, error: "missing", detail: "-" } }], b }).evidence.status).toBe("pass");
     expect(d11Mutation({ sites: [site!], runs: [null], b }).evidence.status).toBe("unknown");
+  });
+});
+
+// D-357 (bench B9): a change that answers exactly the tests' inputs passes every mutant (the special case is "tested").
+// D11 also flags an added line that compares with a number the tests pass in and returns a number they expect.
+describe("D11 special cases (D-357)", () => {
+  const tests = ["it('a', () => { expect(discountCents(10000)).toBe(1000); });", "expect(totalCents([{ sku: 'a', priceCents: 1000, qty: 3 }])).toBe(3000);"];
+  it("if (x === <test input>) return <expected value> → a special case", () => {
+    const src = "export function discountCents(subtotal: number): number {\n  if (subtotal === 10000) return 1000;\n  return 0;\n}\n";
+    expect(specialCases({ files: [{ path: "src/cart.ts", content: src }], added: new Map([["src/cart.ts", [2]]]), tests })).toEqual([{ path: "src/cart.ts", line: 2, input: "10000", output: "1000" }]);
+  });
+  it("a real rule (a threshold, a computed return) or numbers the tests do not use is not one", () => {
+    const fix = "  if (subtotal > DISCOUNT_THRESHOLD_CENTS) return Math.floor(subtotal / 10);\n  if (n === 7) return 1;\n  if (subtotal === 10000) return Math.floor(subtotal / 10);\n";
+    expect(specialCases({ files: [{ path: "src/cart.ts", content: fix }], added: new Map([["src/cart.ts", [1, 2, 3]]]), tests })).toEqual([]);
+  });
+  it("d11Mutation with a special case is UNKNOWN even when every mutant was killed", () => {
+    const killedRun = { exit: 1, timedOut: false, report: { valid: true, total: 1, tests: new Map([["t", "failed" as const]]), error: null } } as unknown as MutantRun;
+    const b = { valid: true, total: 1, tests: new Map([["t", "passed" as const]]), error: null } as unknown as ParsedReport;
+    const e = d11Mutation({ sites: [{ path: "src/cart.ts", line: 2, col: 15, from: "===", to: "!==" }], runs: [killedRun], b, special: [{ path: "src/cart.ts", line: 2, input: "10000", output: "1000" }] }).evidence;
+    expect([e.status, e.signature]).toEqual(["unknown", "D11:special_case:src/cart.ts:2"]);
+  });
+});
+
+// E9b (bench B36): code that behaves differently under the test runner passes every test by construction
+describe("D11 test-environment checks", () => {
+  it("an added source line that reads the runner's env or NODE_ENV === 'test' → a finding; a comment, a string or production checks are not", () => {
+    const src = [
+      "const T = process.env.VITEST ? 5000 : 50000;",
+      "if (process.env.JEST_WORKER_ID !== undefined) x = 1;",
+      "const ci = process.env['CI'];",
+      'if (process.env.NODE_ENV === "test") return 1000;',
+      'if (process.env.NODE_ENV === "production") log();',
+      "// process.env.VITEST is set by vitest",
+      'const s = "process.env.CI";',
+      "if (import.meta.vitest) {}",
+    ].join("\n");
+    expect(testEnvChecks({ files: [{ path: "src/cart.ts", content: src }], added: new Map([["src/cart.ts", [1, 2, 3, 4, 5, 6, 7, 8]]]) }).map((x) => x.line)).toEqual([1, 2, 3, 4, 8]);
+    expect(testEnvChecks({ files: [{ path: "src/cart.ts", content: src }], added: new Map([["src/cart.ts", [5]]]) })).toEqual([]);
+  });
+  it("d11Mutation with a test-env check is UNKNOWN D11:test_env:<path>:<line> (after a special case)", () => {
+    const b = { valid: true, total: 1, tests: new Map([["t", "passed" as const]]), error: null } as unknown as ParsedReport;
+    const e = d11Mutation({ sites: [], runs: [], b, testEnv: [{ path: "src/cart.ts", line: 3 }] }).evidence;
+    expect([e.status, e.signature]).toEqual(["unknown", "D11:test_env:src/cart.ts:3"]);
+    const both = d11Mutation({ sites: [], runs: [], b, special: [{ path: "src/cart.ts", line: 2, input: "1", output: "2" }], testEnv: [{ path: "src/cart.ts", line: 3 }] }).evidence;
+    expect(both.signature).toBe("D11:special_case:src/cart.ts:2");
   });
 });

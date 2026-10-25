@@ -16,7 +16,9 @@ import {
   profileVolume,
   buildProfileArgs,
   imageTags,
+  uiImageTag,
   infraUser,
+  names,
   runIdTime,
   sandboxHardening,
   sweepOrphans,
@@ -169,6 +171,22 @@ describe("buildRunArgs", () => {
   });
 });
 
+describe("D12 roles (D-364)", () => {
+  it("ui-app and ui get exactly SANDBOX_HARDENING, as 1000:1000, never a secret, never --cap-add; their network is named", () => {
+    const vol = { kind: "volume" as const, source: `mandat-vol-${RUN}-b`, target: "/m", readonly: false };
+    for (const role of ["ui-app", "ui"] as const) {
+      const a = buildRunArgs({ role, runId: RUN, image: "img", network: `mandat-ui-${RUN}`, user: "1000:1000", mounts: [vol], envNames: [], publicEnv: { PORT: "4173" }, detach: role === "ui-app", name: `mandat-ui-app-${RUN}` }, ctx);
+      for (const f of sandboxHardening(RUN, role)) expect(a).toContain(f);
+      expect(a).toContain(`mandat.role=${role}`);
+      expect(a.join(" ")).not.toMatch(/--cap-add|--privileged|-p |--publish|docker\.sock/);
+      expect(code(() => buildRunArgs({ role, runId: RUN, image: "img", network: "x", user: "1000:1000", mounts: [], envNames: ["ANTHROPIC_API_KEY"], publicEnv: {} }, ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+      expect(code(() => buildRunArgs({ role, runId: RUN, image: "img", network: "x", user: "0:0", mounts: [], envNames: [], publicEnv: {} }, ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    }
+    expect(names.uiNet(RUN)).toBe(`mandat-ui-${RUN}`);
+    expect(names.uiApp(RUN)).toBe(`mandat-ui-app-${RUN}`);
+  });
+});
+
 describe("buildProxyRunArgs (D-083)", () => {
   const base = {
     name: "mandat-llm-proxy" as const, image: "mandat-llm-proxy:v0.1.0-abc", user: "1000:1000", mandatHome: MH,
@@ -303,6 +321,22 @@ describe("imageTags (D-053)", () => {
     w("packages/contract/src/index.ts", "changed");
     const c = await imageTags(root);
     expect(c.proxy).not.toBe(b.proxy);
+  });
+});
+
+describe("uiImageTag (E9б, D12)", () => {
+  it("the Playwright version and a hash of the UI Dockerfile and runner; a change in the runner changes it", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mandat-uiimg-"));
+    const w = (p: string, c: string) => {
+      mkdirSync(path.dirname(path.join(root, p)), { recursive: true });
+      writeFileSync(path.join(root, p), c);
+    };
+    w("docker/sandbox-ui/Dockerfile", "FROM x");
+    w("packages/verify/ui-runner/ui-run.mjs", "a");
+    const a = uiImageTag(root);
+    expect(a).toMatch(/^mandat-sandbox-ui:pw1\.63\.0-[0-9a-f]{12}$/);
+    w("packages/verify/ui-runner/ui-run.mjs", "b");
+    expect(uiImageTag(root)).not.toBe(a);
   });
 });
 

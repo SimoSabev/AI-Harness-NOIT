@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { THEMES, VIEWS, parseSample, parseTheme, parseView, prefCookie } from "./prefs";
+import { LANG_CHOICES, THEMES, VIEWS, parseSample, parseTheme, parseView, prefCookie } from "./prefs";
 
 describe("prefs (D-305)", () => {
   it("тема и изглед: непозната стойност → по подразбиране (тъмна, карта)", () => {
@@ -25,6 +25,8 @@ describe("prefs (D-305)", () => {
   });
   it("бисквитката е за цялия сайт, година, SameSite=Lax", () => {
     expect(prefCookie("theme", "light")).toBe("theme=light; Path=/; Max-Age=31536000; SameSite=Lax");
+    expect(prefCookie("lang", "bg")).toBe("lang=bg; Path=/; Max-Age=31536000; SameSite=Lax");
+    expect(LANG_CHOICES.map((l) => l.id)).toEqual(["en", "bg"]);
   });
   it("светлата тема и „като системата“ при светла система са едни и същи стойности", () => {
     const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/globals.css"), "utf8");

@@ -1,3 +1,4 @@
+import { codexToStream } from "./to-stream.js";
 import type { AgentAdapter } from "../adapter.js";
 import { buildCodexArgv } from "./argv.js";
 import { parseCodexLine } from "./stream.js";
@@ -10,8 +11,12 @@ export function codexAdapter(o: { model: string; cliVersion: "0.160.1" }): Agent
     supportsSteering: false,
     launch(ctx, channel, canary) {
       if (!("OPENAI_API_KEY" in channel)) throw new Error("codex needs an openai channel");
-      return { argv: buildCodexArgv({ model: o.model, prompt: ctx.prompt }), env: { OPENAI_API_KEY: channel.OPENAI_API_KEY, [canary.name]: canary.value }, stdin: "closed" };
+      const argv = buildCodexArgv({ model: o.model, prompt: ctx.prompt });
+      // v5 E8а: the compiled -c flags go before the prompt (the last positional); CODEX_HOME is already public env
+      if (ctx.harness) argv.splice(argv.length - 1, 0, ...ctx.harness.argv);
+      return { argv, env: { OPENAI_API_KEY: channel.OPENAI_API_KEY, [canary.name]: canary.value }, stdin: "closed" };
     },
     parseLine: parseCodexLine,
+    toStream: codexToStream,
   };
 }

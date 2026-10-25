@@ -169,6 +169,7 @@ export async function startGate(o: GateOptions): Promise<{ close(): Promise<void
     });
   };
 
+  const mcpCalls = new Map<string, { minute: number; n: number }>();
   const server = http.createServer((req, res) => {
     const method = req.method ?? "GET";
     const p = req.url ?? "/";
@@ -184,6 +185,23 @@ export async function startGate(o: GateOptions): Promise<{ close(): Promise<void
     }
     if (route.upstream === "llm_proxy") {
       forward(req, res, new URL(p, llmProxy), method, p);
+      return;
+    }
+    if (route.upstream === "mcp" && route.mcp) {
+      // E8e (D-354): one path per server → the sidecar's /mcp; a per-minute budget per server (all its routes)
+      const key = route.mcp.target;
+      const minute = Math.floor(Date.now() / 60_000);
+      const c = mcpCalls.get(key);
+      const n = c && c.minute === minute ? c.n + 1 : 1;
+      mcpCalls.set(key, { minute, n });
+      if (n > route.mcp.per_min) {
+        log({ kind: "proxy_block", method, path: p, status: 429 });
+        res.writeHead(429, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "mandat_mcp_budget" }));
+        return;
+      }
+      const q = p.indexOf("?");
+      forward(req, res, new URL(`${route.mcp.target}/mcp${q >= 0 ? p.slice(q) : ""}`), method, p);
       return;
     }
     serveNpm(req, res, method, p);

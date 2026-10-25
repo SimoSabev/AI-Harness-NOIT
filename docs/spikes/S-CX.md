@@ -19,3 +19,6 @@
 ## Известно ограничение до S-CX
 Ако `project_doc_max_bytes=0` не спре четенето на AGENTS.md, износът вече третира AGENTS.md като config клас (D3 → UNKNOWN при
 промяна); четенето от агента е записано в docs/security.md.
+
+## v5 (22.10.2026)
+Статус: **SKIPPED — липсва ключ в проксито** (облачна сесия). Стъпката е в docs/setup/local-live-checklist.md.

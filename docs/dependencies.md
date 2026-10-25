@@ -31,6 +31,8 @@
 | @types/node | 24.19.2 | 09.10.2026 | MIT | dev | типове за Node 24 |
 | @types/picomatch | 4.0.3 | 03.04.2026 | MIT | dev | типове |
 | pnpm | 12.14.0 | 15.10.2026 | MIT | инструмент (packageManager) | workspace |
+| @modelcontextprotocol/server | 2.3.1 | 05.10.2026 | Apache-2.0 | packages/mcp (Apache), packages/mcp-bridge (харнес) | MCP сървърът `mandat`; бриджът stdio → streamable HTTP на sidecar-а (E8д); npm time, прочетено 22.10.2026 |
+| @modelcontextprotocol/client | 2.3.1 | 05.10.2026 | Apache-2.0 | packages/mcp (dev), packages/mcp-bridge (харнес) | stdio клиент към MCP сървъра в sidecar-а (E8д); тестове |
 | @modelcontextprotocol/sdk | 1.32.1 | 05.10.2026 | MIT | САМО spikes/ (dependency на private пакета spikes, D-086) | MCP сървър за спайк S1; не влиза в продукта |
 
 ## Извън npm (отделни процеси или образи, не се линкват)
@@ -82,6 +84,10 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | zod (cli) | 4.6.7 | — | MIT | cli (runtime) | валидация на ключовете на контролния адрес на `mandat local` (D-293); същата версия като в останалите пакети |
 | pnpm (образ mandat-sandbox) | 12.14.0 | (вж. инструментите на хранилището) | MIT | sandbox image | инсталиране на репа с pnpm-lock.yaml v9 в пясъчника; integrity в docker/sandbox/Dockerfile (D-301) |
 | yarn (образ mandat-sandbox) | 1.22.22 | 09.03.2024 | BSD-2-Clause | sandbox image | инсталиране на репа с yarn.lock v1; integrity в Dockerfile; собственият yarn на базовия образ се маха (D-301) |
+| @yarnpkg/cli-dist (образ mandat-sandbox) | 4.18.1 | 24.09.2026 | BSD-2-Clause | sandbox image | yarn berry за репа с yarn.lock v8–10 (`__metadata`); един файл `/opt/yarn-berry/yarn.js`, integrity в Dockerfile; `YARN_IGNORE_PATH=1` (D-358) |
+| @oven/bun-linux-x64-baseline, @oven/bun-linux-aarch64 (образ mandat-sandbox) | 1.4.3 | 10.10.2026 | MIT | sandbox image | `bun install` за репа с текстов bun.lock (спайк в docs/spikes/bun.md); само инсталиране, тестовете остават vitest/jest; integrity по архитектура в Dockerfile (D-358) |
+| typescript, vite, vitest (само фикстура fixtures/shop-bun-vitest) | 6.0.3, 8.3.4, 5.0.5 | (вж. demo-shop) | Apache-2.0, MIT, MIT | fixture | Docker тест на bun (D-358) |
+| typescript, vite, vitest (само фикстура fixtures/shop-yarn-berry) | 6.0.3, 8.3.4, 5.0.5 | (вж. demo-shop) | Apache-2.0, MIT, MIT | fixture | Docker тест на yarn berry (D-358) |
 | jest (само фикстура fixtures/shop-pnpm-jest) | 30.2.0 | 28.09.2025 | MIT | fixture | Docker тест на pnpm + jest; не е зависимост на пакет (D-301) |
 | vite, vitest, typescript (само фикстура fixtures/shop-yarn-vitest) | 8.3.4, 5.0.5, 6.0.3 | (вж. demo-shop) | MIT, MIT, Apache-2.0 | fixture | Docker тест на yarn v1; vite е изрично, защото yarn v1 не слага peer зависимости (D-301) |
 | electron (само apps/desktop, извън workspace) | 44.9.0 | 17.10.2026 | MIT | desktop (dev) | прозорецът на харнеса около `pnpm local` (D-303); инсталира се само с `pnpm desktop`; бинарният файл го сваля собственият install.js на electron срещу checksums.json в пакета; извън `pnpm licenses:check` (отделен lockfile) |

@@ -6,6 +6,8 @@ import { SseResponsesUsage, SseUsage, mergeUsage, responsesUsageOf } from "./sse
 import { ProxyState } from "./state.js";
 import type { RequestLine } from "./state.js";
 import { adminBearer, tokenPrefix8, verifyTaskToken } from "./token.js";
+import { BootGate } from "./boot.js";
+import type { BootOptions } from "./boot.js";
 
 export const PROXY_VERSION = "0.1.0";
 const INFERENCE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens", "/v1/responses"]);
@@ -78,9 +80,24 @@ export interface ProxyServerOptions {
   /** E3в: the OpenAI upstream (Responses API) with the real key; prices per model ([НП], from Simo) */
   openai?: { apiKey: string; upstream: string; prices: Record<string, OpenAiRate> };
   usageLogPath: string;
+  /** E7в / D-345: start locked; the keys arrive once through POST /admin/boot with the one-time boot token */
+  boot?: BootOptions;
   /** stdout log line (never bodies, headers or token values; 8.1). */
   log?: (line: RequestLine) => void;
   now?: () => number;
+}
+
+const KEY = /^[\x21-\x7e]{20,512}$/;
+function parseBootKeys(body: Buffer | null): { anthropic: string; openai?: string } | null {
+  try {
+    const v = JSON.parse(body?.toString("utf8") ?? "") as Record<string, unknown>;
+    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai");
+    if (!keysOk || typeof v.anthropic !== "string" || !KEY.test(v.anthropic)) return null;
+    if (v.openai !== undefined && (typeof v.openai !== "string" || !KEY.test(v.openai))) return null;
+    return { anthropic: v.anthropic, ...(typeof v.openai === "string" ? { openai: v.openai } : {}) };
+  } catch {
+    return null;
+  }
 }
 
 export function createProxyServer(o: ProxyServerOptions): { inference: http.Server; admin: http.Server; state: ProxyState } {
@@ -90,6 +107,11 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
   const now = o.now ?? (() => Date.now());
   const log = o.log ?? ((l: RequestLine) => process.stdout.write(JSON.stringify(l) + "\n"));
   const admin = adminBearer(o.secret);
+  // the real keys: from the options (env path) or, with a boot gate, from POST /admin/boot (memory only)
+  const keys = { anthropic: o.apiKey, openai: o.openai?.apiKey ?? "" };
+  const boot = o.boot ? new BootGate(o.boot) : null;
+  let locked = boot !== null;
+  const providers = (): string[] => (["anthropic", "openai"] as const).filter((p) => keys[p] !== "");
 
   const record = (l: Omit<RequestLine, "kind" | "ts">): void => {
     const line: RequestLine = { kind: "request", ts: new Date(now()).toISOString(), ...l };
@@ -113,13 +135,17 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         return reject(403, "permission_error", "path_not_allowed", null);
       }
       const provider = providerOf(p);
+      if (locked) {
+        req.resume();
+        return reject(503, "api_error", "proxy_locked", null);
+      }
       if (token === null) return reject(401, "authentication_error", "token_invalid", null);
       const v = verifyTaskToken(o.secret, token, Math.floor(now() / 1000));
       if (!v.ok) return reject(401, "authentication_error", v.code, null);
       const runId = v.claims.r;
       // E3в: a token is for ONE channel; an anthropic token on /v1/responses (or the reverse) → 401
       if ((v.claims.p ?? "anthropic") !== provider) return reject(401, "authentication_error", "token_channel_mismatch", runId);
-      if (provider === "openai" && (!o.openai || !openaiUpstream)) return reject(403, "permission_error", "provider_not_configured", runId);
+      if (provider === "openai" && (!o.openai || !openaiUpstream || keys.openai === "")) return reject(403, "permission_error", "provider_not_configured", runId);
       if (state.revoked.has(runId)) return reject(401, "authentication_error", "token_revoked", runId);
       const run = state.get(runId);
       run.budget = v.claims.b;
@@ -140,8 +166,8 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
 
       const headers: http.OutgoingHttpHeaders = {};
       for (const [k, val] of Object.entries(req.headers)) if (!DROP_REQ.has(k.toLowerCase()) && val !== undefined) headers[k] = val;
-      if (provider === "openai") headers.authorization = `Bearer ${o.openai?.apiKey ?? ""}`;
-      else headers["x-api-key"] = o.apiKey;
+      if (provider === "openai") headers.authorization = `Bearer ${keys.openai}`;
+      else headers["x-api-key"] = keys.anthropic;
       headers["content-length"] = body.length;
       const target = new URL(fullPath, provider === "openai" ? (openaiUpstream as URL) : upstream);
       const mod = target.protocol === "https:" ? https : http;
@@ -223,7 +249,27 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       const url = new URL(req.url ?? "/", "http://admin");
       if (req.method === "GET" && url.pathname === "/healthz") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, version: PROXY_VERSION }));
+        res.end(JSON.stringify({ ok: true, version: PROXY_VERSION, locked, providers: providers() }));
+        return;
+      }
+      if (req.method === "POST" && url.pathname === "/admin/boot") {
+        const a = req.headers.authorization;
+        const token = typeof a === "string" && a.startsWith("Bearer ") ? a.slice(7) : null;
+        const body = await readBody(req);
+        if (boot === null || !boot.check(token, now())) {
+          res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
+          return;
+        }
+        const parsed = parseBootKeys(body);
+        if (parsed === null) {
+          res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: "bad_keys" }));
+          return;
+        }
+        boot.spend();
+        keys.anthropic = parsed.anthropic;
+        keys.openai = parsed.openai ?? "";
+        locked = false;
+        res.writeHead(204).end();
         return;
       }
       if (req.headers.authorization !== `Bearer ${admin}`) {

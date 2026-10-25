@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
 import type { OpenAiRate } from "./pricing.js";
 import { createProxyServer } from "./server.js";
+import { BOOT_TTL_MS, bootTokenHash } from "./boot.js";
+
+// E7в / D-345: with a boot token the proxy starts locked and gets the keys once over the admin port
+const bootToken = process.env.MANDAT_PROXY_BOOT_TOKEN ?? "";
+delete process.env.MANDAT_PROXY_BOOT_TOKEN;
 
 const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
 const secretFile = process.env.MANDAT_PROXY_SECRET_FILE ?? "/var/lib/mandat-proxy/secret";
@@ -18,7 +23,7 @@ if ((!upstream.startsWith("https://") || !openaiUpstream.startsWith("https://"))
   process.stderr.write("mandat-llm-proxy: a non-https upstream needs MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM=1\n");
   process.exit(2);
 }
-if (apiKey === "" && process.env.MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM !== "1") {
+if (apiKey === "" && bootToken === "" && process.env.MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM !== "1") {
   process.stderr.write("mandat-llm-proxy: ANTHROPIC_API_KEY is missing\n");
   process.exit(2);
 }
@@ -27,7 +32,8 @@ const { inference, admin } = createProxyServer({
   secret,
   apiKey,
   upstream,
-  ...(openaiKey !== "" || process.env.MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM === "1" ? { openai: { apiKey: openaiKey, upstream: openaiUpstream, prices } } : {}),
+  ...(openaiKey !== "" || bootToken !== "" || process.env.MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM === "1" ? { openai: { apiKey: openaiKey, upstream: openaiUpstream, prices } } : {}),
+  ...(bootToken !== "" ? { boot: { tokenHash: bootTokenHash(bootToken), expiresAtMs: Date.now() + BOOT_TTL_MS, spentFile: "/var/lib/mandat-proxy/boot-spent" } } : {}),
   usageLogPath: process.env.MANDAT_PROXY_USAGE_LOG ?? "/var/lib/mandat-proxy/usage.jsonl",
 });
 inference.listen(8787, "0.0.0.0");

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { FileKeyStore, loadKek, mintBootToken } from "@mandat/llm-proxy";
 import { buildProxyRunArgs, dockerText, ensureUpstreamNetwork, imageTags } from "@mandat/sandbox";
 import { infraUserFor } from "@mandat/worker";
 import type { HostConfig } from "@mandat/worker";
@@ -37,9 +38,17 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     else io.stdout("already running\n");
     return 0;
   }
-  const key = io.env.ANTHROPIC_API_KEY;
-  if (key === undefined || key === "") {
-    io.stderr("задай ANTHROPIC_API_KEY само за тази команда: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
+  // E7в / D-313: the keys come from this command's env (and are sealed into the store) or from the store
+  const store = new FileKeyStore(o.mandatHome, loadKek({ env: io.env, mandatHome: o.mandatHome }));
+  const envKey = io.env.ANTHROPIC_API_KEY;
+  const envOpenai = io.env.OPENAI_API_KEY;
+  if (envKey !== undefined && envKey !== "") {
+    store.put("anthropic", envKey);
+    if (envOpenai) store.put("openai", envOpenai);
+  }
+  const key = store.get("anthropic");
+  if (key === null) {
+    io.stderr("няма ключ: въведи го в „Ключове“ в UI или веднъж: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
     return 3;
   }
   await ensureUpstreamNetwork(deps.docker);
@@ -56,16 +65,17 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   const publicEnv: Record<string, string> = { MANDAT_PROXY_SECRET_FILE: "/var/lib/mandat-proxy/secret" };
   // E3в: OpenAI only when given for this command; prices and upstreams are not secrets (S33, docs/setup/keys.md)
   for (const k of ["MANDAT_PROXY_OPENAI_PRICES", "MANDAT_UPSTREAM_ANTHROPIC", "MANDAT_UPSTREAM_OPENAI"] as const) if (io.env[k]) publicEnv[k] = io.env[k] as string;
-  const openai = io.env.OPENAI_API_KEY;
+  const openai = store.get("openai");
   // D-293: which providers have a key — names only, never values (read back by proxyProviders)
   publicEnv.MANDAT_PROXY_PROVIDERS = openai ? "anthropic,openai" : "anthropic";
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
     name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port,
-    envNames: openai ? ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] : ["ANTHROPIC_API_KEY"], publicEnv, ...(o.host.extraCa !== undefined ? { caFile: o.host.extraCa } : {}),
+    envNames: ["MANDAT_PROXY_BOOT_TOKEN"], publicEnv, ...(o.host.extraCa !== undefined ? { caFile: o.host.extraCa } : {}),
   });
-  // The key value lives only in the env of the docker CLI process; argv has just `-e ANTHROPIC_API_KEY`.
-  const started = await deps.docker.run(args, { env: { ANTHROPIC_API_KEY: key, ...(openai ? { OPENAI_API_KEY: openai } : {}) }, stdin: "closed", timeoutMs: 60_000 });
+  // D-345: the container gets only a one-time boot token (by name, D-043); the keys go once over the loopback admin port.
+  const boot = mintBootToken();
+  const started = await deps.docker.run(args, { env: { MANDAT_PROXY_BOOT_TOKEN: boot }, stdin: "closed", timeoutMs: 60_000 });
   if (started.exitCode !== 0) {
     io.stderr("cannot start mandat-llm-proxy\n");
     return 3;
@@ -73,6 +83,11 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   if (!(await waitHealthz(deps, port, 10_000))) {
     await dockerText(deps.docker, ["rm", "-f", NAME], 60_000);
     io.stderr("llm-proxy: healthz did not answer within 10 s\n");
+    return 3;
+  }
+  if (!(await deps.bootProxy(port, boot, { anthropic: key, ...(openai ? { openai } : {}) }))) {
+    await dockerText(deps.docker, ["rm", "-f", NAME], 60_000);
+    io.stderr("llm-proxy: the boot exchange failed\n");
     return 3;
   }
   if (o.json) printJson(io, { state: "running", healthz: "ok", port });

@@ -1,0 +1,10 @@
+{
+  "name": "@mandat-fixture/fake-mcp",
+  "version": "1.0.0",
+  "private": false,
+  "description": "A fake stdio MCP server for the sidecar docker test (E8e): reports what it can see from inside its sidecar.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "bin": { "fake-mcp": "server.mjs" },
+  "dependencies": { "@modelcontextprotocol/server": "2.3.1" }
+}

@@ -20,11 +20,12 @@ describe("mandat tui (D-306)", () => {
   it("без цвят: картата, роят, панелите и клавишите; всеки ред е най-много колкото терминала", () => {
     const out = renderTui(tuiModel(rows, now), { width: 100, height: 30, color: false, focus: 0 });
     const lines = out.split("\n");
-    expect(out).toContain("задачи 1");
-    expect(out).toContain("ти 2");
+    expect(out).toContain("tasks 1");
+    expect(out).toContain("you 2");
     expect(out).toContain("[1] api");
-    expect(out).toContain("ПРОВАЛ");
-    expect(out).toContain("q изход");
+    expect(out).toContain("FAILED");
+    expect(out).toContain("q quit");
+    expect(/[\u0400-\u04FF]/.test(out.replace(/задача \w/g, ""))).toBe(false);
     expect(out).not.toContain("\u001b[");
     for (const l of lines) expect(visibleWidth(l)).toBeLessThanOrEqual(100);
     expect(lines.length).toBeLessThanOrEqual(30);
@@ -35,6 +36,14 @@ describe("mandat tui (D-306)", () => {
     for (const l of out.split("\n")) expect(visibleWidth(l)).toBeLessThanOrEqual(80);
   });
   it("празно: казва как да дадеш задача", () => {
-    expect(renderTui(tuiModel([], now), { width: 60, height: 20, color: false, focus: 0 })).toContain("Още няма задачи");
+    expect(renderTui(tuiModel([], now), { width: 60, height: 20, color: false, focus: 0 })).toContain("No tasks yet");
+  });
+  it("на български (MANDAT_LANG=bg): същата карта с думите от каталога (E7е)", () => {
+    const out = renderTui(tuiModel(rows, now), { width: 100, height: 30, color: false, focus: 0, lang: "bg" });
+    expect(out).toContain("задачи 1");
+    expect(out).toContain("ти 2");
+    expect(out).toContain("ПРОВАЛ");
+    expect(out).toContain("q изход");
+    expect(renderTui(tuiModel([], now), { width: 60, height: 20, color: false, focus: 0, lang: "bg" })).toContain("Още няма задачи");
   });
 });

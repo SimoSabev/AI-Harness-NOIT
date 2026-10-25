@@ -6,7 +6,7 @@ import { db } from "./db";
 import { controlKeys } from "./keys";
 import { devSecondFactor } from "./session";
 
-// Демо промпт т. 8 „Общо за E3“: the ONLY web module that reads SUPABASE_SERVICE_ROLE_KEY; imported only by
+// Demo prompt §8 "Common to E3": the ONLY web module that reads SUPABASE_SERVICE_ROLE_KEY; imported only by
 // app/api/**/route.ts (service-role-scope.test.ts). The key is used for the Realtime REST broadcast.
 function broadcaster(): ApiDeps["broadcast"] {
   const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;

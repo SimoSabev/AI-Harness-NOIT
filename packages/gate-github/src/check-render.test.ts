@@ -46,3 +46,15 @@ describe("check-render (т. 6.2, D-209)", () => {
     expect(checkLine(v)).toBe("Мандат verdict: failure — FAILED · D7.ci pass · D2.inventory fail (20 → 19)");
   });
 });
+
+describe("D-209 fallback (E7б): UNKNOWN → failure when action_required does not block", () => {
+  it("default action_required; unknownAs failure → failure with the same UNKNOWN title; env switch", async () => {
+    const { conclusionOf, unknownConclusionFrom } = await import("./index.js");
+    expect(conclusionOf("UNKNOWN")).toBe("action_required");
+    expect(conclusionOf("UNKNOWN", "failure")).toBe("failure");
+    expect(conclusionOf("VERIFIED", "failure")).toBe("success");
+    expect(unknownConclusionFrom({})).toBe("action_required");
+    expect(unknownConclusionFrom({ MANDAT_UNKNOWN_CONCLUSION: "failure" })).toBe("failure");
+    expect(unknownConclusionFrom({ MANDAT_UNKNOWN_CONCLUSION: "neutral" })).toBe("action_required");
+  });
+});

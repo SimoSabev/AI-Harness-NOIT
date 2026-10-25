@@ -96,7 +96,7 @@ describe("репо", () => {
     expect(banned.test('import { z } from "@mandat/contract";')).toBe(false);
   });
 
-  it("скриптовете с `VAR=…` вървят и под Windows: pnpm ползва shell emulator (D-309)", () => {
+  it("скриптовете с `VAR=…` вървят и под Windows: pnpm ползва shell emulator (D-367)", () => {
     const envPrefix = /^[A-Z_][A-Z0-9_]*=\S*\s/;
     const manifests = ["package.json", ...["packages", "apps"].flatMap((d) => readdirSync(path.join(repo, d)).map((n) => path.join(d, n, "package.json")))];
     const prefixed = manifests

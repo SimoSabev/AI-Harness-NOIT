@@ -1,0 +1,24 @@
+{
+  "name": "@mandat/profile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The harness profile compiler: layers A–H → each agent's control layer (Claude Code, Codex, Gemini, local)",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/profile/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*"
+  }
+}

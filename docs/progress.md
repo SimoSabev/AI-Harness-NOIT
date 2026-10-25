@@ -17,22 +17,41 @@
 
 Общо чака Симо: docs/spec (10 файла на спецификацията, т. 0.6; Q-018).
 
+## v5 (PRD v1.1): фази E7–E11
+
+В облачната сесия всичко е линейно в клона на сесията с таг `[phase/<код>]` в комитите (D-340).
+
+| Ред | Фаза | Клон | Зависи от | Статус | Готово, когато | Live части (SKIPPED без Симо) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | E7а живи спайкове + общи договори | phase/e7a-live-spikes | — | ГОТОВО (live чака Симо) (docs/reports/E7a.md) | 5/6 | S0, S1, S2, S-CX, SH2 (live), S-SUB |
+| 2 | E7б GitHub на живо | phase/e7b-github-live | E7а | ГОТОВО (live чака Симо) (docs/reports/E7b.md) | 0/3 офлайн-възможни → резервата D-209 готова | L1–L3, external-pr --live |
+| 3 | E7в ключове (envelope, boot токен) | phase/e7c-key-envelope | E7а | ГОТОВО (live чака Симо; safeStorage → E9ж) (docs/reports/E7c.md) | 4/5 | истински ключ |
+| 4 | E7г базова линия, flaky, рисков профил | phase/e7d-baseline | E7а | ГОТОВО (docs/tasks/e7d.md) | 4/4 | — |
+| 5 | E7д сесията на живо | phase/e7e-live-session | E7а | ГОТОВО (live чака Симо) (docs/reports/E7e.md) | 3/3 | истински агент |
+| 6 | E7е езиков каталог | phase/e7f-i18n | — | ГОТОВО (docs/reports/E7f.md) | все редове | — |
+| 7 | E7ж първо пускане на чужда машина | phase/e7g-first-run | E7в | ГОТОВО (live чака Симо) (docs/reports/E7g.md) | 1/3 | macOS/Windows при Симо |
+| 8 | E8а контролен слой и компилатор | phase/e8a-profile-compiler | E7а (SH2) | ГОТОВО (live чака Симо) (docs/reports/E8a.md) | 4/5 | истински агент с deny |
+| 9 | E8б харнес-профил A–H | phase/e8b-profile | E8а, E7г | ГОТОВО („Пробвай“ отложено) (docs/tasks/e8b.md) | 3/4 | — |
+| 10 | E8в роли | phase/e8c-roles | — | ГОТОВО (docs/reports/E8c.md) | 3/3 | — |
+| 11 | E8г права с ask, насочване, HELD срок | phase/e8d-permissions | E8а, E8в | ГОТОВО (live чака Симо) (docs/reports/E8d.md) | 3/3 | S2 live → MANDAT_STEER=1 |
+| 12 | E8д MCP каталог и скилове | phase/e8e-mcp-catalog | E8а | ГОТОВО (live чака Симо) (docs/reports/E8e.md) | 4/4 | CLI ↔ бридж на живо (чеклист 18) |
+| 13 | E8е конфликти, WIP, rebase | phase/e8f-coordination | E7д | ГОТОВО (docs/reports/E8f.md) | 2/2 | — |
+| 14 | E8ж доставка | phase/e8g-delivery | E7б | ГОТОВО (live чака Симо) (docs/reports/E8g.md) | 3/3 | L1–L3 |
+| 15 | E8з threat model, redteam 10, bench 20 | phase/e8h-redteam | E8а, E8д | ГОТОВО (прегледът чака Симо) (docs/reports/E8h.md) | 2/3 | — |
+| 16 | E8и monorepo/berry/bun | phase/e8i-runners | E7г | ГОТОВО (docs/reports/E8i.md) | 2/2 | — |
+| 17 | E8к спайк RS | phase/e8k-spike-research | — | ГОТОВО (живите числа чакат Симо) (docs/reports/E8k.md) | 1/2 | ключове за доставчици |
+| 18 | E9а нощна смяна | phase/e9a-night-shift | E8е, E8г | ГОТОВО (live чака Симо) (docs/reports/E9a.md) | 1/2 | нощна смяна у Симо |
+| 19 | E9б D5/D8/D12/съветник | phase/e9b-judge-full | E8б | ГОТОВО (AC-5.4 на живо чака Симо) (docs/reports/E9b.md) | 5/6, bench 40/40 | преглед на живо (Q-059); D12 и скрити тестове с твой проект (чеклист 22–23) |
+| 20 | E9в Gemini, local, роли по модел, Codex профил | phase/e9c-agents-2 | E8а | не е започната | 0/— | ключове/вход |
+| 21 | E9г ресърч услуга | phase/e9d-research | E8д, E8к | не е започната | 0/— | ключове; златен набор |
+| 22 | E9д учене | phase/e9e-learning | E9а | не е започната | 0/— | — |
+| 23 | E9е подписани комити, revert, GitLab | phase/e9f-delivery-2 | E8ж | не е започната | 0/— | L4 |
+| 24 | E9ж професионален десктоп | phase/e9g-desktop-pro | E7в, E7е | не е започната | 0/— | подписване, 3 ОС |
+| 25 | E10 екипи и навсякъде | phase/e10-* | E9 | не е започната | 0/— | VPS, екип |
+| 26 | E11 платформа | phase/e11-* | E10 | не е започната | 0/— | — |
+
 ## Текуща задача
-E6 (D-296–D-303): харнесът (без име засега) + Мандат (съдията); правила, дъска, канали и стълба в UI; 2 задачи наведнъж; промяната по
-файл; мутационна проверка D11; pnpm/yarn/jest; проверка преди `pnpm local`; `pnpm desktop`. Следва: проба у Симо
-(`pnpm local` или `pnpm desktop`, `pnpm mandat login`); monorepo/workspaces; yarn berry.
+E7, E8, E9а и E9б са готови (живите части — docs/setup/local-live-checklist.md). D-360: вид задача „Без ограничения“ (free).
+Следва: E9в — Gemini CLI, локален модел, роли по модел, Codex профил (+ каналът „review“ за съветника).
 
-## Часове: план/реално по фаза
-| Фаза | План [О] | Реално |
-| --- | --- | --- |
-| E1а | 4–5 | ≈ 2 |
-| E1б | 44–56 | ≈ 6 |
-| E1в | 25–34 | ≈ 3 |
-| E2 | 17–23 | ≈ 2,5 |
-| E3а | 34–44 | ≈ 4 |
-| E3б | 20–27 | ≈ 3 |
-| E3в | 23–29 | ≈ 4 |
-| E3г | 9–12 | ≈ 2 |
-| E4 | 26–36 | ≈ 5 |
-
-## Разход API: $0
+## Разход API: $0 (v5 бюджет ≤ $25, D-328)

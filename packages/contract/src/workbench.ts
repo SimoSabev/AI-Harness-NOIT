@@ -12,6 +12,10 @@ const SECRET = /\b(?:sk-[A-Za-z0-9_-]{8,}|ghp_[A-Za-z0-9]{20,}|gh[ousr]_[A-Za-z0
 export function redactSummary(s: string): string {
   return s.replace(SECRET, "[скрито]").replace(/\s+/g, " ").trim().slice(0, 300);
 }
+/** Secrets out, newlines kept, at most `max` characters (the stream text, v5 2.1). */
+export function redactText(s: string, max: number): string {
+  return s.replace(SECRET, "[скрито]").slice(0, max);
+}
 export function localUrl(u: string): boolean {
   try {
     const x = new URL(u);
@@ -86,12 +90,27 @@ export type OpenWindowWrite = z.infer<typeof OpenWindowWrite>;
 export const NightRules = z
   .object({
     auto_merge: z.object({ min_level: z.number().int().min(0).max(3), max_lines: z.number().int().min(0).max(2000) }).strict(),
-    on_fail: z.enum(["stop", "retry_once"]),
+    // v5 2.4 / D-320: the shift never stops on one task; the old values (D-307) read as the new one
+    on_fail: z.preprocess((v) => (v === "stop" || v === "retry_once" ? "retry_then_park" : v), z.literal("retry_then_park")),
+    retries: z.number().int().min(0).max(3).default(1),
     same_file: z.enum(["wait", "allow"]),
     forbid_tools: z.array(z.string().min(1).max(120)).max(100),
   })
   .strict();
 export type NightRules = z.infer<typeof NightRules>;
+export const NightQuestion = z
+  .object({
+    shift_id: z.string().uuid(),
+    task_id: TaskId,
+    what_stopped: z.string().max(1000),
+    tried: z.array(z.string().max(300)).max(10),
+    proposal: z.string().max(2000),
+    status: z.enum(["open", "answered", "closed"]),
+    answer: z.string().max(2000).nullable(),
+  })
+  .strict();
+export type NightQuestion = z.infer<typeof NightQuestion>;
+export const NightQueueStatus = z.enum(["queued", "running", "merged", "waiting", "failed", "skipped", "parked"]);
 export const NightQueueWrite = z.object({ repo_id: z.string().uuid(), text: z.string().min(1).max(4000), risk: z.enum(["low", "medium", "high"]), est_minutes: z.number().int().min(1).max(1440), est_usd: z.number().min(0).max(1000) }).strict();
 
 export const ResearchQuestionWrite = z.object({ id: z.string().regex(/^q_[a-z0-9_]{1,40}$/), question: z.string().min(1).max(2000), repo_id: z.string().uuid().nullable() }).strict();

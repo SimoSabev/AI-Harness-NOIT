@@ -5,7 +5,7 @@ import type { Summary } from "../inbox";
 import { asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 
-// Демо промпт т. 8.1: GET /api/inbox, /api/board, /api/tasks/:id — all under RLS as the user.
+// Demo prompt §8.1: GET /api/inbox, /api/board, /api/tasks/:id — all under RLS as the user.
 export type Role = "owner" | "approver" | "viewer";
 export interface TaskRow {
   id: string; type: string; agent: string; text: string; state: string; wait_reason: string | null; usd: number; minutes: number;
@@ -15,10 +15,12 @@ export interface TaskRow {
   pr_number: number | null; approved_by_human: boolean; col: ColumnNo; repo_id: string;
   a_passed: number | null; a_total: number | null; inv_before: number | null; inv_after: number | null;
   ladder_level: number | null; ladder_s_up: number | null; ladder_pinned: boolean | null; ledger_seq: number | null;
+  /** E8g: a steerable agent is running now (the "Steer" box) */
+  steerable?: boolean;
 }
 
 const TASKS = `
-select t.id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.wait_reason, t.usd::float8 as usd, t.minutes::float8 as minutes, t.effective_level,
+select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t.state, t.wait_reason, t.usd::float8 as usd, t.minutes::float8 as minutes, t.effective_level,
        t.last_result, t.outcome_decided, t.seq::int as seq, to_char(t.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at,
        to_char(t.state_entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as state_entered_at,
        c.id::text as changeset_id, c.head_sha, coalesce(c.approval_needed, false) as approval_needed, coalesce(c.requires_second_factor, false) as requires_second_factor,
@@ -85,6 +87,10 @@ export interface TaskDetail {
   ladderEvents: { input: string; level_before: number; level_after: number; created_at: string }[];
   ledger: { seq: number; kind: string; ts: string; hash: string }[]; diff: string | null; activities: { kind: string; text: string }[];
   approvals: { decision: string; method: string; decided_at: string }[]; label: { layer: string; label: string } | null;
+  /** E8g: what the agent asked for (the cards of a HELD tool_approval task) */
+  asks: { id: string; attempt: number; tool: string; reason: string; status: string }[];
+  /** E9b (D12): the screenshot names of the changeset (approver+ by RLS) */
+  shots: string[];
 }
 
 export async function taskDetail(db: Db, uid: string, org: string, role: Role, id: string): Promise<TaskDetail | null> {
@@ -100,7 +106,9 @@ export async function taskDetail(db: Db, uid: string, org: string, role: Role, i
     const activities = (await sql.query<{ kind: string; text: string }>("select kind, text from public.task_activities where task_id = $1 order by id limit 200", [id])).rows;
     const approvals = task.changeset_id ? (await sql.query<{ decision: string; method: string; decided_at: string }>("select decision, method, to_char(decided_at at time zone 'UTC', 'YYYY-MM-DD HH24:MI') as decided_at from public.approvals where changeset_id = $1::uuid order by decided_at", [task.changeset_id])).rows : [];
     const label = task.verdict_id ? ((await sql.query<{ layer: string; label: string }>("select layer, label from public.failure_labels where verdict_id = $1::uuid order by id desc limit 1", [task.verdict_id])).rows[0] ?? null) : null;
-    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label };
+    const asks = (await sql.query<TaskDetail["asks"][number]>("select id::text as id, attempt, tool, reason, status from public.tool_asks where task_id = $1 order by attempt desc, tool limit 50", [id])).rows;
+    const shots = task.changeset_id ? (await sql.query<{ name: string }>("select name from public.changeset_shots where changeset_id = $1::uuid order by name", [task.changeset_id])).rows.map((r) => r.name) : [];
+    return { task, role, evidence, ladder, ladderEvents, ledger, diff, activities, approvals, label, asks, shots };
   });
 }
 
@@ -112,4 +120,12 @@ export async function firstRepo(db: Db, uid: string, org: string): Promise<strin
 /** D-305: the org's repositories, for the projects on the start page and in the side bar. */
 export async function repos(db: Db, uid: string, org: string): Promise<{ id: string; full_name: string }[]> {
   return asUser(db, uid, async (sql) => (await sql.query<{ id: string; full_name: string }>("select id::text as id, full_name from public.repos where org_id = $1::uuid order by full_name", [org])).rows);
+}
+
+/** E9b (D12): one screenshot of a changeset as the user (RLS: approver+); null when it is not there or not theirs. */
+export async function changesetShot(db: Db, uid: string, changesetId: string, name: string): Promise<Buffer | null> {
+  return asUser(db, uid, async (sql) => {
+    const r = (await sql.query<{ png: Uint8Array }>("select png from public.changeset_shots where changeset_id = $1::uuid and name = $2", [changesetId, name])).rows[0];
+    return r ? Buffer.from(r.png) : null;
+  });
 }

@@ -11,7 +11,8 @@ export type RunId = z.infer<typeof RunId>;
 // D-226: the E0 local org or a Supabase org uuid.
 export const OrgId = z.union([z.literal("o_local"), z.string().uuid()]);
 export type OrgId = z.infer<typeof OrgId>;
-export const TaskType = z.enum(["bugfix", "feature", "css", "docs"]);
+// D-360: "free" = no scope limits (the whole repo; tests may change), asked for by Simo 23.10.2026
+export const TaskType = z.enum(["bugfix", "feature", "css", "docs", "free"]);
 export type TaskType = z.infer<typeof TaskType>;
 export const Glob = z
   .string()
@@ -37,12 +38,14 @@ export const SecurityLimits = z.object({
 export type SecurityLimits = z.infer<typeof SecurityLimits>;
 export const RepoConfig = z.object({
   // D-301: the install command names the package manager (packageManagerOf); its lockfile decides the gate allowlist
-  runtime: z.object({ install: z.enum(["npm ci --ignore-scripts", "pnpm install --frozen-lockfile --ignore-scripts", "yarn install --frozen-lockfile --ignore-scripts"]), node: z.literal("24") }),
+  runtime: z.object({ install: z.enum(["npm ci --ignore-scripts", "pnpm install --frozen-lockfile --ignore-scripts", "yarn install --frozen-lockfile --ignore-scripts", "bun install --frozen-lockfile --ignore-scripts"]), node: z.literal("24") }),
   tests: z.object({
     command: z.string().min(1).max(500), // run with /bin/sh -c in the test sandbox
-    format: z.enum(["vitest-json", "jest-json"]), // D-301: jest --json has the same shape (testResults[].assertionResults[])
+    format: z.enum(["vitest-json", "jest-json", "node-test"]), // D-301: jest --json has the same shape (testResults[].assertionResults[]); D-358: so does the node --test reporter
     env: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(200)),
     test_globs: z.array(Glob).min(1),
+    /** E7г / D-314: optional, so contracts without it keep their hash */
+    flaky: z.array(TestId).max(500).optional(),
   }),
   protected_paths: z.array(Glob),
   protected_json_fields: z.record(z.string(), z.array(z.string().min(1))),
@@ -50,8 +53,9 @@ export const RepoConfig = z.object({
   budgets: z.object({ task_usd: z.number().positive().max(20), task_minutes: z.number().int().min(1).max(120) }),
 });
 export type RepoConfig = z.infer<typeof RepoConfig>;
-export function packageManagerOf(rc: Pick<RepoConfig, "runtime">): "npm" | "pnpm" | "yarn" {
-  return rc.runtime.install.startsWith("pnpm ") ? "pnpm" : rc.runtime.install.startsWith("yarn ") ? "yarn" : "npm";
+export function packageManagerOf(rc: Pick<RepoConfig, "runtime">): "npm" | "pnpm" | "yarn" | "bun" {
+  const i = rc.runtime.install;
+  return i.startsWith("pnpm ") ? "pnpm" : i.startsWith("yarn ") ? "yarn" : i.startsWith("bun ") ? "bun" : "npm";
 }
 export const Contract = z
   .object({
@@ -113,6 +117,12 @@ export const DetectorId = z.enum([
   "D7.ci",
   "POLICY",
   "D11.mutation", // D-300: mutants of the changed lines must be caught by the tests
+  // v5 2.6 (D-341: named like the others, <id>.<what>)
+  "D5.hidden",
+  "D8.static",
+  "D12.ui",
+  "RESEARCH",
+  "REVIEW",
 ]);
 export type DetectorId = z.infer<typeof DetectorId>;
 export const Evidence = z
@@ -236,6 +246,18 @@ export const LedgerKind = z.enum([
   "integrity_mismatch",
   "demo_reset",
   "external_verdict",
+  // v5 2.6
+  "profile_change",
+  "role_change",
+  "tool_permission",
+  "mcp_change",
+  "night_question",
+  "night_start", // E9а
+  "night_done",
+  "hidden_tests", // E9б (D-362)
+  "research_run",
+  "conflict",
+  "parked",
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
@@ -259,6 +281,12 @@ export const SecurityEventKind = z.enum([
   "config_path_change",
   "tree_mismatch",
   "redaction_hit",
+  // v5 2.6 (+ config_change for SH2-CX: the seeded agent config changed during the run)
+  "tool_poisoning",
+  "mcp_definition_changed",
+  "ask_denied",
+  "conflict_file",
+  "config_change",
 ]);
 export type SecurityEventKind = z.infer<typeof SecurityEventKind>;
 export const SecurityEvent = z

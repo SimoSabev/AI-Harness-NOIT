@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseMandatYml, repoConfigFromPolicy } from "./policy.js";
+import { FREE_TASK_TYPE, NODE_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy, taskTypeOf } from "./policy.js";
 import { packageManagerOf } from "./schemas.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -59,9 +59,28 @@ describe("repoConfigFromPolicy (F18, unsupported-runner)", () => {
     const yarn = repoConfigFromPolicy(ok(demo.replace("package_manager: npm", "package_manager: yarn").replace("install: npm ci --ignore-scripts", "install: yarn install --frozen-lockfile --ignore-scripts")).policy);
     expect(yarn.ok && packageManagerOf(yarn.config)).toBe("yarn");
   });
+  it("E8и (D-358): node --test с репортера на харнеса → node-test (vitest-json форма); без репортера → unsupported_runner", () => {
+    const node = repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: node").replace(/command: .*/, `command: ${NODE_TEST_COMMAND}`)).policy);
+    expect(node.ok && node.config.tests).toMatchObject({ format: "node-test", command: "node --test --test-reporter=/opt/mandat/reporters/node-test.mjs --test-reporter-destination=$MANDAT_REPORT" });
+    expect(repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: node").replace(/command: .*/, "command: node --test")).policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "npm/node" });
+    const bun = repoConfigFromPolicy(ok(demo.replace("package_manager: npm", "package_manager: bun").replace("install: npm ci --ignore-scripts", "install: bun install --frozen-lockfile --ignore-scripts")).policy);
+    expect(bun.ok && packageManagerOf(bun.config)).toBe("bun");
+  });
   it("друга install команда, mocha → unsupported_runner", () => {
     const pnpm = ok(demo.replace("package_manager: npm", "package_manager: pnpm").replace("install: npm ci --ignore-scripts", "install: pnpm install --frozen-lockfile"));
     expect(repoConfigFromPolicy(pnpm.policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "pnpm/vitest" });
     expect(repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: mocha")).policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "npm/mocha" });
+  });
+});
+
+describe("taskTypeOf (D-360: „без ограничения“)", () => {
+  it("видът от политиката; free без запис в политиката → цялото хранилище, тестовете може да се променят, среден риск", () => {
+    const p = ok(demo).policy;
+    expect(taskTypeOf(p, "bugfix")).toEqual(p.task_types.bugfix);
+    expect(FREE_TASK_TYPE).toEqual({ allowed_paths: ["**"], may_change_tests: true, risk_class: "medium" });
+    expect(taskTypeOf(p, "free")).toEqual(FREE_TASK_TYPE);
+    const own = ok(demo.replace("task_types:\n", "task_types:\n  free:\n    allowed_paths: [\"**\"]\n    may_change_tests: true\n    risk_class: high\n")).policy;
+    expect(taskTypeOf(own, "free")?.risk_class).toBe("high");
+    expect(taskTypeOf({ ...p, task_types: {} }, "docs")).toBeUndefined();
   });
 });

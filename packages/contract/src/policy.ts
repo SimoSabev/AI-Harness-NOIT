@@ -1,7 +1,7 @@
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { hashJcs } from "./hash.js";
-import { Glob, RepoConfig, TaskType } from "./schemas.js";
+import { Glob, RepoConfig, TaskType, TestId } from "./schemas.js";
 import type { Sha256 } from "./schemas.js";
 
 // `.mandat.yml` v2 minimum (демо промпт т. 5.6; D-265: block contents are the coder's minimum until docs/spec arrives).
@@ -18,7 +18,7 @@ export const MandatPolicy = z
     runtime: z
       .object({
         node: z.enum(["20", "22", "24"]),
-        package_manager: z.enum(["npm", "pnpm", "yarn"]),
+        package_manager: z.enum(["npm", "pnpm", "yarn", "bun"]),
         install: z.string().min(1).max(200),
       })
       .strict(),
@@ -28,6 +28,8 @@ export const MandatPolicy = z
         command: z.string().min(1).max(500),
         env: z.record(EnvName, z.string().max(200)).default({}),
         test_globs: z.array(Glob).min(1),
+        /** E7г / D-314: test IDs that changed status between the two baseline runs; D1 does not count them */
+        flaky: z.array(TestId).max(500).optional(),
       })
       .strict(),
     ci: z
@@ -90,6 +92,16 @@ export const MandatPolicy = z
   });
 export type MandatPolicy = z.infer<typeof MandatPolicy>;
 
+/**
+ * D-360: the task type "free" has no scope limits — the whole repo, tests may change. A policy may define it (e.g. a higher
+ * risk class); otherwise this default applies. Protected paths (D3) and every other detector still run: free widens the
+ * scope, it does not switch the judge off; risk "medium" keeps a person in front of a level-3 merge.
+ */
+export const FREE_TASK_TYPE = { allowed_paths: ["**"], may_change_tests: true, risk_class: "medium" } as const satisfies NonNullable<MandatPolicy["task_types"]["free"]>;
+export function taskTypeOf(p: MandatPolicy, type: TaskType): MandatPolicy["task_types"][TaskType] {
+  return p.task_types[type] ?? (type === "free" ? { ...FREE_TASK_TYPE, allowed_paths: [...FREE_TASK_TYPE.allowed_paths] } : undefined);
+}
+
 export type ParsedPolicy = { ok: true; policy: MandatPolicy; config_hash: Sha256 } | { ok: false; error: string };
 
 /**
@@ -117,19 +129,24 @@ export function parseMandatYml(text: string): ParsedPolicy {
 
 /** Bridge to the E0 detectors: the E0 RepoConfig supports only npm + vitest (F18). */
 /** The one install command per package manager (lockfile frozen, no install scripts). */
-export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts" } as const;
+export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts", bun: "bun install --frozen-lockfile --ignore-scripts" } as const;
+
+/** E8и (D-358): `node --test` runs with the harness reporter (/opt/mandat/reporters, read-only in the image), which writes the vitest JSON shape */
+export const NODE_TEST_COMMAND = "node --test --test-reporter=/opt/mandat/reporters/node-test.mjs --test-reporter-destination=$MANDAT_REPORT";
+const nodeTestOk = (cmd: string) => /^node --test( |$)/.test(cmd) && cmd.includes("--test-reporter=/opt/mandat/reporters/node-test.mjs") && cmd.includes("--test-reporter-destination=$MANDAT_REPORT");
 
 export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoConfig } | { ok: false; reason: "unsupported_runner"; detail: string } {
   const pm = p.runtime.package_manager;
   const fw = p.tests.framework;
-  // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report)
+  // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report). D-358: yarn berry, bun (text lockfile)
   const install = INSTALL_CMD[pm];
-  if ((fw !== "vitest" && fw !== "jest") || p.runtime.install !== install || p.runtime.node !== "24") {
+  const runner = fw === "vitest" || fw === "jest" || (fw === "node" && nodeTestOk(p.tests.command));
+  if (!runner || p.runtime.install !== install || p.runtime.node !== "24") {
     return { ok: false, reason: "unsupported_runner", detail: `${pm}/${fw}` };
   }
   const config = RepoConfig.parse({
     runtime: { install, node: "24" },
-    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs },
+    tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : fw === "node" ? "node-test" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs, ...(p.tests.flaky?.length ? { flaky: p.tests.flaky } : {}) },
     protected_paths: p.protected_paths,
     protected_json_fields: p.protected_json_fields,
     config_paths: p.config_paths,

@@ -94,4 +94,76 @@ describe("runTestProcedure (фалшив docker)", () => {
     expect(r.ok).toBe(true);
     expect(calls.some((a) => a.includes("pnpm") && a.includes("--frozen-lockfile"))).toBe(true);
   });
+
+  it("E9б (D8): lint and typecheck run after the tests on the same installed volume, with no network; their exits come back", async () => {
+    const calls: string[][] = [];
+    const d = docker([{ match: (a) => a.join(" ").includes("head -c"), out: report }, { match: (a) => a.join(" ").includes("/bin/sh -c npm run lint"), exit: 1 }, { match: (a) => a.join(" ").includes("/bin/sh -c npx tsc --noEmit"), timedOut: true }], calls);
+    const r = await runTestProcedure({ ...input(d, tree()), startGate: () => Promise.resolve(gate([])), checks: [{ name: "lint", command: "npm run lint" }, { name: "typecheck", command: "npx tsc --noEmit" }] });
+    expect(r.ok && r.checks).toEqual([{ name: "lint", exit: 1 }, { name: "typecheck", exit: null }]);
+    const lint = calls.find((a) => a.join(" ").includes("npm run lint")) ?? [];
+    expect(lint.join(" ")).toContain("--network none");
+  });
+  it("E9б (D12): last, tree B's dev server and a browser on the run's own internal network; the result and screenshots come back; all of it is removed", async () => {
+    const calls: string[][] = [];
+    const run = "r_01JABCDEFGHJKMNPQRSTVWXYZ0";
+    const result = JSON.stringify({ up: true, routes: [{ route: "/", console_errors: ["boom"], failed_requests: [], screenshot: "route-0.png" }, { route: "/cart", console_errors: [], failed_requests: [], screenshot: "route-1.png" }] });
+    const d = docker([
+      { match: (a) => a.join(" ").includes("/m/out/ui/result.json"), out: result },
+      { match: (a) => a.join(" ").includes("/m/out/ui/route-0.png"), out: "PNG0" },
+      { match: (a) => a.join(" ").includes("/m/out/ui/route-1.png"), exit: 1 },
+      { match: (a) => a.join(" ").includes("head -c"), out: report },
+    ], calls);
+    const r = await runTestProcedure({ ...input(d, tree(), { tree: "b" }), startGate: () => Promise.resolve(gate([])), ui: { image: "ui:t", devCommand: "npm run dev", routes: ["/", "/cart"] } });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ui?.up).toBe(true);
+    expect(r.ui?.routes.map((x) => x.route)).toEqual(["/", "/cart"]);
+    expect(r.ui?.routes[0]?.console_errors).toEqual(["boom"]);
+    expect(r.ui?.shots["route-0.png"]?.toString()).toBe("PNG0");
+    expect(r.ui?.shots["route-1.png"]).toBeUndefined();
+    const j = calls.map((a) => a.join(" "));
+    expect(j).toContain(`network create --internal --label mandat.run=${run} mandat-ui-${run}`);
+    const app = j.find((a) => a.includes("mandat.role=ui-app")) ?? "";
+    expect(app).toMatch(/^run -d /);
+    expect(app).toContain(`--name mandat-ui-app-${run}`);
+    expect(app).toContain(`--network mandat-ui-${run}`);
+    expect(app).toContain(`mandat-vol-${run}-b:/m`);
+    expect(app).toContain("-e PORT=4173");
+    expect(app).toContain("-e HOST=0.0.0.0");
+    expect(app.endsWith("s:t /bin/sh -c npm run dev")).toBe(true);
+    const ui = j.find((a) => a.includes("mandat.role=ui ")) ?? "";
+    expect(ui).toContain(`--network mandat-ui-${run}`);
+    expect(ui).toContain(`-e MANDAT_UI_URL=http://mandat-ui-app-${run}:4173`);
+    expect(ui).toContain('-e MANDAT_UI_ROUTES=["/","/cart"]');
+    expect(ui).toContain(`mandat-uiout-${run}:/m`);
+    expect(ui).not.toContain(`mandat-vol-${run}-b`);
+    expect(ui.endsWith("ui:t node /opt/mandat/ui/ui-run.mjs")).toBe(true);
+    for (const a of [...j.filter((x) => x.includes("mandat.role")), ...j]) expect(a).not.toMatch(/ -p |--publish|--privileged|--cap-add/);
+    // the UI step is the last thing on the volume; then the app, the network and the out volume go
+    expect(j.indexOf(app)).toBeGreaterThan(j.findIndex((a) => a.includes("/bin/sh -c npx vitest run")));
+    expect(j).toContain(`rm -f mandat-ui-app-${run}`);
+    expect(j).toContain(`network rm mandat-ui-${run}`);
+    expect(j).toContain(`volume rm -f mandat-uiout-${run}`);
+  });
+  it("E9б (D12): base screenshots are seeded into the browser's own volume under /m/in/base before it runs", async () => {
+    const calls: string[][] = [];
+    const run = "r_01JABCDEFGHJKMNPQRSTVWXYZ0";
+    const d = docker([{ match: (a) => a.join(" ").includes("/m/out/ui/result.json"), out: JSON.stringify({ up: true, routes: [] }) }, { match: (a) => a.join(" ").includes("head -c"), out: report }], calls);
+    await runTestProcedure({ ...input(d, tree(), { tree: "b" }), startGate: () => Promise.resolve(gate([])), ui: { image: "ui:t", devCommand: "npm run dev", routes: ["/"], baseShots: { "route-0.png": Buffer.from("BASE") } } });
+    const j = calls.map((a) => a.join(" "));
+    const seed = j.findIndex((a) => a.includes(`mandat-uiout-${run}:/m `) && a.includes("mkdir -p /m/in/base && tar -x -C /m/in/base"));
+    expect(seed).toBeGreaterThan(-1);
+    expect(seed).toBeLessThan(j.findIndex((a) => a.includes("mandat.role=ui ")));
+    expect(j[seed]).toContain("--network none");
+    // /m/in is root's in the sandbox image (the agent never writes it): the seed is the one root step, as for /m/in elsewhere
+    expect(j[seed]).toContain("--user 0:0");
+  });
+  it("E9б (D12): a broken result.json or a network that cannot be made → ui null (D12 says the check did not run); the verdict path goes on", async () => {
+    const d1 = docker([{ match: (a) => a.join(" ").includes("/m/out/ui/result.json"), out: "{not json" }, { match: (a) => a.join(" ").includes("head -c"), out: report }], []);
+    const r1 = await runTestProcedure({ ...input(d1, tree(), { tree: "b" }), startGate: () => Promise.resolve(gate([])), ui: { image: "ui:t", devCommand: "npm run dev", routes: ["/"] } });
+    expect(r1.ok && r1.ui).toBeNull();
+    const d2 = docker([{ match: (a) => a[0] === "network" && a[1] === "create", exit: 1 }, { match: (a) => a.join(" ").includes("head -c"), out: report }], []);
+    const r2 = await runTestProcedure({ ...input(d2, tree(), { tree: "b" }), startGate: () => Promise.resolve(gate([])), ui: { image: "ui:t", devCommand: "npm run dev", routes: ["/"] } });
+    expect(r2).toMatchObject({ ok: true, ui: null });
+  });
 });

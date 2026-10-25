@@ -2,6 +2,7 @@ import type { Verdict, VerifyMode } from "@mandat/contract";
 import type { DeliveryAction } from "@mandat/core";
 import type { GitHubPort } from "./port.js";
 import { renderCheck } from "./render.js";
+import { commitMessage, prBody, prTitle } from "./templates.js";
 
 // Демо промпт т. 6.3 — what the Writer App does per level. Every call here is idempotent by its key, so the worker can
 // run it from the outbox (T3-2). CAS (D-235): every attempt writes a NEW ref; an existing ref → BLOCKED.
@@ -22,6 +23,10 @@ export interface DeliverInput {
   ledgerSeq: number | null;
   mode: VerifyMode;
   appUrl?: string | null;
+  /** E8g (D-356): the task for the commit message and the PR text (absent → the short E1 texts) */
+  task?: { type: string; text: string };
+  /** the project's setting; none by default */
+  coAuthors?: readonly string[];
 }
 export type DeliverOutcome =
   | { kind: "none" }
@@ -33,13 +38,18 @@ export type DeliverOutcome =
 export async function deliver(gh: GitHubPort, i: DeliverInput, action: DeliveryAction): Promise<DeliverOutcome> {
   if (action.kind === "none") return { kind: "none" };
   if (action.kind === "hold") return { kind: "held", wait_reason: action.wait_reason };
-  const c = await gh.createCommit(i.repo, { treeFromDiff: i.diffPatch, parentSha: i.base_sha, message: `mandat: ${i.task_id} (attempt ${i.attempt})` });
+  const message = i.task ? commitMessage({ type: i.task.type, text: i.task.text, taskId: i.task_id, verdict: i.verdict, ledgerSeq: i.ledgerSeq, ...(i.coAuthors ? { coAuthors: i.coAuthors } : {}) }) : `mandat: ${i.task_id} (attempt ${i.attempt})`;
+  const c = await gh.createCommit(i.repo, { treeFromDiff: i.diffPatch, parentSha: i.base_sha, message });
   const ref = branchFor(i.task_id, i.attempt);
   const created = await gh.createRefIfAbsent(i.repo, { ref: `refs/heads/${ref}`, sha: c.commitSha });
   if (!created.ok) return { kind: "blocked", reason: "branch_changed_by_human" };
   if (action.kind === "branch_only") return { kind: "branch", ref, head_sha: c.commitSha };
   const draft = action.kind === "draft_pr";
-  const pr = await gh.createPull(i.repo, { head: ref, base: i.base, title: `Mandat: ${i.task_id}`, body: `Verdict ${i.verdict.result} · level ${i.effectiveLevel} · seq ${i.ledgerSeq ?? "-"}`, draft });
+  const title = i.task ? prTitle(i.task) : `Mandat: ${i.task_id}`;
+  const body = i.task
+    ? prBody({ text: i.task.text, taskId: i.task_id, diff: i.diffPatch, verdict: i.verdict, level: i.effectiveLevel, ledgerSeq: i.ledgerSeq, cardUrl: i.appUrl ? `${i.appUrl.replace(/\/$/, "")}/tasks/${i.task_id}` : null })
+    : `Verdict ${i.verdict.result} · level ${i.effectiveLevel} · seq ${i.ledgerSeq ?? "-"}`;
+  const pr = await gh.createPull(i.repo, { head: ref, base: i.base, title, body, draft });
   const r = renderCheck(i.verdict, { effectiveLevel: i.effectiveLevel, levelReasons: i.levelReasons, mode: i.mode, ledgerSeq: i.ledgerSeq, appUrl: i.appUrl ?? null, taskId: i.task_id });
   await gh.createOrUpdateCheckRun(i.repo, { name: "Мандат verdict", head_sha: c.commitSha, external_id: i.task_id, conclusion: r.conclusion, title: r.title, summary: r.summary, ...(r.details_url ? { details_url: r.details_url } : {}) });
   return { kind: "pr", ref, head_sha: c.commitSha, number: pr.number, draft, auto_merge: action.kind === "pr_then_auto_merge", notify: action.kind === "pr_then_auto_merge" ? action.notify : true };

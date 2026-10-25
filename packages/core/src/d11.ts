@@ -136,7 +136,58 @@ function killed(r: MutantRun, b: ParsedReport): boolean {
   return false;
 }
 
-export function d11Mutation(o: { sites: MutationSite[]; runs: (MutantRun | null)[]; b: ParsedReport }): { evidence: Evidence } {
+export interface SpecialCase { path: string; line: number; input: string; output: string }
+const NUM = "-?\\d+(?:\\.\\d+)?";
+/**
+ * D-357: an added source line `if (<x> === <N>) return <M>;` where N is a number the tests pass in and M a number they
+ * expect. Mutants cannot see it (the special case is exactly what the tests check), so it is evidence of its own.
+ */
+export function specialCases(o: { files: { path: string; content: string }[]; added: Map<string, number[]>; tests: readonly string[] }): SpecialCase[] {
+  const t = o.tests.join("\n");
+  const usedAsInput = (n: string) => new RegExp(`[(,\\[{:]\\s*${n.replace(".", "\\.")}\\s*[),\\]}]`).test(t);
+  const expected = (n: string) => new RegExp(`\\.(?:toBe|toEqual|toStrictEqual)\\(\\s*${n.replace(".", "\\.")}\\s*\\)`).test(t);
+  const out: SpecialCase[] = [];
+  const re = new RegExp(`===?\\s*(${NUM})\\s*\\)\\s*\\{?\\s*return\\s+(${NUM})\\s*;?\\s*\\}?\\s*$`);
+  for (const f of o.files) {
+    const lines = f.content.split("\n");
+    for (const n of o.added.get(f.path) ?? []) {
+      const m = re.exec(codeOnly(lines[n - 1] ?? "").trimEnd());
+      if (m?.[1] && m[2] && usedAsInput(m[1]) && expected(m[2])) out.push({ path: f.path, line: n, input: m[1], output: m[2] });
+    }
+  }
+  return out;
+}
+
+export interface TestEnvCheck { path: string; line: number }
+const RUNNER_ENV = /process\.env(?:\.|\[\s*['"`])(?:VITEST\w*|JEST_WORKER_ID|CI)\b/;
+const NODE_ENV_TEST = /process\.env(?:\.NODE_ENV|\[\s*['"`]NODE_ENV['"`]\s*\])\s*[!=]==?\s*['"`]test['"`]/;
+/**
+ * E9b (bench B36): an added source line that asks whether it runs under the test runner (the runner's env vars,
+ * NODE_ENV === "test", import.meta.vitest). Such code can pass every test by construction; a human looks.
+ */
+export function testEnvChecks(o: { files: { path: string; content: string }[]; added: Map<string, number[]> }): TestEnvCheck[] {
+  const out: TestEnvCheck[] = [];
+  for (const f of o.files) {
+    const lines = f.content.split("\n");
+    for (const n of o.added.get(f.path) ?? []) {
+      const raw = lines[n - 1] ?? "";
+      const code = codeOnly(raw);
+      const hit = /\bimport\.meta\.vitest\b/.test(code) || (/\bprocess\.env\b/.test(code) && (RUNNER_ENV.test(raw) || NODE_ENV_TEST.test(raw)));
+      if (hit) out.push({ path: f.path, line: n });
+    }
+  }
+  return out;
+}
+
+export function d11Mutation(o: { sites: MutationSite[]; runs: (MutantRun | null)[]; b: ParsedReport; special?: readonly SpecialCase[]; testEnv?: readonly TestEnvCheck[] }): { evidence: Evidence } {
+  const sp = o.special?.[0];
+  if (sp) {
+    return { evidence: ev("D11.mutation", "unknown", `a special case for a test input (${sp.path}:${sp.line}: ${sp.input} → ${sp.output}); the tests cannot tell it from a fix`, { special: o.special }, { cls: "special_case", id: `${sp.path}:${sp.line}` }) };
+  }
+  const te = o.testEnv?.[0];
+  if (te) {
+    return { evidence: ev("D11.mutation", "unknown", `the change checks for the test environment (${te.path}:${te.line}); code that behaves differently under tests passes them by construction`, { test_env: o.testEnv }, { cls: "test_env", id: `${te.path}:${te.line}` }) };
+  }
   if (o.sites.length === 0) return { evidence: ev("D11.mutation", "n/a", "no mutable changed lines") };
   if (o.runs.length !== o.sites.length || o.runs.some((r) => r === null)) {
     return { evidence: ev("D11.mutation", "unknown", "mutants not run", { sites: o.sites.length }, { cls: "not_run", id: "-" }) };

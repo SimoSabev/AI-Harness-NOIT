@@ -1,5 +1,23 @@
 # syntax=docker/dockerfile:1
 # mandat-sandbox: unmodified Claude Code + the fake agents. Built ONLY locally, never published (4.1).
+
+# E8e (D-354): the MCP sidecar bridge (stdio MCP server → streamable HTTP), deployed with its production dependencies.
+# The sidecar runs this same image with role mcp; the agent never runs it.
+FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS mcpbridge
+WORKDIR /src
+RUN --mount=type=secret,id=extra_ca,required=false \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    npm i -g --no-audit --no-fund pnpm@12.14.0
+COPY . .
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    pnpm install --frozen-lockfile --filter "@mandat/mcp-bridge..." \
+ && pnpm --filter "@mandat/mcp-bridge..." build \
+ && pnpm --filter @mandat/mcp-bridge --prod deploy /out \
+ && find /out -type d \( -name tests -o -name __tests__ -o -name test \) -prune -exec rm -rf {} + \
+ && find /out -type f \( -name "*.test.*" -o -name "*.spec.*" \) -delete
+# (the dependencies' own test files carry sample tokens; the R8 keyscan must see none in the sandbox image)
+
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
 
 # curl + dig for the R14 probes. SANDBOX_APT=0 only where Debian mirrors are unreachable (D-151);
@@ -84,10 +102,51 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     cd / && rm -rf /tmp/pm /root/.npm; \
     pnpm --version | grep -F "${PNPM_VERSION}"; yarn --version | grep -F "${YARN_VERSION}"
 
+# E8и (D-358): yarn berry for repos with a yarn 4 lockfile (`__metadata`), the single-file release from @yarnpkg/cli-dist,
+# pinned by integrity; run as `node /opt/yarn-berry/yarn.js` with YARN_IGNORE_PATH=1 (the repo's yarnPath is never used).
+ARG YARN_BERRY_VERSION=4.18.1
+ARG YARN_BERRY_INTEGRITY=sha512-EH+A4TxAtBWXKE0DGQxW9Bo9crXHLJ73mfxjTQJuv8XonNWWTpei8BQ5JjczHJNU9GROTycwMFn8iOvRIZXUcA==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    mkdir /tmp/yb && cd /tmp/yb; \
+    npm pack --silent "@yarnpkg/cli-dist@${YARN_BERRY_VERSION}"; \
+    got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "yarnpkg-cli-dist-${YARN_BERRY_VERSION}.tgz")"; \
+    [ "$got" = "$YARN_BERRY_INTEGRITY" ] || { echo "integrity mismatch for yarn berry: $got" >&2; exit 1; }; \
+    mkdir -p /opt/yarn-berry; \
+    tar -xzf "yarnpkg-cli-dist-${YARN_BERRY_VERSION}.tgz" -C /opt/yarn-berry --strip-components=2 package/bin/yarn.js; \
+    cd / && rm -rf /tmp/yb /root/.npm; \
+    YARN_IGNORE_PATH=1 node /opt/yarn-berry/yarn.js --version | grep -Fx "${YARN_BERRY_VERSION}"
+
+# E8и (D-358): bun for repos with a text bun.lock — only `bun install` (the tests still run with vitest/jest); the platform
+# binary from @oven/bun-linux-<arch> (x64: the baseline build, no AVX2 needed), pinned by integrity.
+ARG BUN_VERSION=1.4.3
+ARG BUN_INTEGRITY_amd64=sha512-4kW2iuLPQLv3N6o21tLwD1ALhI75LFT9YvlpoHrkM6IalbuS3LNKcHc9ex5kAHifJEFFm0ExGx1Zj75wdDux7w==
+ARG BUN_INTEGRITY_arm64=sha512-ylogDFxDD+aRKO0TJauwDzCWM+rULvc85gRNZQ9CnY6rm2BU4GC2XUDi20bh67CIuB4Wt/0PL1xpsJ2hqplMww==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) PKG=bun-linux-x64-baseline; WANT="$BUN_INTEGRITY_amd64" ;; \
+      arm64) PKG=bun-linux-aarch64; WANT="$BUN_INTEGRITY_arm64" ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    mkdir /tmp/bun && cd /tmp/bun; \
+    npm pack --silent "@oven/${PKG}@${BUN_VERSION}"; \
+    got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "oven-${PKG}-${BUN_VERSION}.tgz")"; \
+    [ "$got" = "$WANT" ] || { echo "integrity mismatch for bun: $got" >&2; exit 1; }; \
+    tar -xzf "oven-${PKG}-${BUN_VERSION}.tgz" -C /usr/local/bin --strip-components=2 package/bin/bun; \
+    chmod 0755 /usr/local/bin/bun; \
+    cd / && rm -rf /tmp/bun /root/.npm; \
+    DO_NOT_TRACK=1 bun --version | grep -Fx "${BUN_VERSION}"
+
 COPY packages/agents/fakes/ /opt/mandat/fakes/
+# v5 E8а / SH2: the harness hooks (ESM, no dependencies); the agent can run them, never change them
+COPY packages/agents/hooks/ /opt/mandat/hooks/
+# E8и (D-358): test reporters the harness passes to runners without a JSON report of their own (node --test)
+COPY packages/verify/reporters/ /opt/mandat/reporters/
+COPY --from=mcpbridge /out /opt/mandat/mcp-bridge
 # E4 (т. 9.0): recorded transcripts + fixed patches for the deterministic replay agents
 COPY demo/recordings/*.jsonl demo/recordings/*.patch /opt/mandat/replay/
-RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* \
+RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay /opt/mandat/hooks /opt/mandat/reporters && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* /opt/mandat/hooks/* /opt/mandat/reporters/* \
  && mkdir -p /m/work /m/out /m/in /home/agent \
  && chown 1000:1000 /m /m/work /m/out && chown root:root /m/in && chmod 0755 /m/in
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { allowedUrl, childEnv, localSpawn, loginScript, parseBanner, stopCommand, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, localSpawn, loginScript, parseBanner, stopCommand, stepOf } from "./banner.js";
 
-describe("Windows (D-309)", () => {
+describe("Windows (D-367)", () => {
   it("pnpm local: the pnpm that started us (npm_execpath), never a bare `pnpm` that spawn cannot find on Windows", () => {
     expect(localSpawn({ npm_execpath: "C:\\nvm4w\\nodejs\\node_modules\\pnpm\\pnpm.exe" })).toEqual({ cmd: "C:\\nvm4w\\nodejs\\node_modules\\pnpm\\pnpm.exe", args: ["local"] });
     expect(localSpawn({ npm_execpath: "/usr/lib/pnpm/bin/pnpm.cjs", npm_node_execpath: "/usr/bin/node" })).toEqual({ cmd: "/usr/bin/node", args: ["/usr/lib/pnpm/bin/pnpm.cjs", "local"] });
@@ -37,6 +37,17 @@ describe("desktop banner (D-303)", () => {
     expect(parseBanner(BANNER.replace(/ {2}Ключ:.*\n/, "").replace(/ {2}Адрес:.*\n/, ""))?.totp).toBeNull();
     expect(parseBanner("  Отвори:  http://localhost:3000\n")).toBeNull();
     expect(parseBanner(BANNER.replace("http://localhost:3000", "https://evil.example"))).toBeNull();
+  });
+
+  it("the English banner (E7е) gives the same fields", () => {
+    const en = BANNER.replace("Отвори:", "Open:   ").replace("Имейл:", "Email:").replace("Парола:", "Password:").replace("Ключ:", "Key: ").replace("Адрес:", "URI: ");
+    expect(parseBanner(en)).toEqual(parseBanner(BANNER));
+  });
+
+  it("error lines of pnpm local in either language", () => {
+    expect(isErrorLine("✗ Docker не отговаря")).toBe(true);
+    expect(isErrorLine("Error: listen EADDRINUSE")).toBe(true);
+    expect(isErrorLine("[2/4] database")).toBe(false);
   });
 
   it("стъпките [n/4] за прозореца при пускане", () => {

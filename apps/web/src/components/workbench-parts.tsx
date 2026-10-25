@@ -1,27 +1,30 @@
 import Link from "next/link";
-import type { FleetRow, ToolCallRow, WindowRow } from "../lib/workbench";
+import { rich } from "../i18n/rich";
+import type { Key, T } from "../i18n/t";
+import type { FleetRow, TerminalLine, ToolCallRow, WindowRow } from "../lib/workbench";
 import { ago } from "../lib/status";
 import { card, label } from "./ui";
 
 // D-307: the pieces shared by the workbench screens (design H1–H6).
-export function SampleNote({ what, table }: { what: string; table: string }) {
+export function SampleNote({ what, table, t }: { what: string; table: string; t: T }) {
   return (
     <p role="note" className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-dashed border-line-strong bg-raised px-4 py-2.5 text-sm text-mute">
-      <span className="rounded bg-warn-soft px-1.5 py-0.5 font-display text-[11px] font-semibold tracking-[0.12em] text-warn">ПРИМЕР</span>
-      <span className="flex-1">Още не се записва: {what}. Когато започне да пише в <code className="font-mono text-ink">{table}</code>, тук ще са истинските данни.</span>
-      <Link href="/settings" className="text-xs underline">скрий примерите</Link>
+      <span className="rounded bg-warn-soft px-1.5 py-0.5 font-display text-[11px] font-semibold tracking-[0.12em] text-warn">{t("sample.badge")}</span>
+      <span className="flex-1">{rich(t("sample.note", { what }), { table: <code className="font-mono text-ink">{table}</code> })}</span>
+      <Link href="/settings" className="text-xs underline">{t("sample.hideAll")}</Link>
     </p>
   );
 }
 
-const AGENT: Record<FleetRow["state"], { ring: string; fill: string; text: string; label: string }> = {
-  running: { ring: "bg-ok", fill: "bg-ok-soft", text: "text-ok", label: "работи" },
-  waiting: { ring: "bg-warn", fill: "bg-warn-soft", text: "text-warn", label: "чака теб" },
-  failed: { ring: "bg-bad", fill: "bg-bad-soft", text: "text-bad", label: "провал" },
-  done: { ring: "bg-idle", fill: "bg-raised", text: "text-mute", label: "готов" },
-  idle: { ring: "bg-line-strong", fill: "bg-raised", text: "text-mute", label: "свободен" },
+const AGENT: Record<FleetRow["state"], { ring: string; fill: string; text: string; label: Key }> = {
+  running: { ring: "bg-ok", fill: "bg-ok-soft", text: "text-ok", label: "wb.state.running" },
+  waiting: { ring: "bg-warn", fill: "bg-warn-soft", text: "text-warn", label: "wb.state.waiting" },
+  failed: { ring: "bg-bad", fill: "bg-bad-soft", text: "text-bad", label: "wb.state.failed" },
+  done: { ring: "bg-idle", fill: "bg-raised", text: "text-mute", label: "wb.state.done" },
+  idle: { ring: "bg-line-strong", fill: "bg-raised", text: "text-mute", label: "wb.state.idle" },
 };
-export const agentTone = (s: FleetRow["state"], role?: FleetRow["role"]) => (role === "judge" ? { ring: "bg-info", fill: "bg-info-soft", text: "text-info", label: "Мандат" } : AGENT[s]);
+/** Colours and the catalog key of the state word (the judge is Mandat). */
+export const agentTone = (s: FleetRow["state"], role?: FleetRow["role"]): { ring: string; fill: string; text: string; label: Key } => (role === "judge" ? { ring: "bg-info", fill: "bg-info-soft", text: "text-info", label: "brand.judge" } : AGENT[s]);
 
 export function AgentHex({ s, role, initials, size = "md" }: { s: FleetRow["state"]; role?: FleetRow["role"]; initials: string; size?: "sm" | "md" }) {
   const t = agentTone(s, role);
@@ -56,41 +59,39 @@ export function FlowLines({ className = "" }: { className?: string }) {
 }
 
 const KIND: Record<ToolCallRow["kind"], string> = { mcp: "mcp", skill: "skill", builtin: "tool", bash: "bash", mandat: "mandat" };
-const DECISION: Record<ToolCallRow["decision"], { t: string; c: string }> = {
-  allowed: { t: "позволено", c: "text-ok" }, asked: { t: "чака теб", c: "text-warn" }, denied: { t: "спряно", c: "text-bad" }, slow: { t: "бавно", c: "text-warn" }, error: { t: "грешка", c: "text-bad" },
-};
-export function ToolCalls({ calls, withAgent = true }: { calls: ToolCallRow[]; withAgent?: boolean }) {
+const DECISION: Record<ToolCallRow["decision"], string> = { allowed: "text-ok", asked: "text-warn", denied: "text-bad", slow: "text-warn", error: "text-bad" };
+export function ToolCalls({ calls, t, withAgent = true }: { calls: ToolCallRow[]; t: T; withAgent?: boolean }) {
   return (
     <ol className="divide-y divide-line">
       {calls.map((c, i) => (
         <li key={`${c.at}-${i}`} className="grid grid-cols-[44px_minmax(0,1fr)_auto] items-baseline gap-3 px-4 py-2">
-          <span className="font-mono text-[11px] text-mute">{new Date(c.at).toLocaleTimeString("bg", { hour: "2-digit", minute: "2-digit" })}</span>
+          <span className="font-mono text-[11px] text-mute">{new Date(c.at).toLocaleTimeString(t.locale, { hour: "2-digit", minute: "2-digit" })}</span>
           <span className="min-w-0">
             <span className="block truncate font-mono text-xs"><span className="text-ink">{c.tool}</span> <span className="text-mute">{c.summary}</span></span>
             <span className="block truncate text-[11px] text-mute">{withAgent ? `${c.agent} · ` : ""}<span className={c.kind === "mandat" ? "text-info" : c.kind === "skill" ? "text-accent-text" : ""}>{KIND[c.kind]}</span></span>
           </span>
-          <span className={`text-right text-xs ${DECISION[c.decision].c}`}>{DECISION[c.decision].t}</span>
+          <span className={`text-right text-xs ${DECISION[c.decision]}`}>{t(`wb.decision.${c.decision}`)}</span>
         </li>
       ))}
     </ol>
   );
 }
 
-const WIN: Record<WindowRow["kind"], { ic: string; g: string }> = { terminal: { ic: ">_", g: "Терминали" }, preview: { ic: "◐", g: "Прегледи в браузъра" }, server: { ic: "●", g: "Сървъри и портове" }, log: { ic: "≡", g: "Логове" } };
-export function Windows({ windows }: { windows: WindowRow[] }) {
+const WIN: Record<WindowRow["kind"], string> = { terminal: ">_", preview: "◐", server: "●", log: "≡" };
+export function Windows({ windows, t }: { windows: WindowRow[]; t: T }) {
   const groups = (["terminal", "preview", "server", "log"] as const).map((k) => ({ k, items: windows.filter((w) => w.kind === k) })).filter((g) => g.items.length > 0);
-  if (groups.length === 0) return <p className="px-1 text-sm text-mute">Няма отворени прозорци.</p>;
+  if (groups.length === 0) return <p className="px-1 text-sm text-mute">{t("wb.noWindows")}</p>;
   return (
     <div className="space-y-3">
       {groups.map((g) => (
         <div key={g.k}>
-          <p className="px-1 pb-1 text-xs text-mute">{WIN[g.k].g} · {g.items.length}</p>
+          <p className="px-1 pb-1 text-xs text-mute">{t(`wb.win.${g.k}`)} · {g.items.length}</p>
           <ul className="space-y-1">
             {g.items.map((w) => (
               <li key={w.id} className="flex items-center gap-2 rounded-lg bg-raised px-2.5 py-1.5 text-xs">
-                <span aria-hidden="true" className={`w-5 font-mono ${w.status === "live" ? "text-ok" : w.status === "slow" ? "text-warn" : "text-mute"}`}>{WIN[g.k].ic}</span>
+                <span aria-hidden="true" className={`w-5 font-mono ${w.status === "live" ? "text-ok" : w.status === "slow" ? "text-warn" : "text-mute"}`}>{WIN[g.k]}</span>
                 {w.url ? <a href={w.url} className="min-w-0 flex-1 truncate text-ink no-underline hover:underline" target="_blank" rel="noreferrer">{w.title}</a> : <span className="min-w-0 flex-1 truncate">{w.title}</span>}
-                <span className="font-mono text-[10px] text-mute">{w.status === "live" ? "жив" : w.status === "slow" ? "бави" : ago(w.last_seen_at)}</span>
+                <span className="font-mono text-[10px] text-mute">{w.status === "live" ? t("wb.live") : w.status === "slow" ? t("wb.slow") : ago(w.last_seen_at, new Date(), t.lang)}</span>
               </li>
             ))}
           </ul>
@@ -100,14 +101,14 @@ export function Windows({ windows }: { windows: WindowRow[] }) {
   );
 }
 
-export function SessionTree({ sessions }: { sessions: (FleetRow & { depth: number })[] }) {
+export function SessionTree({ sessions, t }: { sessions: (FleetRow & { depth: number })[]; t: T }) {
   return (
     <ul className="space-y-2">
       {sessions.map((s) => (
         <li key={s.id} className="flex items-center gap-2.5" style={{ paddingLeft: s.depth * 18 }}>
           <AgentHex s={s.state} role={s.role} initials={initialsOf(s.agent, s.role)} size="sm" />
-          <span className="min-w-0 flex-1"><span className="block truncate text-sm">{s.agent}</span><span className="block truncate text-xs text-mute">{s.role === "subagent" ? "подагент · " : ""}{s.step}</span></span>
-          {s.context_pct !== null && <span className="w-16"><Meter value={s.context_pct} label={`контекст ${s.agent}`} tone={s.context_pct > 80 ? "warn" : "accent"} /></span>}
+          <span className="min-w-0 flex-1"><span className="block truncate text-sm">{s.agent}</span><span className="block truncate text-xs text-mute">{s.role === "subagent" ? t("wb.subagent") : ""}{s.step}</span></span>
+          {s.context_pct !== null && <span className="w-16"><Meter value={s.context_pct} label={t("wb.context", { agent: s.agent })} tone={s.context_pct > 80 ? "warn" : "accent"} /></span>}
         </li>
       ))}
     </ul>
@@ -115,7 +116,7 @@ export function SessionTree({ sessions }: { sessions: (FleetRow & { depth: numbe
 }
 
 export function Panel({ title, aside, children, className = "" }: { title: string; aside?: React.ReactNode; children: React.ReactNode; className?: string }) {
-  const id = `p-${title.replace(/[^a-zа-я0-9]+/gi, "-").toLowerCase()}`;
+  const id = `p-${title.replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}`;
   return (
     <section aria-labelledby={id} tabIndex={className.includes("overflow-x-auto") ? 0 : undefined} className={`${card} rise overflow-hidden ${className}`}>
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5">
@@ -127,3 +128,26 @@ export function Panel({ title, aside, children, className = "" }: { title: strin
   );
 }
 export { label };
+
+/**
+ * E7e: the read-only terminal of a task — the agent's stream after redaction, ≤ 50 000 lines. Chunks of 500 lines with
+ * `content-visibility: auto` keep long sessions cheap (the browser skips rendering the chunks out of view).
+ */
+export function Terminal({ lines, t }: { lines: TerminalLine[]; t: T }) {
+  const chunks: TerminalLine[][] = [];
+  for (let i = 0; i < lines.length; i += 500) chunks.push(lines.slice(i, i + 500));
+  return (
+    <div role="log" aria-label={t("wb.terminal")} tabIndex={0} className="max-h-96 overflow-auto bg-raised px-4 py-3 font-mono text-xs leading-5 text-ink">
+      {chunks.map((c) => (
+        <div key={c[0]?.seq ?? 0} style={{ contentVisibility: "auto", containIntrinsicSize: `auto ${c.length * 20}px` }}>
+          {c.map((l) => (
+            <div key={l.seq} className="whitespace-pre-wrap break-words">
+              <span aria-hidden="true" className="mr-2 inline-block w-3 text-mute">{l.mark}</span>
+              {l.text}
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}

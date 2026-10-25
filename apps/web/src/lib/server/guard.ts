@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-// Спец. т. 12 / демо промпт т. 8.1: Origin check + CSRF (double submit) + body ≤ 1 MB + rate limit for the internal API.
+// Spec §12 / demo prompt §8.1: Origin check + CSRF (double submit) + body ≤ 1 MB + rate limit for the internal API.
 export const MAX_BODY = 1024 * 1024;
 export const CSRF_COOKIE = "mandat_csrf";
 export const CSRF_HEADER = "x-mandat-csrf";

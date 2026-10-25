@@ -1,25 +1,42 @@
+import type { Key, T } from "../../i18n/t";
+
 // Browser side of the internal API: the CSRF double-submit header from the mandat_csrf cookie.
 export function csrfToken(): string {
   const m = /(?:^|;\s*)mandat_csrf=([^;]+)/.exec(typeof document === "undefined" ? "" : document.cookie);
   return m ? decodeURIComponent(m[1] ?? "") : "";
 }
 
-export async function postJson(url: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
-  const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json", "x-mandat-csrf": csrfToken() }, body: JSON.stringify(body), credentials: "same-origin" });
+export async function postJson(url: string, body: unknown, method: "POST" | "PATCH" = "POST"): Promise<{ status: number; body: Record<string, unknown> }> {
+  const r = await fetch(url, { method, headers: { "content-type": "application/json", "x-mandat-csrf": csrfToken() }, body: JSON.stringify(body), credentials: "same-origin" });
   const parsed = (await r.json().catch(() => ({}))) as Record<string, unknown>;
   return { status: r.status, body: parsed };
 }
 
-export const ERROR_TEXT: Record<string, string> = {
-  head_sha_moved: "Промяната е обновена след като я отвори. Презареди картата и провери отново.",
-  already_approved: "Вече е одобрено.",
-  second_factor_required: "Нужен е код от приложението за удостоверяване.",
-  second_factor_invalid: "Кодът не е верен или е изтекъл.",
-  second_factor_rejected: "Проверката на кода е изтекла (над 2 мин). Въведи нов код.",
-  not_an_approver: "Нямаш права да одобряваш.",
-  not_retryable: "Задачата не може да се повтори в това състояние.",
-  no_attempts_left: "Опитите са изчерпани.",
-  no_repo_for_type: "Няма хранилище за този вид задача.",
-  not_stoppable: "Задачата не може да се спре в това състояние.",
-  rate_limited: "Твърде много заявки. Опитай след минута.",
+/** The API error codes a person may see → catalog keys (E7f); unknown codes fall back to "Error (status)". */
+export const ERROR_TEXT: Record<string, Key> = {
+  head_sha_moved: "error.head_sha_moved",
+  already_approved: "error.already_approved",
+  second_factor_required: "error.second_factor_required",
+  second_factor_invalid: "error.second_factor_invalid",
+  second_factor_rejected: "error.second_factor_rejected",
+  not_an_approver: "error.not_an_approver",
+  not_retryable: "error.not_retryable",
+  no_attempts_left: "error.no_attempts_left",
+  no_repo_for_type: "error.no_repo_for_type",
+  not_stoppable: "error.not_stoppable",
+  rate_limited: "error.rate_limited",
+  not_allowed: "error.not_allowed",
+  rule_gone: "error.rule_gone",
+  already_decided: "error.already_decided",
+  not_steerable: "error.not_steerable",
+  name_taken: "error.name_taken",
+  not_in_registry: "error.not_in_registry",
+  bad_version: "error.bad_version",
+  ci_rounds_exhausted: "error.ci_rounds_exhausted",
 };
+
+export function errorText(t: T, r: { status: number; body: Record<string, unknown> }, extra: Record<string, Key> = {}, fallback?: string): string {
+  const code = String(r.body.error);
+  const key = extra[code] ?? ERROR_TEXT[code];
+  return key ? t(key) : (fallback ?? t("error.generic", { status: r.status }));
+}

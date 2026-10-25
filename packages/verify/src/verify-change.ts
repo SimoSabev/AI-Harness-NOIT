@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
-import { Verdict, effectiveLevel, hashJcs, repoConfigFromPolicy, sha256Tag } from "@mandat/contract";
+import { Verdict, effectiveLevel, hashJcs, repoConfigFromPolicy, sha256Tag, taskTypeOf } from "@mandat/contract";
 import type { ChangedFile, D7Status, ErrorCode, Evidence, MandatPolicy, RepoConfig, Sha256, VerifyOutcome, VerifyRequest } from "@mandat/contract";
 import { buildReasons, decideVerdict, ev, na } from "@mandat/core";
 import { cleanClone, recomputeTreeSha, removeTree } from "@mandat/export";
@@ -9,6 +10,7 @@ import type { startRunGate } from "./gate.js";
 import type { RunWriter } from "./run-dir.js";
 import type { runTestProcedure } from "./test-procedure.js";
 import { VerifyInfraError, verifyTrees } from "./verify-trees.js";
+import type { HiddenTests, UiCheck } from "./verify-trees.js";
 
 // Демо промпт т. 3.1 / 3.3 / 5.7 (D-205, D-206): the single verification contract.
 
@@ -38,6 +40,8 @@ export interface VerifyDeps {
   d7Evidence?: Evidence;
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
+  /** v5 E9б (D8): license and age of new dependencies (default: the npm registry from the host) */
+  depFacts?: (deps: { name: string; spec: string }[]) => Promise<D8Dependency[]>;
   recompute?: typeof recomputeTreeSha;
   progress?: (line: string) => void;
   now?: () => Date;
@@ -86,6 +90,12 @@ export interface VerifyChangeInput {
   deps: VerifyDeps;
   /** a verdict decided before verification (base untrusted, export refused): recorded as is */
   preVerdict?: Evidence;
+  /** v5 E9б (D5): a person's hidden tests for tree B */
+  hidden?: HiddenTests | null;
+  /** v5 E9б (D8): lint and typecheck commands */
+  checks?: { name: "lint" | "typecheck"; command: string }[];
+  /** v5 E9б (D12): the UI check (paths, dev command, browser image, routes) */
+  ui?: UiCheck;
 }
 
 export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome> {
@@ -105,6 +115,11 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
 
   const finish = (): VerifyOutcome => {
     const evidence = EVIDENCE_ORDER.map((d) => evd.get(d) ?? na(d));
+    // D5 only when hidden tests ran (verdicts without them keep their evidence list)
+    for (const d of ["D5.hidden", "D8.static", "D12.ui"] as const) {
+      const e = evd.get(d);
+      if (e) evidence.push(e);
+    }
     const infraEv = evd.get("INFRA");
     if (infraEv) evidence.push(infraEv);
     const result = decideVerdict(evidence);
@@ -143,7 +158,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
     return finish();
   }
   const policy = i.policy.policy;
-  const tt = req.task_type ? policy.task_types[req.task_type] : undefined;
+  const tt = req.task_type ? taskTypeOf(policy, req.task_type) : undefined;
   if (tt) riskCap = policy.risk_classes[tt.risk_class]?.level_cap ?? 1;
   const bridge = repoConfigFromPolicy(policy);
   if (!bridge.ok) {
@@ -151,7 +166,10 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
     set(ev("INFRA", "unknown", `unsupported runner ${bridge.detail}`, {}, { cls: "unsupported_runner", id: bridge.detail }));
     return finish();
   }
-  const missing = policy.harness.required_detectors.filter((d) => (MISSING_DETECTORS as readonly string[]).includes(d));
+  // D5 exists when a person gave hidden tests; without them a policy that requires D5 is FAILED INFRA:detector_missing
+  const hasHidden = (i.hidden?.files.length ?? 0) > 0;
+  const hasChecks = (i.checks?.length ?? 0) > 0;
+  const missing = policy.harness.required_detectors.filter((d) => (MISSING_DETECTORS as readonly string[]).includes(d) && !(d === "D5" && hasHidden) && !(d === "D8" && hasChecks));
   if (missing.length > 0) {
     set(ev("POLICY", "pass", "policy loaded from base"));
     set(ev("INFRA", "fail", `required detector missing: ${missing.join(", ")}`, { missing }, { cls: "detector_missing", id: missing[0] ?? "-" }));
@@ -188,7 +206,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
       infraUser: deps.infraUser, ipv6Sysctl: deps.ipv6Sysctl, mirrorPath: deps.mirrorPath, baseSha: req.base_sha, baseDir, diffPatch: i.diffPatch,
       files: i.files, rc, allowedPaths: tt ? tt.allowed_paths : ["**"], mayChangeTests, mustPass: [], external, tmpRoot: deps.tmpRoot,
       ...(deps.extraCa ? { extraCa: deps.extraCa } : {}), ...(deps.startGate ? { startGate: deps.startGate } : {}), ...(deps.runTests ? { runTests: deps.runTests } : {}),
-      ...(deps.progress ? { progress: deps.progress } : {}),
+      ...(deps.progress ? { progress: deps.progress } : {}), ...(deps.depFacts ? { depFacts: deps.depFacts } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}), ...(i.ui ? { ui: i.ui } : {}),
     });
     for (const e of r.evidence) set(e);
     if (!tt) set(na("D4.contract", "no task type"));

@@ -13,7 +13,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const REPORTS = Object.freeze({ unit: "test-results/unit.json", docker: "test-results/docker.json", live: "test-results/live.json" });
 export const CONFIGS = Object.freeze(["vitest.config.ts", "vitest.docker.config.ts", "vitest.live.config.ts"]);
 const CORE_DIRS = ["packages/contract/", "packages/core/", "packages/ledger/", "packages/verify/", "packages/mcp/", "packages/gate-github/"];
-const DECISION = /\/\/\s*(D-2\d\d):/;
+const DECISION = /\/\/\s*(D-[23]\d\d):/; // v5: D-3xx decisions count too
 const NOT_RUN = new Set(["skipped", "pending", "todo", "disabled"]);
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
