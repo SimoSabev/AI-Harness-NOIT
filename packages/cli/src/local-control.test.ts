@@ -65,7 +65,7 @@ describe("mandat local control (D-293)", () => {
     const proc: LoginProc = { onOutput: (f) => void (out = f), onExit: (f) => void (exit = f), write: (x) => void written.push(x), kill: () => exit(null) };
     const login = new LoginSessions({ prepare: async () => "ok", discard: async () => undefined, spawn: () => proc, status: async () => ({ loggedIn: true, email: "s@example.com", plan: "Max" }), timeoutMs: 60_000 });
     const removed: string[] = [];
-    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login, logout: async (n) => (removed.push(n), true), system: new SystemJobs({ run: () => undefined, org: "o" }) });
+    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login, logout: async (n) => (removed.push(n), true), system: new SystemJobs({ run: () => undefined, org: "o" }), addProject: async () => ({ ok: false, error: "failed" }) });
     const call = async (method: string, path: string, body?: unknown) => {
       const r = await fetch(`${c.url}${path}`, { method, headers: { authorization: `Bearer ${c.token}` }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
       return [r.status, await r.json()] as const;
@@ -96,7 +96,7 @@ describe("mandat local control (D-293)", () => {
   });
   it("D-370: /system lists the jobs; POST /system/<job> starts one from the closed list; anything else → 404/405", async () => {
     const argv: (readonly string[])[] = [];
-    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login: noLogin(), logout: async () => false, system: new SystemJobs({ run: (a) => void argv.push(a), org: "o" }) });
+    const c = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], login: noLogin(), logout: async () => false, system: new SystemJobs({ run: (a) => void argv.push(a), org: "o" }), addProject: async () => ({ ok: false, error: "failed" }) });
     const call = async (method: string, path: string) => {
       const r = await fetch(`${c.url}${path}`, { method, headers: { authorization: `Bearer ${c.token}` } });
       return [r.status, await r.json()] as const;
