@@ -6,9 +6,11 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
     npm i -g --no-audit --no-fund pnpm@12.14.0
 COPY . .
-RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+# D-389: the pnpm store survives between builds (a code change no longer downloads every dependency again), and only
+# this image's packages are installed, not the whole workspace.
+RUN --mount=type=cache,id=mandat-pnpm-store,target=/pnpm-store --mount=type=secret,id=extra_ca,required=false set -eu; \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
-    pnpm install --frozen-lockfile \
+    pnpm install --frozen-lockfile --store-dir /pnpm-store --filter "@mandat/llm-proxy..." \
  && pnpm --filter "@mandat/llm-proxy..." build \
  && pnpm --filter @mandat/llm-proxy --prod deploy /out
 

@@ -9,9 +9,10 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
     npm i -g --no-audit --no-fund pnpm@12.14.0
 COPY . .
-RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+# D-389: the pnpm store survives between builds (a code change no longer downloads every dependency again).
+RUN --mount=type=cache,id=mandat-pnpm-store,target=/pnpm-store --mount=type=secret,id=extra_ca,required=false set -eu; \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
-    pnpm install --frozen-lockfile --filter "@mandat/mcp-bridge..." \
+    pnpm install --frozen-lockfile --store-dir /pnpm-store --filter "@mandat/mcp-bridge..." \
  && pnpm --filter "@mandat/mcp-bridge..." build \
  && pnpm --filter @mandat/mcp-bridge --prod deploy /out \
  && find /out -type d \( -name tests -o -name __tests__ -o -name test \) -prune -exec rm -rf {} + \
