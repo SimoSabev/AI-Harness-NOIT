@@ -9,18 +9,19 @@ import type { Db } from "./db.js";
 import { drainOutbox } from "./outbox.js";
 import { PgOutbox, enqueueOutbox } from "./pg-outbox.js";
 import { DEMO_ORG_ID, seedMinimal } from "./seed.js";
+import { startPostgres } from "./pg-container.test-helper.js";
 
 // Real Postgres 17 (postgres:17.6-alpine, D-274) for what PGlite cannot do: parallel connections.
 const NAME = `mandat-pgtest-${process.pid}`;
+let pgUrl = "";
 const ORG = "00000000-0000-4000-8000-000000000001";
 const docker = (...a: string[]) => spawnSync("docker", a, { encoding: "utf8" });
 let db: Db;
 
 beforeAll(async () => {
-  const r = docker("run", "-d", "--rm", "--name", NAME, "-e", "POSTGRES_PASSWORD=postgres", "postgres:17.6-alpine");
-  if (r.status !== 0) throw new Error(`postgres container: ${r.stderr}`);
-  const ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.trim();
-  db = openDb(`postgresql://postgres:postgres@${ip}:5432/postgres`);
+  // D-389: the published 127.0.0.1 port, so it works on a Mac too (pg-container.test-helper.ts)
+  pgUrl = startPostgres(NAME).url;
+  db = openDb(pgUrl);
   for (let k = 0; k < 60; k++) {
     try {
       await db.query("select 1");
@@ -82,8 +83,7 @@ describe("Postgres (docker)", () => {
   });
   it("пряка подмяна на дневника е отказана; verify-log --org през CLI", async () => {
     await expect(db.query("update public.ledger set kind = 'x' where seq = 1")).rejects.toThrow(/append-only/);
-    const ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.trim();
-    const r = spawnSync("node", [path.join(repoRoot, "packages/cli/dist/main.js"), "verify-log", "--org", ORG], { encoding: "utf8", env: { ...process.env, MANDAT_DB_URL: `postgresql://postgres:postgres@${ip}:5432/postgres` } });
+    const r = spawnSync("node", [path.join(repoRoot, "packages/cli/dist/main.js"), "verify-log", "--org", ORG], { encoding: "utf8", env: { ...process.env, MANDAT_DB_URL: pgUrl } });
     expect(r.stdout).toMatch(/OK: chain intact \(seq 1\.\.40/);
     expect(r.status).toBe(0);
   });

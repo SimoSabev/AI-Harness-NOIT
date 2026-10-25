@@ -11,19 +11,20 @@ import type { DaemonDeps } from "./daemon.js";
 import { openDb } from "./db.js";
 import type { Db } from "./db.js";
 import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
+import { startPostgres } from "./pg-container.test-helper.js";
 
 // E8f (v5 p. 4.6 (1), AC-4.2): two live tasks of one repo edit src/cart.ts (fake:slow-edit, real sandboxes, two worker
 // slots on real Postgres). The later one is stopped (same_file: wait), re-queued behind the first, and runs after it.
 const NAME = `mandat-pgconf-${process.pid}`;
+let pgUrl = "";
 const docker = (...a: string[]) => spawnSync("docker", a, { encoding: "utf8" });
 let db: Db;
 const home = mkdtempSync(path.join(os.tmpdir(), "mandat-conf-"));
 beforeAll(async () => {
   await dockerEnv();
-  const r = docker("run", "-d", "--rm", "--name", NAME, "-e", "POSTGRES_PASSWORD=postgres", "postgres:17.6-alpine");
-  if (r.status !== 0) throw new Error(`postgres container: ${r.stderr}`);
-  const ip = docker("inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}", NAME).stdout.trim();
-  db = openDb(`postgresql://postgres:postgres@${ip}:5432/postgres`);
+  // D-389: the published 127.0.0.1 port, so it works on a Mac too (pg-container.test-helper.ts)
+  pgUrl = startPostgres(NAME).url;
+  db = openDb(pgUrl);
   for (let k = 0; k < 60; k++) {
     try {
       await db.query("select 1");
@@ -48,7 +49,7 @@ afterAll(async () => {
 });
 
 describe("same file, two live tasks (docker)", () => {
-  it("the later task waits for the earlier one, then runs to a verdict", async () => {
+  it("the later task waits for the earlier one, then runs on the new main (D-367: the same edit is then empty)", async () => {
     const d: DaemonDeps = { db, home, gh: fakeGitHub({ repos: { "mandat-demo/shop": {} } }), ghRepo: "mandat-demo/shop" };
     const first = runDaemonOnce(d);
     await new Promise((res) => setTimeout(res, 4000));
@@ -61,6 +62,8 @@ describe("same file, two live tasks (docker)", () => {
     expect(rows.find((r) => r.id === "t_conf_a")?.state).not.toBe("CREATED");
     expect((await db.query<{ text: string }>("select text from public.task_activities where task_id = 't_conf_b' and kind = 'conflict'")).rows.map((r) => r.text)).toEqual(["src/cart.ts · t_conf_a"]);
     expect(await runDaemonOnce(d)).toBe("t_conf_b");
-    expect((await db.query<{ n: number }>("select count(*)::int as n from public.verdicts where task_id = 't_conf_b'")).rows[0]?.n).toBe(1);
+    // D-367: the first change went into main by itself, so the second, the same edit, finds nothing to change on the new
+    // base — it runs (attempt 2, after the wait) and stops as an empty change, without a verdict (D-288)
+    expect((await db.query<{ state: string; wait_reason: string; attempt: number }>("select state, wait_reason, attempt from public.tasks where id = 't_conf_b'")).rows[0]).toEqual({ state: "HELD", wait_reason: "empty_change", attempt: 2 });
   }, 1_200_000);
 });
