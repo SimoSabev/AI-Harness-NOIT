@@ -23,6 +23,7 @@ describe("skills catalog (AC-5.7)", () => {
     const rows = (await db.query<{ name: string; source: string; approved: boolean; blocked_reason: string | null; has_hash: boolean }>("select name, source, approved, blocked_reason, content_hash is not null as has_hash from public.skills order by name")).rows;
     expect(rows).toEqual([
       { name: "release-notes", source: "repo", approved: false, blocked_reason: null, has_hash: true },
+      { name: "research", source: "builtin", approved: true, blocked_reason: null, has_hash: true },
       { name: "review", source: "builtin", approved: true, blocked_reason: null, has_hash: true },
       { name: "sneaky", source: "repo", approved: false, blocked_reason: "invisible character U+202E", has_hash: true },
       { name: "test-first", source: "builtin", approved: true, blocked_reason: null, has_hash: true },

@@ -5,7 +5,7 @@ import { RESEARCH_ROLES, depthBudget } from "@mandat/contract";
 import type { ResearchDepth, ResearchGoal, ResearchRole, ResearchScope } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
-import type { ResearchChannel } from "../lib/server/research";
+import type { ResearchChannel } from "../lib/research-types";
 import { btn, card, input, label } from "./ui";
 
 // E9d (D-398): a new research question — what, how deep, how to spend on models; the rest folded under "More options".

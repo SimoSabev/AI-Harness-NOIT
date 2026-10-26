@@ -8,7 +8,7 @@ import type { T } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
 import { PHASES, hostOf, liveState } from "../lib/research-view";
 import type { LiveState } from "../lib/research-view";
-import type { ResearchFeed, ResearchQuestionRow } from "../lib/server/research";
+import type { ResearchFeed, ResearchQuestionRow } from "../lib/research-types";
 import type { Tone } from "../lib/status";
 import { StatusBadge, btn, card, label } from "./ui";
 

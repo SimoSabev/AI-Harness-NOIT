@@ -1,43 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { ResearchReport, ResearchRequest, TraceEvent } from "@mandat/contract";
-import type { ResearchDepth, ResearchGoal } from "@mandat/contract";
 import type { Result } from "./actions";
 import { hasCap } from "./roles";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
+import type { ResearchChannel, ResearchFeed, ResearchQuestionRow } from "../research-types";
+
+export type { ResearchChannel, ResearchFeed, ResearchQuestionRow };
 
 // E9d (D-398): research from the web. A person with research.ask queues a question (the worker runs it); the page
 // follows its events (SSE) and offers the report for download. Reads go through RLS as the person; the queue row is
 // written by the server (service role), like a task.
-
-export interface ResearchQuestionRow {
-  id: string;
-  question: string;
-  status: "queued" | "running" | "done" | "partial" | "failed" | "stopped";
-  depth: ResearchDepth | null;
-  goal: ResearchGoal | null;
-  partial: string | null;
-  error: string | null;
-  usd: number;
-  created_at: string;
-  started_at: string | null;
-  finished_at: string | null;
-  stop_requested: boolean;
-  has_report: boolean;
-}
-export interface ResearchFeed {
-  question: ResearchQuestionRow;
-  events: TraceEvent[];
-  report: ResearchReport | null;
-}
-export interface ResearchChannel {
-  id: string;
-  label: string;
-  kind: "api_key" | "cli_profile" | "local";
-  model: string;
-  health: string;
-  enabled: boolean;
-}
 
 const err = (status: number, error: string): Result => ({ status, body: { error } });
 const TS = (c: string) => `to_char(${c} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
