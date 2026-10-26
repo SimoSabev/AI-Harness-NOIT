@@ -41,7 +41,8 @@
     "@octokit/webhooks": "14.2.0",
     "pg": "8.23.1",
     "web-push": "3.6.7",
-    "@mandat/review": "workspace:*"
+    "@mandat/review": "workspace:*",
+    "@mandat/research": "workspace:*"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",

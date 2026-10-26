@@ -3,7 +3,7 @@ import { runResearch } from "./engine.js";
 import { Fetcher } from "./fetch/fetcher.js";
 import type { HttpResult } from "./fetch/http.js";
 import { fakeModel } from "./model.js";
-import type { ModelRequest } from "./model.js";
+import type { ModelClient, ModelRequest } from "./model.js";
 import type { RouterChannel } from "./router.js";
 import { routeRoles } from "./router.js";
 import type { SearchProvider } from "./search/providers.js";
@@ -44,12 +44,23 @@ export const DEMO_SCRIPT: DemoScript = {
   }),
 };
 
-export interface DemoWorld {
-  run: () => Promise<ResearchReport>;
-  events: TraceEvent[];
+export interface DemoEnv {
+  channels: RouterChannel[];
+  clientOf: (c: RouterChannel) => ModelClient;
+  providers: SearchProvider[];
+  fetcher: Fetcher;
   calls: string[];
 }
-export function demoWorld(o: { script?: DemoScript; usdPerCall?: number; urls?: string[]; pages?: Record<string, string>; req?: Partial<ResearchRequestInput>; emit?: (e: TraceEvent) => void; delayMs?: number; id?: string } = {}): DemoWorld {
+export interface DemoOptions {
+  script?: DemoScript;
+  usdPerCall?: number;
+  urls?: string[];
+  pages?: Record<string, string>;
+  /** a pause before every answer, so the live panel can be watched */
+  delayMs?: number;
+}
+/** the models, search and pages of the recorded world */
+export function demoEnv(o: DemoOptions = {}): DemoEnv {
   const pages = o.pages ?? DEMO_PAGES;
   const wait = () => (o.delayMs ? new Promise((r) => setTimeout(r, o.delayMs)) : Promise.resolve());
   const res = (url: string): HttpResult => {
@@ -72,15 +83,25 @@ export function demoWorld(o: { script?: DemoScript; usdPerCall?: number; urls?: 
     calls.push(role);
     return JSON.stringify(script[role]?.(r) ?? {});
   }, o.usdPerCall ?? 0);
-  const routes = routeRoles([ch], "balanced");
+  return { channels: [ch], clientOf: () => client, providers: [provider], fetcher, calls };
+}
+
+export interface DemoWorld {
+  run: () => Promise<ResearchReport>;
+  events: TraceEvent[];
+  calls: string[];
+}
+export function demoWorld(o: DemoOptions & { req?: Partial<ResearchRequestInput>; emit?: (e: TraceEvent) => void; id?: string } = {}): DemoWorld {
+  const env = demoEnv(o);
+  const routes = routeRoles(env.channels, "balanced");
   if (!routes.ok) throw new Error(routes.why);
   const events: TraceEvent[] = [];
   return {
     events,
-    calls,
+    calls: env.calls,
     run: () =>
       runResearch({ question: DEMO_QUESTION, depth: "standard", goal: "balanced", ...o.req }, {
-        id: o.id ?? "q_demo", routes: routes.routes, clientOf: () => client, providers: [provider], fetcher,
+        id: o.id ?? "q_demo", routes: routes.routes, clientOf: env.clientOf, providers: env.providers, fetcher: env.fetcher,
         emit: (e) => {
           events.push(e);
           o.emit?.(e);

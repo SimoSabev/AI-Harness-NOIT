@@ -58,6 +58,9 @@
     },
     {
       "path": "../../packages/review"
+    },
+    {
+      "path": "../../packages/research"
     }
   ]
 }
