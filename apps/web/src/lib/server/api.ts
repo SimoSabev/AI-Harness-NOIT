@@ -20,6 +20,8 @@ import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import type { Db } from "./sql";
+import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
+import { reportHtml, reportMarkdown } from "@mandat/research/report";
 import { AccountName, AddProjectBody, LoginCode, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
@@ -504,4 +506,113 @@ export async function postHiddenTests(req: Request, d: ApiDeps, repoId: string):
   const p = await post(req, d);
   if (p instanceof Response) return p;
   return done(await uploadHidden(d.db, { uid: p.uid, repoId, body: p.body, secondFactor: d.secondFactor }), d);
+}
+
+// E9d (D-398): research — queue a question, stop it, follow it live, download the report
+const QID = /^q_[a-z0-9_]{1,40}$/;
+export async function postResearch(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!d.createLimiter.take(p.uid)) return json(429, { error: "rate_limited" });
+  return done(await createResearch(d.db, { uid: p.uid, org: p.org, body: p.body }), d);
+}
+export async function postResearchStop(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!QID.test(id)) return json(404, { error: "unknown_research" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await stopResearch(d.db, { uid: p.uid, org: p.org, id }), d);
+}
+
+/** the live trace of one question as Server-Sent Events: each tick sends the new events and the question's state; the
+ * report rides on the event after the run ends, then the stream closes. EventSource resumes with Last-Event-ID = seq. */
+export async function streamResearch(req: Request, d: ApiDeps, id: string, o: { intervalMs?: number; maxMs?: number } = {}): Promise<Response> {
+  if (!QID.test(id)) return json(404, { error: "unknown_research" });
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  const q = new URL(req.url).searchParams.get("after");
+  const last = req.headers.get("last-event-id");
+  const cursor = last ?? q;
+  if (cursor !== null && !/^-?\d{1,6}$/.test(cursor)) return json(400, { error: "bad_query" });
+  let after = cursor === null ? -1 : Number(cursor);
+  const first = await researchFeed(d.db, c.uid, c.org, id, after);
+  if (!first) return json(404, { error: "unknown_research" });
+  const enc = new TextEncoder();
+  const intervalMs = o.intervalMs ?? 600;
+  const maxMs = o.maxMs ?? 5 * 60_000;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let sig = "";
+  const body = new ReadableStream<Uint8Array>({
+    start(ctl) {
+      const started = Date.now();
+      let pinged = started;
+      let closed = false;
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        if (timer) clearTimeout(timer);
+        try {
+          ctl.close();
+        } catch {
+          // already closed by the client
+        }
+      };
+      req.signal.addEventListener("abort", close);
+      const send = (f: NonNullable<Awaited<ReturnType<typeof researchFeed>>>): boolean => {
+        const now = JSON.stringify([f.question.status, f.question.stop_requested, f.question.usd, f.question.has_report]);
+        if (f.events.length > 0 || now !== sig || f.report) {
+          sig = now;
+          after = f.events.at(-1)?.seq ?? after;
+          ctl.enqueue(enc.encode(`event: feed\nid: ${after}\ndata: ${JSON.stringify(f)}\n\n`));
+        }
+        return f.report !== null || (["failed", "stopped"].includes(f.question.status) && f.events.length === 0);
+      };
+      const tick = async () => {
+        if (closed) return;
+        if (Date.now() - started >= maxMs) return close();
+        try {
+          const f = await researchFeed(d.db, c.uid, c.org, id, after);
+          if (!f) return close();
+          if (send(f)) return close();
+          if (Date.now() - pinged >= 15_000) {
+            pinged = Date.now();
+            ctl.enqueue(enc.encode(": ping\n\n"));
+          }
+        } catch {
+          return close();
+        }
+        timer = setTimeout(() => void tick(), intervalMs);
+      };
+      if (send(first)) return close();
+      timer = setTimeout(() => void tick(), intervalMs);
+    },
+    cancel() {
+      if (timer) clearTimeout(timer);
+    },
+  });
+  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store, no-transform", "x-accel-buffering": "no" } });
+}
+
+/** the report as a file: html (self-contained, no scripts), md or json */
+export async function getResearchReport(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!QID.test(id)) return json(404, { error: "unknown_research" });
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  const format = new URL(req.url).searchParams.get("format") ?? "html";
+  if (!["html", "md", "json"].includes(format)) return json(400, { error: "bad_format" });
+  const r = await researchReport(d.db, c.uid, c.org, id);
+  if (!r) return json(404, { error: "no_report" });
+  const name = `research-${id}.${format}`;
+  const [text, type] = format === "html" ? [reportHtml(r), "text/html; charset=utf-8"] : format === "md" ? [reportMarkdown(r), "text/markdown; charset=utf-8"] : [JSON.stringify(r, null, 2), "application/json; charset=utf-8"];
+  const inline = new URL(req.url).searchParams.get("view") === "1" && format === "html";
+  return new Response(text, {
+    status: 200,
+    headers: {
+      "content-type": type,
+      "content-disposition": `${inline ? "inline" : "attachment"}; filename="${name}"`,
+      "x-content-type-options": "nosniff",
+      // the report has no scripts; its links open outside, its styles are inline
+      "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+      "cache-control": "private, no-store",
+    },
+  });
 }

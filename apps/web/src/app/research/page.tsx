@@ -1,76 +1,63 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ResearchForm } from "../../components/research-form";
+import { ResearchLive } from "../../components/research-live";
 import { Shell } from "../../components/shell";
 import { Panel } from "../../components/workbench-parts";
-import { card } from "../../components/ui";
+import { StatusBadge, btn } from "../../components/ui";
 import { getT } from "../../i18n/server";
 import { pageName } from "../../lib/brand";
 import { db } from "../../lib/server/db";
 import { pageCtx } from "../../lib/server/page";
-import { researchView } from "../../lib/server/workbench";
+import { researchChannels, researchFeed, researchQuestions } from "../../lib/server/research";
+import type { ResearchQuestionRow } from "../../lib/server/research";
+import type { Tone } from "../../lib/status";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
   return { title: pageName((await getT())("research.title")) };
 }
 
-const V = { confirmed: { c: "text-ok", m: "bg-ok" }, single: { c: "text-warn", m: "bg-warn" }, conflict: { c: "text-bad", m: "bg-bad" }, unchecked: { c: "text-mute", m: "bg-idle" } } as const;
-const S = { read: "text-ok", weak: "text-warn", failed: "text-bad" } as const;
+const TONE: Record<ResearchQuestionRow["status"], Tone> = { queued: "gray", running: "blue", done: "green", partial: "amber", failed: "red", stopped: "gray" };
 
-// D-307 / design H6: a question, the agents on it, every claim checked against its sources by Mandat, the draft answer.
-export default async function ResearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+// E9d (D-398): the research page — the questions on the left; a new question, or one question live: its result in the
+// middle and its activity on the right (research-live.tsx).
+export default async function ResearchPage({ searchParams }: { searchParams: Promise<{ q?: string; new?: string }> }) {
   const c = await pageCtx();
   const t = await getT();
-  const qid = (await searchParams).q;
-  const r = await researchView(db(), c.uid, c.org, qid);
-  const cur = r.current;
-  const count = (v: keyof typeof V) => cur?.claims.filter((x) => x.verdict === v).length ?? 0;
+  const sp = await searchParams;
+  const [questions, channels] = await Promise.all([researchQuestions(db(), c.uid, c.org), researchChannels(db(), c.uid, c.org)]);
+  const showForm = sp.new === "1" || questions.length === 0;
+  const pick = showForm ? null : (questions.find((q) => q.id === sp.q) ?? questions[0] ?? null);
+  const feed = pick ? await researchFeed(db(), c.uid, c.org, pick.id, -1) : null;
   return (
     <Shell current="research" waiting={c.waiting} wide>
-      <h1 className="font-display text-2xl font-semibold tracking-tight">{t("research.title")}</h1>
-      <p className="mt-1 text-sm text-mute">{t("research.intro")}</p>
-      {r.questions.length === 0 ? (
-        <p className={`${card} mt-6 p-6 text-sm text-mute`}>{t("research.none")}</p>
-      ) : (
-        <div className="mt-6 grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
-          <Panel title={t("research.questions", { n: r.questions.length })}>
-            <ul className="p-2">
-              {r.questions.map((q) => (
-                <li key={q.id}><Link href={`/research?q=${q.id}`} aria-current={cur?.id === q.id ? "page" : undefined} className="block rounded-lg px-3 py-2 text-sm hover:bg-raised aria-[current=page]:bg-accent-soft"><span className="line-clamp-2">{q.question}</span><span className="mt-0.5 block text-xs text-mute">{q.status === "running" ? t("research.q.running") : q.status === "done" ? t("research.q.done") : t("research.q.failed")} · {t("research.claimsCount", { n: q.claims })}</span></Link></li>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="font-display text-2xl font-semibold tracking-tight">{t("research.title")}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-mute">{t("research.intro")}</p>
+        </div>
+        {!showForm && <Link href="/research?new=1" className={btn.primary}>{t("research.new")}</Link>}
+      </div>
+      <div className="mt-6 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <Panel title={t("research.questions", { n: questions.length })} className="self-start">
+          {questions.length === 0 ? (
+            <p className="p-4 text-sm text-mute">{t("research.none")}</p>
+          ) : (
+            <ul className="max-h-[70vh] overflow-y-auto p-2">
+              {questions.map((q) => (
+                <li key={q.id}>
+                  <Link href={`/research?q=${q.id}`} aria-current={pick?.id === q.id ? "page" : undefined} className="block rounded-lg px-3 py-2 text-sm hover:bg-raised aria-[current=page]:bg-accent-soft">
+                    <span className="line-clamp-2">{q.question}</span>
+                    <span className="mt-1 flex items-center gap-2"><StatusBadge tone={TONE[q.status]} label={t(`research.st.${q.status}`)} />{q.depth && <span className="text-xs text-mute">{t(`research.depth.${q.depth}`)}</span>}</span>
+                  </Link>
+                </li>
               ))}
             </ul>
-          </Panel>
-          {cur && (
-            <>
-              <div className="flex min-w-0 flex-col gap-4">
-                <section className={`${card} rise p-5`}>
-                  <p className="font-mono text-[11px] tracking-[0.1em] text-accent-text">{t("research.question", { status: cur.status === "running" ? t("research.question.running") : t("research.question.done") })}</p>
-                  <h2 className="mt-1 font-display text-xl font-semibold leading-snug">{cur.question}</h2>
-                </section>
-                <Panel title={t("research.claims")} aside={<span className="flex gap-3"><span className="text-ok">{t("research.nConfirmed", { n: count("confirmed") })}</span><span className="text-warn">{t("research.nSingle", { n: count("single") })}</span><span className="text-bad">{t("research.nConflict", { n: count("conflict") })}</span></span>}>
-                  <ul className="divide-y divide-line">
-                    {cur.claims.map((x, i) => (
-                      <li key={i} className="grid grid-cols-[18px_minmax(0,1fr)_120px] gap-3 px-4 py-3">
-                        <span aria-hidden="true" className={`hex mt-1 inline-block h-3 w-3.5 ${V[x.verdict].m}`} />
-                        <span><span className="block text-sm leading-relaxed">{x.text}</span><span className="mt-1 flex flex-wrap gap-1">{x.source_ns.map((n) => <a key={n} href={cur.sources.find((s) => s.n === n)?.url ?? "#"} className="rounded border border-line px-1.5 font-mono text-[10px] text-mute no-underline hover:text-ink" target="_blank" rel="noreferrer">[{n}]</a>)}</span></span>
-                        <span className={`text-right text-xs ${V[x.verdict].c}`}>{t(`research.v.${x.verdict}`)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Panel>
-              </div>
-              <div className="flex flex-col gap-4">
-                <Panel title={t("research.sources", { n: cur.sources.length })} aside={t("research.read", { n: cur.sources.filter((s) => s.state === "read").length })}>
-                  <ul className="divide-y divide-line">{cur.sources.map((s) => <li key={s.n} className="grid grid-cols-[34px_minmax(0,1fr)_70px] gap-2 px-4 py-2 text-xs"><span className="font-mono text-mute">[{s.n}]</span><a href={s.url} target="_blank" rel="noreferrer" className="truncate text-ink no-underline hover:underline">{s.title}</a><span className={`text-right ${S[s.state]}`}>{t(`research.s.${s.state}`)}</span></li>)}</ul>
-                </Panel>
-                <Panel title={t("research.draft")}>
-                  <p className="p-4 text-sm leading-relaxed text-mute">{cur.draft ?? t("research.draftPending")}</p>
-                </Panel>
-              </div>
-            </>
           )}
-        </div>
-      )}
+        </Panel>
+        {feed ? <ResearchLive key={feed.question.id} initial={feed} /> : <ResearchForm channels={channels} />}
+      </div>
     </Shell>
   );
 }

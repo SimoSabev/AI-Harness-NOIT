@@ -10,9 +10,9 @@ describe("i18n catalog (E7е)", () => {
   it("en and bg have the same keys", () => {
     expect(Object.keys(bg).sort()).toEqual(Object.keys(en).sort());
   });
-  it("the research page does not claim checks that do not run yet (E9г is not built)", () => {
-    expect(en["research.intro"]).toMatch(/not (built|ready) yet/);
-    expect(bg["research.intro"]).toMatch(/още не е (готова|направена)/);
+  it("the research page says what the service checks (E9d, D-398): verbatim quotes, every claim against its sources", () => {
+    expect(en["research.intro"]).toMatch(/verbatim quotes/);
+    expect(bg["research.intro"]).toMatch(/дословни цитати/);
   });
   it("no empty values in either language", () => {
     for (const [k, v] of [...Object.entries(en), ...Object.entries(bg)]) expect(v.trim(), k).not.toBe("");

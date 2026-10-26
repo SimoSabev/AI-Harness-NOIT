@@ -7,6 +7,9 @@
     "declarationMap": false,
     "rootDir": ".",
     "paths": {
+      "@mandat/research/report": [
+        "./packages/research/src/report.ts"
+      ],
       "@mandat/mcp-bridge/registry": [
         "./packages/mcp-bridge/src/registry.ts"
       ],

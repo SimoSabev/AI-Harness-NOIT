@@ -288,6 +288,9 @@ importers:
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../../packages/redaction
+      '@mandat/research':
+        specifier: workspace:*
+        version: link:../../packages/research
       '@mandat/worker':
         specifier: workspace:*
         version: link:../worker
