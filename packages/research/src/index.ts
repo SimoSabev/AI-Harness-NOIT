@@ -33,3 +33,5 @@ export { anthropicWebSearch, arxiv, crossref, exa, fetchTransport, github, searx
 export type { SearchProvider, SearchQuery, Transport } from "./search/providers.js";
 export { anthropicViaProxy } from "./model.js";
 export { usd as usdText } from "./report/text.js";
+export { RENDER_SCRIPT, dockerRenderer } from "./fetch/browser.js";
+export type { RenderRun } from "./fetch/browser.js";

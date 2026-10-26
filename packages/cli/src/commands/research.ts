@@ -3,8 +3,9 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { MandatError, ResearchRequest, TraceEvent } from "@mandat/contract";
 import type { ResearchReport, ResearchRequestInput } from "@mandat/contract";
-import { demoWorld, reportHtml, reportMarkdown, usdText } from "@mandat/research";
-import { buildProfileArgs, imageTags, profileVolume } from "@mandat/sandbox";
+import { RENDER_SCRIPT, demoWorld, dockerRenderer, reportHtml, reportMarkdown, usdText } from "@mandat/research";
+import type { Renderer } from "@mandat/research";
+import { buildProfileArgs, buildRenderArgs, dockerText, imageTags, profileVolume, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { hostResearchEnv, reapStaleResearch, runResearchOnce } from "@mandat/worker";
 import type { Db, ResearchDeps } from "@mandat/worker";
@@ -32,6 +33,20 @@ export function profilePrintExec(docker: DockerRunner): (profile: string, argv: 
   };
 }
 
+/** the browser tier when the Playwright image is built (`pnpm mandat images build --ui`), else none */
+export async function browserRenderer(docker: DockerRunner, runId: string): Promise<Renderer | null> {
+  const image = uiImageTag(repoRoot);
+  if ((await dockerText(docker, ["image", "inspect", image], 15_000)).exitCode !== 0) return null;
+  return dockerRenderer({
+    args: () => buildRenderArgs({ image, script: RENDER_SCRIPT, runId: runId.replace(/[^a-z0-9_]/g, "_").slice(0, 48) }),
+    run: async (args, stdin, timeoutMs) => {
+      const out: Buffer[] = [];
+      const r = await docker.run(args, { env: {}, stdin: Readable.from([stdin]), timeoutMs, onStdout: (c) => out.push(c) });
+      return { exitCode: r.timedOut ? 124 : r.exitCode, stdout: Buffer.concat(out).toString("utf8") };
+    },
+  });
+}
+
 /** the worker's research side: the proxy on loopback when it runs, subscriptions through Docker */
 export function researchDeps(o: { db: Db; io: Io; home: string; docker: DockerRunner; inferencePort: number; adminPort: number }): ResearchDeps {
   const secretPath = path.join(o.home, "proxy", "secret");
@@ -40,7 +55,8 @@ export function researchDeps(o: { db: Db; io: Io; home: string; docker: DockerRu
     log: (l) => o.io.stderr(`${l}\n`),
     envFor: async (org, req, id) => {
       const up = existsSync(secretPath) && (await fetch(`http://127.0.0.1:${o.adminPort}/healthz`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false));
-      return hostResearchEnv({ db: o.db, env: o.io.env, proxy: up ? { url: `http://127.0.0.1:${o.inferencePort}`, secretPath } : null, profileExec: profilePrintExec(o.docker) }, org, req, id);
+      const renderer = await browserRenderer(o.docker, id).catch(() => null);
+      return hostResearchEnv({ db: o.db, env: o.io.env, proxy: up ? { url: `http://127.0.0.1:${o.inferencePort}`, secretPath } : null, profileExec: profilePrintExec(o.docker), renderer }, org, req, id);
     },
   };
 }

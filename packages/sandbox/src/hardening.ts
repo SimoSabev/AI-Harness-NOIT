@@ -376,3 +376,21 @@ export function envForPhase(
   for (const k of Object.keys(testsEnv)) if (SECRETS.has(k)) forbid("tests.env may not set a secret name", { name: k });
   return { names: [], publicValues: { ...BASE_PUBLIC, MANDAT_REPORT: "/m/out/report.json", ...testsEnv } };
 }
+
+/**
+ * E9г (D-394): the browser tier of research — one page in the Playwright image, the SANDBOX_HARDENING flags, the
+ * network to the internet (mandat-upstream) and the runner script mounted read-only. The script's guard proxy keeps the
+ * browser off every non-public address; no secret, no volume, no published port.
+ */
+export function buildRenderArgs(o: { image: string; script: string; runId: string }): string[] {
+  if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
+  if (!/^[a-z0-9_]{1,48}$/.test(o.runId)) forbid("invalid run id");
+  if (!path.isAbsolute(o.script) || !o.script.endsWith(".mjs")) forbid("the render script must be an absolute .mjs path");
+  const flags = SANDBOX_HARDENING.map((f) => f.replace("<run_id>", o.runId).replace("<role>", "render"));
+  return [
+    "run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...flags,
+    "-e", "HOME=/home/agent", "-e", "MANDAT_RENDER_MAIN=1",
+    "-v", `${path.resolve(o.script)}:/opt/mandat/ui/research-render.mjs:ro`,
+    "-w", "/opt/mandat/ui", "--entrypoint", "node", o.image, "/opt/mandat/ui/research-render.mjs",
+  ];
+}

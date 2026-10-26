@@ -675,6 +675,10 @@ importers:
       zod:
         specifier: 4.6.7
         version: 4.6.7
+    devDependencies:
+      '@mandat/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
 
   packages/review:
     dependencies:

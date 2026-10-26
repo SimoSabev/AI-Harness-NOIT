@@ -6,7 +6,8 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "render-runner"
   ],
   "exports": {
     ".": {
@@ -31,5 +32,8 @@
     "linkedom": "0.18.14",
     "unpdf": "1.9.1",
     "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@mandat/sandbox": "workspace:*"
   }
 }
