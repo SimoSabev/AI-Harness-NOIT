@@ -8,7 +8,7 @@ import type { Health } from "../lib/overview";
 import { authMode } from "../lib/server/auth";
 import { btn } from "./ui";
 
-// D-305, D-384: the frame of every page — a side bar with three sections (tasks, projects, settings). A new task
+// D-305, D-384: the frame of every page — a side bar with four sections (tasks, projects, memory, settings; D-395). A new task
 // starts from the box on the tasks page, so the frame has no second "+ New task". On a phone the bar is a row of links.
 export const HEALTH: Record<Health, { mark: string; text: string; label: Key }> = {
   bad: { mark: "bg-bad", text: "text-bad", label: "health.bad" },

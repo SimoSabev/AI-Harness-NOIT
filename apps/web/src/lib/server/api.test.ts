@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { getBoard, getInbox, getTask, postApprove, postFailureLabel, postRetry, postStop, postTask } from "./api";
+import { deleteMemoryRoute, getBoard, getInbox, getMemory, getMemoryHistory, getTask, patchMemoryRoute, postApprove, postFailureLabel, postMemory, postMemoryConsolidate, postRetry, postStop, postTask } from "./api";
 import type { ApiDeps } from "./api";
 import { RateLimiter } from "./guard";
 import { U, changesetOf, webDb } from "./web-db.test-helper";
@@ -55,5 +55,25 @@ describe("API (т. 8.1)", () => {
     expect(sent.some((t) => t.endsWith(":board"))).toBe(true);
     who = U.viewer;
     expect((await postRetry(post("/api/tasks/t_seed_docs/retry", {}), deps, "t_seed_docs")).status).toBe(403);
+  });
+});
+
+describe("API на паметта (D-392)", () => {
+  it("без вход 401; CSRF; създаване, редакция, история, подреждане, изтриване", async () => {
+    who = null;
+    expect((await getMemory(get("/api/memory"), deps)).status).toBe(401);
+    who = U.owner;
+    expect((await postMemory(post("/api/memory", { text: "Отговаряй кратко", kind: "preference", scope: "user" }, { "x-mandat-csrf": "d".repeat(43) }), deps)).status).toBe(403);
+    const c = await postMemory(post("/api/memory", { text: "Отговаряй кратко", kind: "preference", scope: "user" }), deps);
+    expect(c.status).toBe(201);
+    const id = ((await c.json()) as { item: { id: string } }).item.id;
+    expect((await patchMemoryRoute(post(`/api/memory/${id}`, { action: "pin", pinned: true }), deps, id)).status).toBe(200);
+    const h = (await (await getMemoryHistory(get(`/api/memory/${id}/history`), deps, id)).json()) as { events: { action: string }[] };
+    expect(h.events.map((e) => e.action)).toEqual(["created", "pinned"]);
+    expect((await postMemoryConsolidate(post("/api/memory/consolidate", {}), deps)).status).toBe(200);
+    const o = (await (await getMemory(get("/api/memory"), deps)).json()) as { items: { id: string; pinned: boolean }[] };
+    expect(o.items.find((m) => m.id === id)?.pinned).toBe(true);
+    expect((await deleteMemoryRoute(post(`/api/memory/${id}`, {}), deps, id)).status).toBe(200);
+    who = U.approver;
   });
 });

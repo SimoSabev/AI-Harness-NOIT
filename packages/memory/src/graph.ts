@@ -1,8 +1,8 @@
 import type { MemoryItem } from "@mandat/contract";
 
 // D-392: the "Links" view of the memory menu. Nodes: you, each project, each memory, and every entity two or more
-// memories share; edges: scope (memory → you/project), about (memory → entity), superseded (old → new). The layout is a
-// seeded force layout (Fruchterman–Reingold), so the same memory always draws the same picture — no new dependency.
+// memories share; edges: scope (memory → you/project), about (memory → entity), superseded (old → new). The layout is radial
+// and seeded, so the same memory always draws the same picture — no new dependency.
 
 export type NodeType = "root" | "memory" | "entity";
 export interface GraphNode { id: string; type: NodeType; label: string; x: number; y: number; status?: MemoryItem["status"]; kind?: MemoryItem["kind"] }
@@ -25,46 +25,68 @@ function rng(seed: number): () => number {
   };
 }
 
+const clampX = (x: number) => Math.min(W - PAD, Math.max(PAD, x));
+const clampY = (y: number) => Math.min(H - PAD, Math.max(PAD, y));
+
+/**
+ * Radial first, then a gentle push apart: you on the left, the projects on the right, each root's memories on a ring
+ * around it, each shared entity between the memories that name it. The push only separates nodes closer than MIN and
+ * pulls each back toward its seat, so the picture keeps its shape (who → what) and nothing overlaps.
+ */
 function layout(nodes: GraphNode[], edges: GraphEdge[]): void {
-  const n = nodes.length;
-  const idx = new Map(nodes.map((x, i) => [x.id, i]));
-  const r = rng(42 + n);
-  const pos = nodes.map((_, i) => (i === 0 ? { x: W / 2, y: H / 2 } : { x: PAD + r() * (W - 2 * PAD), y: PAD + r() * (H - 2 * PAD) }));
-  const k = Math.sqrt(((W - 2 * PAD) * (H - 2 * PAD)) / Math.max(1, n)) * 0.75;
-  let temp = W / 8;
-  for (let it = 0; it < 220; it++) {
-    const d = pos.map(() => ({ x: 0, y: 0 }));
-    for (let i = 0; i < n; i++)
-      for (let j = i + 1; j < n; j++) {
-        const pi = pos[i]!, pj = pos[j]!;
-        let dx = pi.x - pj.x, dy = pi.y - pj.y;
+  const roots = nodes.filter((x) => x.type === "root");
+  const seat = new Map<string, { x: number; y: number }>();
+  roots.forEach((rt, i) => {
+    if (roots.length === 1) seat.set(rt.id, { x: W / 2, y: H / 2 });
+    else if (i === 0) seat.set(rt.id, { x: W * 0.3, y: H / 2 });
+    else seat.set(rt.id, { x: W * 0.72, y: (H * i) / roots.length });
+  });
+  const r = rng(42 + nodes.length);
+  roots.forEach((rt, ri) => {
+    const mine = edges.filter((e) => e.kind === "scope" && e.to === rt.id).map((e) => e.from);
+    const c = seat.get(rt.id) ?? { x: W / 2, y: H / 2 };
+    // one root: a full ring; you and projects: you fan out to the left, each project to the right (the middle stays
+    // free for the entities they share)
+    const full = roots.length === 1;
+    const radius = Math.min(full ? 300 : 250, 120 + 20 * mine.length);
+    const [from, span] = full ? [0, 2 * Math.PI] : ri === 0 ? [Math.PI * 0.55, Math.PI * 0.9] : [-Math.PI * 0.45, Math.PI * 0.9];
+    mine.forEach((id, i) => {
+      const a = full ? from + (span * i) / Math.max(1, mine.length) + r() * 0.2 : from + (span * (i + 0.5)) / Math.max(1, mine.length);
+      seat.set(id, { x: clampX(c.x + radius * Math.cos(a)), y: clampY(c.y + radius * Math.sin(a) * 0.85) });
+    });
+  });
+  for (const en of nodes.filter((x) => x.type === "entity")) {
+    const ps = edges.filter((e) => e.kind === "about" && e.to === en.id).flatMap((e) => seat.get(e.from) ?? []);
+    const cx = ps.reduce((s, p) => s + p.x, 0) / Math.max(1, ps.length);
+    const cy = ps.reduce((s, p) => s + p.y, 0) / Math.max(1, ps.length);
+    seat.set(en.id, { x: clampX(cx + (r() - 0.5) * 30), y: clampY(cy + (r() - 0.5) * 30) });
+  }
+  const pos = nodes.map((x) => ({ ...(seat.get(x.id) ?? { x: W / 2, y: H / 2 }) }));
+  const home = pos.map((p) => ({ ...p }));
+  const MIN = 46;
+  for (let it = 0; it < 160; it++) {
+    for (let i = 0; i < pos.length; i++)
+      for (let j = i + 1; j < pos.length; j++) {
+        const a = pos[i]!, b = pos[j]!;
+        let dx = a.x - b.x, dy = a.y - b.y;
         let dist = Math.hypot(dx, dy);
+        if (dist >= MIN) continue;
         if (dist < 0.01) {
-          dx = 0.01 * (i - j);
-          dy = 0.01;
+          dx = 0.5 + 0.01 * (i - j);
+          dy = 0.5;
           dist = Math.hypot(dx, dy);
         }
-        const f = (k * k) / dist;
-        d[i]!.x += (dx / dist) * f; d[i]!.y += (dy / dist) * f;
-        d[j]!.x -= (dx / dist) * f; d[j]!.y -= (dy / dist) * f;
+        const push = (MIN - dist) / 2;
+        const fixedA = nodes[i]!.type === "root", fixedB = nodes[j]!.type === "root";
+        const wa = fixedA ? 0 : fixedB ? 2 : 1, wb = fixedB ? 0 : fixedA ? 2 : 1;
+        a.x = clampX(a.x + (dx / dist) * push * wa); a.y = clampY(a.y + (dy / dist) * push * wa);
+        b.x = clampX(b.x - (dx / dist) * push * wb); b.y = clampY(b.y - (dy / dist) * push * wb);
       }
-    for (const e of edges) {
-      const i = idx.get(e.from), j = idx.get(e.to);
-      if (i === undefined || j === undefined) continue;
-      const pi = pos[i]!, pj = pos[j]!;
-      const dx = pi.x - pj.x, dy = pi.y - pj.y;
-      const dist = Math.max(0.01, Math.hypot(dx, dy));
-      const f = (dist * dist) / k;
-      d[i]!.x -= (dx / dist) * f; d[i]!.y -= (dy / dist) * f;
-      d[j]!.x += (dx / dist) * f; d[j]!.y += (dy / dist) * f;
-    }
-    for (let i = 1; i < n; i++) {
-      const p = pos[i]!, v = d[i]!;
-      const len = Math.max(0.01, Math.hypot(v.x, v.y));
-      p.x = Math.min(W - PAD, Math.max(PAD, p.x + (v.x / len) * Math.min(len, temp)));
-      p.y = Math.min(H - PAD, Math.max(PAD, p.y + (v.y / len) * Math.min(len, temp)));
-    }
-    temp = Math.max(1, temp * 0.97);
+    pos.forEach((p, i) => {
+      if (nodes[i]!.type === "root") return;
+      p.x += (home[i]!.x - p.x) * 0.02;
+      p.y += (home[i]!.y - p.y) * 0.02;
+    });
   }
   nodes.forEach((x, i) => {
     x.x = Math.round(pos[i]!.x);

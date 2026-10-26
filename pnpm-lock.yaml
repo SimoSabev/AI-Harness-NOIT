@@ -279,6 +279,9 @@ importers:
       '@mandat/mcp-bridge':
         specifier: workspace:*
         version: link:../../packages/mcp-bridge
+      '@mandat/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@mandat/onboard':
         specifier: workspace:*
         version: link:../../packages/onboard
