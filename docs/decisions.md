@@ -2739,3 +2739,56 @@ BrowserWindow не се ползва за Dock-а в macOS. Затова при 
 Инсталираният `.dmg` не се пипа: иконата му идва от пакета (`electron-builder.config.mjs` → icon-512, D-382/D-383).
 Тестове: harness-launch.test.ts (dockIcon само за macOS от кода).
 Статус: решено.
+
+## D-393 Връзки: първо пускане (/welcome), модели, абонаменти, ключове и локални модели (26.10.2026)
+Номер: шестте първи комита на клона са с етикет „D-392“; паралелната сесия за паметта зае D-392 в същия ден, затова
+решението е D-393 (комитите не са пренаписани: клонът phase/e9d-research-engine вече е построен върху тях).
+Решение:
+(1) Едно понятие „връзка“ (packages/contract/src/connections.ts): начин да стигнеш до модел — абонамент (непроменен CLI
+със собствен вход, D-295), API ключ, сървър на този компютър или друг адрес, който говори Anthropic Messages API
+(Claude Code) или OpenAI Responses API (Codex). Каталог `PROVIDERS` с адрес, вид удостоверяване, страница за ключ,
+документация, дата на проверка и предложени модели (най-способен/балансиран/бърз, един „препоръчан“). Агентът на задача:
+`claude` | `codex` (ключа на доставчика), `claude@<акаунт>` | `codex@<акаунт>` (абонамент), `claude+<връзка>` |
+`codex+<връзка>` (записана връзка); `tasks.model` пази избрания модел (null = подразбиращия се на връзката).
+(2) Сигурност — същият модел като досега: агентът в пясъчника получава само mdt_ токен; токенът назовава една връзка
+(claim `u`), проксито държи ключа ѝ, адреса ѝ, начина на удостоверяване и списъка позволени модели (модел извън списъка →
+403). Ключовете са в keys.sealed.json (AES-GCM, KEK в keychain, E7в) под `conn:<id>`; метаданните — в
+$MANDAT_HOME/connections.json (0600); уебът и работникът никога не виждат ключ. Ключът се проверява веднъж от CLI-то
+(`GET <адрес>/v1/models`; без такъв път — едно съобщение с max_tokens 1) и не се връща в отговор. Адрес: само https към
+име (без IP литерал, без потребител, query или fragment) или http към този компютър, който проксито вижда като
+`host.docker.internal` (`--add-host host.docker.internal:host-gateway` само на проксито, никога на пясъчника).
+(3) Модели: за записана връзка Claude Code ползва избрания модел за всички нива и подагенти (`ANTHROPIC_DEFAULT_*_MODEL`,
+`CLAUDE_CODE_SUBAGENT_MODEL` — по документацията на Kimi, иначе Claude Code иска Claude имена, които доставчикът няма).
+Цени: от каталога; локален модел — 0; непозната цена — оценка по цената на Sonnet, за да спира бюджетът. Ключът на
+Anthropic вече пуска Opus 5.5 и Fable 5.1 (цени от claude-api skill, кеш 06.10.2026: $4/$20 и $10/$50 на MTok).
+(4) Локален модел (Ollama, LM Studio): работи през Claude Code и проксито (Ollama говори Anthropic Messages API от
+01.2026); задача на локален модел не вдига стълбата над ниво 1 (спец. 5.3; `tasks.channel_kind`, `ladderStepFor` cap).
+(5) ChatGPT абонамент: `codex login --device-auth` в контейнер с CODEX_HOME на собствен volume
+(`mandat-profile-codex-<име>` → /home/agent/.codex-profile); уебът показва страницата на OpenAI и еднократния код, нищо не
+се връща към процеса. В задача Codex ползва собствения си доставчик и входа (без `model_provider="mandat"`), а изходът е
+само CONNECT тунелът на вратата към chatgpt.com, auth.openai.com, api.openai.com [НП: точните хостове и текстът на
+`codex login --device-auth`/`login status` — спайк на живо].
+(6) Уеб: `/welcome` се отваря сам, докато нищо не може да пусне задача и първото пускане не е завършено: (а) какво имаш
+(абонаменти, ключове, на този компютър — Ollama/LM Studio се откриват сами с моделите си), (б) свързване на място
+(вход, ключ с проверка, избор на модели), (в) агент и модел по подразбиране. „Настройки → Модели“ (/settings/models):
+моделите на всяка връзка, махане, подразбиращото се, „Добави връзка“. Полето за задача: агент + модел, запомненото
+първо. Права: `accounts.manage` + Origin + CSRF; контролната точка на `pnpm local` (127.0.0.1 + токен).
+Как го правят други харнеси (26.10.2026): OpenCode — `opencode auth login`, доставчици от models.dev, данните централно
+(https://opencode.ai/docs/cli); Codex — вход с ChatGPT или device code, `~/.codex/auth.json` или keychain
+(https://developers.openai.com/codex/auth); Goose — env → keychain → файл 0600; Cline — абонамент, BYOK или локален
+модел с откриване на моделите (https://docs.cline.bot/running-models-locally/ollama). Ollama Anthropic API:
+https://docs.ollama.com/api/anthropic-compatibility; DeepSeek: https://api-docs.deepseek.com/guides/anthropic_api
+(x-api-key; `deepseek-v4-pro`, `deepseek-flash`); Kimi Code: https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html
+(`https://api.kimi.ai/coding/`, `k3.1-pro`); Z.ai: https://docs.z.ai/scenario-example/develop-tools/claude (Bearer;
+[НП: имена на моделите]).
+Тестове: contract connections.test.ts; llm-proxy proxy-upstreams.test.ts, connections-store.test.ts; sandbox
+connections.test.ts; channels connection-channel.test.ts; agents codex.test.ts; verify sandbox-exec.test.ts; worker
+agent-route.test.ts, daemon (spill с новия маршрут); core external-ladder-key.test.ts; cli connections.test.ts,
+login-session.test.ts, local-control.test.ts, proxy-keys.test.ts, accounts.test.ts; web connections-api.test.ts,
+agents.test.ts, login-view.test.ts, connections-ui.test.ts. Проверка в браузъра с stub на контролната точка и отделна
+база: /welcome → вход с Claude (код) → DeepSeek (отказан и приет ключ) → ChatGPT (device код) → подразбиращо се →
+полето за задача тръгва с него → задача с `claude@lichno` + `claude-opus-5-5` в tasks; намерени и оправени 5 неща
+(инсталираните модели на Ollama вместо каталожното име, текстовете за ChatGPT, един вход на панел, етикети).
+Не е проверено на живо: истинска задача през DeepSeek/Kimi/Z.ai/Ollama, ChatGPT вход и задача с Codex,
+`host-gateway` под Colima [НП] (чеклист 30–32).
+Статус: решено (живите части чакат Симо).
