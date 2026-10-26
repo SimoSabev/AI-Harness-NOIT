@@ -10,6 +10,8 @@ exports[`buildProxyRunArgs (D-083) > snapshot и варианти 1`] = `
   "unless-stopped",
   "--network",
   "mandat-upstream",
+  "--add-host",
+  "host.docker.internal:host-gateway",
   "--user",
   "1000:1000",
   "--read-only",

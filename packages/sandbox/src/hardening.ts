@@ -193,8 +193,11 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
       if (spec.role === "mcp" && (!m.source.startsWith("mandat-mcp-") || !(m.target === "/m/mcp" || m.target.startsWith("/m/mcp/")))) {
         forbid("an MCP sidecar mounts only its own mandat-mcp-* volume under /m/mcp (D-354)", { source: m.source, target: m.target });
       }
-      if ((m.source.startsWith(PROFILE_PREFIX) || m.target === PROFILE_DIR) && !(spec.role === "agent" && m.source.startsWith(PROFILE_PREFIX) && m.target === PROFILE_DIR)) {
-        forbid("a subscription profile volume is only for the agent, at PROFILE_DIR (D-295)", { source: m.source, target: m.target });
+      // D-392: a Codex (ChatGPT) profile lives at CODEX_PROFILE_DIR, a Claude one at PROFILE_DIR — never crossed
+      const isProfile = m.source.startsWith(PROFILE_PREFIX) || m.target === PROFILE_DIR || m.target === CODEX_PROFILE_DIR;
+      const want = m.source.startsWith(`${PROFILE_PREFIX}codex-`) ? CODEX_PROFILE_DIR : PROFILE_DIR;
+      if (isProfile && !(spec.role === "agent" && m.source.startsWith(PROFILE_PREFIX) && m.target === want)) {
+        forbid("a subscription profile volume is only for the agent, at its profile dir (D-295, D-392)", { source: m.source, target: m.target });
       }
     } else {
       checkBind(m, spec.role, ctx, spec.caFile);
@@ -218,14 +221,19 @@ export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status"
   if (!o.volume.startsWith(PROFILE_PREFIX) || !/^[a-z0-9-]+$/.test(o.volume)) forbid("not a profile volume", { volume: o.volume });
   if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
   const base = ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m", "--pids-limit=256", "--memory=1g", "--label", "mandat.profile=1"];
-  const env = ["-e", "HOME=/tmp", "-e", `CLAUDE_CONFIG_DIR=${PROFILE_DIR}`, "-e", "DISABLE_AUTOUPDATER=1"];
+  // D-392: a ChatGPT sign-in is the unmodified `codex login --device-auth` (a code the person types on OpenAI's page)
+  const codex = o.volume.startsWith(`${PROFILE_PREFIX}codex-`);
+  const dir = codex ? CODEX_PROFILE_DIR : PROFILE_DIR;
+  const env = codex ? ["-e", "HOME=/tmp", "-e", `CODEX_HOME=${dir}`] : ["-e", "HOME=/tmp", "-e", `CLAUDE_CONFIG_DIR=${dir}`, "-e", "DISABLE_AUTOUPDATER=1"];
+  const cli = codex ? "codex" : "claude";
   if (kind === "init") {
-    return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${PROFILE_DIR}`];
+    return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${dir}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${dir}`];
   }
-  if (kind === "status") return ["run", "--rm", "--network", "none", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}:ro`, "--entrypoint", "claude", o.image, "auth", "status", "--json"];
-  if (kind === "logout") return ["run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "logout"];
+  const run = (net: string, tty: string[], ro: boolean) => ["run", "--rm", ...tty, "--network", net, "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${dir}${ro ? ":ro" : ""}`, "--entrypoint", cli, o.image];
+  if (kind === "status") return [...run("none", [], true), ...(codex ? ["login", "status"] : ["auth", "status", "--json"])];
+  if (kind === "logout") return [...run("mandat-upstream", ["-i"], false), ...(codex ? ["logout"] : ["auth", "logout"])];
   // D-369: login-web = the same flow with pipes (the web hands the pasted code to stdin), no TTY
-  return ["run", "--rm", kind === "login-web" ? "-i" : "-it", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "login", "--claudeai"];
+  return [...run("mandat-upstream", [kind === "login-web" ? "-i" : "-it"], false), ...(codex ? ["login", "--device-auth"] : ["auth", "login", "--claudeai"])];
 }
 
 export interface ProxyRunOptions {
@@ -254,6 +262,8 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
   if (o.name === "mandat-llm-proxy") args.push("--restart", "unless-stopped");
   args.push(
     "--network", "mandat-upstream",
+    // D-392: a model server on this computer (Ollama, LM Studio) — the proxy only; the sandbox never gets this name
+    "--add-host", "host.docker.internal:host-gateway",
     "--user", o.user,
     "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges",
     "--pids-limit=256", "--memory=512m",
@@ -282,8 +292,10 @@ const BASE_PUBLIC = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/home/agent",
  * The harness never reads it; the agent reaches the provider only through the gate's CONNECT tunnel (TLS end to end).
  */
 export const PROFILE_DIR = "/home/agent/.claude-profile";
+/** D-392: Codex's own login (ChatGPT) — CODEX_HOME on a profile volume of its own. */
+export const CODEX_PROFILE_DIR = "/home/agent/.codex-profile";
 const PROFILE_PREFIX = "mandat-profile-";
-export function profileVolume(provider: "claude", name: string): string {
+export function profileVolume(provider: "claude" | "codex", name: string): string {
   if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(name)) throw new MandatError("E_USAGE", "profile name: a-z, 0-9, '-', up to 32");
   return `${PROFILE_PREFIX}${provider}-${name}`;
 }
@@ -291,7 +303,7 @@ export function profileVolume(provider: "claude", name: string): string {
 /** 8.2: exact env sets per phase. names = secrets only (→ RunSpec.envNames); publicValues → RunSpec.publicEnv. */
 export function envForPhase(
   phase: "install" | "agent" | "test",
-  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "profile"; testsEnv?: Record<string, string> } = {},
+  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "profile" | "profile-codex"; testsEnv?: Record<string, string>; model?: string } = {},
 ): { names: string[]; publicValues: Record<string, string> } {
   if (phase === "install") {
     return {
@@ -322,6 +334,13 @@ export function envForPhase(
       publicValues: { ...BASE_PUBLIC, CODEX_HOME: "/m/codex-home", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
+  if (phase === "agent" && o.tokenName === "profile-codex") {
+    // D-392: Codex with its own ChatGPT login; out only through the gate's CONNECT tunnel to OpenAI's hosts
+    return {
+      names: ["AWS_SECRET_ACCESS_KEY"],
+      publicValues: { ...BASE_PUBLIC, CODEX_HOME: CODEX_PROFILE_DIR, HTTPS_PROXY: "http://egress-gate:80", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+    };
+  }
   if (phase === "agent" && o.tokenName === "profile") {
     // D-295: the CLI uses its own subscription login from the profile; the only way out is the gate's tunnel.
     return {
@@ -341,13 +360,18 @@ export function envForPhase(
     };
   }
   if (phase === "agent") {
+    // D-392: a saved connection (DeepSeek, Ollama…) serves one model; Claude Code uses it for every tier and subagent
+    if (o.model !== undefined && !/^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,127}$/.test(o.model)) forbid("invalid model id", { model: o.model.slice(0, 40) });
+    const tiers = o.model !== undefined
+      ? { ANTHROPIC_DEFAULT_HAIKU_MODEL: o.model, ANTHROPIC_DEFAULT_SONNET_MODEL: o.model, ANTHROPIC_DEFAULT_OPUS_MODEL: o.model, ANTHROPIC_DEFAULT_FABLE_MODEL: o.model, CLAUDE_CODE_SUBAGENT_MODEL: o.model }
+      : { ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-haiku-5-5" };
     return {
-      names: [o.tokenName ?? "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY"],
+      names: [o.tokenName === "OPENAI_API_KEY" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY"],
       publicValues: {
         ...BASE_PUBLIC,
         CLAUDE_CONFIG_DIR: "/home/agent/.claude",
         ANTHROPIC_BASE_URL: "http://egress-gate",
-        ANTHROPIC_DEFAULT_HAIKU_MODEL: "claude-haiku-5-5",
+        ...tiers,
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
         DISABLE_AUTOUPDATER: "1",
         DISABLE_UPDATES: "1",
