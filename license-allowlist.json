@@ -75,6 +75,11 @@
         "package": "argparse",
         "license": "Python-2.0",
         "reason": "permissive PSF license; js-yaml dependency pulled by electron-updater in the desktop app (apps/desktop, own lockfile), D-376"
+      },
+      {
+        "package": "fast-sha256",
+        "license": "Unlicense",
+        "reason": "public-domain dedication; webhook signing helper pulled by standardwebhooks of the official Anthropic SDK (@anthropic-ai/sdk 1.1.0) that research uses through the proxy; harness only (D-402)"
       }
     ]
   }
