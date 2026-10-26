@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { allowedUrl, childEnv, isErrorLine, parseBanner, startFailed, stepOf } from "./banner.js";
+import { allowedUrl, childEnv, isErrorLine, parseBanner, startFailed, stepOf, stopCommand } from "./banner.js";
+
+describe("Windows (D-392)", () => {
+  it("Stop and quit: on Windows the whole tree (taskkill /T), elsewhere SIGINT to the harness", () => {
+    expect(stopCommand(4242, "win32")).toEqual({ cmd: "taskkill", args: ["/pid", "4242", "/T", "/F"] });
+    expect(stopCommand(4242, "linux")).toBeNull();
+    expect(stopCommand(undefined, "win32")).toBeNull();
+  });
+});
 
 const BANNER = [
   "",
