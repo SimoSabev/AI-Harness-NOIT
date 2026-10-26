@@ -144,7 +144,8 @@ async function realHealthz(port: number): Promise<boolean> {
 }
 
 function adapterFor(agent: string, model: string): AgentAdapter {
-  if (agent === "claude") return claudeAdapter({ model: "claude-sonnet-5-5", cliVersion: "2.1.302" });
+  // D-392: the channel's model (a picked Claude model, a subscription's default, a saved connection's model)
+  if (agent === "claude") return claudeAdapter({ model, cliVersion: "2.1.302" });
   if (agent === "codex") return codexAdapter({ model, cliVersion: "0.160.1" });
   if (agent.startsWith("fake-codex:")) {
     const c = agent.slice(11);
@@ -400,7 +401,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           return;
         }
         try {
-          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret") });
+          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret"), provider: i.agent === "codex" || i.agent.startsWith("fake-codex:") ? "openai" : "anthropic" });
           await g.setPolicy("agent", [...channel.gateRoutes(), ...mcpRoutes], channel.gateTunnels?.());
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
@@ -477,8 +478,12 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         try {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
-            ...(viaProfile && ch.profileName ? { profile: profileVolume("claude", ch.profileName) } : {}),
-            env: { phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}) },
+            ...(viaProfile && ch.profileName ? { profile: profileVolume(ch.provider === "openai" ? "codex" : "claude", ch.profileName) } : {}),
+            env: {
+              phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}),
+              // D-392: a saved connection serves its own model names — Claude Code uses the model for every tier
+              ...(ch.provider === "anthropic" && ch.label.startsWith("conn-") ? { model: ch.model } : {}),
+            },
             cmd: launch.argv,
             timeoutMs: contract.repo_config.budgets.task_minutes * 60_000 + 120_000,
             ...(stdin ? { stdin: stdin as unknown as NodeJS.ReadableStream } : {}),

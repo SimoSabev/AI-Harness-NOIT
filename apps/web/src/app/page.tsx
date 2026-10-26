@@ -1,16 +1,18 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { LiveTask } from "../components/live-task";
 import { TaskDetails, TaskShots } from "../components/task-details";
 import { Shell } from "../components/shell";
 import { NewTask, TaskList } from "../components/workspace";
-import type { WsAgent } from "../components/workspace";
+
 import { getT } from "../i18n/server";
-import { agentChoices, agentLabel } from "../lib/agents";
+import { agentLabel } from "../lib/agents";
+import type { TaskAgent } from "../lib/agents";
 import { pageTitle } from "../lib/inbox";
 import { ago, statusOf } from "../lib/status";
 import { taskFeed } from "../lib/server/chat-feed";
 import { db } from "../lib/server/db";
-import { controlKeys } from "../lib/server/keys";
+import { agentsView } from "../lib/server/connections";
 import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
 import { sessionOf } from "../lib/server/workbench";
@@ -44,12 +46,14 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     const s = statusOf(x, t.lang);
     return { id: x.id, text: x.text, tone: s.tone, label: s.label, ago: ago(x.updated_at, now, t.lang) };
   });
-  let agents: WsAgent[] = [];
+  // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
+  let agents: TaskAgent[] = [];
+  let preferredModel: string | null = null;
   if (!initial) {
-    const ctl = controlKeys(process.env);
-    const keys = (await ctl?.status())?.providers ?? [];
-    const accounts = ((await ctl?.accounts()) ?? []).filter((a) => a.loggedIn).map((a) => a.agent);
-    agents = agentChoices({ accounts, keys, demo: process.env.MANDAT_DEMO_AGENTS === "1" }).map((id) => ({ id, label: agentLabel(id, t.lang) }));
+    const v = await agentsView(t.lang);
+    if (v.local && v.agents.length === 0 && !v.prefs.onboarded) redirect("/welcome");
+    agents = v.agents;
+    preferredModel = v.prefs.defaultAgent === agents[0]?.id ? v.prefs.defaultModel : null;
   }
   return (
     <Shell current="tasks" waiting={c.waiting} full>
@@ -63,7 +67,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
-            <NewTask agents={agents} projects={projects} canAct={canAct(c.role)} initialText={prefill} />
+            <NewTask agents={agents} preferredModel={preferredModel} projects={projects} canAct={canAct(c.role)} initialText={prefill} />
           )}
         </div>
       </div>

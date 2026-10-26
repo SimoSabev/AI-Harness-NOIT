@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  AddConnectionBody, Connection, ConnectionId, ModelId, PROVIDERS, Preferences, ProxyUpstream, agentOf, connectionLabel, formatAgentRef, parseAgentRef,
+  AddConnectionBody, Connection, ConnectionId, ConnectionsReply, ModelId, PROVIDERS, Preferences, ProxyUpstream, agentOf, connectionLabel, formatAgentRef, parseAgentRef,
   priceOf, providerInfo, upstreamUrl,
 } from "./connections.js";
 
@@ -29,12 +29,15 @@ describe("connections: catalog (D-392)", () => {
   });
 });
 
+// D-095: key-looking values are built at runtime, never literals
+const KEY = ["sk", "0123456789abcdefghij"].join("-");
+
 describe("connections: ids, models, addresses (D-392)", () => {
   it("ids are the profile alphabet; model ids allow the forms providers use (qwen3-coder:30b, org/model, glm-5.2[1m])", () => {
     expect(ConnectionId.safeParse("deepseek").success).toBe(true);
     for (const bad of ["", "Deep", "-x", "a b", "a".repeat(33)]) expect(ConnectionId.safeParse(bad).success).toBe(false);
     for (const ok of ["claude-sonnet-5-5", "qwen3-coder:30b", "moonshotai/kimi-k3", "glm-5.2[1m]", "k3.1-pro"]) expect(ModelId.safeParse(ok).success).toBe(true);
-    for (const bad of ["", " x", "a b", "x;rm", "mdt_abc", "sk-ant-api03-xyz", "a".repeat(129)]) expect(ModelId.safeParse(bad).success).toBe(false);
+    for (const bad of ["", " x", "a b", "x;rm", "mdt_abc", ["sk", "ant", "api03", "xyz"].join("-"), "a".repeat(129)]) expect(ModelId.safeParse(bad).success).toBe(false);
   });
   it("upstreamUrl: https for a remote host; http only for this computer, which the proxy container reaches as host.docker.internal", () => {
     expect(upstreamUrl("https://api.deepseek.com/anthropic/")).toEqual({ ok: true, url: "https://api.deepseek.com/anthropic", local: false });
@@ -51,8 +54,8 @@ describe("connections: ids, models, addresses (D-392)", () => {
     expect(Connection.safeParse({ ...c, models: [] }).success).toBe(false);
   });
   it("AddConnectionBody: a key only for a provider that takes one; it never comes back in Connection", () => {
-    expect(AddConnectionBody.safeParse({ provider: "deepseek", key: "sk-0123456789abcdefghij", models: ["deepseek-v4-pro"] }).success).toBe(true);
-    expect(AddConnectionBody.safeParse({ provider: "ollama", key: "sk-0123456789abcdefghij", models: ["qwen3-coder"] }).success).toBe(false);
+    expect(AddConnectionBody.safeParse({ provider: "deepseek", key: KEY, models: ["deepseek-v4-pro"] }).success).toBe(true);
+    expect(AddConnectionBody.safeParse({ provider: "ollama", key: KEY, models: ["qwen3-coder"] }).success).toBe(false);
     expect(AddConnectionBody.safeParse({ provider: "deepseek", models: ["deepseek-v4-pro"] }).success).toBe(false);
     expect(AddConnectionBody.safeParse({ provider: "custom", key: "k".repeat(24), models: ["m1"] }).success).toBe(false); // custom needs an address
     expect(Object.keys(Connection.shape)).not.toContain("key");
@@ -80,5 +83,28 @@ describe("agent refs (D-392)", () => {
     expect(agentOf("claude+deepseek")).toBe("claude");
     expect(agentOf("codex@rabota")).toBe("codex");
     expect(connectionLabel("deepseek")).toBe("conn-deepseek");
+  });
+});
+
+describe("ChatGPT sign-in and the connections reply (D-393)", () => {
+  it("the device page must be OpenAI's own (https, no user, no port); the code is the short one-time code", async () => {
+    const { isDeviceUrl, findDeviceLogin } = await import("./local-control.js");
+    expect(isDeviceUrl("https://auth.openai.com/codex/device")).toBe(true);
+    for (const bad of ["http://auth.openai.com/codex/device", "https://auth.openai.com.evil.example/codex/device", "https://u@auth.openai.com/codex/device", "https://evil.example/device"]) expect(isDeviceUrl(bad)).toBe(false);
+    const out = "Follow these steps to sign in with ChatGPT using device code authorization:\n\n1. Open this link in your browser and sign in to your account\n   \x1b[94mhttps://auth.openai.com/codex/device\x1b[0m\n\n2. Enter this one-time code (expires in 15 minutes)\n   \x1b[94mABCD-12EFG\x1b[0m\n";
+    expect(findDeviceLogin(out)).toEqual({ url: "https://auth.openai.com/codex/device", code: "ABCD-12EFG" });
+    expect(findDeviceLogin("1. Open this link https://auth.openai.com/codex/device\n")).toBeNull();
+  });
+  it("LoginState: waiting_device carries the address and the code; a start names the CLI", async () => {
+    const { LoginState, LoginStart } = await import("./local-control.js");
+    expect(LoginState.safeParse({ state: "waiting_device", name: "rabota", url: "https://auth.openai.com/codex/device", code: "ABCD-12EFG" }).success).toBe(true);
+    expect(LoginState.safeParse({ state: "waiting_device", name: "rabota", url: "https://evil.example/x", code: "ABCD-12EFG" }).success).toBe(false);
+    expect(LoginStart.parse({ name: "rabota" })).toEqual({ name: "rabota", cli: "claude" });
+    expect(LoginStart.safeParse({ name: "rabota", cli: "codex" }).success).toBe(true);
+    expect(LoginStart.safeParse({ name: "rabota", cli: "gemini" }).success).toBe(false);
+  });
+  it("ConnectionsReply: connections + preferences, nothing else", () => {
+    expect(ConnectionsReply.safeParse({ connections: [], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }).success).toBe(true);
+    expect(ConnectionsReply.safeParse({ connections: [], preferences: {}, keys: {} }).success).toBe(false);
   });
 });

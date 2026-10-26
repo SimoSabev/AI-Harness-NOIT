@@ -47,8 +47,8 @@ describe("accounts commands with a fake docker (D-295)", () => {
       (a) => (a.includes("status") ? { out: '{"loggedIn":false}' } : undefined),
     ]);
     expect(await listAccounts(d as never)).toEqual([
-      { name: "work", agent: "claude@work", loggedIn: true, email: "w@example.com", plan: "Max" },
-      { name: "lichno", agent: "claude@lichno", loggedIn: false, email: null, plan: null },
+      { name: "work", agent: "claude@work", cli: "claude", loggedIn: true, email: "w@example.com", plan: "Max" },
+      { name: "lichno", agent: "claude@lichno", cli: "claude", loggedIn: false, email: null, plan: null },
     ]);
     const a = io();
     expect(await accountsCommand(a.io, d as never, { json: false })).toBe(0);
@@ -71,5 +71,14 @@ describe("accounts commands with a fake docker (D-295)", () => {
     const c = io();
     expect(await loginCommand(c.io, fake([(x) => (x[0] === "image" ? { exit: 1 } : undefined)]) as never, { name: "work" })).toBe(3);
     expect(c.o.err).toContain("E_IMAGES_MISSING");
+  });
+});
+
+describe("parseCodexStatus (D-393)", () => {
+  it("logged in only on exit 0 with the ChatGPT line; never an email", async () => {
+    const { parseCodexStatus } = await import("./commands/accounts.js");
+    expect(parseCodexStatus("Logged in using ChatGPT\n", 0)).toEqual({ loggedIn: true, email: null, plan: "ChatGPT" });
+    expect(parseCodexStatus("Not logged in\n", 1)).toEqual({ loggedIn: false, email: null, plan: null });
+    expect(parseCodexStatus("Logged in using an API key - sk-…\n", 0).loggedIn).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statfsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
+import { ConnectionStore, loadKek } from "@mandat/llm-proxy";
 import { compareVersions, imageTags } from "@mandat/sandbox";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, addLocalProject, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
 import { realDeps } from "../deps.js";
@@ -15,6 +16,7 @@ import type { Keys } from "./local-control.js";
 import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
 import { listAccounts, loginDeps, logoutProfile } from "./accounts.js";
+import { Connections } from "./connections.js";
 import { LoginSessions } from "./login-session.js";
 import { SystemJobs } from "./system-jobs.js";
 import type { JobRun } from "./system-jobs.js";
@@ -290,8 +292,19 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     await startProxy({ anthropic: fromEnv, ...(io.env.OPENAI_API_KEY ? { openai: io.env.OPENAI_API_KEY } : {}) });
   }
   // E7в (AC-3.8): the sealed keys survive a restart; a proxy that came back locked (its boot token is spent) is recreated
+  // D-393: the saved connections (keys sealed apart, local servers without one) start the proxy too
+  const connStore = new ConnectionStore(o.home, loadKek({ env: io.env, mandatHome: o.home }));
+  const hasUpstreams = () => {
+    try {
+      return Object.keys(connStore.upstreams()).length > 0;
+    } catch {
+      return false;
+    }
+  };
+  const restartProxy = async () => (await proxyStart({ ...io, stdout: () => undefined, env: clean }, deps, { mandatHome: o.home, host, json: true, force: true })) === 0;
+  const connections = new Connections({ store: connStore, fetch, restartProxy, accounts: async () => (await listAccounts(deps)).map((a) => ({ name: a.name, cli: a.cli })) });
   const fromStore = async () => {
-    if (!hasSealedKeys(o.home) || !(await proxyLocked(host.proxyAdminPort))) return;
+    if (!(hasSealedKeys(o.home) || hasUpstreams()) || !(await proxyLocked(host.proxyAdminPort))) return;
     io.stderr(`${tt(lang, "local.proxy.saved")}\n`);
     await proxyStart({ ...io, stdout: () => undefined, env: clean }, deps, { mandatHome: o.home, host, json: true, force: true });
   };
@@ -305,7 +318,19 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     providers: () => proxyProviders(deps),
     accounts: () => listAccounts(deps),
     login: new LoginSessions(loginDeps(deps)),
-    logout: (name) => logoutProfile(deps, name),
+    logout: async (name, cli) => {
+      const ok = await logoutProfile(deps, name, cli);
+      if (ok && connStore.get(name)?.baseUrl === null) connStore.remove(name); // its saved models go with the account
+      return ok;
+    },
+    connections: {
+      list: () => connections.list(),
+      add: (b) => connections.add(b),
+      setModels: (id, b) => connections.setModels(id, b),
+      remove: (id) => connections.remove(id),
+      detect: () => connections.detect(io.env),
+      setPrefs: (b) => connections.setPrefs(b),
+    },
     system: new SystemJobs({ run: cliRun(localJobEnv(clean, url)), org: DEMO_ORG_ID }),
     // D-388: "Add project" from the web — a mirror under MANDAT_HOME/projects, a repos row, the rules scan queued
     addProject: (p) => addLocalProject({ db: projectsDb, home: o.home, org: DEMO_ORG_ID, path: p }),

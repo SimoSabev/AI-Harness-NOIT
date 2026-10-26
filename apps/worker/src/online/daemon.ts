@@ -20,7 +20,9 @@ import { runTask } from "../run.js";
 import { sessionRecorder } from "./session-recorder.js";
 import { workbench } from "./workbench.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
-import { loadChannels, profileOfAgent, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
+import { loadChannels, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
+import { routeOf } from "./agent-route.js";
+import { ConnectionStore } from "@mandat/llm-proxy";
 import { inTransaction } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
@@ -60,6 +62,8 @@ interface TaskRow {
   repo_id: string;
   type: TaskType;
   agent: string;
+  /** D-392: the model a person picked (null = the default of the agent's connection) */
+  model: string | null;
   text: string;
   state: string;
   attempt: number;
@@ -129,7 +133,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -191,9 +195,17 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     return { state: "BLOCKED", verdict: null };
   }
   // E3в (Ф3 П4): the channel is chosen here, before contract_hash; orgs without channels keep the E0 default.
-  // D-295: claude@<profile> runs on that subscription profile; no channel selection, no proxy
-  const profile = profileOfAgent(t.agent);
-  const chans = profile ? [] : await loadChannels(d.db, t.org_id);
+  // D-295: claude@<profile> runs on that subscription profile; no channel selection, no proxy. D-392: codex@<account>
+  // (ChatGPT) and claude+<connection> (a saved connection through the proxy) are fixed refs too.
+  const route = routeOf(t.agent, t.model ?? null, new ConnectionStore(d.home).list());
+  if (!route.ok) {
+    log(`[daemon] ${t.id}: ${route.reason} for agent ${t.agent}`);
+    const seq = await inTransaction(d.db, async (tx) => setState(tx, t, "HELD", { wait_reason: "no_channel" }));
+    await bc("HELD", seq, { wait_reason: "no_channel" });
+    return { state: "HELD", verdict: null };
+  }
+  const profile = route.account;
+  const chans = route.ref ? [] : await loadChannels(d.db, t.org_id);
   let current: (typeof chans)[number] | null = null;
   if (chans.length > 0) {
     const rule = await ruleFor(d.db, t.org_id, t.repo_id, t.type);
@@ -215,7 +227,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
     return f;
   };
-  const profileRef: ChannelRef | undefined = profile ? { label: `claude-profile-${profile}`, kind: "cli_profile", model: "claude-sonnet-5-5" } : undefined;
+  // D-392: a fixed ref, or the selected channel with the picked model, or the provider key's default channel with it
+  const picked = route.ref === null ? route.model : null;
+  const keyRef: ChannelRef | undefined = picked !== null ? { label: route.run === "codex" ? "openai-key-main" : "anthropic-key-main", kind: "api_key", model: picked } : undefined;
+  const profileRef: ChannelRef | undefined = route.ref ?? (current && picked !== null ? { ...refOf(current), model: picked } : current ? undefined : keyRef);
   // E8g (D-353): steers from earlier attempts go into this attempt's contract (framed); newer ones to the live agent
   const steersBefore = t.attempt > 1 ? (await d.db.query<{ id: string; kind: string; text: string }>("select id::text as id, kind, text from public.task_activities where task_id = $1 and kind in ('steer', 'review') order by id limit 20", [t.id])).rows : [];
   const steerIds = steersBefore.filter((r) => r.kind === "steer");
@@ -229,11 +244,12 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const hidden = hiddenRow ? { dir: hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__", files: hiddenRow.files.map((f) => ({ path: f.path, data: Buffer.from(f.data, "base64") })) } : null;
   // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
   const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
-  const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
+  const steerable = t.agent === "fake:steer-echo" || (route.run === "claude" && d.steer === true);
   let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog, nightNote ? `Note from Mandat (night shift): ${nightNote}` : null].filter(Boolean).join("\n\n") || null);
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
+    await tx.query("update public.tasks set channel_kind = $2 where id = $1", [t.id, contract.channel.kind]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_created", task_id: t.id, payload: { task_id: t.id, contract_hash: contract.contract_hash, agent: t.agent } });
     return s;
   });
@@ -279,7 +295,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   };
   const runOnce = async () => {
     const rec = sessionRecorder(workbench(d.db, t.org_id), {
-      taskId: t.id, repoId: t.repo_id, agent: profile ? `claude@${profile}` : t.agent, model: contract.channel.model, account: profile ?? null,
+      taskId: t.id, repoId: t.repo_id, agent: t.agent, model: contract.channel.model, account: profile ?? null,
       ...(d.broadcast ? { broadcast: d.broadcast } : {}), log, onTouching,
     });
     // E8e (D-354): each stdio MCP server of the profile gets only its declared secrets and its call budget
@@ -306,8 +322,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     const rbFile = t.retry_reason === "rebase" ? rebaseFile(d.home, t.id, t.attempt) : null;
     const applyFiles = rbFile && existsSync(rbFile) ? (JSON.parse(readFileSync(rbFile, "utf8")) as { path: string; data: string | null }[]).map((f) => ({ path: f.path, data: f.data === null ? null : Buffer.from(f.data, "base64") })) : undefined;
     try {
+      // a spill changes t.agent (key channels only); a fixed route keeps its CLI
       return await (d.run ?? runTask)({
-        home: d.home, contractPath: cfile, agent: (profile ? "claude" : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
+        home: d.home, contractPath: cfile, agent: (route.ref ? route.run : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
@@ -580,7 +597,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
 
 /** OUTCOME (спец. т. 7): in a demo org the window is 0 min (D-217) → ladder step right away, then CLOSED. */
 export async function finishOutcome(d: Pick<DaemonDeps, "db" | "broadcast">, t: { id: string; org_id: string; repo_id: string; type: string; agent: string; is_demo: boolean }, ladder: LadderState, result: "success" | "failure" | "hard_fail" | "neutral", changesetId: string, prNumber: number | null, mergeSha: string): Promise<void> {
-  const step = ladderStepFor(t.agent, ladder, result);
+  // D-392 (spec 5.3): a task that ran on a local model never lifts the ladder above level 1
+  const kind = (await d.db.query<{ channel_kind: string | null }>("select channel_kind from public.tasks where id = $1", [t.id])).rows[0]?.channel_kind;
+  const step = ladderStepFor(t.agent, ladder, result, kind === "local" ? { cap: 1 } : undefined);
   const seq = await inTransaction(d.db, async (tx) => {
     await tx.query("insert into public.deliveries (org_id, changeset_id, level, kind, pr_number, head_sha) values ($1::uuid, $2::uuid, $3, 'merge', $4, $5)", [t.org_id, changesetId, step.next.level, prNumber, mergeSha]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "delivered", task_id: t.id, payload: { pr: prNumber, merge_sha: mergeSha } });

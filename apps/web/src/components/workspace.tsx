@@ -9,7 +9,8 @@ import { Hex, btn } from "./ui";
 
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; text: string; tone: Tone; label: string; ago: string }
-export interface WsAgent { id: string; label: string }
+/** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
+export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null }
 
 export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: string | null }) {
   const t = useT();
@@ -42,11 +43,18 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
 // none → a link to sign in instead of a box that cannot start anything. D-387: more than one project → a picker.
 const typeFor = (agent: string) => (agent.startsWith("fake") ? "bugfix" : "free");
 
-export function NewTask({ agents, projects, canAct, initialText = "" }: { agents: WsAgent[]; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string }) {
+export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "" }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
   const [agent, setAgent] = useState(agents[0]?.id ?? "");
+  // D-393: the remembered model of the default agent, else the agent's own default; changed per task here
+  const [model, setModel] = useState<string | null>(preferredModel ?? agents[0]?.defaultModel ?? null);
+  const current = agents.find((a) => a.id === agent);
+  const pickAgent = (id: string) => {
+    setAgent(id);
+    setModel(agents.find((a) => a.id === id)?.defaultModel ?? null);
+  };
   const [repo, setRepo] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +63,7 @@ export function NewTask({ agents, projects, canAct, initialText = "" }: { agents
     if (text.trim() === "") return setError(t("ws.ask"));
     setBusy(true);
     setError(null);
-    const r = await postJson("/api/tasks", { text: text.trim(), type: typeFor(agent), agent, ...(repo ? { repo } : {}) });
+    const r = await postJson("/api/tasks", { text: text.trim(), type: typeFor(agent), agent, ...(model && current?.models.includes(model) ? { model } : {}), ...(repo ? { repo } : {}) });
     if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
     setBusy(false);
     setError(errorText(t, r, {}, t("newTask.failed", { status: r.status })));
@@ -73,15 +81,24 @@ export function NewTask({ agents, projects, canAct, initialText = "" }: { agents
           {agents.length > 1 ? (
             <label className="flex items-center gap-1.5 text-xs text-mute">
               {t("ws.agent")}
-              <select value={agent} onChange={(e) => setAgent(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
+              <select value={agent} onChange={(e) => pickAgent(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
                 {agents.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
               </select>
             </label>
           ) : agents[0] ? (
             <span className="text-xs text-mute">{t("ws.agent")} <span className="text-ink">{agents[0].label}</span></span>
           ) : (
-            <Link href="/keys" className="text-sm text-accent underline-offset-4 hover:underline">{t("ws.signIn")}</Link>
+            <Link href="/welcome" className="text-sm text-accent underline-offset-4 hover:underline">{t("ws.signIn")}</Link>
           )}
+          {current && current.models.length > 1 && (
+            <label className="flex items-center gap-1.5 text-xs text-mute">
+              {t("ws.model")}
+              <select value={model ?? ""} onChange={(e) => setModel(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 font-mono text-sm text-ink">
+                {current.models.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </label>
+          )}
+          {current && current.models.length === 1 && <span className="font-mono text-xs text-mute">{current.models[0]}</span>}
           <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy || agents.length === 0}>{busy ? t("ws.sending") : t("ws.send")}</button>
         </div>
       </div>

@@ -27,6 +27,7 @@ const fake: KeysClient = {
   jobs: async () => [job("doctor")],
   runJob: async (j) => (calls.push({ kind: "job", j }), { ...job(j), state: "running" }),
   addProject: async (path) => (calls.push({ kind: "project", path }), { ok: true, repo_id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/shop", created: true }),
+  connections: async () => null, addConnection: async () => null, setModels: async () => null, removeConnection: async () => null, detect: async () => null, setPrefs: async () => false,
 };
 const job = (j: "doctor" | "images" | "images-ui" | "fixtures" | "fixtures-force" | "stats" | "verify-log") => ({ job: j, state: "idle" as const, started_at: null, finished_at: null, exit: null, lines: [], result: null });
 const calls: unknown[] = [];
@@ -123,7 +124,7 @@ describe("controlKeys (D-293)", () => {
       const c = controlKeys({ MANDAT_LOCAL_CONTROL_URL: `http://127.0.0.1:${port}`, MANDAT_LOCAL_CONTROL_TOKEN: "t".repeat(64) });
       expect(await c?.status()).toEqual({ proxy: "running", providers: ["anthropic"] });
       expect(auth).toBe(`Bearer ${"t".repeat(64)}`);
-      expect(await c?.accounts()).toEqual([{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }]);
+      expect(await c?.accounts()).toEqual([{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max", cli: "claude" }]); // D-393: an older `mandat local` without cli → Claude
     } finally {
       srv.close();
     }

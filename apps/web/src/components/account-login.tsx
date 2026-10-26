@@ -12,7 +12,8 @@ const ERR: Record<string, Key> = { keys_unavailable: "error.keys_unavailable", n
 
 // D-369, D-387: `mandat login` from the web, one button. The unchanged Claude Code runs in a container of `pnpm local`; this form shows
 // Anthropic's sign-in address and passes the pasted code on. The code field clears itself; nothing is kept here.
-export function AccountLogin({ suggested }: { suggested: string }) {
+// D-393: `cli` = "codex" signs in to ChatGPT (`codex login --device-auth`): OpenAI's page and a one-time code to type there.
+export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested: string; cli?: "claude" | "codex"; onDone?: (name: string) => void }) {
   const router = useRouter();
   const t = useT();
   const [s, setS] = useState<LoginState>({ state: "idle" });
@@ -25,8 +26,13 @@ export function AccountLogin({ suggested }: { suggested: string }) {
     const p = LoginState.safeParse(r.body);
     if (r.status === 200 && p.success) {
       setErr(null);
+      // D-393: one sign-in runs at a time in `mandat local`; this panel shows only its own account's (Claude and ChatGPT side by side)
+      if (p.data.state !== "idle" && p.data.name !== name.trim()) return setS({ state: "idle" });
       setS(p.data);
-      if (p.data.state === "done") router.refresh();
+      if (p.data.state === "done") {
+        onDone?.(p.data.name);
+        router.refresh();
+      }
     } else setErr(errorText(t, r, ERR));
   };
   const get = async () => {
@@ -44,7 +50,7 @@ export function AccountLogin({ suggested }: { suggested: string }) {
 
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
-    apply(await postJson("/api/accounts/login", { name: name.trim() }));
+    apply(await postJson("/api/accounts/login", { name: name.trim(), ...(cli === "codex" ? { cli } : {}) }));
   };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,13 +63,13 @@ export function AccountLogin({ suggested }: { suggested: string }) {
     apply({ status: r.status, body: (await r.json().catch(() => ({}))) as Record<string, unknown> });
   };
 
-  const note = v.note && (s.state === "done" ? t(v.note, { who: s.email ?? s.name, plan: s.plan ?? t("agent.subscription"), name: s.name }) : t(v.note));
+  const note = v.note && (s.state === "done" ? t(v.note, { who: s.email ?? s.name, plan: s.plan ?? t("agent.subscription"), name: s.name, agent: `${cli}@${s.name}` }) : t(v.note));
   return (
     <div className="mt-3 space-y-3">
       {v.show === "form" && (
         // D-387: one button; the account's name has a default and is changed only by whoever wants to
         <form className="space-y-3" onSubmit={(e) => void start(e)}>
-          <button className={btn.primary} type="submit">{t("keys.login.start")}</button>
+          <button className={btn.primary} type="submit">{t(cli === "codex" ? "keys.login.startChatgpt" : "keys.login.start")}</button>
           <details className="text-sm">
             <summary className="cursor-pointer text-mute hover:text-ink">{t("keys.login.nameOther")}</summary>
             <label className="mt-2 block">
@@ -88,9 +94,19 @@ export function AccountLogin({ suggested }: { suggested: string }) {
           </form>
         </div>
       )}
+      {v.show === "device" && s.state === "waiting_device" && (
+        <div className="space-y-3">
+          <p className="text-sm">{t("keys.login.device1")}</p>
+          <a className={btn.secondary} href={s.url} target="_blank" rel="noopener noreferrer">{t("keys.login.openChatgpt")}</a>
+          <p className="text-sm">{t("keys.login.device2")}</p>
+          <p className="select-all rounded-lg bg-raised px-3 py-2 text-center font-mono text-lg tracking-widest" aria-label={t("keys.login.code")}>{s.code}</p>
+          <p className="text-xs text-mute" role="status">{t("keys.login.deviceWait")}</p>
+          <button className={btn.ghost} type="button" onClick={() => void cancel()}>{t("keys.login.cancel")}</button>
+        </div>
+      )}
       {v.show === "form" && note && <p className={`text-sm ${s.state === "failed" ? "text-bad" : "text-ok"}`} role={s.state === "failed" ? "alert" : "status"}>{note}</p>}
       {err && <p className="text-sm text-bad" role="alert">{err}</p>}
-      <p className="text-xs text-mute">{t("keys.login.privacy")}</p>
+      <p className="text-xs text-mute">{t(cli === "codex" ? "keys.login.privacyChatgpt" : "keys.login.privacy")}</p>
     </div>
   );
 }

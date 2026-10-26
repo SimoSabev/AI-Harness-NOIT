@@ -22,7 +22,7 @@ import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./per
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
-import { AccountName, AddProjectBody, LoginCode, SystemJob } from "@mandat/contract";
+import { AccountName, AddConnectionBody, AddProjectBody, AgentRefString, ConnectionId, LoginCode, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -288,7 +288,7 @@ export async function deleteKeys(req: Request, d: ApiDeps): Promise<Response> {
 
 // D-369: the subscription login from the web (owner with keys.manage). The pasted code goes on to the control endpoint
 // and to the stdin of `claude auth login`; it is never stored, logged or sent back.
-const NameBody = z.object({ name: AccountName }).strict();
+const NameBody = z.object({ name: AccountName, cli: z.enum(["claude", "codex"]).optional() }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 const LOGIN_ERRORS = new Set(["bad_name", "bad_code", "not_waiting"]);
 
@@ -310,7 +310,7 @@ export async function postLogin(req: Request, d: ApiDeps): Promise<Response> {
   const k = await keysOwner(req, d, true);
   if (k instanceof Response) return k;
   const b = NameBody.safeParse(k.body);
-  return b.success ? loginReply(await k.keys.login({ kind: "start", name: b.data.name })) : json(400, { error: "bad_name" });
+  return b.success ? loginReply(await k.keys.login({ kind: "start", name: b.data.name, ...(b.data.cli ? { cli: b.data.cli } : {}) })) : json(400, { error: "bad_name" });
 }
 
 export async function postLoginCode(req: Request, d: ApiDeps): Promise<Response> {
@@ -347,8 +347,54 @@ export async function postLogout(req: Request, d: ApiDeps): Promise<Response> {
   if (k instanceof Response) return k;
   const b = NameBody.safeParse(k.body);
   if (!b.success) return json(400, { error: "bad_name" });
-  const removed = await k.keys.logout(b.data.name);
+  const removed = await k.keys.logout(b.data.name, b.data.cli);
   return removed === null ? json(502, { error: "control_unavailable" }) : json(200, { removed });
+}
+
+// D-393: saved connections (first-run page, Settings → Models) — the owner with accounts.manage; a key goes on to the
+// control endpoint once (checked there against the provider, sealed, handed to the proxy) and never comes back.
+const unavailable = () => json(502, { error: "control_unavailable" });
+export async function getConnections(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, false);
+  if (k instanceof Response) return k;
+  const r = await k.keys.connections();
+  return r ? json(200, r) : unavailable();
+}
+export async function postConnection(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  const b = AddConnectionBody.safeParse(k.body);
+  if (!b.success) return json(400, { error: "bad_connection" });
+  const r = await k.keys.addConnection(b.data);
+  return r ? json(r.ok ? 200 : 400, r.ok ? r : { error: r.error }) : unavailable();
+}
+export async function patchConnection(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  const b = ModelsBody.safeParse(k.body);
+  if (!ConnectionId.safeParse(id).success || !b.success) return json(400, { error: "bad_models" });
+  const ok = await k.keys.setModels(id, b.data);
+  return ok === null ? unavailable() : ok ? json(200, { ok }) : json(404, { error: "unknown_connection" });
+}
+export async function deleteConnection(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  if (!ConnectionId.safeParse(id).success) return json(400, { error: "bad_id" });
+  const removed = await k.keys.removeConnection(id);
+  return removed === null ? unavailable() : json(200, { removed });
+}
+export async function getDetect(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, false);
+  if (k instanceof Response) return k;
+  const r = await k.keys.detect();
+  return r ? json(200, r) : unavailable();
+}
+export async function putPreferences(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  const p = Preferences.safeParse(k.body);
+  if (!p.success || (p.data.defaultAgent !== null && !AgentRefString.safeParse(p.data.defaultAgent).success)) return json(400, { error: "bad_preferences" });
+  return (await k.keys.setPrefs(p.data)) ? json(200, { ok: true }) : unavailable();
 }
 
 // D-388: "Add project" from the web — `mandat local` mirrors the folder, adds the repo and queues the rules scan

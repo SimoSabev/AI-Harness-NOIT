@@ -152,3 +152,31 @@ describe("LoginSessions (D-369)", () => {
     expect(d.discarded).toEqual(["new"]);
   });
 });
+
+// D-393: a ChatGPT sign-in — `codex login --device-auth` prints OpenAI's page and a code; nothing goes back to stdin.
+describe("LoginSessions with Codex (D-393)", () => {
+  it("start(name, codex) → waiting_device → the process ends after the person typed the code there → done", async () => {
+    const p = fakeProc();
+    const clis: string[] = [];
+    const s = new LoginSessions({
+      prepare: async (_n, cli) => (clis.push(`prepare:${cli}`), "ok"),
+      discard: async () => undefined,
+      spawn: (_n, cli) => (clis.push(`spawn:${cli}`), p.proc),
+      status: async (_n, cli) => (clis.push(`status:${cli}`), { loggedIn: true, email: null, plan: "ChatGPT" }),
+      timeoutMs: 60_000,
+    });
+    expect(await s.start("rabota", "codex")).toEqual({ state: "starting", name: "rabota" });
+    await tick();
+    p.emit("1. Open this link in your browser and sign in to your account\n   https://auth.openai.com/codex/device\n");
+    expect(s.state().state).toBe("starting");
+    p.emit("2. Enter this one-time code (expires in 15 minutes)\n   ABCD-12EFG\n");
+    expect(s.state()).toEqual({ state: "waiting_device", name: "rabota", url: "https://auth.openai.com/codex/device", code: "ABCD-12EFG" });
+    expect(s.submit("whatever-code-123")).toBeNull();
+    p.exit(0);
+    await tick();
+    await tick();
+    expect(s.state()).toEqual({ state: "done", name: "rabota", email: null, plan: "ChatGPT" });
+    expect(p.written).toEqual([]);
+    expect(clis).toEqual(["prepare:codex", "spawn:codex", "status:codex"]);
+  });
+});

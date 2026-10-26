@@ -32,6 +32,31 @@ export function findLoginUrl(text: string): string | null {
   return null;
 }
 
+// D-393: a ChatGPT sign-in is the unmodified `codex login --device-auth` [НП: the exact wording; spike when Codex runs
+// live]: it prints OpenAI's device page and a one-time code; the person types the code there, nothing comes back here.
+const DEVICE_HOSTS = ["auth.openai.com", "chatgpt.com"];
+export function isDeviceUrl(u: string): boolean {
+  try {
+    const p = new URL(u);
+    return p.protocol === "https:" && p.username === "" && p.password === "" && p.port === "" && DEVICE_HOSTS.includes(p.hostname);
+  } catch {
+    return false;
+  }
+}
+const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+/** The device page and the one-time code in the output of `codex login --device-auth` (both, or null). */
+export function findDeviceLogin(text: string): { url: string; code: string } | null {
+  const plain = text.replace(ANSI, "");
+  const url = [...plain.matchAll(URL_RE)].map((m) => m[0]).find(isDeviceUrl);
+  const after = url ? plain.slice(plain.indexOf(url) + url.length) : "";
+  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1];
+  return url && code ? { url, code } : null;
+}
+
+/** Start a subscription sign-in: the account name and the CLI (Claude Code, or Codex for ChatGPT). */
+export const LoginStart = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), cli: z.enum(["claude", "codex"]).default("claude") }).strict();
+export type LoginStart = z.infer<typeof LoginStart>;
+
 export const LoginFailure = z.enum(["busy", "images_missing", "start_failed", "no_url", "invalid_code", "not_logged_in", "timeout", "cancelled"]);
 export type LoginFailure = z.infer<typeof LoginFailure>;
 
@@ -39,6 +64,7 @@ export const LoginState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("idle") }).strict(),
   z.object({ state: z.literal("starting"), name: AccountName }).strict(),
   z.object({ state: z.literal("waiting_code"), name: AccountName, url: z.string().max(4096).refine(isLoginUrl) }).strict(),
+  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(/^[A-Z0-9]{4,8}-[A-Z0-9]{4,8}$/) }).strict(),
   z.object({ state: z.literal("checking"), name: AccountName }).strict(),
   z.object({ state: z.literal("done"), name: AccountName, email: z.string().max(320).nullable(), plan: z.string().max(100).nullable() }).strict(),
   z.object({ state: z.literal("failed"), name: AccountName, reason: LoginFailure }).strict(),

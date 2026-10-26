@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { realDockerRunner } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import type { Fetcher, SqlClient } from "@mandat/ledger";
+import type { ProxyUpstream } from "@mandat/contract";
 
 /** Everything the CLI touches outside the process; tests replace it (fake runner, fake healthz). */
 export interface CliDeps {
@@ -14,7 +15,8 @@ export interface CliDeps {
   /** tests: a fake ledger database for `verify-log --org <uuid>` */
   db?: SqlClient & { end?: () => Promise<void> };
   /** E7в / D-345: hands the keys to a freshly started proxy once (POST /admin/boot on the loopback admin port) */
-  bootProxy(port: number, token: string, keys: { anthropic: string; openai?: string; search?: { exa?: string } }): Promise<boolean>;
+  /** D-393: any of the provider keys and the saved connections' upstreams (at least one); research search keys (Exa) */
+  bootProxy(port: number, token: string, keys: { anthropic?: string; openai?: string; upstreams?: Record<string, ProxyUpstream>; search?: { exa?: string } }): Promise<boolean>;
   /** tests: a local TSA instead of the network */
   tsaFetcher?: Fetcher;
 }

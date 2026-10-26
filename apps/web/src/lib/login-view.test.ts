@@ -16,3 +16,9 @@ describe("loginView (D-369)", () => {
     }
   });
 });
+
+describe("loginView with ChatGPT (D-393)", () => {
+  it("waiting_device → the page and the code to type there, and keep asking", () => {
+    expect(loginView({ state: "waiting_device", name: "rabota", url: "https://auth.openai.com/codex/device", code: "ABCD-12EFG" })).toEqual({ show: "device", poll: true, note: null });
+  });
+});

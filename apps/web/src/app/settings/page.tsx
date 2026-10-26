@@ -30,7 +30,10 @@ export default async function SettingsPage() {
       <section aria-labelledby="s-keys" className={`${card} mt-8 p-5`}>
         <h2 id="s-keys" className="font-display text-base font-semibold">{t("keys.title")}</h2>
         <p className="mt-1 mb-3 text-sm text-mute">{t("keys.intro")}</p>
-        <Link href="/keys" className={link}>{t("settings.keysLink")}</Link>
+        <p className="flex flex-wrap gap-4">
+          <Link href="/settings/models" className={link}>{t("conn.title")}</Link>
+          <Link href="/keys" className={link}>{t("settings.keysLink")}</Link>
+        </p>
       </section>
       <section aria-labelledby="s-lang" className={`${card} mt-4 p-5`}>
         <h2 id="s-lang" className="mb-4 font-display text-base font-semibold">{t("settings.lang")}</h2>

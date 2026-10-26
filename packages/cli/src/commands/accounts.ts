@@ -5,7 +5,7 @@ import type { CliDeps } from "../deps.js";
 import { printJson } from "../output.js";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
-import type { LoginDeps, LoginProc } from "./login-session.js";
+import type { LoginCli, LoginDeps, LoginProc } from "./login-session.js";
 
 // D-295: subscription accounts, like T3 Code: the user signs in to the unmodified Claude Code through Anthropic's own
 // flow, one profile volume per account. The harness reads only `claude auth status` (who, which plan), never a token.
@@ -40,19 +40,26 @@ export function parseClaudeStatus(stdout: string): ProfileStatus {
   return { loggedIn: true, email: s.data.email ?? null, plan: subscriptionLabel(s.data.subscriptionType) };
 }
 
-const PREFIX = "mandat-profile-claude-";
+/** D-393: `codex login status` [НП: the wording] — „Logged in using ChatGPT“ on success; the plan is not shown. */
+export function parseCodexStatus(stdout: string, exitCode: number): ProfileStatus {
+  return exitCode === 0 && /logged in using chatgpt/i.test(stdout) ? { loggedIn: true, email: null, plan: "ChatGPT" } : { loggedIn: false, email: null, plan: null };
+}
 
-export interface Account extends ProfileStatus { name: string; agent: string }
+const PREFIX = { claude: "mandat-profile-claude-", codex: "mandat-profile-codex-" } as const;
+
+export interface Account extends ProfileStatus { name: string; agent: string; cli: LoginCli }
 
 export async function listAccounts(deps: CliDeps): Promise<Account[]> {
   const r = await dockerText(deps.docker, ["volume", "ls", "--filter", "label=mandat.profile=1", "--format", "{{.Name}}"]);
   if (r.exitCode !== 0) return [];
   const image = (await imageTags(repoRoot)).sandbox;
   const out: Account[] = [];
-  for (const vol of r.stdout.split("\n").map((x) => x.trim()).filter((x) => x.startsWith(PREFIX))) {
-    const name = vol.slice(PREFIX.length);
+  for (const vol of r.stdout.split("\n").map((x) => x.trim())) {
+    const cli = (["claude", "codex"] as const).find((c) => vol.startsWith(PREFIX[c]));
+    if (!cli) continue;
+    const name = vol.slice(PREFIX[cli].length);
     const s = await dockerText(deps.docker, buildProfileArgs("status", { image, volume: vol }), 60_000);
-    out.push({ name, agent: `claude@${name}`, ...parseClaudeStatus(s.stdout) });
+    out.push({ name, agent: `${cli}@${name}`, cli, ...(cli === "codex" ? parseCodexStatus(s.stdout, s.exitCode) : parseClaudeStatus(s.stdout)) });
   }
   return out;
 }
@@ -66,8 +73,8 @@ export async function accountsCommand(io: Io, deps: CliDeps, o: { json: boolean 
 }
 
 /** Image present, upstream network, the profile volume created and owned by the agent user (terminal and web login). */
-export async function prepareProfile(deps: CliDeps, name: string): Promise<{ ok: true; image: string; volume: string; created: boolean } | { ok: false; reason: "images_missing" | "failed"; image: string }> {
-  const volume = profileVolume("claude", name);
+export async function prepareProfile(deps: CliDeps, name: string, cli: LoginCli = "claude"): Promise<{ ok: true; image: string; volume: string; created: boolean } | { ok: false; reason: "images_missing" | "failed"; image: string }> {
+  const volume = profileVolume(cli, name);
   const image = (await imageTags(repoRoot)).sandbox;
   if ((await dockerText(deps.docker, ["image", "inspect", image])).exitCode !== 0) return { ok: false, reason: "images_missing", image };
   await ensureUpstreamNetwork(deps.docker);
@@ -77,23 +84,24 @@ export async function prepareProfile(deps: CliDeps, name: string): Promise<{ ok:
   return { ok: true, image, volume, created };
 }
 
-async function profileStatus(deps: CliDeps, name: string): Promise<ProfileStatus> {
+async function profileStatus(deps: CliDeps, name: string, cli: LoginCli = "claude"): Promise<ProfileStatus> {
   const image = (await imageTags(repoRoot)).sandbox;
-  return parseClaudeStatus((await dockerText(deps.docker, buildProfileArgs("status", { image, volume: profileVolume("claude", name) }), 60_000)).stdout);
+  const r = await dockerText(deps.docker, buildProfileArgs("status", { image, volume: profileVolume(cli, name) }), 60_000);
+  return cli === "codex" ? parseCodexStatus(r.stdout, r.exitCode) : parseClaudeStatus(r.stdout);
 }
 
 /** D-369: the real process behind a web login — `docker run -i` with pipes; nothing it prints is logged here. */
 export function loginDeps(deps: CliDeps): LoginDeps {
   let image = "";
   return {
-    prepare: async (name) => {
-      const p = await prepareProfile(deps, name);
+    prepare: async (name, cli) => {
+      const p = await prepareProfile(deps, name, cli);
       image = p.image;
       return p.ok ? (p.created ? "created" : "ok") : p.reason;
     },
-    discard: async (name) => void (await dockerText(deps.docker, ["volume", "rm", profileVolume("claude", name)], 60_000)),
-    spawn: (name): LoginProc => {
-      const child = spawn("docker", buildProfileArgs("login-web", { image, volume: profileVolume("claude", name) }), { stdio: ["pipe", "pipe", "pipe"] });
+    discard: async (name, cli) => void (await dockerText(deps.docker, ["volume", "rm", profileVolume(cli, name)], 60_000)),
+    spawn: (name, cli): LoginProc => {
+      const child = spawn("docker", buildProfileArgs("login-web", { image, volume: profileVolume(cli, name) }), { stdio: ["pipe", "pipe", "pipe"] });
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
       child.stdin.on("error", () => undefined);
@@ -107,7 +115,7 @@ export function loginDeps(deps: CliDeps): LoginDeps {
         kill: () => void child.kill("SIGTERM"),
       };
     },
-    status: (name) => profileStatus(deps, name),
+    status: (name, cli) => profileStatus(deps, name, cli),
     timeoutMs: 10 * 60_000,
   };
 }
@@ -128,8 +136,8 @@ export async function loginCommand(io: Io, deps: CliDeps, o: { name: string }): 
 }
 
 /** Signs the account out and removes its profile volume (terminal and web). */
-export async function logoutProfile(deps: CliDeps, name: string): Promise<boolean> {
-  const vol = profileVolume("claude", name);
+export async function logoutProfile(deps: CliDeps, name: string, cli: LoginCli = "claude"): Promise<boolean> {
+  const vol = profileVolume(cli, name);
   const image = (await imageTags(repoRoot)).sandbox;
   await dockerText(deps.docker, buildProfileArgs("logout", { image, volume: vol }), 60_000);
   return (await dockerText(deps.docker, ["volume", "rm", vol], 60_000)).exitCode === 0;

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { FileKeyStore, loadKek, mintBootToken } from "@mandat/llm-proxy";
+import { ConnectionStore, FileKeyStore, loadKek, mintBootToken } from "@mandat/llm-proxy";
 import { buildProxyRunArgs, dockerText, ensureUpstreamNetwork, imageTags } from "@mandat/sandbox";
 import { infraUserFor } from "@mandat/worker";
 import type { HostConfig } from "@mandat/worker";
@@ -39,7 +39,8 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     return 0;
   }
   // E7в / D-313: the keys come from this command's env (and are sealed into the store) or from the store
-  const store = new FileKeyStore(o.mandatHome, loadKek({ env: io.env, mandatHome: o.mandatHome }));
+  const kek = loadKek({ env: io.env, mandatHome: o.mandatHome });
+  const store = new FileKeyStore(o.mandatHome, kek);
   const envKey = io.env.ANTHROPIC_API_KEY;
   const envOpenai = io.env.OPENAI_API_KEY;
   if (envKey !== undefined && envKey !== "") {
@@ -50,7 +51,9 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   if (io.env.EXA_API_KEY) store.put("research:exa", io.env.EXA_API_KEY);
   const exa = store.get("research:exa");
   const key = store.get("anthropic");
-  if (key === null) {
+  // D-393: the saved connections (DeepSeek, Kimi, Ollama…) are upstreams of their own; any one of them is enough
+  const upstreams = new ConnectionStore(o.mandatHome, kek).upstreams();
+  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0) {
     io.stderr("няма ключ: въведи го в „Ключове“ в UI или веднъж: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
     return 3;
   }
@@ -70,7 +73,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   for (const k of ["MANDAT_PROXY_OPENAI_PRICES", "MANDAT_UPSTREAM_ANTHROPIC", "MANDAT_UPSTREAM_OPENAI"] as const) if (io.env[k]) publicEnv[k] = io.env[k] as string;
   const openai = store.get("openai");
   // D-293: which providers have a key — names only, never values (read back by proxyProviders)
-  publicEnv.MANDAT_PROXY_PROVIDERS = openai ? "anthropic,openai" : "anthropic";
+  publicEnv.MANDAT_PROXY_PROVIDERS = [key ? "anthropic" : null, openai ? "openai" : null].filter(Boolean).join(",");
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
     name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port, publishInferencePort: o.host.proxyInferencePort,
@@ -88,7 +91,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     io.stderr("llm-proxy: healthz did not answer within 10 s\n");
     return 3;
   }
-  if (!(await deps.bootProxy(port, boot, { anthropic: key, ...(openai ? { openai } : {}), ...(exa ? { search: { exa } } : {}) }))) {
+  if (!(await deps.bootProxy(port, boot, { ...(key ? { anthropic: key } : {}), ...(openai ? { openai } : {}), ...(Object.keys(upstreams).length > 0 ? { upstreams } : {}), ...(exa ? { search: { exa } } : {}) }))) {
     await dockerText(deps.docker, ["rm", "-f", NAME], 60_000);
     io.stderr("llm-proxy: the boot exchange failed\n");
     return 3;
