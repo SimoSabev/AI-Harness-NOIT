@@ -44,3 +44,5 @@ export { deliverLocal } from "./online/deliver-local.js";
 export { addLocalProject, projectSlug } from "./online/add-project.js";
 export { MAX_RUNNING_PER_ORG, claimResearch, processResearch, reapStaleResearch, runResearchOnce } from "./online/research.js";
 export type { ResearchDeps, ResearchEnv } from "./online/research.js";
+export { DEFAULT_LOCAL_MODEL, DEFAULT_SEARXNG, hostResearchEnv } from "./online/research-host.js";
+export type { HostResearchOptions } from "./online/research-host.js";
