@@ -13,7 +13,7 @@ export type CommandAction =
   | { kind: "click"; selector: string }
   | { kind: "none" };
 
-const VIEW_HREF: Record<DesktopView, string> = { tasks: "/", projects: "/harness", settings: "/settings" };
+const VIEW_HREF: Record<DesktopView, string> = { tasks: "/", projects: "/harness", memory: "/memory", settings: "/settings" };
 
 export function commandAction(cmd: DesktopCommand, ctx: { typing: boolean }): CommandAction {
   switch (cmd.command) {

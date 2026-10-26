@@ -16,13 +16,13 @@ describe("the application menu (AC-12.7)", () => {
     expect(top(appMenu("bg", "win32", { appName: "Харнес", loginItem: false }))).toEqual(["Файл", "Редакция", "Изглед", "Прозорец", "Помощ"]);
   });
 
-  it("File has New task, Approve, Add project, Apply locally; View has the three sections", () => {
+  it("File has New task, Approve, Add project, Apply locally; View has the four sections (D-403)", () => {
     const m = appMenu("en", "darwin", { appName: "Harness", loginItem: false });
     const file = m.find((i) => labelOf(i) === "File");
     const cmds = (i: MenuSpec | undefined) => flat(i && "submenu" in i && i.submenu ? i.submenu : []).flatMap((x) => ("command" in x && x.command ? [x.command] : []));
     expect(cmds(file)).toEqual([{ command: "new_task" }, { command: "approve" }, { command: "add_project" }, { command: "apply_locally" }]);
     const view = m.find((i) => labelOf(i) === "View");
-    expect(cmds(view).map((c) => (c.command === "view" ? c.view : c.command))).toEqual(["tasks", "projects", "settings"]);
+    expect(cmds(view).map((c) => (c.command === "view" ? c.view : c.command))).toEqual(["tasks", "projects", "memory", "settings"]);
   });
 
   it("Edit is built from roles, so copy and paste work in the window", () => {

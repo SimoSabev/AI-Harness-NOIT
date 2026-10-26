@@ -19,6 +19,7 @@ import { uploadHidden } from "./hidden";
 import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
+import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import type { Db } from "./sql";
 import { AccountName, AddProjectBody, LoginCode, SystemJob } from "@mandat/contract";
 import { z } from "zod";
@@ -47,14 +48,14 @@ async function ctx(req: Request, d: ApiDeps): Promise<{ uid: string; org: string
   return { uid, org: m.org_id, role: m.role };
 }
 
-async function post(req: Request, d: ApiDeps): Promise<{ uid: string; org: string; body: unknown } | Response> {
+async function post(req: Request, d: ApiDeps): Promise<{ uid: string; org: string; role: "owner" | "approver" | "viewer"; body: unknown } | Response> {
   if (!checkOrigin(req)) return json(403, { error: "bad_origin" });
   if (!checkCsrf(req)) return json(403, { error: "bad_csrf" });
   const c = await ctx(req, d);
   if (c instanceof Response) return c;
   const b = await readJsonBody(req);
   if (!b.ok) return json(b.status, { error: b.status === 413 ? "body_too_large" : "bad_json" });
-  return { uid: c.uid, org: c.org, body: b.value };
+  return { uid: c.uid, org: c.org, role: c.role, body: b.value };
 }
 
 async function done(r: Result, d: ApiDeps): Promise<Response> {
@@ -504,4 +505,40 @@ export async function postHiddenTests(req: Request, d: ApiDeps, repoId: string):
   const p = await post(req, d);
   if (p instanceof Response) return p;
   return done(await uploadHidden(d.db, { uid: p.uid, repoId, body: p.body, secondFactor: d.secondFactor }), d);
+}
+
+// D-400: the memory menu (the person's own memory + the org's project memory).
+export async function getMemory(req: Request, d: ApiDeps): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  return json(200, await memoryOverview(d.db, c.uid, c.org));
+}
+export async function postMemory(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const r = await createMemoryWeb(d.db, { uid: p.uid, org: p.org, role: p.role, body: p.body });
+  return json(r.status, r.body);
+}
+export async function patchMemoryRoute(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const r = await patchMemoryWeb(d.db, { uid: p.uid, org: p.org, role: p.role, id, body: p.body });
+  return json(r.status, r.body);
+}
+export async function deleteMemoryRoute(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const r = await deleteMemoryWeb(d.db, { uid: p.uid, org: p.org, role: p.role, id });
+  return json(r.status, r.body);
+}
+export async function getMemoryHistory(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  return json(200, { events: await memoryHistoryWeb(d.db, c.uid, c.org, id) });
+}
+export async function postMemoryConsolidate(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const r = await consolidateMemoryWeb(d.db, { uid: p.uid, org: p.org, role: p.role });
+  return json(r.status, r.body);
 }

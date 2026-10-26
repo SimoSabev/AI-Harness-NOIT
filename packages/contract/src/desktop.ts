@@ -117,7 +117,7 @@ export function parseDesktopResponse(method: string, raw: unknown): DesktopResul
 }
 
 /** D-384: the View menu opens the three sections of the side bar. */
-export const DesktopView = z.enum(["tasks", "projects", "settings"]);
+export const DesktopView = z.enum(["tasks", "projects", "memory", "settings"]); // D-403: memory
 export type DesktopView = z.infer<typeof DesktopView>;
 
 /** main → web: what the menu, a shortcut or a notification click asks the UI to do. */

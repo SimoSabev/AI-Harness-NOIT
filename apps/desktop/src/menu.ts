@@ -29,6 +29,7 @@ const SEP: MenuSpec = { type: "separator" };
 const VIEWS: { view: DesktopView; label: DesktopKey }[] = [
   { view: "tasks", label: "view.tasks" },
   { view: "projects", label: "view.projects" },
+  { view: "memory", label: "view.memory" },
   { view: "settings", label: "view.settings" },
 ];
 
