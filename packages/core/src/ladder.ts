@@ -79,10 +79,11 @@ export function simulateLadder(o: { p: number; h: number; runs: number; seed: nu
 export function ladderCapFor(agent: string): LadderLevel {
   return agent.startsWith("external:") ? 1 : 3;
 }
-export function ladderStepFor(agent: string, s: LadderState, e: LadderInput, o?: { h_up?: number; h_down?: number }): LadderStepResult {
+/** D-392: `cap` lowers the agent's cap (a local model: 1, spec 5.3). */
+export function ladderStepFor(agent: string, s: LadderState, e: LadderInput, o?: { h_up?: number; h_down?: number; cap?: LadderLevel }): LadderStepResult {
   if (agent === "external:mcp-local") return { next: { ...s }, delta: 0, reason: "none" };
   const r = ladderStep(s, e, o);
-  const cap = ladderCapFor(agent);
+  const cap = Math.min(ladderCapFor(agent), o?.cap ?? 3) as LadderLevel;
   if (r.next.level <= cap) return r;
   return { next: { ...r.next, level: cap, s_up: 0, s_down: 0 }, delta: cap - s.level, reason: r.reason };
 }

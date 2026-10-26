@@ -14,3 +14,12 @@ describe("external-ladder-key (D-207, S38)", () => {
     expect(ladderStepFor("external:mcp-local", { level: 0, s_up: 0, s_down: 0, pinned: false }, "success")).toMatchObject({ reason: "none", delta: 0 });
   });
 });
+
+// D-392 (spec 5.3): a local model never climbs above level 1, whatever its record
+describe("local model cap (D-392)", () => {
+  it("cap 1 from the caller: a success at level 1 stays at 1", () => {
+    const at1 = { level: 1 as const, s_up: 99, s_down: 0, pinned: false };
+    expect(ladderStepFor("claude+ollama", at1, "success", { cap: 1 }).next.level).toBe(1);
+    expect(ladderStepFor("claude+ollama", at1, "success").next.level).toBeGreaterThanOrEqual(1);
+  });
+});
