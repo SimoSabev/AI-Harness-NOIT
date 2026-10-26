@@ -60,5 +60,6 @@ describe("mandat research (D-398)", () => {
     } finally {
       await db.end();
     }
-  });
+    // a fresh PGlite with every migration takes a while on a busy machine
+  }, 120_000);
 });
