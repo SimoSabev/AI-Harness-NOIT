@@ -205,7 +205,7 @@ export async function runResearch(input: ResearchRequestInput | ResearchRequest,
   };
 
   const runLane = async (lane: PlanLane) => {
-    let queries: string[] = [];
+    let queries: string[];
     try {
       queries = (await models.json("searcher", `queries ${lane.id}`, Queries, {
         system: SEARCHER_SYSTEM,
