@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { MandatError, sha256Tag } from "@mandat/contract";
 import type { ChannelRef, GateRoute } from "@mandat/contract";
-import { adminBearer, mintTaskToken } from "@mandat/llm-proxy";
+import { ALLOWED_MODELS, adminBearer, mintTaskToken } from "@mandat/llm-proxy";
 import type { TaskUsage } from "@mandat/llm-proxy";
 import type { Channel } from "./channel.js";
 import { profileChannel } from "./profile-channel.js";
@@ -23,6 +23,9 @@ export function apiKeyChannel(o: {
   label: string;
   model: string;
   provider?: "anthropic" | "openai";
+  /** D-392: the saved connection (proxy upstream) the tokens of this channel are for */
+  upstream?: string;
+  kind?: "api_key" | "local";
   proxyAdminUrl: string;
   secretPath: string;
   fetchImpl?: typeof fetch;
@@ -34,13 +37,13 @@ export function apiKeyChannel(o: {
   const provider = o.provider ?? "anthropic";
   return {
     label: o.label,
-    kind: "api_key",
+    kind: o.kind ?? "api_key",
     provider,
     model: o.model,
     issueTaskCredential(r) {
       const now = (o.now ?? (() => new Date()))();
       const e = Math.floor(now.getTime() / 1000) + r.ttlMin * 60;
-      const token = mintTaskToken(secret(), { t: r.taskId, r: r.runId, a: 1, e, b: r.budgetUsd, n: randomBytes(8).toString("hex"), ...(provider === "openai" ? { p: "openai" as const } : {}) });
+      const token = mintTaskToken(secret(), { t: r.taskId, r: r.runId, a: 1, e, b: r.budgetUsd, n: randomBytes(8).toString("hex"), ...(provider === "openai" ? { p: "openai" as const } : {}), ...(o.upstream !== undefined ? { u: o.upstream } : {}) });
       return Promise.resolve({ token, tokenHash: sha256Tag(token), expiresAt: new Date(e * 1000).toISOString() });
     },
     async revokeTaskCredential(runId) {
@@ -66,13 +69,17 @@ export function apiKeyChannel(o: {
 }
 
 /** E0: only api_key; cli_profile and local → E_CHANNEL_UNSUPPORTED. */
-export function channelFor(ref: ChannelRef, o: { proxyAdminUrl: string; secretPath: string }): Channel {
-  // D-295: claude-profile-<name> → the subscription login in the profile volume of that name
-  const prof = ref.kind === "cli_profile" ? /^claude-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
-  if (prof?.[1]) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[1] });
+export function channelFor(ref: ChannelRef, opts: { proxyAdminUrl: string; secretPath: string; provider?: "anthropic" | "openai" }): Channel {
+  const { provider, ...o } = opts;
+  // D-295: claude-profile-<name> → the subscription login in the profile volume of that name; D-392: codex-profile-<name>
+  const prof = ref.kind === "cli_profile" ? /^(claude|codex)-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
+  if (prof?.[2]) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[2], provider: prof[1] === "codex" ? "openai" : "anthropic" });
+  // D-392: a saved connection — its tokens name the proxy upstream; the wire is the agent's (Claude Code / Codex)
+  const conn = ref.kind !== "cli_profile" ? /^conn-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
+  if (conn?.[1]) return apiKeyChannel({ label: ref.label, model: ref.model, kind: ref.kind === "local" ? "local" : "api_key", provider: provider ?? "anthropic", upstream: conn[1], ...o });
   if (ref.kind !== "api_key") throw new MandatError("E_CHANNEL_UNSUPPORTED", `channel kind ${ref.kind} is not supported in E0`);
   // E3в: anthropic-key-* with the E0 model; openai-key-* (Codex, Responses API; model and price from Simo [НП])
-  if (/^anthropic-key-(main|demo)$/.test(ref.label) && ref.model === "claude-sonnet-5-5") return apiKeyChannel({ label: ref.label, model: ref.model, ...o });
+  if (/^anthropic-key-(main|demo)$/.test(ref.label) && ALLOWED_MODELS.includes(ref.model)) return apiKeyChannel({ label: ref.label, model: ref.model, ...o });
   if (/^openai-key-(main|demo)$/.test(ref.label)) return apiKeyChannel({ label: ref.label, model: ref.model, provider: "openai", ...o });
   throw new MandatError("E_CHANNEL_UNSUPPORTED", `unsupported channel ${ref.label}/${ref.model}`);
 }
