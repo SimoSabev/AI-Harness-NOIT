@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { AddProjectReply, JobState, LoginState } from "@mandat/contract";
-import type { SystemJob } from "@mandat/contract";
+import { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
+import type { AddConnectionBody, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
 // starts the proxy with them. The web server keeps nothing: no database row, no file, no log, no echo.
@@ -10,14 +10,21 @@ export const KeysBody = z.object({
 }).strict();
 
 export interface KeysStatus { proxy: "running" | "stopped" | "unavailable"; providers: string[] }
-export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }
+export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null; /** D-393: Claude Code or Codex (ChatGPT) */ cli: "claude" | "codex" }
 /** D-369: the subscription login of `mandat local` (the code goes to the control endpoint and on to stdin, nowhere else). */
-export type LoginOp = { kind: "state" } | { kind: "start"; name: string } | { kind: "code"; code: string } | { kind: "cancel" };
+export type LoginOp = { kind: "state" } | { kind: "start"; name: string; cli?: "claude" | "codex" } | { kind: "code"; code: string } | { kind: "cancel" };
 export type LoginReply = { ok: true; state: LoginState } | { ok: false; error: string };
 
 export interface KeysClient {
   login(op: LoginOp): Promise<LoginReply>;
-  logout(name: string): Promise<boolean | null>;
+  logout(name: string, cli?: "claude" | "codex"): Promise<boolean | null>;
+  /** D-393: the saved connections and the task box defaults; null = the control endpoint did not answer */
+  connections(): Promise<ConnectionsReply | null>;
+  addConnection(b: AddConnectionBody): Promise<AddConnectionReply | null>;
+  setModels(id: string, b: ModelsBody): Promise<boolean | null>;
+  removeConnection(id: string): Promise<boolean | null>;
+  detect(): Promise<DetectReply | null>;
+  setPrefs(p: Preferences): Promise<boolean>;
   /** D-370: the CLI commands of `mandat local` (page System); null = the control endpoint did not answer */
   jobs(): Promise<JobState[] | null>;
   runJob(job: SystemJob): Promise<JobState | null>;
@@ -31,7 +38,7 @@ export interface KeysClient {
 }
 
 const Accounts = z.object({
-  accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable() })).max(50),
+  accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable(), cli: z.enum(["claude", "codex"]).default("claude") })).max(50),
 });
 const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai"])) });
 
@@ -57,17 +64,25 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const a = Accounts.safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return a.success ? a.data.accounts : [];
   };
-  const send = (method: string, path: string, body?: unknown) =>
+  const send = (method: string, path: string, body?: unknown, timeoutMs = 30_000) =>
     fetch(`${url}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     });
+  // D-393: zod on every answer; a key never travels this way back (AddConnectionReply has no key field)
+  const parsed = async <T>(p: Promise<Response | null>, schema: z.ZodType<T>): Promise<T | null> => {
+    const r = await p.catch(() => null);
+    const j = schema.safeParse(r?.ok || r?.status === 400 ? await r.json().catch(() => null) : null);
+    return j.success ? j.data : null;
+  };
+  const Done = z.object({ ok: z.literal(true) }).passthrough();
+  const Removed = z.object({ removed: z.boolean() });
   const Err = z.object({ error: z.string().max(40) });
   const login = async (op: LoginOp): Promise<LoginReply> => {
-    const r = await (op.kind === "state" ? send("GET", "/accounts/login") : op.kind === "cancel" ? send("DELETE", "/accounts/login") : op.kind === "start" ? send("POST", "/accounts/login", { name: op.name }) : send("POST", "/accounts/login/code", { code: op.code })).catch(() => null);
+    const r = await (op.kind === "state" ? send("GET", "/accounts/login") : op.kind === "cancel" ? send("DELETE", "/accounts/login") : op.kind === "start" ? send("POST", "/accounts/login", { name: op.name, ...(op.cli ? { cli: op.cli } : {}) }) : send("POST", "/accounts/login/code", { code: op.code })).catch(() => null);
     const j: unknown = await r?.json().catch(() => null);
     if (r?.ok) {
       const s = LoginState.safeParse(j);
@@ -76,8 +91,8 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const e = Err.safeParse(j);
     return { ok: false, error: r && r.status === 400 && e.success ? e.data.error : "control_unavailable" };
   };
-  const logout = async (name: string): Promise<boolean | null> => {
-    const r = await send("POST", "/accounts/logout", { name }).catch(() => null);
+  const logout = async (name: string, cli?: "claude" | "codex"): Promise<boolean | null> => {
+    const r = await send("POST", "/accounts/logout", { name, ...(cli ? { cli } : {}) }).catch(() => null);
     const j = z.object({ removed: z.boolean() }).safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data.removed : null;
   };
@@ -99,6 +114,13 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
   return {
     login,
     logout,
+    connections: () => parsed(send("GET", "/connections"), ConnectionsReply),
+    // the key check talks to the provider: up to ~20 s, plus the proxy restart
+    addConnection: (b) => parsed(send("POST", "/connections", b, 90_000), AddConnectionReply),
+    setModels: async (id, b) => (await parsed(send("PATCH", `/connections/${encodeURIComponent(id)}`, b, 90_000), Done)) !== null,
+    removeConnection: async (id) => (await parsed(send("DELETE", `/connections/${encodeURIComponent(id)}`, undefined, 90_000), Removed))?.removed ?? null,
+    detect: () => parsed(send("GET", "/connections/detect"), DetectReply),
+    setPrefs: async (p) => (await parsed(send("PUT", "/preferences", p), Done)) !== null,
     jobs,
     runJob,
     addProject,
