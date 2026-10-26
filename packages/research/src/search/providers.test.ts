@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { anthropicWebSearch, arxiv, crossref, exa, github, searxng, stackexchange, webSearchToolType, wikipedia } from "./providers.js";
 import type { SearchQuery, Transport } from "./providers.js";
