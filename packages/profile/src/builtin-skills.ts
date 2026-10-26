@@ -1,5 +1,6 @@
 import { sha256Tag } from "@mandat/contract";
 import type { SkillRef } from "@mandat/contract";
+import { RESEARCH_SKILL } from "./research-skill.js";
 
 // E8e (v5 p. 4.5 (5), D-354): the harness's own skills. The profile names a skill by content hash; the run materializes
 // only texts whose hash matches (a repo skill that changed since approval is left out and listed).
@@ -11,6 +12,11 @@ export const BUILTIN_SKILLS = {
   review: {
     description: "Read the change as a reviewer: correctness, tests, scope.",
     text: "---\nname: review\ndescription: Read the change as a reviewer: correctness, tests, scope.\n---\nCheck that every changed line is needed for the task, that a test covers it, and that nothing outside the allowed paths changed. Report problems; do not rewrite the change.\n",
+  },
+  // E9г (D-401): the research process with the research_* tools
+  research: {
+    description: "Find facts with checked sources through Mandat's research tools (research_*), never from memory.",
+    text: RESEARCH_SKILL,
   },
 } as const;
 export type BuiltinSkill = keyof typeof BUILTIN_SKILLS;
