@@ -373,6 +373,9 @@ importers:
       '@mandat/llm-proxy':
         specifier: workspace:*
         version: link:../../packages/llm-proxy
+      '@mandat/memory':
+        specifier: workspace:*
+        version: link:../../packages/memory
       '@mandat/onboard':
         specifier: workspace:*
         version: link:../../packages/onboard

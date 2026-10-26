@@ -3,12 +3,13 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { Verdict } from "@mandat/contract";
+import { Verdict, sha256Tag } from "@mandat/contract";
 import { readLedgerOnline, verifyOnlineRows } from "@mandat/ledger";
 import { fakeGitHub } from "@mandat/gate-github";
+import { addMemory, loadMemory } from "@mandat/memory";
 import { buildFixture } from "../fixtures.js";
 import { repoRoot } from "../testing.js";
-import { DEMO_CHANNELS, DEMO_ORG_ID, DEMO_REPO_ID, seedChannels, seedMinimal } from "./seed.js";
+import { DEMO_CHANNELS, DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedChannels, seedMinimal } from "./seed.js";
 import { contractForTask, runDaemonOnce } from "./daemon.js";
 import type { DaemonDeps } from "./daemon.js";
 import { pgliteDb } from "./pglite-db.test-helper.js";
@@ -69,6 +70,28 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(s.events.map((e) => e.topic)).toContain("task:t_web_1");
     for (const e of s.events) expect(JSON.stringify(e.payload).length).toBeLessThanOrEqual(1024);
     expect(await runDaemonOnce(s.deps)).toBe(null);
+  });
+  it("D-392: паметта на човека влиза в договора (memory_hash = sha256 на блока), в дневника и в memory_usage; MEMORY: от бележките на агента чака одобрение", async () => {
+    const s = await setup(0);
+    await s.db.query("update public.tasks set created_by = $1, text = $2 where id = 't_web_1'", [DEMO_OWNER_ID, "Fix the discount in the cart\nзапомни: отговаряй на български"]);
+    await addMemory(s.db, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, note: { text: "The cart discount code is SAVE10", kind: "fact", scope: "project", basis: "user_said", repo_id: DEMO_REPO_ID }, source: "human", actor: `human:${DEMO_OWNER_ID}` });
+    const run = s.deps.run;
+    s.deps.run = async (i) => {
+      const o = await (run as NonNullable<typeof run>)(i);
+      writeFileSync(path.join(o.runDir ?? "", "notes.txt"), "done\nMEMORY: The cart tests live in tests/cart.spec.ts\n");
+      return o;
+    };
+    await runDaemonOnce(s.deps);
+    const block = s.runs[0]?.memoryBlock ?? "";
+    expect(block).toContain("About the person:\n- отговаряй на български\n");
+    expect(block).toContain("The cart discount code is SAVE10");
+    const c = JSON.parse(readFileSync(s.runs[0]?.contractPath ?? "", "utf8")) as { memory_hash: string };
+    expect(c.memory_hash).toBe(sha256Tag(block));
+    const rows = await readLedgerOnline(s.db, DEMO_ORG_ID);
+    expect(rows.map((r) => r.kind)).toEqual(["demo_reset", "task_created", "memory_snapshot", "verdict", "gated"]);
+    expect(verifyOnlineRows(rows, DEMO_ORG_ID).ok).toBe(true);
+    expect((await s.db.query<{ block_hash: string }>("select block_hash from public.memory_usage where task_id = 't_web_1'")).rows).toEqual([{ block_hash: c.memory_hash }]);
+    expect((await loadMemory(s.db, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, statuses: ["pending"] })).map((m) => [m.text, m.source])).toEqual([["The cart tests live in tests/cart.spec.ts", "agent_sandbox"]]);
   });
   it("ниво 2 → PR, approval check, сливане на fakeGitHub → OUTCOME (прозорец 0 мин) → стълбата расте → CLOSED", async () => {
     const s = await setup(2);

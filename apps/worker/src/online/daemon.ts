@@ -2,7 +2,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "n
 import os from "node:os";
 import path from "node:path";
 import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
-import type { ChannelRef, Contract, MandatPolicy, TaskType, Verdict } from "@mandat/contract";
+import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } from "@mandat/contract";
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
 import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
@@ -26,6 +26,7 @@ import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 import { mainHead, rebaseOnto } from "./rebase.js";
 import { ciNote } from "./ci.js";
+import { memoryForTask, sandboxProposals } from "./memory.js";
 import { deliverLocal, mergeLocal } from "./deliver-local.js";
 
 const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
@@ -72,6 +73,8 @@ interface TaskRow {
   provider: string;
   /** E9а: the night shift the task belongs to */
   shift_id: string | null;
+  /** D-392: whose memory the task gets (null: nobody started it) */
+  created_by: string | null;
 }
 
 /** E9а: the approved profile with the night's forbidden tools as deny rules for the subject night (and its hash recomputed) */
@@ -84,7 +87,7 @@ function nightProfile(hp: HarnessProfile, forbid: readonly string[]): HarnessPro
 const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n").filter((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---"))).length;
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
-export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null): Contract {
+export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = taskTypeOf(policy, t.type); // D-360: "free" has a default scope
@@ -92,7 +95,7 @@ export function contractForTask(t: { id: string; type: TaskType; text: string; a
   return sealContract({
     task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: [t.text, note, t.replay ? `[mandat-replay: ${t.replay}]` : null].filter(Boolean).join("\n\n"), base_commit: baseSha, scan_facts_hash: null,
     allowed_paths: tt.allowed_paths, may_change_tests: tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
-    memory_hash: null, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
+    memory_hash: memoryHash, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
     repo_config: rc.config,
   });
 }
@@ -129,7 +132,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -230,11 +233,17 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
   const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
   const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
-  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog, nightNote ? `Note from Mandat (night shift): ${nightNote}` : null].filter(Boolean).join("\n\n") || null);
+  // D-392: the person's memory for this task (frozen core + the slice for its text); memory never stops a task
+  const mem = await memoryForTask(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id, taskId: t.id, attempt: t.attempt, text: t.text }).catch((e: unknown) => {
+    log(`[daemon] ${t.id}: memory skipped: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
+    return null;
+  });
+  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog, nightNote ? `Note from Mandat (night shift): ${nightNote}` : null].filter(Boolean).join("\n\n") || null, mem?.hash ?? null);
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_created", task_id: t.id, payload: { task_id: t.id, contract_hash: contract.contract_hash, agent: t.agent } });
+    if (mem) await appendLedgerOnline(tx, { org_id: t.org_id, kind: "memory_snapshot", task_id: t.id, payload: { snapshot_hash: mem.hash, core: mem.block.core.length, recall: mem.block.recall.length, tokens: mem.block.tokens } });
     return s;
   });
   await bc("RUNNING", seq);
@@ -316,6 +325,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
         ...(Object.keys(mcpBudgets).length > 0 ? { mcpBudgets } : {}),
+        ...(mem ? { memoryBlock: mem.text } : {}),
       });
     } finally {
       if (steerable) await d.db.query("update public.tasks set steerable = false where id = $1", [t.id]).catch(() => undefined);
@@ -382,12 +392,19 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     });
     await bc("RETRY", seq);
     log(`[daemon] ${t.id}: ${from.label} 429 → spill → ${to.label} · agent ${t.agent} · attempt ${t.attempt}`);
-    contract = contractForTask(t, parsed.policy, baseSha, refOf(to), partial > 0 ? "Note: the working tree contains partial work from an interrupted session." : null);
+    contract = contractForTask(t, parsed.policy, baseSha, refOf(to), partial > 0 ? "Note: the working tree contains partial work from an interrupted session." : null, mem?.hash ?? null);
     cfile = writeContract(contract);
     seq = await inTransaction(d.db, async (tx) => setState(tx, t, "RUNNING"));
     await bc("RUNNING", seq);
     out = await runOnce();
     await usageRow(out);
+  }
+  // D-392: the agent's "MEMORY:" notes (already CANARY-checked and redacted on disk) → proposals that wait for a person
+  const notesFile = out.runDir ? path.join(out.runDir, "notes.txt") : null;
+  if (notesFile && existsSync(notesFile)) {
+    await sandboxProposals(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id, taskId: t.id, notes: readFileSync(notesFile, "utf8") })
+      .then((r) => (r.added + r.refused > 0 ? log(`[daemon] ${t.id}: memory proposals ${r.added} waiting, ${r.refused} refused`) : undefined))
+      .catch(() => undefined);
   }
   const minutes = Math.round(((now().getTime() - t0) / 60000) * 100) / 100;
   const v = out.verdict;

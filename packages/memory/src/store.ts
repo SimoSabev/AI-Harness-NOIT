@@ -64,6 +64,8 @@ export type AddResult = { ok: true; item: MemoryItem; superseded: string[] } | {
 
 export async function addMemory(sql: MemorySql, o: {
   org: string; user: string; note: MemoryNote; source: MemorySource; actor: Actor; provenance?: MemoryProvenance; exactSecrets?: readonly string[];
+  /** the person who wrote it (default: user); null for an agent's proposal in a task nobody started */
+  createdBy?: string | null;
 }): Promise<AddResult> {
   const n = o.note;
   if (n.scope === "project" && !n.repo_id) return { ok: false, reason: "no_repo" };
@@ -77,7 +79,7 @@ export async function addMemory(sql: MemorySql, o: {
   const r = await sql.query<{ id: string }>(
     `insert into public.memory_items (org_id, user_id, repo_id, scope, kind, text, status, source, basis, entities, provenance, created_by)
      values ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10::text[], $11::jsonb, $12::uuid) returning id::text as id`,
-    [o.org, n.scope === "user" ? o.user : null, n.scope === "project" ? n.repo_id : null, n.scope, n.kind, n.text, status, o.source, basis, entitiesOf(n.text), JSON.stringify(o.provenance ?? {}), o.user],
+    [o.org, n.scope === "user" ? o.user : null, n.scope === "project" ? n.repo_id : null, n.scope, n.kind, n.text, status, o.source, basis, entitiesOf(n.text), JSON.stringify(o.provenance ?? {}), o.createdBy === undefined ? o.user : o.createdBy],
   );
   const id = r.rows[0]?.id ?? "";
   await event(sql, { org: o.org, id, action: "created", actor: o.actor, after: { text: n.text, status }, task_id: o.provenance?.task_id ?? null });

@@ -45,13 +45,24 @@ export function initialStatus(source: MemorySource, basis: MemoryBasis | null): 
   return "pending";
 }
 
-/** "запомни: …" / "remember: …" lines of a task text: the person's own words, so they become active memories. */
-export function rememberLines(text: string): string[] {
+function prefixed(text: string, re: RegExp, max: number): string[] {
   const out: string[] = [];
   for (const line of text.split("\n")) {
-    const m = /^\s*(?:запомни|remember)\s*:\s*(.*)$/iu.exec(line);
-    const v = m?.[1]?.trim();
-    if (v) out.push(v);
+    const v = re.exec(line)?.[1]?.trim();
+    if (v && out.length < max) out.push(v);
   }
   return out;
 }
+
+/** "запомни: …" / "remember: …" lines of a task text: the person's own words, so they become active memories. */
+export function rememberLines(text: string): string[] {
+  return prefixed(text, /^\s*(?:запомни|remember)\s*:\s*(.*)$/iu, 20);
+}
+
+/** "MEMORY: …" lines an agent in the sandbox left in /m/out/notes.txt: proposals that wait for a person (at most 10). */
+export function memoryFromNotes(notes: string): string[] {
+  return prefixed(notes, /^\s*(?:MEMORY|ПАМЕТ)\s*:\s*(.*)$/u, 10);
+}
+
+/** What the memory block tells an agent about suggesting a memory (the sandbox has no memory tool). */
+export const NOTES_HINT = "To suggest a memory for later tasks, write a line `MEMORY: <one fact>` into /m/out/notes.txt; a person approves it.";

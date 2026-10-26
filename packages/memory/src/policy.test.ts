@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialStatus, rememberLines, scanMemory } from "./policy.js";
+import { initialStatus, memoryFromNotes, rememberLines, scanMemory } from "./policy.js";
 
 describe("скенерът на записа (D-392, OWASP ASI06)", () => {
   it("обикновен факт или предпочитание минава", () => {
@@ -47,6 +47,13 @@ describe("начално състояние по източник и основ�
   it("агент в пясъчника → винаги чака; консолидация → активно", () => {
     expect(initialStatus("agent_sandbox", "user_said")).toBe("pending");
     expect(initialStatus("consolidation", null)).toBe("active");
+  });
+});
+
+describe("предложения на агента в пясъчника (notes.txt)", () => {
+  it("редовете MEMORY: / ПАМЕТ: стават предложения; до 10, без празни", () => {
+    expect(memoryFromNotes("готово\nMEMORY: тестовете са в tests/\n  ПАМЕТ: ползва се pnpm \nMEMORY:")).toEqual(["тестовете са в tests/", "ползва се pnpm"]);
+    expect(memoryFromNotes(Array.from({ length: 15 }, (_, i) => `MEMORY: факт ${i}`).join("\n"))).toHaveLength(10);
   });
 });
 

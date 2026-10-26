@@ -1,5 +1,5 @@
 export { estimateTokens, terms, normalizeKey, similarity, entitiesOf, KNOWN_TOOLS } from "./text.js";
-export { scanMemory, initialStatus, rememberLines } from "./policy.js";
+export { scanMemory, initialStatus, rememberLines, memoryFromNotes, NOTES_HINT } from "./policy.js";
 export type { ScanReason, ScanResult } from "./policy.js";
 export { renderCore, memoryBlock, coreOrder } from "./core.js";
 export type { Core, MemoryBlock } from "./core.js";
