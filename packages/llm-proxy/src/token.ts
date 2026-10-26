@@ -9,6 +9,8 @@ export interface TokenClaims {
   n: string; // 16 hex nonce
   /** E3в: the provider of the channel this token is for (absent = anthropic, E0 tokens) */
   p?: "anthropic" | "openai";
+  /** D-392: the saved connection (proxy upstream) this token is for; absent = the provider's own key */
+  u?: string;
 }
 
 const b64 = (b: Buffer | string): string => Buffer.from(b).toString("base64url");
@@ -37,7 +39,7 @@ export function verifyTaskToken(
   } catch {
     return { ok: false, code: "token_invalid" };
   }
-  if (typeof c.r !== "string" || typeof c.t !== "string" || typeof c.e !== "number" || typeof c.b !== "number" || c.a !== 1 || (c.p !== undefined && c.p !== "anthropic" && c.p !== "openai")) {
+  if (typeof c.r !== "string" || typeof c.t !== "string" || typeof c.e !== "number" || typeof c.b !== "number" || c.a !== 1 || (c.p !== undefined && c.p !== "anthropic" && c.p !== "openai") || (c.u !== undefined && (typeof c.u !== "string" || !/^[a-z0-9][a-z0-9-]{0,31}$/.test(c.u)))) {
     return { ok: false, code: "token_invalid" };
   }
   if (c.e < nowS) return { ok: false, code: "token_expired" };

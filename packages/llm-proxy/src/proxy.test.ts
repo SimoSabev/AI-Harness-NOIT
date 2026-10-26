@@ -140,7 +140,7 @@ describe("proxy server", () => {
     const r = await call(p.inf, "/v1/messages", { headers: { "x-api-key": mintTaskToken(secret, c) }, body: msg() });
     expect(r.status).toBe(401);
     expect(JSON.parse(r.body)).toEqual({ type: "error", error: { type: "authentication_error", message: "mandat: token_revoked" } });
-    expect(JSON.parse((await call(p.adm, "/healthz", { method: "GET" })).body)).toEqual({ ok: true, version: "0.1.0", locked: false, providers: ["anthropic"] });
+    expect(JSON.parse((await call(p.adm, "/healthz", { method: "GET" })).body)).toEqual({ ok: true, version: "0.1.0", locked: false, providers: ["anthropic"], upstreams: [] });
     expect((await call(p.adm, "/nope", { method: "GET", headers: { authorization: `Bearer ${adminBearer(secret)}` } })).status).toBe(404);
     expect(up.seen).toHaveLength(0);
   });

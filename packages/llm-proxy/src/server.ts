@@ -1,7 +1,8 @@
 import http from "node:http";
 import https from "node:https";
-import { ALLOWED_MODELS, costUsd, costUsdOpenAi } from "./pricing.js";
-import type { OpenAiRate, ResponsesUsage, Usage } from "./pricing.js";
+import { ConnectionId, ProxyUpstream } from "@mandat/contract";
+import { ALLOWED_MODELS, ESTIMATE, costUsd, costUsdFlat, costUsdOpenAi } from "./pricing.js";
+import type { FlatRate, OpenAiRate, ResponsesUsage, Usage } from "./pricing.js";
 import { SseResponsesUsage, SseUsage, mergeUsage, responsesUsageOf } from "./sse-usage.js";
 import { ProxyState } from "./state.js";
 import type { RequestLine } from "./state.js";
@@ -82,23 +83,42 @@ export interface ProxyServerOptions {
   usageLogPath: string;
   /** E7в / D-345: start locked; the keys arrive once through POST /admin/boot with the one-time boot token */
   boot?: BootOptions;
+  /** tests only: an http upstream on any host (the boot payload otherwise allows http to this computer only) */
+  allowHttpUpstream?: boolean;
   /** stdout log line (never bodies, headers or token values; 8.1). */
   log?: (line: RequestLine) => void;
   now?: () => number;
 }
 
 const KEY = /^[\x21-\x7e]{20,512}$/;
-function parseBootKeys(body: Buffer | null): { anthropic: string; openai?: string } | null {
+/** D-392: a saved connection as the proxy holds it (memory only). */
+interface Upstream { wire: "anthropic" | "openai"; url: URL; auth: "x-api-key" | "bearer" | "none"; key: string; models: string[]; prices: Record<string, FlatRate> }
+type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream> };
+function parseBootKeys(body: Buffer | null, allowHttp: boolean): BootKeys | null {
   try {
     const v = JSON.parse(body?.toString("utf8") ?? "") as Record<string, unknown>;
-    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai");
-    if (!keysOk || typeof v.anthropic !== "string" || !KEY.test(v.anthropic)) return null;
+    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai" || k === "upstreams");
+    if (!keysOk || (v.anthropic !== undefined && (typeof v.anthropic !== "string" || !KEY.test(v.anthropic)))) return null;
     if (v.openai !== undefined && (typeof v.openai !== "string" || !KEY.test(v.openai))) return null;
-    return { anthropic: v.anthropic, ...(typeof v.openai === "string" ? { openai: v.openai } : {}) };
+    const upstreams = new Map<string, Upstream>();
+    const raw = v.upstreams ?? {};
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw) || Object.keys(raw).length > 20) return null;
+    for (const [id, u] of Object.entries(raw)) {
+      // the schema allows https or http to this computer; tests also point at an http stub on 127.0.0.1
+      const p = ProxyUpstream.safeParse(allowHttp && typeof u === "object" && u !== null && typeof (u as { url?: unknown }).url === "string" ? { ...u, url: String((u as { url: string }).url).replace(/^http:\/\/127\.0\.0\.1(:\d+)/, "http://host.docker.internal$1") } : u);
+      if (!ConnectionId.safeParse(id).success || !p.success || (p.data.auth !== "none" && !KEY.test(p.data.key))) return null;
+      upstreams.set(id, { ...p.data, url: new URL((u as { url: string }).url) });
+    }
+    if (typeof v.anthropic !== "string" && typeof v.openai !== "string" && upstreams.size === 0) return null;
+    return { anthropic: typeof v.anthropic === "string" ? v.anthropic : "", openai: typeof v.openai === "string" ? v.openai : "", upstreams };
   } catch {
     return null;
   }
 }
+/** The upstream path: the connection's base path + the API path (https://api.deepseek.com/anthropic + /v1/messages). */
+const joinPath = (base: URL, fullPath: string): URL => new URL(`${base.pathname.replace(/\/+$/, "")}${fullPath}`, base);
+/** A connection that lists `glm-5.2[1m]` also allows `glm-5.2` (Claude Code sends the bare name with the 1M beta). */
+const allowedOn = (u: Upstream, model: string): string | null => (u.models.includes(model) ? model : u.models.includes(`${model}[1m]`) ? `${model}[1m]` : null);
 
 export function createProxyServer(o: ProxyServerOptions): { inference: http.Server; admin: http.Server; state: ProxyState } {
   const state = new ProxyState(o.usageLogPath, (m) => process.stdout.write(`${m}\n`));
@@ -109,6 +129,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
   const admin = adminBearer(o.secret);
   // the real keys: from the options (env path) or, with a boot gate, from POST /admin/boot (memory only)
   const keys = { anthropic: o.apiKey, openai: o.openai?.apiKey ?? "" };
+  let upstreams = new Map<string, Upstream>();
   const boot = o.boot ? new BootGate(o.boot) : null;
   let locked = boot !== null;
   const providers = (): string[] => (["anthropic", "openai"] as const).filter((p) => keys[p] !== "");
@@ -145,7 +166,12 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       const runId = v.claims.r;
       // E3в: a token is for ONE channel; an anthropic token on /v1/responses (or the reverse) → 401
       if ((v.claims.p ?? "anthropic") !== provider) return reject(401, "authentication_error", "token_channel_mismatch", runId);
-      if (provider === "openai" && (!o.openai || !openaiUpstream || keys.openai === "")) return reject(403, "permission_error", "provider_not_configured", runId);
+      // D-392: a token for a saved connection goes to that upstream only; its wire must be this path's
+      const conn = v.claims.u !== undefined ? (upstreams.get(v.claims.u) ?? null) : null;
+      if (v.claims.u !== undefined && conn === null) return reject(403, "permission_error", "provider_not_configured", runId);
+      if (conn !== null && conn.wire !== provider) return reject(401, "authentication_error", "token_channel_mismatch", runId);
+      if (conn === null && provider === "openai" && (!o.openai || !openaiUpstream || keys.openai === "")) return reject(403, "permission_error", "provider_not_configured", runId);
+      if (conn === null && provider === "anthropic" && keys.anthropic === "") return reject(403, "permission_error", "provider_not_configured", runId);
       if (state.revoked.has(runId)) return reject(401, "authentication_error", "token_revoked", runId);
       const run = state.get(runId);
       run.budget = v.claims.b;
@@ -161,15 +187,24 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       } catch {
         model = null;
       }
-      const rate = provider === "openai" && model !== null ? o.openai?.prices[model] : undefined;
-      if (model === null || (provider === "anthropic" ? !ALLOWED_MODELS.includes(model) : rate === undefined)) return reject(403, "permission_error", "model_not_allowed", runId);
+      const listed = conn !== null && model !== null ? allowedOn(conn, model) : null;
+      if (conn !== null && listed === null) return reject(403, "permission_error", "model_not_allowed", runId);
+      const flat: FlatRate | null = conn !== null && listed !== null ? (conn.prices[listed] ?? conn.prices[model ?? ""] ?? null) : null;
+      const estimated = conn !== null && flat === null;
+      const connRate = conn !== null ? (flat ?? ESTIMATE) : null;
+      const rate = conn === null && provider === "openai" && model !== null ? o.openai?.prices[model] : connRate !== null && provider === "openai" ? { input: connRate.input, cached_input: connRate.cacheRead, output: connRate.output } : undefined;
+      if (conn === null && (model === null || (provider === "anthropic" ? !ALLOWED_MODELS.includes(model) : rate === undefined))) return reject(403, "permission_error", "model_not_allowed", runId);
+      const extra = conn !== null ? { upstream: v.claims.u as string, ...(estimated ? { estimated: true as const } : {}) } : {};
 
       const headers: http.OutgoingHttpHeaders = {};
       for (const [k, val] of Object.entries(req.headers)) if (!DROP_REQ.has(k.toLowerCase()) && val !== undefined) headers[k] = val;
-      if (provider === "openai") headers.authorization = `Bearer ${keys.openai}`;
+      if (conn !== null) {
+        if (conn.auth === "bearer") headers.authorization = `Bearer ${conn.key}`;
+        else if (conn.auth === "x-api-key") headers["x-api-key"] = conn.key;
+      } else if (provider === "openai") headers.authorization = `Bearer ${keys.openai}`;
       else headers["x-api-key"] = keys.anthropic;
       headers["content-length"] = body.length;
-      const target = new URL(fullPath, provider === "openai" ? (openaiUpstream as URL) : upstream);
+      const target = conn !== null ? joinPath(conn.url, fullPath) : new URL(fullPath, provider === "openai" ? (openaiUpstream as URL) : upstream);
       const mod = target.protocol === "https:" ? https : http;
       const isCount = p === "/v1/messages/count_tokens";
       const up = mod.request(target, { method: "POST", headers }, (ur) => {
@@ -208,7 +243,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
               }
             }
             const usdO = status >= 400 || !ru || !rate ? 0 : costUsdOpenAi(rate, ru);
-            record({ method, path: p, run_id: runId, status, model, input_tokens: ru?.input_tokens ?? 0, output_tokens: ru?.output_tokens ?? 0, cache_read: ru?.cached_tokens ?? 0, cache_write: 0, usd: usdO, token_prefix8: tokenPrefix8(token), provider, ...limit });
+            record({ method, path: p, run_id: runId, status, model, input_tokens: ru?.input_tokens ?? 0, output_tokens: ru?.output_tokens ?? 0, cache_read: ru?.cached_tokens ?? 0, cache_write: 0, usd: usdO, token_prefix8: tokenPrefix8(token), provider, ...extra, ...limit });
             return;
           }
           let usage: Usage = { input_tokens: 0, output_tokens: 0 };
@@ -223,7 +258,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
               usage = { input_tokens: 0, output_tokens: 0 };
             }
           }
-          const usd = isCount || (ur.statusCode ?? 500) >= 400 ? 0 : (costUsd(model, usage) ?? 0);
+          const usd = isCount || (ur.statusCode ?? 500) >= 400 ? 0 : connRate !== null ? costUsdFlat(connRate, usage) : (costUsd(model as string, usage) ?? 0);
           const cacheWrite =
             usage.cache_creation !== undefined
               ? (usage.cache_creation.ephemeral_5m_input_tokens ?? 0) + (usage.cache_creation.ephemeral_1h_input_tokens ?? 0)
@@ -232,7 +267,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
             method, path: p, run_id: runId, status: ur.statusCode ?? 0, model,
             input_tokens: isCount ? 0 : usage.input_tokens, output_tokens: isCount ? 0 : usage.output_tokens,
             cache_read: isCount ? 0 : (usage.cache_read_input_tokens ?? 0), cache_write: isCount ? 0 : cacheWrite,
-            usd, token_prefix8: tokenPrefix8(token), ...limit,
+            usd, token_prefix8: tokenPrefix8(token), ...extra, ...limit,
           });
         });
       });
@@ -249,7 +284,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       const url = new URL(req.url ?? "/", "http://admin");
       if (req.method === "GET" && url.pathname === "/healthz") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, version: PROXY_VERSION, locked, providers: providers() }));
+        res.end(JSON.stringify({ ok: true, version: PROXY_VERSION, locked, providers: providers(), upstreams: [...upstreams.keys()].sort() }));
         return;
       }
       if (req.method === "POST" && url.pathname === "/admin/boot") {
@@ -260,14 +295,15 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
           res.writeHead(401, { "content-type": "application/json" }).end(JSON.stringify({ error: "unauthorized" }));
           return;
         }
-        const parsed = parseBootKeys(body);
+        const parsed = parseBootKeys(body, o.allowHttpUpstream === true);
         if (parsed === null) {
           res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: "bad_keys" }));
           return;
         }
         boot.spend();
         keys.anthropic = parsed.anthropic;
-        keys.openai = parsed.openai ?? "";
+        keys.openai = parsed.openai;
+        upstreams = parsed.upstreams;
         locked = false;
         res.writeHead(204).end();
         return;
