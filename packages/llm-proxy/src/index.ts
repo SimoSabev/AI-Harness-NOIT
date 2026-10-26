@@ -10,3 +10,5 @@ export { BOOT_TTL_MS, BootGate, bootTokenHash, mintBootToken } from "./boot.js";
 export type { BootOptions } from "./boot.js";
 export { FileKeyStore, kekId, loadKek, openKey, sealKey } from "./envelope.js";
 export type { KeyProvider, SealedKey } from "./envelope.js";
+export { ConnectionStore } from "./connections-store.js";
+export type { SavedConnection } from "./connections-store.js";

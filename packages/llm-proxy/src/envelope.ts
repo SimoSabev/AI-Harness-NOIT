@@ -4,7 +4,7 @@ import path from "node:path";
 
 // E7в / D-313: API keys at rest are sealed with AES-256-GCM under a key-encryption key (KEK). The provider name is the
 // associated data, so a sealed Anthropic key cannot be replayed as an OpenAI key. Nothing here logs a key.
-export type KeyProvider = "anthropic" | "openai" | `mcp:${string}` | `research:${string}`;
+export type KeyProvider = "anthropic" | "openai" | `mcp:${string}` | `research:${string}` | `conn:${string}`;
 export interface SealedKey {
   ciphertext: string; // base64: ciphertext + 16-byte tag
   nonce: string; // base64, 12 bytes, fresh per seal
