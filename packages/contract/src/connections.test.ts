@@ -29,12 +29,15 @@ describe("connections: catalog (D-392)", () => {
   });
 });
 
+// D-095: key-looking values are built at runtime, never literals
+const KEY = ["sk", "0123456789abcdefghij"].join("-");
+
 describe("connections: ids, models, addresses (D-392)", () => {
   it("ids are the profile alphabet; model ids allow the forms providers use (qwen3-coder:30b, org/model, glm-5.2[1m])", () => {
     expect(ConnectionId.safeParse("deepseek").success).toBe(true);
     for (const bad of ["", "Deep", "-x", "a b", "a".repeat(33)]) expect(ConnectionId.safeParse(bad).success).toBe(false);
     for (const ok of ["claude-sonnet-5-5", "qwen3-coder:30b", "moonshotai/kimi-k3", "glm-5.2[1m]", "k3.1-pro"]) expect(ModelId.safeParse(ok).success).toBe(true);
-    for (const bad of ["", " x", "a b", "x;rm", "mdt_abc", "sk-ant-api03-xyz", "a".repeat(129)]) expect(ModelId.safeParse(bad).success).toBe(false);
+    for (const bad of ["", " x", "a b", "x;rm", "mdt_abc", ["sk", "ant", "api03", "xyz"].join("-"), "a".repeat(129)]) expect(ModelId.safeParse(bad).success).toBe(false);
   });
   it("upstreamUrl: https for a remote host; http only for this computer, which the proxy container reaches as host.docker.internal", () => {
     expect(upstreamUrl("https://api.deepseek.com/anthropic/")).toEqual({ ok: true, url: "https://api.deepseek.com/anthropic", local: false });
@@ -51,8 +54,8 @@ describe("connections: ids, models, addresses (D-392)", () => {
     expect(Connection.safeParse({ ...c, models: [] }).success).toBe(false);
   });
   it("AddConnectionBody: a key only for a provider that takes one; it never comes back in Connection", () => {
-    expect(AddConnectionBody.safeParse({ provider: "deepseek", key: "sk-0123456789abcdefghij", models: ["deepseek-v4-pro"] }).success).toBe(true);
-    expect(AddConnectionBody.safeParse({ provider: "ollama", key: "sk-0123456789abcdefghij", models: ["qwen3-coder"] }).success).toBe(false);
+    expect(AddConnectionBody.safeParse({ provider: "deepseek", key: KEY, models: ["deepseek-v4-pro"] }).success).toBe(true);
+    expect(AddConnectionBody.safeParse({ provider: "ollama", key: KEY, models: ["qwen3-coder"] }).success).toBe(false);
     expect(AddConnectionBody.safeParse({ provider: "deepseek", models: ["deepseek-v4-pro"] }).success).toBe(false);
     expect(AddConnectionBody.safeParse({ provider: "custom", key: "k".repeat(24), models: ["m1"] }).success).toBe(false); // custom needs an address
     expect(Object.keys(Connection.shape)).not.toContain("key");

@@ -11,13 +11,14 @@ let db: Awaited<ReturnType<typeof webDb>>;
 let who: string | null = U.owner;
 const calls: unknown[] = [];
 const KEY = ["sk", "ds", "k".repeat(40)].join("-");
+const REJECTED = ["sk", "rejected", "0123456789abc"].join("-"); // D-095: key-looking values are built at runtime
 const conn = { id: "deepseek", provider: "deepseek" as const, label: "DeepSeek", baseUrl: "https://api.deepseek.com/anthropic", models: ["deepseek-v4-pro"], defaultModel: "deepseek-v4-pro", hasKey: true };
 const fake = {
   status: async () => ({ proxy: "running" as const, providers: [] }), set: async () => null, clear: async () => ({ proxy: "stopped" as const, providers: [] }), accounts: async () => [],
   login: async (op: unknown) => (calls.push(op), { ok: true as const, state: { state: "starting" as const, name: "rabota" } }),
   logout: async () => true, jobs: async () => [], runJob: async () => null, addProject: async () => null,
   connections: async () => ({ connections: [conn], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }),
-  addConnection: async (b: AddConnectionBody) => (calls.push({ add: b.provider, keyed: b.key !== undefined }), b.key === "sk-rejected-0123456789abc" ? { ok: false as const, error: "bad_key" as const } : { ok: true as const, connection: conn }),
+  addConnection: async (b: AddConnectionBody) => (calls.push({ add: b.provider, keyed: b.key !== undefined }), b.key === REJECTED ? { ok: false as const, error: "bad_key" as const } : { ok: true as const, connection: conn }),
   setModels: async (id: string) => (calls.push({ models: id }), id === "deepseek"),
   removeConnection: async (id: string) => (calls.push({ remove: id }), true),
   detect: async () => ({ local: [{ provider: "ollama" as const, models: ["qwen3-coder"] }], envKeys: [] }),
@@ -40,7 +41,7 @@ describe("API /api/connections (D-393)", () => {
     const r = await postConnection(req("POST", { provider: "deepseek", key: KEY, models: ["deepseek-v4-pro"] }), deps(fake));
     const text = await r.text();
     expect([r.status, text.includes(KEY)]).toEqual([200, false]);
-    const bad = await postConnection(req("POST", { provider: "deepseek", key: "sk-rejected-0123456789abc", models: ["deepseek-v4-pro"] }), deps(fake));
+    const bad = await postConnection(req("POST", { provider: "deepseek", key: REJECTED, models: ["deepseek-v4-pro"] }), deps(fake));
     expect([bad.status, await bad.json()]).toEqual([400, { error: "bad_key" }]);
     expect((await postConnection(req("POST", { provider: "ollama", key: KEY, models: ["m"] }), deps(fake))).status).toBe(400);
     expect((await patchConnection(req("PATCH", { models: ["deepseek-flash"], defaultModel: "deepseek-flash" }), deps(fake), "deepseek")).status).toBe(200);
