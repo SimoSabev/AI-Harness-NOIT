@@ -50,6 +50,9 @@
     },
     {
       "path": "../onboard"
+    },
+    {
+      "path": "../../packages/research"
     }
   ]
 }

@@ -32,3 +32,4 @@ export type { Lang, Words } from "./report/text.js";
 export { anthropicWebSearch, arxiv, crossref, exa, fetchTransport, github, searxng, stackexchange, webSearchToolType, wikipedia } from "./search/providers.js";
 export type { SearchProvider, SearchQuery, Transport } from "./search/providers.js";
 export { anthropicViaProxy } from "./model.js";
+export { usd as usdText } from "./report/text.js";

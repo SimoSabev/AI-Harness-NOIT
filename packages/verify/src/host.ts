@@ -11,6 +11,8 @@ export interface HostConfig {
   /** D-151: build the sandbox image without apt (curl/dig) where Debian mirrors are unreachable. */
   sandboxApt: boolean;
   proxyAdminPort: number;
+  /** D-399: the proxy's inference port on loopback (the research engine of this computer); default admin − 1 */
+  proxyInferencePort: number;
 }
 
 export function hostConfig(env: Record<string, string | undefined>): HostConfig {
@@ -18,7 +20,9 @@ export function hostConfig(env: Record<string, string | undefined>): HostConfig 
   if (ca !== undefined && ca !== "" && !existsSync(ca)) throw new MandatError("E_USAGE", `MANDAT_EXTRA_CA_CERTS not found: ${ca}`);
   const port = Number(env.MANDAT_PROXY_ADMIN_PORT ?? "8788");
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new MandatError("E_USAGE", "invalid MANDAT_PROXY_ADMIN_PORT");
-  return { extraCa: ca === "" ? undefined : ca, sandboxApt: env.MANDAT_SANDBOX_APT !== "0", proxyAdminPort: port };
+  const inf = Number(env.MANDAT_PROXY_INFERENCE_PORT ?? String(port - 1));
+  if (!Number.isInteger(inf) || inf < 1 || inf > 65535 || inf === port) throw new MandatError("E_USAGE", "invalid MANDAT_PROXY_INFERENCE_PORT");
+  return { extraCa: ca === "" ? undefined : ca, sandboxApt: env.MANDAT_SANDBOX_APT !== "0", proxyAdminPort: port, proxyInferencePort: inf };
 }
 
 export async function infraUserFor(r: DockerRunner): Promise<{ mode: DockerMode; user: string }> {

@@ -70,7 +70,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   publicEnv.MANDAT_PROXY_PROVIDERS = openai ? "anthropic,openai" : "anthropic";
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
-    name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port,
+    name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port, publishInferencePort: o.host.proxyInferencePort,
     envNames: ["MANDAT_PROXY_BOOT_TOKEN"], publicEnv, ...(o.host.extraCa !== undefined ? { caFile: o.host.extraCa } : {}),
   });
   // D-345: the container gets only a one-time boot token (by name, D-043); the keys go once over the loopback admin port.

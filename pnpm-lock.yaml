@@ -479,6 +479,9 @@ importers:
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../redaction
+      '@mandat/research':
+        specifier: workspace:*
+        version: link:../research
       '@mandat/sandbox':
         specifier: workspace:*
         version: link:../sandbox

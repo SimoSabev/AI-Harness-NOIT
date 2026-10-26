@@ -389,4 +389,27 @@ describe("profile helper containers (D-295)", () => {
     expect(i.slice(i.indexOf("img"))).toEqual(["img", "-c", `chown 1000:1000 ${PROFILE_DIR}`]);
     expect(() => buildProfileArgs("status", { image: "img", volume: "mandat-run-x" })).toThrow(MandatError);
   });
+  it("print (D-399): one research model call — claude -p with no tools, stdin open, the profile's route; anything else is refused", () => {
+    const argv = ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", "m", "--system-prompt", "s"];
+    const p = buildProfileArgs("print", { image: "img", volume: vol, argv });
+    expect(p.slice(0, 3)).toEqual(["run", "--rm", "-i"]);
+    expect(p).toEqual(expect.arrayContaining(["--network", "mandat-upstream", "--cap-drop=ALL", "-v", `${vol}:${PROFILE_DIR}`]));
+    expect(p.slice(p.indexOf("img"))).toEqual(["img", ...argv.slice(1)]);
+    for (const bad of [
+      ["claude", "-p", "--tools", "Bash", "--strict-mcp-config", "--no-session-persistence"],
+      [...argv, "--dangerously-skip-permissions"],
+      [...argv, "--mcp-config", "x.json"],
+      ["sh", "-c", "id"],
+    ]) expect(() => buildProfileArgs("print", { image: "img", volume: vol, argv: bad })).toThrow(MandatError);
+  });
+});
+
+describe("the proxy's inference port for research (D-399)", () => {
+  const base = { name: "mandat-llm-proxy" as const, image: "img", user: "1000:1000", mandatHome: MH, publishAdminPort: 8788, envNames: [], publicEnv: {} };
+  it("only on loopback, only for the real proxy, never the admin port twice", () => {
+    expect(buildProxyRunArgs({ ...base, publishInferencePort: 8787 }).join(" ")).toContain("-p 127.0.0.1:8787:8787");
+    expect(buildProxyRunArgs(base).join(" ")).not.toContain(":8787");
+    expect(() => buildProxyRunArgs({ ...base, publishInferencePort: 8788 })).toThrow(MandatError);
+    expect(() => buildProxyRunArgs({ ...base, name: "mandat-llm-proxy-test-x", publishInferencePort: 9000 })).toThrow(MandatError);
+  });
 });

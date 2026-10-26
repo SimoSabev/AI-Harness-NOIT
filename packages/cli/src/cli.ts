@@ -16,6 +16,7 @@ import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
 import { demoExportRepo, demoExternalPr, demoSeed, demoSpill } from "./commands/demo.js";
 import { workerCommand } from "./commands/worker.js";
+import { researchAsk, researchDemo } from "./commands/research.js";
 import { tuiCommand } from "./commands/tui.js";
 import { localCommand } from "./commands/local.js";
 import { accountsCommand, loginCommand, logoutCommand } from "./commands/accounts.js";
@@ -250,6 +251,37 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .option("--once", "process at most one task and exit")
     .action(async (o: { once?: boolean }) => {
       code = await workerCommand(io, { home: home(), once: Boolean(o.once) });
+    });
+  // E9г (D-398): research — the live trace in the terminal and a report to download
+  const research = program.command("research").description("research with checked sources: a plan, our own search, verbatim quotes, a report");
+  const fmt = (f: string): "html" | "md" | "json" => {
+    if (f !== "html" && f !== "md" && f !== "json") throw new MandatError("E_USAGE", "--format must be html, md or json");
+    return f;
+  };
+  research
+    .command("ask <question>")
+    .description("queue a question in the local database, follow every step, write the report")
+    .option("--depth <depth>", "quick | standard | deep", "standard")
+    .option("--goal <goal>", "economy | balanced | quality", "balanced")
+    .option("--budget <usd>", "the most this question may cost")
+    .option("--org <org>", "the org uuid (default: the local owner org)")
+    .option("--out <file>", "write the report here (default: stdout)")
+    .option("--format <format>", "html | md | json", "html")
+    .action(async (question: string, o: { depth: string; goal: string; budget?: string; org?: string; out?: string; format: string }) => {
+      const db = depsIn?.db ?? openDb(dbUrl(io.env));
+      const org = o.org ?? (await db.query<{ id: string }>("select id::text as id from public.orgs order by created_at limit 1")).rows[0]?.id;
+      if (!org) throw new MandatError("E_USAGE", "no org in the database: run pnpm local first");
+      const request = { question, depth: o.depth, goal: o.goal, ...(o.budget ? { budget_usd: Number(o.budget) } : {}) } as Parameters<typeof researchAsk>[1]["request"];
+      code = await researchAsk(io, { db, org, request, format: fmt(o.format), ...(o.out ? { out: o.out } : {}) });
+    });
+  research
+    .command("demo")
+    .description("the recorded demo world: no key, no network — see the trace and the report")
+    .option("--question <q>", "the question shown (the recorded answers stay the same)")
+    .option("--out <file>", "write the report here (default: stdout)")
+    .option("--format <format>", "html | md | json", "html")
+    .action(async (o: { question?: string; out?: string; format: string }) => {
+      code = await researchDemo(io, { format: fmt(o.format), ...(o.out ? { out: o.out } : {}), ...(o.question ? { question: o.question } : {}) });
     });
   // D-295: subscription accounts (one profile volume per account)
   program

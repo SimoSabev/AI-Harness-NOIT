@@ -214,13 +214,21 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
  * login is interactive (the user's own terminal) and runs the unmodified `claude auth login` — the provider's flow;
  * status reads the volume read-only without network; init is the one root step (chown of the fresh volume).
  */
-export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status" | "logout", o: { image: string; volume: string }): string[] {
+export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status" | "logout" | "print", o: { image: string; volume: string; argv?: string[] }): string[] {
   if (!o.volume.startsWith(PROFILE_PREFIX) || !/^[a-z0-9-]+$/.test(o.volume)) forbid("not a profile volume", { volume: o.volume });
   if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
   const base = ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m", "--pids-limit=256", "--memory=1g", "--label", "mandat.profile=1"];
   const env = ["-e", "HOME=/tmp", "-e", `CLAUDE_CONFIG_DIR=${PROFILE_DIR}`, "-e", "DISABLE_AUTOUPDATER=1"];
   if (kind === "init") {
     return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${PROFILE_DIR}`];
+  }
+  // E9г (D-399): one model call of the research engine: `claude -p` with no tools, no MCP and no session on disk; the
+  // prompt on stdin; the network is the profile's own route to the provider (like login)
+  if (kind === "print") {
+    const a = o.argv ?? [];
+    const ok = a[0] === "claude" && a[1] === "-p" && a.includes("--tools") && a[a.indexOf("--tools") + 1] === "" && a.includes("--strict-mcp-config") && a.includes("--no-session-persistence");
+    if (!ok || a.some((x) => /^--(dangerously|mcp-config|add-dir|allowedTools|permission-mode|settings|plugin-dir)/.test(x))) forbid("a print call is claude -p with no tools (D-399)");
+    return ["run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, ...a.slice(1)];
   }
   if (kind === "status") return ["run", "--rm", "--network", "none", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}:ro`, "--entrypoint", "claude", o.image, "auth", "status", "--json"];
   if (kind === "logout") return ["run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${PROFILE_DIR}`, "--entrypoint", "claude", o.image, "auth", "logout"];
@@ -234,6 +242,8 @@ export interface ProxyRunOptions {
   user: string;
   mandatHome: string;
   publishAdminPort: number | null;
+  /** E9г (D-399): the inference port on loopback for the research engine on this computer (mdt_ tokens only) */
+  publishInferencePort?: number | null;
   envNames: string[];
   publicEnv: Record<string, string>;
   command?: string[];
@@ -241,9 +251,10 @@ export interface ProxyRunOptions {
   caFile?: string;
 }
 
-/** 8.1 / D-083: the proxy, the test proxy and the stub. Only `-p 127.0.0.1:<port>:8788` may be published. */
+/** 8.1 / D-083: the proxy, the test proxy and the stub. Only `-p 127.0.0.1:<port>:8788` may be published, and for the
+ * proxy itself the inference port on loopback too (D-399: the research engine of this computer, mdt_ tokens only). */
 export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
-  const keys = new Set(["name", "image", "user", "mandatHome", "publishAdminPort", "envNames", "publicEnv", "command", "caFile"]);
+  const keys = new Set(["name", "image", "user", "mandatHome", "publishAdminPort", "publishInferencePort", "envNames", "publicEnv", "command", "caFile"]);
   for (const k of Object.keys(o)) if (!keys.has(k)) forbid(`unknown docker option: ${k}`);
   if (!/^(mandat-llm-proxy|mandat-llm-proxy-test-[a-z0-9-]+|mandat-test-stub-[a-z0-9-]+)$/.test(o.name)) forbid("invalid proxy name");
   if (!/^\d+:\d+$/.test(o.user)) forbid("invalid user");
@@ -268,6 +279,10 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
   if (o.publishAdminPort !== null) {
     if (!Number.isInteger(o.publishAdminPort) || o.publishAdminPort < 1 || o.publishAdminPort > 65535) forbid("invalid port");
     args.push("-p", `127.0.0.1:${o.publishAdminPort}:8788`);
+  }
+  if (o.publishInferencePort !== undefined && o.publishInferencePort !== null) {
+    if (o.name !== "mandat-llm-proxy" || !Number.isInteger(o.publishInferencePort) || o.publishInferencePort < 1 || o.publishInferencePort > 65535 || o.publishInferencePort === o.publishAdminPort) forbid("invalid inference port");
+    args.push("-p", `127.0.0.1:${o.publishInferencePort}:8787`);
   }
   args.push(o.image, ...(o.command ?? []));
   for (const a of o.command ?? []) if (/--privileged|docker\.sock/.test(a)) forbid("forbidden token in command");
