@@ -204,3 +204,7 @@ export function agentOf(s: string): "claude" | "codex" | null {
 }
 /** The channel label of a saved connection (packages/channels channelFor resolves it to the proxy upstream of that id). */
 export const connectionLabel = (id: string): string => `conn-${id}`;
+
+/** GET /connections of `mandat local`: the saved connections (no keys) and the task box defaults. */
+export const ConnectionsReply = z.object({ connections: z.array(Connection).max(50), preferences: Preferences }).strict();
+export type ConnectionsReply = z.infer<typeof ConnectionsReply>;

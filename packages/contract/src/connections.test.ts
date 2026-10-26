@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  AddConnectionBody, Connection, ConnectionId, ModelId, PROVIDERS, Preferences, ProxyUpstream, agentOf, connectionLabel, formatAgentRef, parseAgentRef,
+  AddConnectionBody, Connection, ConnectionId, ConnectionsReply, ModelId, PROVIDERS, Preferences, ProxyUpstream, agentOf, connectionLabel, formatAgentRef, parseAgentRef,
   priceOf, providerInfo, upstreamUrl,
 } from "./connections.js";
 
@@ -80,5 +80,28 @@ describe("agent refs (D-392)", () => {
     expect(agentOf("claude+deepseek")).toBe("claude");
     expect(agentOf("codex@rabota")).toBe("codex");
     expect(connectionLabel("deepseek")).toBe("conn-deepseek");
+  });
+});
+
+describe("ChatGPT sign-in and the connections reply (D-393)", () => {
+  it("the device page must be OpenAI's own (https, no user, no port); the code is the short one-time code", async () => {
+    const { isDeviceUrl, findDeviceLogin } = await import("./local-control.js");
+    expect(isDeviceUrl("https://auth.openai.com/codex/device")).toBe(true);
+    for (const bad of ["http://auth.openai.com/codex/device", "https://auth.openai.com.evil.example/codex/device", "https://u@auth.openai.com/codex/device", "https://evil.example/device"]) expect(isDeviceUrl(bad)).toBe(false);
+    const out = "Follow these steps to sign in with ChatGPT using device code authorization:\n\n1. Open this link in your browser and sign in to your account\n   \x1b[94mhttps://auth.openai.com/codex/device\x1b[0m\n\n2. Enter this one-time code (expires in 15 minutes)\n   \x1b[94mABCD-12EFG\x1b[0m\n";
+    expect(findDeviceLogin(out)).toEqual({ url: "https://auth.openai.com/codex/device", code: "ABCD-12EFG" });
+    expect(findDeviceLogin("1. Open this link https://auth.openai.com/codex/device\n")).toBeNull();
+  });
+  it("LoginState: waiting_device carries the address and the code; a start names the CLI", async () => {
+    const { LoginState, LoginStart } = await import("./local-control.js");
+    expect(LoginState.safeParse({ state: "waiting_device", name: "rabota", url: "https://auth.openai.com/codex/device", code: "ABCD-12EFG" }).success).toBe(true);
+    expect(LoginState.safeParse({ state: "waiting_device", name: "rabota", url: "https://evil.example/x", code: "ABCD-12EFG" }).success).toBe(false);
+    expect(LoginStart.parse({ name: "rabota" })).toEqual({ name: "rabota", cli: "claude" });
+    expect(LoginStart.safeParse({ name: "rabota", cli: "codex" }).success).toBe(true);
+    expect(LoginStart.safeParse({ name: "rabota", cli: "gemini" }).success).toBe(false);
+  });
+  it("ConnectionsReply: connections + preferences, nothing else", () => {
+    expect(ConnectionsReply.safeParse({ connections: [], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }).success).toBe(true);
+    expect(ConnectionsReply.safeParse({ connections: [], preferences: {}, keys: {} }).success).toBe(false);
   });
 });
