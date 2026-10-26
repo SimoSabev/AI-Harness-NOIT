@@ -1,4 +1,4 @@
-import { PROFILE_DIR, buildRunArgs, envForPhase } from "@mandat/sandbox";
+import { CODEX_PROFILE_DIR, PROFILE_DIR, buildRunArgs, envForPhase } from "@mandat/sandbox";
 import type { DockerRunResult, DockerRunner, MountSpec, RunRole, Tree } from "@mandat/sandbox";
 import { gatePaths } from "./gate.js";
 
@@ -19,7 +19,7 @@ export interface SandboxRun {
   /** run network name or "none"; with a run network the tree's resolv.conf/hosts are mounted (D-011, D-081). */
   network: string;
   tree?: Tree;
-  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY"; extraPublic?: Record<string, string> };
+  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY"; extraPublic?: Record<string, string>; /** D-392: a saved connection's model (every Claude tier) */ model?: string };
   /** D-295: the subscription profile volume of the agent (buildRunArgs refuses it for any other role) */
   profile?: string;
   user?: "1000:1000" | "0:0";
@@ -43,9 +43,11 @@ export function runSandbox(ctx: SandboxCtx, o: SandboxRun): Promise<DockerRunRes
     mounts.push({ kind: "bind", source: p.resolv, target: "/etc/resolv.conf", readonly: true });
     mounts.push({ kind: "bind", source: p.hosts, target: "/etc/hosts", readonly: true });
   }
-  if (o.profile !== undefined) mounts.push({ kind: "volume", source: o.profile, target: PROFILE_DIR, readonly: false });
-  const tokenName = o.profile !== undefined && o.env.phase === "agent" ? ("profile" as const) : o.env.tokenName;
-  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(tokenName ? { tokenName } : {}) });
+  // D-392: a Codex (ChatGPT) profile volume goes to CODEX_PROFILE_DIR
+  const codexProfile = o.profile?.startsWith("mandat-profile-codex-") === true;
+  if (o.profile !== undefined) mounts.push({ kind: "volume", source: o.profile, target: codexProfile ? CODEX_PROFILE_DIR : PROFILE_DIR, readonly: false });
+  const tokenName = o.profile !== undefined && o.env.phase === "agent" ? (codexProfile ? ("profile-codex" as const) : ("profile" as const)) : o.env.tokenName;
+  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(tokenName ? { tokenName } : {}), ...(o.env.model !== undefined ? { model: o.env.model } : {}) });
   const secrets = o.env.secrets ?? {};
   const args = buildRunArgs(
     {

@@ -53,3 +53,15 @@ describe("codex-parse", () => {
     expect(parseCodexLine("[1]")[0]?.type).toBe("unparsed");
   });
 });
+
+// D-392: Codex with a ChatGPT subscription uses its own provider and login (CODEX_HOME on the profile volume): no mandat
+// provider, no token; the only env is the canary.
+describe("codex with a ChatGPT subscription (D-392)", () => {
+  it("no model_provider overrides, no OPENAI_API_KEY; the rest of the argv is the same", () => {
+    const l = codexAdapter({ model: "gpt-5-codex", cliVersion: "0.160.1" }).launch(ctx, { PROFILE: true }, canary);
+    expect(l.argv.join(" ")).not.toContain("model_provider");
+    expect(l.argv.slice(0, 15)).toEqual(buildCodexArgv({ model: "gpt-5-codex", prompt: "Fix it" }).slice(0, 15));
+    expect(l.argv.at(-1)).toBe("Fix it");
+    expect(l.env).toEqual({ AWS_SECRET_ACCESS_KEY: "c" });
+  });
+});
