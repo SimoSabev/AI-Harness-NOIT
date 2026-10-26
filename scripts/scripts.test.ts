@@ -96,6 +96,19 @@ describe("репо", () => {
     expect(banned.test('import { z } from "@mandat/contract";')).toBe(false);
   });
 
+  it("скриптовете с `VAR=…` вървят и под Windows: pnpm ползва shell emulator (D-392)", () => {
+    const envPrefix = /^[A-Z_][A-Z0-9_]*=\S*\s/;
+    const manifests = ["package.json", ...["packages", "apps"].flatMap((d) => readdirSync(path.join(repo, d)).map((n) => path.join(d, n, "package.json")))];
+    const prefixed = manifests
+      .filter((m) => existsSync(path.join(repo, m)))
+      .flatMap((m) => Object.values((JSON.parse(readFileSync(path.join(repo, m), "utf8")) as { scripts?: Record<string, string> }).scripts ?? {}))
+      .filter((s) => envPrefix.test(s));
+    expect(prefixed).toContain("NEXT_TELEMETRY_DISABLED=1 next build");
+    expect(envPrefix.test("next build")).toBe(false);
+    const emulator = execFileSync("pnpm", ["config", "get", "shell-emulator"], { cwd: repo, encoding: "utf8", shell: process.platform === "win32" }).trim();
+    expect(emulator).toBe("true");
+  });
+
   it("pnpm check не вижда fixtures (D-051)", () => {
     const ls = execFileSync("pnpm", ["-r", "ls", "--depth", "-1", "--json"], { cwd: repo, encoding: "utf8" });
     const dirs = (JSON.parse(ls) as { path: string }[]).map((p) => path.relative(repo, p.path));

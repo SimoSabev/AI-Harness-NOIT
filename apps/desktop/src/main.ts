@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, Menu, Notification, Tray, app, dialog, globalShortcut, ipcMain, nativeImage, safeStorage, shell } from "electron";
 import { LocalPath } from "@mandat/contract";
 import type { DesktopCommand } from "@mandat/contract";
-import { childEnv, parseBanner, startFailed, stepOf } from "./banner.js";
+import { childEnv, parseBanner, startFailed, stepOf, stopCommand } from "./banner.js";
 import type { Banner } from "./banner.js";
 import { commandFor, registerBridge, registerDrop, sendCommand } from "./bridge-main.js";
 import type { DesktopHandlers } from "./bridge-main.js";
@@ -215,10 +215,17 @@ function loginItemOn(): boolean | null {
   return loginSupported ? app.getLoginItemSettings().openAtLogin : null;
 }
 
+// D-392: on Windows the whole tree goes (taskkill /T); kill() alone would leave the web server holding the port.
+function stopChild(): void {
+  const tree = stopCommand(child?.pid, process.platform);
+  if (tree) spawn(tree.cmd, tree.args, { stdio: "ignore" }).on("error", () => child?.kill());
+  else child?.kill("SIGINT");
+}
+
 function runAction(action: MenuAction): void {
   if (action === "open") show();
   else if (action === "quit") {
-    if (child) child.kill("SIGINT");
+    if (child) stopChild();
     else app.quit();
   } else if (action === "toggle_login") {
     // off by default: only this click turns it on (or off again); the OS keeps the setting
@@ -405,7 +412,7 @@ else {
   app.on("window-all-closed", () => undefined); // the tray keeps it alive
   app.on("before-quit", () => {
     terms?.closeAll();
-    child?.kill("SIGINT");
+    if (child) stopChild();
   });
   app.on("will-quit", () => globalShortcut.unregisterAll());
   void app.whenReady().then(async () => {

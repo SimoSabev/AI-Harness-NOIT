@@ -31,6 +31,11 @@ export function childEnv(env: Record<string, string | undefined>): Record<string
   return out;
 }
 
+/** D-392: on Windows kill() ends only the harness process itself; the web server would keep the port, so the whole tree goes. */
+export function stopCommand(pid: number | undefined, platform: NodeJS.Platform): { cmd: string; args: string[] } | null {
+  return platform === "win32" && pid !== undefined ? { cmd: "taskkill", args: ["/pid", String(pid), "/T", "/F"] } : null;
+}
+
 export function allowedUrl(url: string, base: string): boolean {
   try {
     return new URL(url).origin === new URL(base).origin;

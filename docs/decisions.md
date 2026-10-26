@@ -2740,9 +2740,33 @@ BrowserWindow не се ползва за Dock-а в macOS. Затова при 
 Тестове: harness-launch.test.ts (dockIcon само за macOS от кода).
 Статус: решено.
 
+## D-392 Скриптовете вървят и под Windows: `shellEmulator: true` в pnpm-workspace.yaml (22.10.2026)
+Решение: pnpm пуска всички package.json скриптове през собствената си POSIX обвивка, не през cmd. Така
+`NEXT_TELEMETRY_DISABLED=1 next build|dev|start` в apps/web работи и в PowerShell/cmd, без cross-env и без нова зависимост.
+Тест: scripts/scripts.test.ts („скриптовете с `VAR=…` вървят и под Windows“) намира скриптовете с `VAR=…` отпред и проверява,
+че `pnpm config get shell-emulator` дава `true`.
+Проверено: тестът е червен без настройката и зелен с нея; `pnpm build` в PowerShell на Windows 11 минава (преди: „'NEXT_TELEMETRY_DISABLED'
+is not recognized“ в @mandat/web). Емулаторът важи и под Linux/WSL; там CI (`pnpm check`) е проверката.
+Не е проверено: под Windows останалата част от `pnpm local` (Docker, пясъчникът) и `pnpm gitleaks` (`"$PWD"`); README
+все още препоръчва WSL.
+Допълнение (22.10.2026): `pnpm local` стигна до [4/4] под Windows и падна на `spawn pnpm ENOENT` (там pnpm е pnpm.cmd).
+`mandat local` вече пуска уеб сървъра с `node <next>/dist/bin/next start -p 3000` в apps/web (webStartSpawn), без pnpm и
+без shell: работи на всяка ОС и Ctrl+C спира самия сървър (през shell kill() би спрял cmd.exe, а сървърът би държал порта).
+Тест: local.test.ts. Десктопът (`pnpm desktop`) падаше по същия начин: сега пуска `pnpm local` с pnpm-а, който го е
+стартирал (npm_execpath; под Windows pnpm.exe, проверено в PowerShell), а „Спри и излез“ под Windows спира цялото дърво с
+`taskkill /pid … /T /F` (сигнал там спира само pnpm и сървърът остава на порта). Тест: apps/desktop/src/banner.test.ts.
+Не е проверено в самия прозорец (Electron) под Windows. Остава под Windows (без промяна): `mandat doctor`
+вика `pnpm -v` без shell; 5 CLI теста падат под Windows и преди тази промяна (verify-log, pnpm --silent, proxy ×2, WSL DrvFs).
+Защо: Симо, 22.10.2026 — `pnpm local` падна на Windows; „направи поправката за Windows постоянна в хранилището“.
+Алтернативи: cross-env в apps/web (нова зависимост, правило 8); WSL за всички (у Симо няма Linux дистрибуция).
+Източник: https://pnpm.io/settings#shellemulator (22.10.2026), проверено с pnpm 12.14.0. Статус: решено.
+Номер: първоначално D-309 в клона new-session; при сливането с exciting-heisenberg (25.10.2026) номерът беше зает, затова D-367; при второто сливане (25.10.2026, PR #1) и D-367 беше заето, затова D-392.
+Допълнение (25.10.2026, сливане с PR #1): новият десктоп (D-376) пуска CLI-я направо с Node-а на Electron и уебът тръгва с node + next (D-376), затова localSpawn и webStartSpawn отпаднаха. Остана само спирането на цялото дърво под Windows (stopCommand в apps/desktop/src/banner.ts).
+
 ## D-393 Връзки: първо пускане (/welcome), модели, абонаменти, ключове и локални модели (26.10.2026)
-Номер: шестте първи комита на клона са с етикет „D-392“; паралелната сесия за паметта зае D-392 в същия ден, затова
-решението е D-393 (комитите не са пренаписани: клонът phase/e9d-research-engine вече е построен върху тях).
+Номер: шестте първи комита на клона са с етикет „D-392“, но решението е D-393. D-392 в основния клон е решението за
+скриптовете под Windows (по-рано D-309); сесията за паметта (клон phase/e9m-memory, още не е слят) също ползва D-392 и
+трябва да се преномерира при сливане. Комитите не са пренаписани: phase/e9d-research-engine е построен върху тях.
 Решение:
 (1) Едно понятие „връзка“ (packages/contract/src/connections.ts): начин да стигнеш до модел — абонамент (непроменен CLI
 със собствен вход, D-295), API ключ, сървър на този компютър или друг адрес, който говори Anthropic Messages API
