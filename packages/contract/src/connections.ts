@@ -22,6 +22,8 @@ export interface Price { input: number; output: number; cacheRead: number; cache
 export interface SuggestedModel { id: string; tier: "best" | "balanced" | "fast"; recommended?: true; price?: Price }
 export interface ProviderInfo {
   id: ProviderId;
+  /** the product name (never translated) */
+  label: string;
   kind: "subscription" | "api_key" | "local";
   /** the CLI that runs in the sandbox */
   agent: "claude" | "codex";
@@ -49,21 +51,21 @@ const CLAUDE: SuggestedModel[] = [
 ];
 
 export const PROVIDERS: Readonly<Record<ProviderId, ProviderInfo>> = {
-  "claude-sub": { id: "claude-sub", kind: "subscription", agent: "claude", wire: "anthropic", baseUrl: null, auth: "none", keyPage: null, docs: "https://code.claude.com/docs/en/authentication", checked: "2026-10-26", live: true, models: CLAUDE.slice(0, 3).map(({ price: _, ...m }) => m) },
-  "chatgpt-sub": { id: "chatgpt-sub", kind: "subscription", agent: "codex", wire: "openai", baseUrl: null, auth: "none", keyPage: null, docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
-  anthropic: { id: "anthropic", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.anthropic.com", auth: "x-api-key", keyPage: "https://platform.claude.com/settings/keys", docs: "https://platform.claude.com/docs/en/about-claude/models", checked: "2026-10-26", live: true, models: CLAUDE },
-  openai: { id: "openai", kind: "api_key", agent: "codex", wire: "openai", baseUrl: "https://api.openai.com", auth: "bearer", keyPage: "https://platform.openai.com/api-keys", docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
+  "claude-sub": { id: "claude-sub", label: "Claude", kind: "subscription", agent: "claude", wire: "anthropic", baseUrl: null, auth: "none", keyPage: null, docs: "https://code.claude.com/docs/en/authentication", checked: "2026-10-26", live: true, models: CLAUDE.slice(0, 3).map(({ price: _, ...m }) => m) },
+  "chatgpt-sub": { id: "chatgpt-sub", label: "ChatGPT", kind: "subscription", agent: "codex", wire: "openai", baseUrl: null, auth: "none", keyPage: null, docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
+  anthropic: { id: "anthropic", label: "Anthropic API", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.anthropic.com", auth: "x-api-key", keyPage: "https://platform.claude.com/settings/keys", docs: "https://platform.claude.com/docs/en/about-claude/models", checked: "2026-10-26", live: true, models: CLAUDE },
+  openai: { id: "openai", label: "OpenAI API", kind: "api_key", agent: "codex", wire: "openai", baseUrl: "https://api.openai.com", auth: "bearer", keyPage: "https://platform.openai.com/api-keys", docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
   // api-docs.deepseek.com/guides/anthropic_api: x-api-key; names outside the list → 400
-  deepseek: { id: "deepseek", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.deepseek.com/anthropic", auth: "x-api-key", keyPage: "https://platform.deepseek.com/api_keys", docs: "https://api-docs.deepseek.com/guides/anthropic_api", checked: "2026-10-26", live: false, models: [{ id: "deepseek-v4-pro", tier: "best", recommended: true }, { id: "deepseek-flash", tier: "fast" }] },
+  deepseek: { id: "deepseek", label: "DeepSeek", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.deepseek.com/anthropic", auth: "x-api-key", keyPage: "https://platform.deepseek.com/api_keys", docs: "https://api-docs.deepseek.com/guides/anthropic_api", checked: "2026-10-26", live: false, models: [{ id: "deepseek-v4-pro", tier: "best", recommended: true }, { id: "deepseek-flash", tier: "fast" }] },
   // kimi.com/code/docs/en/third-party-tools/claude-code.html: ANTHROPIC_API_KEY (x-api-key), the Kimi Code plan
-  kimi: { id: "kimi", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.kimi.ai/coding", auth: "x-api-key", keyPage: "https://www.kimi.com/code", docs: "https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html", checked: "2026-10-26", live: false, models: [{ id: "k3.1-pro", tier: "best", recommended: true }, { id: "k3.1-pro-highspeed", tier: "fast" }] },
+  kimi: { id: "kimi", label: "Kimi", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.kimi.ai/coding", auth: "x-api-key", keyPage: "https://www.kimi.com/code", docs: "https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html", checked: "2026-10-26", live: false, models: [{ id: "k3.1-pro", tier: "best", recommended: true }, { id: "k3.1-pro-highspeed", tier: "fast" }] },
   // docs.z.ai/scenario-example/develop-tools/claude: ANTHROPIC_AUTH_TOKEN (bearer), the GLM Coding Plan [НП: model names]
-  zai: { id: "zai", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.z.ai/api/anthropic", auth: "bearer", keyPage: "https://z.ai/manage-apikey/apikey-list", docs: "https://docs.z.ai/scenario-example/develop-tools/claude", checked: "2026-10-26", live: false, models: [{ id: "glm-5.2", tier: "best", recommended: true }] },
+  zai: { id: "zai", label: "Z.ai GLM", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.z.ai/api/anthropic", auth: "bearer", keyPage: "https://z.ai/manage-apikey/apikey-list", docs: "https://docs.z.ai/scenario-example/develop-tools/claude", checked: "2026-10-26", live: false, models: [{ id: "glm-5.2", tier: "best", recommended: true }] },
   // docs.ollama.com/api/anthropic-compatibility: /v1/messages since 01.2026; any token, ignored; no count_tokens
-  ollama: { id: "ollama", kind: "local", agent: "claude", wire: "anthropic", baseUrl: "http://127.0.0.1:11434", auth: "none", keyPage: null, docs: "https://docs.ollama.com/api/anthropic-compatibility", checked: "2026-10-26", live: false, models: [{ id: "qwen3-coder", tier: "balanced", recommended: true }] },
+  ollama: { id: "ollama", label: "Ollama", kind: "local", agent: "claude", wire: "anthropic", baseUrl: "http://127.0.0.1:11434", auth: "none", keyPage: null, docs: "https://docs.ollama.com/api/anthropic-compatibility", checked: "2026-10-26", live: false, models: [{ id: "qwen3-coder", tier: "balanced", recommended: true }] },
   // [НП] LM Studio's Anthropic-compatible endpoint: listed models come from GET /v1/models of the running server
-  lmstudio: { id: "lmstudio", kind: "local", agent: "claude", wire: "anthropic", baseUrl: "http://127.0.0.1:1234", auth: "none", keyPage: null, docs: "https://lmstudio.ai/docs/developer", checked: "2026-10-26", live: false, models: [] },
-  custom: { id: "custom", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: null, auth: "x-api-key", keyPage: null, docs: "https://code.claude.com/docs/en/llm-gateway", checked: "2026-10-26", live: false, models: [] },
+  lmstudio: { id: "lmstudio", label: "LM Studio", kind: "local", agent: "claude", wire: "anthropic", baseUrl: "http://127.0.0.1:1234", auth: "none", keyPage: null, docs: "https://lmstudio.ai/docs/developer", checked: "2026-10-26", live: false, models: [] },
+  custom: { id: "custom", label: "Custom", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: null, auth: "x-api-key", keyPage: null, docs: "https://code.claude.com/docs/en/llm-gateway", checked: "2026-10-26", live: false, models: [] },
 };
 
 export const providerInfo = (id: ProviderId): ProviderInfo => PROVIDERS[id];

@@ -48,3 +48,16 @@ describe("proxy start with sealed keys (E7в, AC-3.8)", () => {
     expect(calls.filter((c) => c.args[0] === "rm" && c.args.includes("mandat-llm-proxy")).length).toBeGreaterThan(0);
   });
 });
+
+// D-393: a saved connection alone (DeepSeek, Ollama…) is enough to start the proxy; its upstream goes in the boot payload.
+describe("proxy start with saved connections (D-393)", () => {
+  it("no Anthropic key, one local connection → started; the boot payload carries the upstream, not a provider key", async () => {
+    const { ConnectionStore } = await import("@mandat/llm-proxy");
+    const home = mkdtempSync(path.join(tmpdir(), "pk-"));
+    new ConnectionStore(home, loadKek({ env: {}, mandatHome: home })).put({ id: "ollama", provider: "ollama", label: "Ollama", baseUrl: "http://127.0.0.1:11434", models: ["qwen3-coder"], defaultModel: "qwen3-coder" });
+    const calls: { args: string[]; env: Record<string, string> }[] = [];
+    const boots: Record<string, unknown>[] = [];
+    expect(await proxyStart(io({}), deps(calls, boots as Record<string, string>[]), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
+    expect(boots).toEqual([{ upstreams: { ollama: { wire: "anthropic", url: "http://host.docker.internal:11434", auth: "none", key: "", models: ["qwen3-coder"], prices: { "qwen3-coder": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } } } }]);
+  });
+});

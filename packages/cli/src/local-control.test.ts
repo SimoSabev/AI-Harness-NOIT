@@ -139,3 +139,41 @@ describe("POST /projects (D-388)", () => {
     }
   });
 });
+
+// D-393: the connections of `mandat local` behind the same token; bad ids and bodies are refused before the service.
+describe("mandat local control: connections (D-393)", () => {
+  it("list, add, models, remove, detect, preferences; a ChatGPT sign-in starts with cli codex", async () => {
+    const seen: string[] = [];
+    const starts: string[] = [];
+    const login = new LoginSessions({ prepare: async () => "images_missing", discard: async () => undefined, spawn: () => { throw new Error("no"); }, status: async () => ({ loggedIn: false, email: null, plan: null }), timeoutMs: 1000 });
+    const c = await startControl({
+      start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base(),
+      login: { state: () => login.state(), start: async (n, cli) => (starts.push(`${n}:${cli}`), { state: "starting", name: n }), submit: () => null, cancel: () => login.state() },
+      connections: {
+        list: async () => (seen.push("list"), { connections: [], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }),
+        add: async (b) => (seen.push(`add:${JSON.stringify(b).length > 0}`), { ok: false, error: "bad_key" }),
+        setModels: async (id) => (seen.push(`models:${id}`), true),
+        remove: async (id) => (seen.push(`remove:${id}`), true),
+        detect: async () => (seen.push("detect"), { local: [], envKeys: [] }),
+        setPrefs: () => (seen.push("prefs"), true),
+      },
+    });
+    const call = (method: string, p: string, body?: unknown) => fetch(`${c.url}${p}`, { method, headers: { authorization: `Bearer ${c.token}`, "content-type": "application/json" }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+    try {
+      expect((await call("GET", "/connections")).status).toBe(200);
+      expect(await (await call("POST", "/connections", { provider: "deepseek", key: "k".repeat(30), models: ["deepseek-v4-pro"] })).json()).toEqual({ ok: false, error: "bad_key" });
+      expect((await call("PATCH", "/connections/deepseek", { models: ["m"], defaultModel: "m" })).status).toBe(200);
+      expect((await call("PATCH", "/connections/Bad%20Id", { models: ["m"], defaultModel: "m" })).status).toBe(404);
+      expect(await (await call("DELETE", "/connections/deepseek")).json()).toEqual({ removed: true });
+      expect((await call("GET", "/connections/detect")).status).toBe(200);
+      expect((await call("PUT", "/preferences", { onboarded: true })).status).toBe(200);
+      expect((await fetch(`${c.url}/connections`, { headers: { authorization: "Bearer nope" } })).status).toBe(401);
+      expect((await call("POST", "/accounts/login", { name: "rabota", cli: "codex" })).status).toBe(200);
+      expect((await call("POST", "/accounts/login", { name: "rabota", cli: "gemini" })).status).toBe(400);
+      expect(starts).toEqual(["rabota:codex"]);
+      expect(seen).toEqual(["list", "add:true", "models:deepseek", "remove:deepseek", "detect", "prefs"]);
+    } finally {
+      await c.close();
+    }
+  });
+});
