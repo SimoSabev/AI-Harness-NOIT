@@ -11,14 +11,23 @@ export const ANTHROPIC_TUNNELS: readonly GateTunnel[] = [
   { host: "platform.claude.com", port: 443 },
 ];
 
+/** D-392: Codex with a ChatGPT login [НП: the exact hosts — the Responses backend, the token refresh and the API; listed
+ * until a live run shows which ones Codex uses (docs/setup/local-live-checklist.md)]. */
+export const OPENAI_TUNNELS: readonly GateTunnel[] = [
+  { host: "chatgpt.com", port: 443 },
+  { host: "auth.openai.com", port: 443 },
+  { host: "api.openai.com", port: 443 },
+];
+
 const ZERO: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
 const HELLO: GateRoute = { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" };
 
-export function profileChannel(o: { label: string; model: string; profileName: string }): Channel {
+export function profileChannel(o: { label: string; model: string; profileName: string; provider?: "anthropic" | "openai" }): Channel {
+  const provider = o.provider ?? "anthropic";
   return {
     label: o.label,
     kind: "cli_profile",
-    provider: "anthropic",
+    provider,
     model: o.model,
     profileName: o.profileName,
     issueTaskCredential() {
@@ -30,6 +39,6 @@ export function profileChannel(o: { label: string; model: string; profileName: s
       throw new Error("a profile channel has no sandbox credential (D-295)");
     },
     gateRoutes: () => [{ ...HELLO, match: { ...HELLO.match } }],
-    gateTunnels: () => ANTHROPIC_TUNNELS.map((t) => ({ ...t })),
+    gateTunnels: () => (provider === "openai" ? OPENAI_TUNNELS : ANTHROPIC_TUNNELS).map((t) => ({ ...t })),
   };
 }

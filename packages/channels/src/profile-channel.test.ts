@@ -15,6 +15,6 @@ describe("profile channel (D-295)", () => {
     expect(ANTHROPIC_TUNNELS.map((t) => `${t.host}:${t.port}`)).toEqual(["api.anthropic.com:443", "console.anthropic.com:443", "platform.claude.com:443"]);
   });
   it("a bad profile label → E_CHANNEL_UNSUPPORTED", () => {
-    for (const label of ["claude-profile-", "claude-profile-Work", "codex-profile-x"]) expect(() => channelFor({ label, kind: "cli_profile", model: "m" }, o)).toThrow(MandatError);
+    for (const label of ["claude-profile-", "claude-profile-Work", "codex-profile-X"]) expect(() => channelFor({ label, kind: "cli_profile", model: "m" }, o)).toThrow(MandatError);
   });
 });
