@@ -16,7 +16,7 @@ import { ladderSim } from "./commands/ladder.js";
 import { anchorCommand } from "./commands/anchor.js";
 import { demoExportRepo, demoExternalPr, demoSeed, demoSpill } from "./commands/demo.js";
 import { workerCommand } from "./commands/worker.js";
-import { researchAsk, researchDemo } from "./commands/research.js";
+import { researchAsk, researchDemo, researchEngine } from "./commands/research.js";
 import { tuiCommand } from "./commands/tui.js";
 import { localCommand } from "./commands/local.js";
 import { accountsCommand, loginCommand, logoutCommand } from "./commands/accounts.js";
@@ -273,6 +273,13 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       if (!org) throw new MandatError("E_USAGE", "no org in the database: run pnpm local first");
       const request = { question, depth: o.depth, goal: o.goal, ...(o.budget ? { budget_usd: Number(o.budget) } : {}) } as Parameters<typeof researchAsk>[1]["request"];
       code = await researchAsk(io, { db, org, request, format: fmt(o.format), ...(o.out ? { out: o.out } : {}) });
+    });
+  research
+    .command("engine <action>")
+    .description("Mandat's own metasearch (SearXNG on 127.0.0.1:8888): start | stop | status")
+    .action(async (action: string) => {
+      if (action !== "start" && action !== "stop" && action !== "status") throw new MandatError("E_USAGE", "engine: start, stop or status");
+      code = await researchEngine(io, deps().docker, action);
     });
   research
     .command("demo")

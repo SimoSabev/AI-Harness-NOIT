@@ -1,0 +1,26 @@
+# E9г (D-396): Mandat's own metasearch for research — SearXNG on 127.0.0.1 only, JSON output, no limiter (the only
+# client is the research engine on this computer), no tracking. The secret comes from SEARXNG_SECRET at start.
+use_default_settings: true
+general:
+  instance_name: "mandat-research"
+  enable_metrics: false
+server:
+  bind_address: "0.0.0.0"
+  port: 8080
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  method: "GET"
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json
+ui:
+  static_use_hash: true
+outgoing:
+  request_timeout: 6.0
+  max_request_timeout: 10.0
+  pool_connections: 50
+  pool_maxsize: 10

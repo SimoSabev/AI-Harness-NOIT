@@ -413,3 +413,17 @@ describe("the proxy's inference port for research (D-399)", () => {
     expect(() => buildProxyRunArgs({ ...base, name: "mandat-llm-proxy-test-x", publishInferencePort: 9000 })).toThrow(MandatError);
   });
 });
+
+describe("SearXNG for research (D-396)", () => {
+  it("pinned by digest, loopback only, no capabilities, settings read-only, the secret by name", async () => {
+    const { buildSearxngArgs, SEARXNG_IMAGE } = await import("./index.js");
+    const a = buildSearxngArgs({ settings: "/repo/docker/searxng/settings.yml", port: 8888 });
+    expect(a).toEqual(expect.arrayContaining(["-p", "127.0.0.1:8888:8080", "--cap-drop=ALL", "--security-opt=no-new-privileges", "-e", "SEARXNG_SECRET", "-v", "/repo/docker/searxng/settings.yml:/etc/searxng/settings.yml:ro"]));
+    expect(a.at(-1)).toBe(SEARXNG_IMAGE);
+    expect(SEARXNG_IMAGE).toMatch(/@sha256:[0-9a-f]{64}$/);
+    expect(a.join(" ")).not.toMatch(/--cap-add|privileged|docker\.sock|0\.0\.0\.0:8888|SEARXNG_SECRET=/);
+    expect(() => buildSearxngArgs({ settings: "/s.yml", port: 8888, image: "searxng/searxng:latest" })).toThrow(MandatError);
+    expect(() => buildSearxngArgs({ settings: "rel.yml", port: 8888 })).toThrow(MandatError);
+    expect(() => buildSearxngArgs({ settings: "/s.yml", port: 80 })).toThrow(MandatError);
+  });
+});

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -5,7 +6,7 @@ import { MandatError, ResearchRequest, TraceEvent } from "@mandat/contract";
 import type { ResearchReport, ResearchRequestInput } from "@mandat/contract";
 import { RENDER_SCRIPT, demoWorld, dockerRenderer, reportHtml, reportMarkdown, usdText } from "@mandat/research";
 import type { Renderer } from "@mandat/research";
-import { buildProfileArgs, buildRenderArgs, dockerText, imageTags, profileVolume, uiImageTag } from "@mandat/sandbox";
+import { SEARXNG_NAME, buildProfileArgs, buildRenderArgs, buildSearxngArgs, dockerText, ensureUpstreamNetwork, imageTags, profileVolume, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { hostResearchEnv, reapStaleResearch, runResearchOnce } from "@mandat/worker";
 import type { Db, ResearchDeps } from "@mandat/worker";
@@ -142,4 +143,41 @@ export async function researchAsk(io: Io, o: { db: Pick<Db, "query">; org: strin
     if (Date.now() > end) return 3;
     await new Promise((r) => setTimeout(r, o.pollMs ?? 700));
   }
+}
+
+/** `mandat research engine start|stop|status`: Mandat's own metasearch (SearXNG on 127.0.0.1, D-396) */
+export async function researchEngine(io: Io, docker: DockerRunner, action: "start" | "stop" | "status", o: { port?: number; health?: (url: string) => Promise<boolean> } = {}): Promise<number> {
+  const port = o.port ?? 8888;
+  const health = o.health ?? (async (url: string) => fetch(url, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false));
+  const state = (await dockerText(docker, ["inspect", "-f", "{{.State.Running}}", SEARXNG_NAME])).stdout.trim();
+  if (action === "stop") {
+    if (state !== "") await dockerText(docker, ["rm", "-f", SEARXNG_NAME], 60_000);
+    io.stdout("stopped\n");
+    return 0;
+  }
+  if (action === "status") {
+    const ok = state === "true" && (await health(`http://127.0.0.1:${port}/healthz`));
+    io.stdout(state === "" ? "not running\n" : ok ? `running, healthz ok (127.0.0.1:${port})\n` : "running, not healthy yet\n");
+    return state === "true" ? 0 : 1;
+  }
+  if (state === "true") {
+    io.stdout(`already running (127.0.0.1:${port})\n`);
+    return 0;
+  }
+  if (state !== "") await dockerText(docker, ["rm", "-f", SEARXNG_NAME], 60_000);
+  await ensureUpstreamNetwork(docker);
+  const r = await docker.run(buildSearxngArgs({ settings: path.join(repoRoot, "docker", "searxng", "settings.yml"), port }), { env: { SEARXNG_SECRET: randomBytes(24).toString("hex") }, stdin: "closed", timeoutMs: 300_000 });
+  if (r.exitCode !== 0) {
+    io.stderr("cannot start SearXNG (is Docker running? the first start pulls the image)\n");
+    return 3;
+  }
+  for (let i = 0; i < 60; i++) {
+    if (await health(`http://127.0.0.1:${port}/healthz`)) {
+      io.stdout(`started, healthz ok (127.0.0.1:${port}); the worker uses it for research\n`);
+      return 0;
+    }
+    await new Promise((x) => setTimeout(x, 1000));
+  }
+  io.stderr("SearXNG started but did not answer within 60 s\n");
+  return 3;
 }

@@ -20,6 +20,12 @@ describe("search providers with recorded answers (D-396)", () => {
     expect(u.searchParams.get("categories")).toBe("science");
     expect(u.searchParams.get("time_range")).toBe("year");
   });
+  it("searxng: all engines timed out → one more try", async () => {
+    let n = 0;
+    const t: Transport = async () => (n++ === 0 ? { status: 200, text: JSON.stringify({ results: [], unresponsive_engines: [["brave", "timeout"]] }) } : { status: 200, text: JSON.stringify({ results: [{ url: "https://a.org", title: "A", content: "" }] }) });
+    expect(await searxng({ baseUrl: "http://127.0.0.1:8888", transport: t }).search(q())).toHaveLength(1);
+    expect(n).toBe(2);
+  });
   it("wikipedia: article URLs in the question's language", async () => {
     const r = rec(JSON.stringify({ query: { search: [{ title: "JSON Canonicalization", snippet: "<span>JCS</span> is", timestamp: "2025-02-03T00:00:00Z" }] } }));
     const [h] = await wikipedia({ transport: r.t }).search(q({ language: "bg" }));

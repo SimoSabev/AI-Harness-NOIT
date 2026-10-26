@@ -394,3 +394,28 @@ export function buildRenderArgs(o: { image: string; script: string; runId: strin
     "-w", "/opt/mandat/ui", "--entrypoint", "node", o.image, "/opt/mandat/ui/research-render.mjs",
   ];
 }
+
+/** E9г (D-396): SearXNG, pinned by digest (2026.10.19-81371861f, Docker Hub, read 26.10.2026). */
+export const SEARXNG_IMAGE = "searxng/searxng:2026.10.19-81371861f@sha256:5ed0323b5f5f8701264ef65e239a2bd83cb57098f2b971fa30bf79c06eeae271";
+export const SEARXNG_NAME = "mandat-searxng";
+/**
+ * E9г (D-396): Mandat's own metasearch for research. Published on loopback only; the settings file read-only; no
+ * capabilities beyond what the image's entrypoint needs to drop to its own user; the secret by name (SEARXNG_SECRET).
+ */
+export function buildSearxngArgs(o: { settings: string; port: number; image?: string }): string[] {
+  if (!path.isAbsolute(o.settings) || !o.settings.endsWith(".yml")) forbid("the SearXNG settings must be an absolute .yml path");
+  if (!Number.isInteger(o.port) || o.port < 1024 || o.port > 65535) forbid("invalid port");
+  const image = o.image ?? SEARXNG_IMAGE;
+  if (image.startsWith("-") || !/@sha256:[0-9a-f]{64}$/.test(image)) forbid("the SearXNG image must be pinned by digest");
+  return [
+    "run", "-d", "--name", SEARXNG_NAME, "--restart", "unless-stopped",
+    "--network", "mandat-upstream", "-p", `127.0.0.1:${o.port}:8080`,
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges", "--pids-limit=256", "--memory=512m", "--cpus=1",
+    "--tmpfs", "/var/cache/searxng:rw,nosuid,nodev,size=64m",
+    "--log-driver=json-file", "--log-opt", "max-size=10m", "--label", "mandat.searxng=1",
+    "-e", "SEARXNG_SECRET", "-e", "GRANIAN_HOST=0.0.0.0",
+    "-v", `${path.resolve(o.settings)}:/etc/searxng/settings.yml:ro`,
+    image,
+  ];
+}

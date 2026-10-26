@@ -65,7 +65,10 @@ export function searxng(o: { baseUrl: string; transport?: Transport }): SearchPr
       const cat = q.scope === "papers" ? "science" : q.scope === "code" ? "it" : "general";
       const range = q.recency === "any" ? "" : `&time_range=${q.recency}`;
       const lang = q.language === "auto" ? "all" : q.language;
-      const j = await json(t, `${o.baseUrl.replace(/\/+$/, "")}/search?format=json&q=${encodeURIComponent(siteOps(q))}&categories=${cat}&language=${lang}&safesearch=0${range}`, { signal });
+      const url = `${o.baseUrl.replace(/\/+$/, "")}/search?format=json&q=${encodeURIComponent(siteOps(q))}&categories=${cat}&language=${lang}&safesearch=0${range}`;
+      let j = await json(t, url, { signal });
+      // every engine timed out (a cold start, a slow network): one more try before "no results"
+      if (arr(j.results).length === 0 && Array.isArray(j.unresponsive_engines) && j.unresponsive_engines.length > 0) j = await json(t, url, { signal });
       return arr(j.results)
         .slice(0, q.max)
         .map((r) => ({ url: str(r.url), title: strip(str(r.title)), snippet: strip(str(r.content)), date: str(r.publishedDate) || null, provider: "searxng" }));

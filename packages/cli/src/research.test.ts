@@ -4,7 +4,7 @@ import { demoEnv } from "@mandat/research";
 import type { DockerRunner } from "@mandat/sandbox";
 import { DEMO_ORG_ID, runResearchOnce, seedMinimal } from "@mandat/worker";
 import { pgliteDb } from "../../../apps/worker/src/online/pglite-db.test-helper.js";
-import { profilePrintExec, researchAsk, researchDemo, traceLine } from "./commands/research.js";
+import { profilePrintExec, researchAsk, researchDemo, researchEngine, traceLine } from "./commands/research.js";
 import type { Io } from "./output.js";
 
 const io = () => {
@@ -62,4 +62,29 @@ describe("mandat research (D-398)", () => {
     }
     // a fresh PGlite with every migration takes a while on a busy machine
   }, 120_000);
+
+  it("engine: start runs SearXNG with a fresh secret by env and waits for health; status and stop", async () => {
+    const calls: { args: string[]; env: Record<string, string> }[] = [];
+    let running = "";
+    const docker: DockerRunner = {
+      run: async (args, o) => {
+        calls.push({ args, env: o.env });
+        if (args[0] === "inspect") o.onStdout?.(Buffer.from(running));
+        if (args[0] === "run") running = "true";
+        if (args[0] === "rm") running = "";
+        return { exitCode: args[0] === "inspect" && running === "" ? 1 : 0, timedOut: false } as Awaited<ReturnType<DockerRunner["run"]>>;
+      },
+    };
+    const t = io();
+    expect(await researchEngine(t.io, docker, "start", { health: async () => true })).toBe(0);
+    const run = calls.find((c) => c.args[0] === "run")!;
+    expect(run.args).toEqual(expect.arrayContaining(["-p", "127.0.0.1:8888:8080", "-e", "SEARXNG_SECRET"]));
+    expect(run.env.SEARXNG_SECRET).toMatch(/^[0-9a-f]{48}$/);
+    expect(run.args.join(" ")).not.toContain(run.env.SEARXNG_SECRET!);
+    expect(await researchEngine(t.io, docker, "start", { health: async () => true })).toBe(0);
+    expect(t.out.at(-1)).toMatch(/already running/);
+    expect(await researchEngine(t.io, docker, "status", { health: async () => true })).toBe(0);
+    expect(await researchEngine(t.io, docker, "stop")).toBe(0);
+    expect(await researchEngine(t.io, docker, "status")).toBe(1);
+  });
 });
