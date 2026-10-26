@@ -35,7 +35,8 @@ async function send(url: string, method: "PUT" | "DELETE", body?: unknown): Prom
 export function ModelPicker({ provider, available = [], models, defaultModel, onChange }: { provider: ProviderId; available?: string[]; models: string[]; defaultModel: string; onChange: (models: string[], defaultModel: string) => void }) {
   const t = useT();
   const [extra, setExtra] = useState("");
-  const suggested = PROVIDERS[provider].models;
+  // a local server offers what it has: the catalog's names only while nothing was found there
+  const suggested = PROVIDERS[provider].kind === "local" && available.length > 0 ? [] : PROVIDERS[provider].models;
   const all = [...new Set([...suggested.map((m) => m.id), ...available, ...models])];
   const toggle = (id: string) => {
     const next = models.includes(id) ? models.filter((m) => m !== id) : [...models, id];
@@ -58,13 +59,13 @@ export function ModelPicker({ provider, available = [], models, defaultModel, on
           return (
             <li key={id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
               <label className="flex min-w-0 flex-1 items-center gap-2">
-                <input type="checkbox" checked={models.includes(id)} onChange={() => toggle(id)} />
+                <input type="checkbox" checked={models.includes(id)} onChange={() => toggle(id)} aria-label={t("conn.useModel", { model: id })} />
                 <span className="truncate font-mono">{id}</span>
                 {s && <span className="text-xs text-mute">{t(TIER[s.tier])}</span>}
                 {s?.recommended && <StatusBadge tone="green" label={t("conn.recommended")} />}
               </label>
               <label className="flex items-center gap-1.5 text-xs text-mute">
-                <input type="radio" name={`default-${provider}`} checked={defaultModel === id} disabled={!models.includes(id)} onChange={() => onChange(models, id)} />
+                <input type="radio" name={`default-${provider}`} checked={defaultModel === id} disabled={!models.includes(id)} onChange={() => onChange(models, id)} aria-label={t("conn.defaultModel", { model: id })} />
                 {t("conn.default")}
               </label>
             </li>
@@ -80,8 +81,13 @@ export function ModelPicker({ provider, available = [], models, defaultModel, on
   );
 }
 
-const initialModels = (p: ProviderId, available: string[]): { models: string[]; defaultModel: string } => {
+/** The first pick: on a local server the installed model that matches the recommended one (qwen3-coder → qwen3-coder:30b), else its first. */
+export const initialModels = (p: ProviderId, available: string[]): { models: string[]; defaultModel: string } => {
   const rec = PROVIDERS[p].models.filter((m) => m.recommended).map((m) => m.id);
+  if (PROVIDERS[p].kind === "local" && available.length > 0) {
+    const pick = available.find((m) => rec.some((r) => m === r || m.startsWith(`${r}:`))) ?? (available[0] as string);
+    return { models: [pick], defaultModel: pick };
+  }
   const models = rec.length > 0 ? rec : available.slice(0, 1);
   return { models, defaultModel: models[0] ?? "" };
 };
@@ -134,7 +140,7 @@ function KeyConnect({ provider, available, onSaved }: { provider: ProviderId; av
       {info.auth !== "none" && (
         <label className="block text-sm">
           <span className="font-medium">{t("conn.key")}</span>
-          <input className={`${input} mt-1.5 font-mono`} type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false} required={needsKey} minLength={20} maxLength={512} />
+          <input className={`${input} mt-1.5 font-mono`} type="password" aria-label={t("conn.key")} value={key} onChange={(e) => setKey(e.target.value)} autoComplete="off" spellCheck={false} required={needsKey} minLength={20} maxLength={512} />
           <span className="mt-1 block text-xs text-mute">
             {t("conn.keyPrivacy")}{" "}
             {info.keyPage && <a href={info.keyPage} target="_blank" rel="noopener noreferrer" className="underline">{t("conn.getKey")}</a>}
@@ -241,7 +247,7 @@ export function ConnectWizard({ connections, detect, agents, accountName, startA
               {agents.map((a) => (
                 <li key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                   <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-                    <input type="radio" name="default-agent" checked={choice.agent === a.id} onChange={() => setChoice({ agent: a.id, model: a.defaultModel })} />
+                    <input type="radio" name="default-agent" checked={choice.agent === a.id} onChange={() => setChoice({ agent: a.id, model: a.defaultModel })} aria-label={a.label} />
                     <span className="font-medium">{a.label}</span>
                     {a.local && <span className="text-xs text-mute">{t("conn.localNote")}</span>}
                   </label>

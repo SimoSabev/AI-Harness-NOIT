@@ -26,6 +26,8 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
     const p = LoginState.safeParse(r.body);
     if (r.status === 200 && p.success) {
       setErr(null);
+      // D-393: one sign-in runs at a time in `mandat local`; this panel shows only its own account's (Claude and ChatGPT side by side)
+      if (p.data.state !== "idle" && p.data.name !== name.trim()) return setS({ state: "idle" });
       setS(p.data);
       if (p.data.state === "done") {
         onDone?.(p.data.name);
@@ -61,7 +63,7 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
     apply({ status: r.status, body: (await r.json().catch(() => ({}))) as Record<string, unknown> });
   };
 
-  const note = v.note && (s.state === "done" ? t(v.note, { who: s.email ?? s.name, plan: s.plan ?? t("agent.subscription"), name: s.name }) : t(v.note));
+  const note = v.note && (s.state === "done" ? t(v.note, { who: s.email ?? s.name, plan: s.plan ?? t("agent.subscription"), name: s.name, agent: `${cli}@${s.name}` }) : t(v.note));
   return (
     <div className="mt-3 space-y-3">
       {v.show === "form" && (
@@ -104,7 +106,7 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
       )}
       {v.show === "form" && note && <p className={`text-sm ${s.state === "failed" ? "text-bad" : "text-ok"}`} role={s.state === "failed" ? "alert" : "status"}>{note}</p>}
       {err && <p className="text-sm text-bad" role="alert">{err}</p>}
-      <p className="text-xs text-mute">{t("keys.login.privacy")}</p>
+      <p className="text-xs text-mute">{t(cli === "codex" ? "keys.login.privacyChatgpt" : "keys.login.privacy")}</p>
     </div>
   );
 }
