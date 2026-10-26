@@ -680,6 +680,28 @@ importers:
         specifier: workspace:*
         version: link:../sandbox
 
+  packages/research-mcp:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@mandat/research':
+        specifier: workspace:*
+        version: link:../research
+      '@mandat/worker':
+        specifier: workspace:*
+        version: link:../../apps/worker
+      '@modelcontextprotocol/server':
+        specifier: 2.3.1
+        version: 2.3.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.3.1
+        version: 2.3.1
+
   packages/review:
     dependencies:
       '@mandat/contract':

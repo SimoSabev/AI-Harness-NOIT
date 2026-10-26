@@ -35,3 +35,4 @@ export { anthropicViaProxy } from "./model.js";
 export { usd as usdText } from "./report/text.js";
 export { RENDER_SCRIPT, dockerRenderer } from "./fetch/browser.js";
 export type { RenderRun } from "./fetch/browser.js";
+export { DEMO_PAGES } from "./demo.js";
