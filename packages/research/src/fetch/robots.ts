@@ -1,4 +1,4 @@
-// E9г (D-394): robots.txt (RFC 9309). The group of the most specific matching user agent (ours, else "*"); the
+// E9г (D-405): robots.txt (RFC 9309). The group of the most specific matching user agent (ours, else "*"); the
 // longest matching rule wins, Allow wins a tie; "*" and "$" in paths. A robots.txt that cannot be read (4xx) allows
 // everything; a server error (5xx) disallows everything (RFC 9309 2.3.1.3–2.3.1.4).
 

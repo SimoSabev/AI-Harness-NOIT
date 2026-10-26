@@ -1,4 +1,4 @@
-# E9г (D-396): Mandat's own metasearch for research — SearXNG on 127.0.0.1 only, JSON output, no limiter (the only
+# E9г (D-407): Mandat's own metasearch for research — SearXNG on 127.0.0.1 only, JSON output, no limiter (the only
 # client is the research engine on this computer), no tracking. The secret comes from SEARXNG_SECRET at start.
 use_default_settings: true
 general:

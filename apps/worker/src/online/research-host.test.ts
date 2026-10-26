@@ -8,7 +8,7 @@ import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, seedChannels, seedMinimal } from "./seed.js";
 import { hostResearchEnv } from "./research-host.js";
 
-// E9г (D-398): every connected model counts — keys through the proxy, subscriptions through their CLI, local servers.
+// E9г (D-409): every connected model counts — keys through the proxy, subscriptions through their CLI, local servers.
 let db: Awaited<ReturnType<typeof pgliteDb>>;
 const secretDir = mkdtempSync(path.join(tmpdir(), "mandat-research-"));
 const secretPath = path.join(secretDir, "secret");
@@ -24,7 +24,7 @@ afterAll(() => db.end());
 const req = ResearchRequest.parse({ question: "q", depth: "standard", goal: "balanced" });
 const env = { MANDAT_SEARXNG_URL: "http://127.0.0.1:9" };
 
-describe("the host research environment (D-398)", () => {
+describe("the host research environment (D-409)", () => {
   it("with the proxy and a profile runner: API keys, the subscription and the local model are all channels", async () => {
     const e = await hostResearchEnv({ db, env, proxy: { url: "http://127.0.0.1:1", secretPath }, profileExec: async () => "{}" }, DEMO_ORG_ID, req, "q_host");
     expect(e.channels.map((c) => c.kind).sort()).toEqual(["api_key", "api_key", "cli_profile", "local"]);

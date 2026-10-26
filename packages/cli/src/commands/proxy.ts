@@ -47,7 +47,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     store.put("anthropic", envKey);
     if (envOpenai) store.put("openai", envOpenai);
   }
-  // E9г (D-400): the research search key (Exa) lives with the model keys, sealed, and reaches only the proxy
+  // E9г (D-411): the research search key (Exa) lives with the model keys, sealed, and reaches only the proxy
   if (io.env.EXA_API_KEY) store.put("research:exa", io.env.EXA_API_KEY);
   const exa = store.get("research:exa");
   const key = store.get("anthropic");

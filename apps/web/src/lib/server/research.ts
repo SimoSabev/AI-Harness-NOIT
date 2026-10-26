@@ -8,7 +8,7 @@ import type { ResearchChannel, ResearchFeed, ResearchQuestionRow } from "../rese
 
 export type { ResearchChannel, ResearchFeed, ResearchQuestionRow };
 
-// E9d (D-398): research from the web. A person with research.ask queues a question (the worker runs it); the page
+// E9d (D-409): research from the web. A person with research.ask queues a question (the worker runs it); the page
 // follows its events (SSE) and offers the report for download. Reads go through RLS as the person; the queue row is
 // written by the server (service role), like a task.
 

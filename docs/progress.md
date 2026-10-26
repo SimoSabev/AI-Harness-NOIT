@@ -45,13 +45,14 @@
 | 20 | E9в Gemini, local, роли по модел, Codex профил | phase/e9c-agents-2 | E8а | не е започната | 0/— | ключове/вход |
 | 21 | E9г ресърч услуга | phase/e9d-research | E8д, E8к | не е започната | 0/— | ключове; златен набор |
 | 22 | E9д учене | phase/e9e-learning | E9а | не е започната | 0/— | — |
+| 22а | E9m памет (D-400–D-403) | phase/e9m-memory | E9а | ГОТОВО (на живо чака Симо) (docs/reports/E9m.md) | M1–M4 ✓, златен набор ✓ | MCP сървърът с истински Claude Code; задача с памет (docs/setup/memory.md) |
 | 23 | E9е подписани комити, revert, GitLab | phase/e9f-delivery-2 | E8ж | не е започната | 0/— | L4 |
 | 24 | E9ж професионален десктоп + сайт | phase/e9g-desktop-pro | E7в, E7е | ГОТОВО (подпис, Windows/Linux и деплоят на сайта чакат Симо) (docs/reports/E9g.md) | AC-12.4–12.10 ✓ (12.8: Linux/Windows отложени); AC-12.1: dmg ✓, подпис чака | подписване, Windows/Linux от CI, деплой на сайта, десктопът на живо (чеклист 25–29) |
 | 25 | E10 екипи и навсякъде | phase/e10-* | E9 | не е започната | 0/— | VPS, екип |
 | 26 | E11 платформа | phase/e11-* | E10 | не е започната | 0/— | — |
 
 ## Текуща задача
-E9г ресърч (клон phase/e9d-research-engine, 26.10.2026, D-393…D-402, docs/integrations/research.md): двигател с роли по модели
+E9г ресърч (клон phase/e9d-research-engine, 26.10.2026, D-404…D-413, docs/integrations/research.md): двигател с роли по модели
 (API / абонамент / локален), собствено търсене (SearXNG + отворени API; Exa и Anthropic web search през проксито), стълба за
 четене (HTTP → браузър → архив → доставчик), дословни цитати, присъди, доклад HTML/MD/JSON, /research с панел на живо,
 `mandat research ask|demo|engine`, MCP сървър `research` и умение `research`. Чака: ключове за жив рън, UI образа за

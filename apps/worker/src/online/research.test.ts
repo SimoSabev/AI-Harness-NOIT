@@ -6,7 +6,7 @@ import { DEMO_ORG_ID, seedMinimal } from "./seed.js";
 import { claimResearch, processResearch, reapStaleResearch, runResearchOnce } from "./research.js";
 import type { ResearchDeps } from "./research.js";
 
-// E9г (D-398): the worker's research queue over the real migrations (PGlite).
+// E9г (D-409): the worker's research queue over the real migrations (PGlite).
 let db: Awaited<ReturnType<typeof pgliteDb>>;
 beforeAll(async () => {
   db = await pgliteDb();
@@ -18,7 +18,7 @@ const queue = (id: string, request: unknown = { question: "How does JCS sort key
   db.query("insert into public.research_questions (id, org_id, question, request, depth, goal) values ($1, $2::uuid, 'How does JCS sort keys?', $3::jsonb, 'standard', 'balanced')", [id, DEMO_ORG_ID, JSON.stringify(request)]);
 const deps = (o: Partial<ResearchDeps> = {}): ResearchDeps => ({ db, envFor: async () => demoEnv(), stopPollMs: 20, ...o });
 
-describe("the research queue (D-398)", () => {
+describe("the research queue (D-409)", () => {
   it("a queued question runs: events in order, sources, claims and the report are stored", async () => {
     await queue("q_w1");
     expect(await runResearchOnce(deps())).toBe("q_w1");

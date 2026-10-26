@@ -12,7 +12,7 @@ import type { ResearchFeed, ResearchQuestionRow } from "../lib/research-types";
 import type { Tone } from "../lib/status";
 import { StatusBadge, btn, card, label } from "./ui";
 
-// E9d (D-398): one research question, live. The centre is the result (the plan and what is found while it runs, the
+// E9d (D-409): one research question, live. The centre is the result (the plan and what is found while it runs, the
 // answer with citations, claims, sources when it ends); the right-hand panel is the activity: the phase, every lane and
 // what it does now, the models with their calls and cost, and every step as it happens (SSE /api/research/:id/stream).
 

@@ -20,7 +20,7 @@ function fakeGet(pages: Record<string, [number, string, string?]>) {
 }
 const quick = { sleep: async () => {}, politeMs: 0 };
 
-describe("the fetch ladder (D-394)", () => {
+describe("the fetch ladder (D-405)", () => {
   it("http is enough for a normal page; one attempt, ok", async () => {
     const g = fakeGet({ "https://a.org/x": [200, long] });
     const at: Attempt[] = [];

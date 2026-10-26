@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const TONE: Record<ResearchQuestionRow["status"], Tone> = { queued: "gray", running: "blue", done: "green", partial: "amber", failed: "red", stopped: "gray" };
 
-// E9d (D-398): the research page — the questions on the left; a new question, or one question live: its result in the
+// E9d (D-409): the research page — the questions on the left; a new question, or one question live: its result in the
 // middle and its activity on the right (research-live.tsx).
 export default async function ResearchPage({ searchParams }: { searchParams: Promise<{ q?: string; new?: string }> }) {
   const c = await pageCtx();

@@ -17,6 +17,7 @@
     "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
     "@mandat/mcp-bridge": "workspace:*",
+    "@mandat/memory": "workspace:*",
     "@mandat/onboard": "workspace:*",
     "@mandat/profile": "workspace:*",
     "@mandat/redaction": "workspace:*",

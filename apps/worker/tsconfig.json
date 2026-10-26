@@ -39,6 +39,9 @@
       "path": "../../packages/ledger"
     },
     {
+      "path": "../../packages/memory"
+    },
+    {
       "path": "../../packages/llm-proxy"
     },
     {

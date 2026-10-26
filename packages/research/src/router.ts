@@ -1,7 +1,7 @@
 import { RESEARCH_ROLES } from "@mandat/contract";
 import type { ResearchGoal, ResearchRole } from "@mandat/contract";
 
-// E9г (D-393): which model does which role. Every channel the person connected counts — API keys, subscription
+// E9г (D-404): which model does which role. Every channel the person connected counts — API keys, subscription
 // profiles and local models. The score is the one of channel selection (D-0xx, packages/channels: 0.5·Q + 0.3·(1 − C)
 // + 0.2·H) with the Q/C weights moved per role and goal: planning and writing pay for quality, the per-page roles
 // (searcher, triage, reader) run many times and pay for cost. A subscription profile is slow per call (a CLI start),

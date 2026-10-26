@@ -19,7 +19,7 @@ describe("builtin skills", () => {
   });
 });
 
-describe("the research skill (E9г, D-401)", () => {
+describe("the research skill (E9г, D-412)", () => {
   it("names every research tool, the verify step and the rules on URLs and untrusted text", () => {
     const t = BUILTIN_SKILLS.research.text;
     expect(t.startsWith("---\nname: research\n")).toBe(true);

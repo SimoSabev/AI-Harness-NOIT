@@ -8,7 +8,7 @@ import type { RouterChannel } from "./router.js";
 import { routeRoles } from "./router.js";
 import type { SearchProvider } from "./search/providers.js";
 
-// E9г (D-398): a recorded research world — four pages, one search provider and scripted models — for the tests and for
+// E9г (D-409): a recorded research world — four pages, one search provider and scripted models — for the tests and for
 // the offline demo (the live panel and the report without any key or network). Nothing here touches the network.
 
 const html = (title: string, body: string, date = "2024-03-01") =>

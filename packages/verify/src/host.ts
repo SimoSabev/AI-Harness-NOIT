@@ -11,7 +11,7 @@ export interface HostConfig {
   /** D-151: build the sandbox image without apt (curl/dig) where Debian mirrors are unreachable. */
   sandboxApt: boolean;
   proxyAdminPort: number;
-  /** D-399: the proxy's inference port on loopback (the research engine of this computer); default admin − 1 */
+  /** D-410: the proxy's inference port on loopback (the research engine of this computer); default admin − 1 */
   proxyInferencePort: number;
 }
 

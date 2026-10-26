@@ -1,0 +1,39 @@
+{
+  "name": "@mandat/memory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mandat's memory: trust-level writes with a scanner, the frozen core, hybrid recall, consolidation, the graph (D-400)",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "mandat-memory-mcp": "dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp.d.ts",
+      "default": "./dist/mcp.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/memory/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/redaction": "workspace:*",
+    "@modelcontextprotocol/server": "2.3.1",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/pg": "8.23.1"
+  }
+}

@@ -52,7 +52,7 @@ export interface DepthBudget {
   tokens: number;
   minutes: number;
 }
-// D-395 (docs/prd/research/research-strategies.md §7.3): caps, not targets; typical runs cost less. Replaces the
+// D-406 (docs/prd/research/research-strategies.md §7.3): caps, not targets; typical runs cost less. Replaces the
 // $0.10/$0.50/$2.00 of D-359, which left no room for a gap round in standard.
 const BUDGETS: Record<ResearchDepth, DepthBudget> = {
   quick: { usd: 0.25, lanes: 1, pages: 8, queries: 6, rounds: 1, tokens: 150_000, minutes: 2 },

@@ -79,7 +79,7 @@
       {
         "package": "fast-sha256",
         "license": "Unlicense",
-        "reason": "public-domain dedication; webhook signing helper pulled by standardwebhooks of the official Anthropic SDK (@anthropic-ai/sdk 1.1.0) that research uses through the proxy; harness only (D-402)"
+        "reason": "public-domain dedication; webhook signing helper pulled by standardwebhooks of the official Anthropic SDK (@anthropic-ai/sdk 1.1.0) that research uses through the proxy; harness only (D-413)"
       }
     ]
   }

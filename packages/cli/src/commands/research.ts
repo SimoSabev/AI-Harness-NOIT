@@ -13,9 +13,9 @@ import type { Db, ResearchDeps } from "@mandat/worker";
 import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 
-// E9г (D-398, D-399): research from the terminal and the worker's research loop.
+// E9г (D-409, D-410): research from the terminal and the worker's research loop.
 
-/** one `claude -p` call of a subscription profile in its own container (buildProfileArgs "print", D-399) */
+/** one `claude -p` call of a subscription profile in its own container (buildProfileArgs "print", D-410) */
 export function profilePrintExec(docker: DockerRunner): (profile: string, argv: string[], stdin: string, signal?: AbortSignal) => Promise<string> {
   let image: string | null = null;
   return async (profile, argv, stdin) => {
@@ -55,7 +55,7 @@ export function researchDeps(o: { db: Db; io: Io; home: string; docker: DockerRu
     db: o.db,
     log: (l) => o.io.stderr(`${l}\n`),
     envFor: async (org, req, id) => {
-      // the proxy's health says which keys it holds (names only): models and, for research, Exa (D-400)
+      // the proxy's health says which keys it holds (names only): models and, for research, Exa (D-411)
       const health = existsSync(secretPath) ? await fetch(`http://127.0.0.1:${o.adminPort}/healthz`, { signal: AbortSignal.timeout(1500) }).then(async (r) => (r.ok ? ((await r.json()) as { providers?: unknown }) : null), () => null) : null;
       const search = Array.isArray(health?.providers) ? health.providers.filter((p): p is string => typeof p === "string") : [];
       const renderer = await browserRenderer(o.docker, id).catch(() => null);
@@ -147,7 +147,7 @@ export async function researchAsk(io: Io, o: { db: Pick<Db, "query">; org: strin
   }
 }
 
-/** `mandat research engine start|stop|status`: Mandat's own metasearch (SearXNG on 127.0.0.1, D-396) */
+/** `mandat research engine start|stop|status`: Mandat's own metasearch (SearXNG on 127.0.0.1, D-407) */
 export async function researchEngine(io: Io, docker: DockerRunner, action: "start" | "stop" | "status", o: { port?: number; health?: (url: string) => Promise<boolean> } = {}): Promise<number> {
   const port = o.port ?? 8888;
   const health = o.health ?? (async (url: string) => fetch(url, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false));

@@ -8,7 +8,7 @@ import { errorText, postJson } from "../lib/client/api";
 import type { ResearchChannel } from "../lib/research-types";
 import { btn, card, input, label } from "./ui";
 
-// E9d (D-398): a new research question — what, how deep, how to spend on models; the rest folded under "More options".
+// E9d (D-409): a new research question — what, how deep, how to spend on models; the rest folded under "More options".
 const DEPTHS: readonly ResearchDepth[] = ["quick", "standard", "deep"];
 const GOALS: readonly ResearchGoal[] = ["economy", "balanced", "quality"];
 const SCOPES: readonly ResearchScope[] = ["web", "docs", "code", "papers"];

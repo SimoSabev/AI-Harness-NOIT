@@ -252,7 +252,7 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .action(async (o: { once?: boolean }) => {
       code = await workerCommand(io, { home: home(), once: Boolean(o.once) });
     });
-  // E9г (D-398): research — the live trace in the terminal and a report to download
+  // E9г (D-409): research — the live trace in the terminal and a report to download
   const research = program.command("research").description("research with checked sources: a plan, our own search, verbatim quotes, a report");
   const fmt = (f: string): "html" | "md" | "json" => {
     if (f !== "html" && f !== "md" && f !== "json") throw new MandatError("E_USAGE", "--format must be html, md or json");

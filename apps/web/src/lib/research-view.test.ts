@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { demoWorld } from "@mandat/research";
 import { liveState } from "./research-view";
 
-describe("the live research panel (D-398)", () => {
+describe("the live research panel (D-409)", () => {
   it("from the events alone: phase, plan, lanes, sources, claims, counters", async () => {
     const w = demoWorld();
     const r = await w.run();

@@ -32,7 +32,7 @@ beforeAll(async () => {
 });
 afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
-describe("model clients (D-393)", () => {
+describe("model clients (D-404)", () => {
   it("anthropic through the proxy: the mdt_ token, a cached system prompt, cost from the price table", async () => {
     const m = proxyModel({ channel: ch("s", "api_key", "claude-haiku-5-5"), baseUrl: base, token: "mdt_test", provider: "anthropic" });
     const r = await m.complete({ system: "sys", user: "u", maxTokens: 50, json: false });

@@ -10,7 +10,7 @@ describe("i18n catalog (E7е)", () => {
   it("en and bg have the same keys", () => {
     expect(Object.keys(bg).sort()).toEqual(Object.keys(en).sort());
   });
-  it("the research page says what the service checks (E9d, D-398): verbatim quotes, every claim against its sources", () => {
+  it("the research page says what the service checks (E9d, D-409): verbatim quotes, every claim against its sources", () => {
     expect(en["research.intro"]).toMatch(/verbatim quotes/);
     expect(bg["research.intro"]).toMatch(/дословни цитати/);
   });

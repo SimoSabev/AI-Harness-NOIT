@@ -2,7 +2,7 @@ import type { ResearchReport } from "@mandat/contract";
 import { processView } from "./process.js";
 import { duration, langOf, usd, wordsOf } from "./text.js";
 
-// E9г (D-397): the report as Markdown — the same content as the HTML, for notes, PRs and the knowledge base.
+// E9г (D-408): the report as Markdown — the same content as the HTML, for notes, PRs and the knowledge base.
 
 const cell = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 

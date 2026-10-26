@@ -1,7 +1,7 @@
 import type http from "node:http";
 import https from "node:https";
 
-// E9г (D-400): paid search providers of research go through the proxy like a model: the research engine has an mdt_
+// E9г (D-411): paid search providers of research go through the proxy like a model: the research engine has an mdt_
 // token, the provider key lives only here (AGENTS.md rule 2). Exa: POST /research/exa/search and /research/exa/contents
 // → https://api.exa.ai/{search,contents} with x-api-key. Each call is priced (Exa list prices, research-tools.md [НП])
 // and counted against the token's budget like tokens are.

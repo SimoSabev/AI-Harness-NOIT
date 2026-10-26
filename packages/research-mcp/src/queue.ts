@@ -5,7 +5,7 @@ import type { Db } from "@mandat/worker";
 type SqlClient = Pick<Db, "query">;
 import type { QueueSide } from "./backend.js";
 
-// E9г (D-401): research_ask / research_recall over the harness database — the same queue the web uses; the worker runs it.
+// E9г (D-412): research_ask / research_recall over the harness database — the same queue the web uses; the worker runs it.
 export function dbQueue(db: SqlClient, org: string): QueueSide {
   return {
     async enqueue(i) {

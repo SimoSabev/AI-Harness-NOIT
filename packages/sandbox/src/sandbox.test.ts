@@ -389,7 +389,7 @@ describe("profile helper containers (D-295)", () => {
     expect(i.slice(i.indexOf("img"))).toEqual(["img", "-c", `chown 1000:1000 ${PROFILE_DIR}`]);
     expect(() => buildProfileArgs("status", { image: "img", volume: "mandat-run-x" })).toThrow(MandatError);
   });
-  it("print (D-399): one research model call — claude -p with no tools, stdin open, the profile's route; anything else is refused", () => {
+  it("print (D-410): one research model call — claude -p with no tools, stdin open, the profile's route; anything else is refused", () => {
     const argv = ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", "m", "--system-prompt", "s"];
     const p = buildProfileArgs("print", { image: "img", volume: vol, argv });
     expect(p.slice(0, 3)).toEqual(["run", "--rm", "-i"]);
@@ -404,7 +404,7 @@ describe("profile helper containers (D-295)", () => {
   });
 });
 
-describe("the proxy's inference port for research (D-399)", () => {
+describe("the proxy's inference port for research (D-410)", () => {
   const base = { name: "mandat-llm-proxy" as const, image: "img", user: "1000:1000", mandatHome: MH, publishAdminPort: 8788, envNames: [], publicEnv: {} };
   it("only on loopback, only for the real proxy, never the admin port twice", () => {
     expect(buildProxyRunArgs({ ...base, publishInferencePort: 8787 }).join(" ")).toContain("-p 127.0.0.1:8787:8787");
@@ -414,7 +414,7 @@ describe("the proxy's inference port for research (D-399)", () => {
   });
 });
 
-describe("SearXNG for research (D-396)", () => {
+describe("SearXNG for research (D-407)", () => {
   it("pinned by digest, loopback only, no capabilities, settings read-only, the secret by name", async () => {
     const { buildSearxngArgs, SEARXNG_IMAGE } = await import("./index.js");
     const a = buildSearxngArgs({ settings: "/repo/docker/searxng/settings.yml", port: 8888 });

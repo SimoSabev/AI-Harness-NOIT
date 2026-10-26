@@ -13,7 +13,7 @@ export const BUILTIN_SKILLS = {
     description: "Read the change as a reviewer: correctness, tests, scope.",
     text: "---\nname: review\ndescription: Read the change as a reviewer: correctness, tests, scope.\n---\nCheck that every changed line is needed for the task, that a test covers it, and that nothing outside the allowed paths changed. Report problems; do not rewrite the change.\n",
   },
-  // E9г (D-401): the research process with the research_* tools
+  // E9г (D-412): the research process with the research_* tools
   research: {
     description: "Find facts with checked sources through Mandat's research tools (research_*), never from memory.",
     text: RESEARCH_SKILL,

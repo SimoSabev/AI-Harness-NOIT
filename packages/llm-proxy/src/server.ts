@@ -87,7 +87,7 @@ export interface ProxyServerOptions {
   boot?: BootOptions;
   /** tests only: an http upstream on any host (the boot payload otherwise allows http to this computer only) */
   allowHttpUpstream?: boolean;
-  /** E9г (D-400): research search providers' keys (env path); with a boot gate they come in the boot payload */
+  /** E9г (D-411): research search providers' keys (env path); with a boot gate they come in the boot payload */
   searchKeys?: Partial<Record<SearchProviderId, string>>;
   /** tests only: another base URL per search provider */
   searchUpstream?: Partial<Record<SearchProviderId, URL>>;
@@ -104,7 +104,7 @@ function parseBootKeys(body: Buffer | null, allowHttp: boolean): BootKeys | null
   try {
     const v = JSON.parse(body?.toString("utf8") ?? "") as Record<string, unknown>;
     const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai" || k === "upstreams" || k === "search");
-    // E9г (D-400): {"search": {"exa": "<key>"}} — only known providers, only key-shaped values
+    // E9г (D-411): {"search": {"exa": "<key>"}} — only known providers, only key-shaped values
     const sr = v.search ?? {};
     if (typeof sr !== "object" || sr === null || Array.isArray(sr) || Object.entries(sr).some(([k, x]) => k !== "exa" || typeof x !== "string" || !KEY.test(x))) return null;
     const search = sr as Partial<Record<SearchProviderId, string>>;
@@ -162,7 +162,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         record({ ...base, run_id: runId, status, token_prefix8: token ? tokenPrefix8(token) : null });
         apiError(res, status, type, code, extra);
       };
-      // E9г (D-400): a research search call — the same token, revocation and budget rules, priced per call
+      // E9г (D-411): a research search call — the same token, revocation and budget rules, priced per call
       const sroute = SEARCH_ROUTES[p];
       if (method === "POST" && sroute !== undefined && req.headers.upgrade === undefined) {
         if (locked) {

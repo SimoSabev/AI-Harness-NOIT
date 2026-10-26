@@ -1,6 +1,6 @@
 import type { ResearchDepth, ResearchGoal, ResearchReport, TraceEvent } from "@mandat/contract";
 
-// E9d (D-398): the shapes the research page shares between the server (lib/server/research.ts) and the client components.
+// E9d (D-409): the shapes the research page shares between the server (lib/server/research.ts) and the client components.
 export interface ResearchQuestionRow {
   id: string;
   question: string;

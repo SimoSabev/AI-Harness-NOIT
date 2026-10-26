@@ -4,7 +4,7 @@ import type { ProcessView } from "./process.js";
 import { duration, langOf, usd, wordsOf } from "./text.js";
 import type { Words } from "./text.js";
 
-// E9г (D-397): the report as ONE self-contained HTML file — no network, no scripts: the answer with citations whose
+// E9г (D-408): the report as ONE self-contained HTML file — no network, no scripts: the answer with citations whose
 // exact quote shows on hover, the claims with verdicts and their quotes, the sources with hash and fetch tier, the
 // process map, the timeline, the models per role with their cost, the full log and the data as JSON. Opens offline,
 // prints to PDF. Every string from the web is escaped.

@@ -5,7 +5,7 @@ import { MandatError } from "@mandat/contract";
 import type { Renderer } from "./fetcher.js";
 import { checkUrl } from "./ssrf.js";
 
-// E9г (D-394): the browser tier — one page per container of the Playwright image (render-runner/render.mjs); the docker
+// E9г (D-405): the browser tier — one page per container of the Playwright image (render-runner/render.mjs); the docker
 // arguments come from SANDBOX_HARDENING (buildRenderArgs, AGENTS.md rule 7). The URL is checked before the container
 // starts; inside, a guard proxy refuses every non-public address the page asks for.
 

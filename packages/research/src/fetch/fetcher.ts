@@ -8,7 +8,7 @@ import type { HttpOptions, HttpResult } from "./http.js";
 import { ALLOW_ALL, DISALLOW_ALL, parseRobots } from "./robots.js";
 import type { Robots } from "./robots.js";
 
-// E9г (D-394): the fetch ladder. 1 http (+ Readability) → 2 a real browser when the page is a JS app or too thin →
+// E9г (D-405): the fetch ladder. 1 http (+ Readability) → 2 a real browser when the page is a JS app or too thin →
 // 3 the Wayback Machine's copy when the site refuses or is down → 4 a configured extract provider (Exa contents, Jina…).
 // A bot wall or a CAPTCHA is never solved or evaded: the ladder moves on to a copy or another source and the source is
 // marked "blocked". robots.txt is respected unless the request turns it off; at most 2 requests per site at a time.
@@ -40,7 +40,7 @@ export interface Rendered {
   status: number;
   html: string;
 }
-/** the browser tier (a hardened Playwright container, D-394) */
+/** the browser tier (a hardened Playwright container, D-405) */
 export interface Renderer {
   render(url: string, signal?: AbortSignal): Promise<Rendered>;
 }

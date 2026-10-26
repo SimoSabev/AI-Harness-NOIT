@@ -1,4 +1,4 @@
--- E9г (PRD 6.13, D-398): research runs. A question is queued by a person (or an agent through the research MCP), the
+-- E9г (PRD 6.13, D-409): research runs. A question is queued by a person (or an agent through the research MCP), the
 -- worker runs it, every step is an event (the live panel reads them in order), and the finished report is stored as
 -- JSON (the downloadable HTML/Markdown is rendered from it). The worker writes (service role); members of the org read.
 

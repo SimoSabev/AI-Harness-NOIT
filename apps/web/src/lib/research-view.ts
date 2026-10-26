@@ -2,7 +2,7 @@ import type { ClaimVerdict, FetchTier, PlanLane, TraceEvent } from "@mandat/cont
 import { processView } from "@mandat/research/report";
 import type { LaneSummary, RoleUsage } from "@mandat/research/report";
 
-// E9d (D-398): what the live panel shows, from the events alone (the same events the report keeps). Pure.
+// E9d (D-409): what the live panel shows, from the events alone (the same events the report keeps). Pure.
 
 export type Phase = "plan" | "search" | "read" | "verify" | "write" | "done";
 export const PHASES: readonly Exclude<Phase, "done">[] = ["plan", "search", "read", "verify", "write"];

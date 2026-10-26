@@ -9,7 +9,7 @@ import { ulid } from "@mandat/contract";
 import { bootTokenHash, createProxyServer, mintBootToken, mintTaskToken } from "./index.js";
 import type { RequestLine, TokenClaims } from "./index.js";
 
-// E9г (D-400): Exa for research through the proxy — the engine has an mdt_ token, the key stays here, each call is priced
+// E9г (D-411): Exa for research through the proxy — the engine has an mdt_ token, the key stays here, each call is priced
 // against the token's budget.
 const secret = randomBytes(32);
 const NOW = 1_792_454_400;
@@ -63,7 +63,7 @@ async function proxy(o: { exa?: string; boot?: unknown; stub: string }) {
 const token = (over: Partial<TokenClaims> = {}) => mintTaskToken(secret, { t: "q_x", r: `q_x_${ulid()}`, a: 1, e: NOW + 600, b: 1, n: "aa", ...over });
 const auth = (tok: string) => ({ authorization: `Bearer ${tok}`, "content-type": "application/json" });
 
-describe("Exa through the proxy (D-400)", () => {
+describe("Exa through the proxy (D-411)", () => {
   it("forwards with the real key, never the token; the call is priced and logged without the body", async () => {
     const stub = await exaStub();
     const p = await proxy({ exa: EXA, stub: stub.url });

@@ -86,7 +86,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   if (slots > 1) io.stderr(`mandat worker: ${slots} задачи едновременно\n`);
   // E9а (v5 5.1): the night shift ticks every 30 s; its tasks are normal tasks the slots claim
   const night = nightTicker({ now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => nightShiftTick(db, { now: new Date(), slots: slotsFrom(env.MANDAT_NIGHT_SLOTS, Math.max(1, slots)), agent: env.MANDAT_NIGHT_AGENT ?? "claude" }) });
-  // E9г (D-398): research runs beside the task slots (≤ 2 here, ≤ 2 per org); MANDAT_RESEARCH=0 turns it off
+  // E9г (D-409): research runs beside the task slots (≤ 2 here, ≤ 2 per org); MANDAT_RESEARCH=0 turns it off
   const host = hostConfig(env);
   const research = env.MANDAT_RESEARCH === "0" ? Promise.resolve() : researchLoop(researchDeps({ db, io, home: o.home, docker: realDockerRunner(), inferencePort: host.proxyInferencePort, adminPort: host.proxyAdminPort }), { once: o.once, pollMs: o.pollMs ?? 2000, ...(o.signal ? { signal: o.signal } : {}) });
   try {

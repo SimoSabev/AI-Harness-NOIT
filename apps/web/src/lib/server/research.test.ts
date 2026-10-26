@@ -8,7 +8,7 @@ import { createResearch, researchChannels, researchFeed, researchQuestions, rese
 import { getResearchReport } from "./api";
 import type { ApiDeps } from "./api";
 
-// E9d (D-398): research from the web — queue, follow, stop, download — under RLS.
+// E9d (D-409): research from the web — queue, follow, stop, download — under RLS.
 let db: Awaited<ReturnType<typeof webDb>>;
 beforeAll(async () => {
   db = await webDb();
@@ -17,7 +17,7 @@ afterAll(async () => db.end());
 
 const ask = { question: "How does JCS sort keys?", depth: "standard", goal: "balanced" };
 
-describe("research in the web (D-398)", () => {
+describe("research in the web (D-409)", () => {
   it("a member with research.ask queues a question; a bad body or an unknown channel is refused", async () => {
     const r = await createResearch(db, { uid: U.owner, org: DEMO_ORG_ID, body: ask });
     expect(r.status).toBe(201);

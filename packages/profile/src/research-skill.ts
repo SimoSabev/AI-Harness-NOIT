@@ -1,4 +1,4 @@
-// E9г (PRD 6.13 p. 2, D-401): the builtin `research` skill — the whole research process of the harness, written for any
+// E9г (PRD 6.13 p. 2, D-412): the builtin `research` skill — the whole research process of the harness, written for any
 // connected agent (Claude Code, Codex, Gemini, a local model). The compiler materializes it like the other builtin skills.
 export const RESEARCH_SKILL = `---
 name: research

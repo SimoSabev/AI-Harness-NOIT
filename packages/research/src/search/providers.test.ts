@@ -10,7 +10,7 @@ function rec(text: string, status = 200) {
   return { t, calls };
 }
 
-describe("search providers with recorded answers (D-396)", () => {
+describe("search providers with recorded answers (D-407)", () => {
   it("searxng: JSON results, site: operators, category by scope, time range", async () => {
     const r = rec(JSON.stringify({ results: [{ url: "https://a.org/x", title: "<b>JCS</b>", content: "the &quot;scheme&quot;", publishedDate: "2024-01-01" }] }));
     const hits = await searxng({ baseUrl: "http://127.0.0.1:8888/", transport: r.t }).search(q({ include: ["rfc-editor.org"], exclude: ["spam.example"], recency: "year", scope: "papers" }));

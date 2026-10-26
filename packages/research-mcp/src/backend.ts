@@ -4,7 +4,7 @@ import type { ClaimVerdict, ResearchReport, ResearchScope, SearchHit } from "@ma
 import { Bm25, canonicalUrl, chunkText, claimVerdict, domainOf, fuseHits, locateQuote } from "@mandat/research";
 import type { Fetcher, Page, SearchProvider } from "@mandat/research";
 
-// E9г (D-401): what the research_* tools do. A session remembers every URL that came out of a tool result: research_read
+// E9г (D-412): what the research_* tools do. A session remembers every URL that came out of a tool result: research_read
 // and research_verify accept only those (AC-13.3: a URL the agent made up is refused with a reason). Page text goes back
 // framed as untrusted. research_ask queues the full run (the worker) and waits a while; research_recall reads finished
 // runs of the project.

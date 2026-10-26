@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { NAV, navActive, taskHref } from "./nav";
 
-describe("the side bar (D-384)", () => {
-  it("has four sections: tasks, research (D-398), projects, settings", () => {
-    expect(NAV.map((n) => [n.id, n.href])).toEqual([["tasks", "/"], ["research", "/research"], ["projects", "/harness"], ["settings", "/settings"]]);
+describe("the side bar (D-384, D-409, D-403)", () => {
+  it("has five sections: tasks, research, projects, memory, settings", () => {
+    expect(NAV.map((n) => [n.id, n.href])).toEqual([["tasks", "/"], ["research", "/research"], ["projects", "/harness"], ["memory", "/memory"], ["settings", "/settings"]]);
     expect(navActive("research")).toBe("research");
+    expect(navActive("memory")).toBe("memory");
   });
 
   it("pages that left the bar light up the section they now live under", () => {

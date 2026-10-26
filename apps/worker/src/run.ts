@@ -70,6 +70,8 @@ export interface RunTaskInput {
   applyFiles?: { path: string; data: Buffer | null }[];
   /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
   mcpBudgets?: Record<string, number>;
+  /** D-400: the memory block of the contract; its sha256 must be the contract's memory_hash */
+  memoryBlock?: string | null;
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
 }
@@ -192,6 +194,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if (e instanceof MandatError) return fail(e.code, e.message);
       return fail("E_CONTRACT_INVALID", `cannot read contract: ${(e as Error).message}`);
     }
+    // D-400: the memory block the agent gets is exactly the one the contract was sealed with (memory_hash)
+    const memoryBlock = i.memoryBlock ?? null;
+    if ((memoryBlock === null ? null : sha256Tag(memoryBlock)) !== contract.memory_hash) return fail("E_CONTRACT_HASH", "memory block does not match the contract's memory_hash");
     let adapter: AgentAdapter;
     try {
       adapter = adapterFor(i.agent, contract.channel.model);
@@ -261,7 +266,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     w.raw("contract.json", readFileSync(i.contractPath));
     w.raw("canary.json", JSON.stringify({ name: "AWS_SECRET_ACCESS_KEY", value_hash: sha256Tag(canary) }) + "\n");
     w.ledger("task_created", contract.task_id, { task_id: contract.task_id, run_id: runId, agent: adapter.id, contract_hash: contract.contract_hash });
-    w.ledger("memory_snapshot", contract.task_id, { snapshot_hash: null, reason: "memory_disabled_e0" });
+    w.ledger("memory_snapshot", contract.task_id, memoryBlock === null ? { snapshot_hash: null, reason: "memory_disabled_e0" } : { snapshot_hash: contract.memory_hash, reason: "memory_block" });
     out(`mandat run ${runId} task=${contract.task_id} agent=${adapter.id} base=${contract.base_commit.slice(0, 7)}`);
 
     const sec = (e: { kind: SecurityEvent["kind"]; severity: SecurityEvent["severity"]; detail: SecurityEvent["detail"]; source: SecurityEvent["source"] }): void => {
@@ -311,7 +316,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
         const seed = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(baseDir), timeoutMs: 120_000 });
         if (seed.exitCode !== 0) infra("E_DOCKER", "seed failed");
-        const text = renderAgentContract(contractForAgent(contract));
+        const text = renderAgentContract(contractForAgent(contract, memoryBlock));
         await w.text("agent-contract.txt", text);
         const c = await runSandbox(sctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "cat > /m/in/contract.txt && chmod 0444 /m/in/contract.txt"], stdin: PassThrough.from([text]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000 });
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");

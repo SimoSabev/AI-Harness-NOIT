@@ -10,7 +10,7 @@ const sub = ch("max", "cli_profile", 0.95, 0.05);
 
 const primary = (r: ReturnType<typeof routeRoles>, role: string) => (r.ok ? r.routes.find((x) => x.role === role)?.channels[0]?.id : null);
 
-describe("routing roles to models (D-393)", () => {
+describe("routing roles to models (D-404)", () => {
   it("balanced: the strong model plans and writes, the cheap one reads pages", () => {
     const r = routeRoles([opus, haiku], "balanced");
     expect(primary(r, "planner")).toBe("opus");

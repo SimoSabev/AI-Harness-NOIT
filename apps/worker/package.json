@@ -33,6 +33,7 @@
     "@mandat/gate-github": "workspace:*",
     "@mandat/ledger": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",
+    "@mandat/memory": "workspace:*",
     "@mandat/onboard": "workspace:*",
     "@mandat/profile": "workspace:*",
     "@mandat/redaction": "workspace:*",

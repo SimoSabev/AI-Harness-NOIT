@@ -8,7 +8,7 @@ describe("supabase/tests (pgTAP on PGlite)", () => {
   });
   it("всички файлове са зелени", async () => {
     const r = await runDbTests();
-    expect(r.map((x) => x.file)).toEqual(["api_keys.test.sql", "diff_omitted.test.sql", "free_type.test.sql", "harness.test.sql", "harness_profiles.test.sql", "harness_ui.test.sql", "hidden_tests.test.sql", "ledger_append.test.sql", "outbox_approvals.test.sql", "research_runs.test.sql", "rls_matrix.test.sql", "rls_roles.test.sql", "mcp_catalog.test.sql", "night_shift.test.sql", "session_lines.test.sql", "tool_permissions.test.sql", "ui_shots.test.sql", "web_rls.test.sql", "workbench_rls.test.sql"].sort());
+    expect(r.map((x) => x.file)).toEqual(["api_keys.test.sql", "diff_omitted.test.sql", "free_type.test.sql", "harness.test.sql", "harness_profiles.test.sql", "harness_ui.test.sql", "hidden_tests.test.sql", "ledger_append.test.sql", "mcp_catalog.test.sql", "memory.test.sql", "night_shift.test.sql", "outbox_approvals.test.sql", "research_runs.test.sql", "rls_matrix.test.sql", "rls_roles.test.sql", "session_lines.test.sql", "tool_permissions.test.sql", "ui_shots.test.sql", "web_rls.test.sql", "workbench_rls.test.sql"].sort());
     for (const f of r) expect({ file: f.file, ok: f.ok, failed: f.failed, error: f.error }).toEqual({ file: f.file, ok: true, failed: [], error: null });
-  }, 120_000);
+  }, 300_000); // 19 files × a fresh PGlite with every migration: ~55 s alone, more under a parallel `pnpm test`
 });

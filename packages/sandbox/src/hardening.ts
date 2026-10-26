@@ -230,12 +230,12 @@ export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status"
     return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${dir}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${dir}`];
   }
   const run = (net: string, tty: string[], ro: boolean) => ["run", "--rm", ...tty, "--network", net, "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${dir}${ro ? ":ro" : ""}`, "--entrypoint", cli, o.image];
-  // E9г (D-399): one model call of the research engine: `claude -p` with no tools, no MCP and no session on disk; the
+  // E9г (D-410): one model call of the research engine: `claude -p` with no tools, no MCP and no session on disk; the
   // prompt on stdin; the network is the profile's own route to the provider (like login). Claude profiles only.
   if (kind === "print") {
     const a = o.argv ?? [];
     const ok = !codex && a[0] === "claude" && a[1] === "-p" && a.includes("--tools") && a[a.indexOf("--tools") + 1] === "" && a.includes("--strict-mcp-config") && a.includes("--no-session-persistence");
-    if (!ok || a.some((x) => /^--(dangerously|mcp-config|add-dir|allowedTools|permission-mode|settings|plugin-dir)/.test(x))) forbid("a print call is claude -p with no tools (D-399)");
+    if (!ok || a.some((x) => /^--(dangerously|mcp-config|add-dir|allowedTools|permission-mode|settings|plugin-dir)/.test(x))) forbid("a print call is claude -p with no tools (D-410)");
     return [...run("mandat-upstream", ["-i"], false), ...a.slice(1)];
   }
   if (kind === "status") return [...run("none", [], true), ...(codex ? ["login", "status"] : ["auth", "status", "--json"])];
@@ -250,7 +250,7 @@ export interface ProxyRunOptions {
   user: string;
   mandatHome: string;
   publishAdminPort: number | null;
-  /** E9г (D-399): the inference port on loopback for the research engine on this computer (mdt_ tokens only) */
+  /** E9г (D-410): the inference port on loopback for the research engine on this computer (mdt_ tokens only) */
   publishInferencePort?: number | null;
   envNames: string[];
   publicEnv: Record<string, string>;
@@ -260,7 +260,7 @@ export interface ProxyRunOptions {
 }
 
 /** 8.1 / D-083: the proxy, the test proxy and the stub. Only `-p 127.0.0.1:<port>:8788` may be published, and for the
- * proxy itself the inference port on loopback too (D-399: the research engine of this computer, mdt_ tokens only). */
+ * proxy itself the inference port on loopback too (D-410: the research engine of this computer, mdt_ tokens only). */
 export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
   const keys = new Set(["name", "image", "user", "mandatHome", "publishAdminPort", "publishInferencePort", "envNames", "publicEnv", "command", "caFile"]);
   for (const k of Object.keys(o)) if (!keys.has(k)) forbid(`unknown docker option: ${k}`);
@@ -402,7 +402,7 @@ export function envForPhase(
 }
 
 /**
- * E9г (D-394): the browser tier of research — one page in the Playwright image, the SANDBOX_HARDENING flags, the
+ * E9г (D-405): the browser tier of research — one page in the Playwright image, the SANDBOX_HARDENING flags, the
  * network to the internet (mandat-upstream) and the runner script mounted read-only. The script's guard proxy keeps the
  * browser off every non-public address; no secret, no volume, no published port.
  */
@@ -419,11 +419,11 @@ export function buildRenderArgs(o: { image: string; script: string; runId: strin
   ];
 }
 
-/** E9г (D-396): SearXNG, pinned by digest (2026.10.19-81371861f, Docker Hub, read 26.10.2026). */
+/** E9г (D-407): SearXNG, pinned by digest (2026.10.19-81371861f, Docker Hub, read 26.10.2026). */
 export const SEARXNG_IMAGE = "searxng/searxng:2026.10.19-81371861f@sha256:5ed0323b5f5f8701264ef65e239a2bd83cb57098f2b971fa30bf79c06eeae271";
 export const SEARXNG_NAME = "mandat-searxng";
 /**
- * E9г (D-396): Mandat's own metasearch for research. Published on loopback only; the settings file read-only; no
+ * E9г (D-407): Mandat's own metasearch for research. Published on loopback only; the settings file read-only; no
  * capabilities beyond what the image's entrypoint needs to drop to its own user; the secret by name (SEARXNG_SECRET).
  */
 export function buildSearxngArgs(o: { settings: string; port: number; image?: string }): string[] {

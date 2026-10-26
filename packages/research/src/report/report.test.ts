@@ -11,7 +11,7 @@ const hostile = {
   "https://evil.example.org/x": `<html><head><title>&lt;img src=x onerror=alert(1)&gt; "quoted"</title></head><body><article><p>${"The JSON Canonicalization Scheme sorts object properties by their UTF-16 code units. ".repeat(8)}</p></article></body></html>`,
 };
 
-describe("the downloadable report (D-397)", () => {
+describe("the downloadable report (D-408)", () => {
   it("HTML: self-contained, escaped, citations with the quote on hover, sources with hash, map and timeline, data as JSON", async () => {
     const r = await demoWorld({ pages: hostile }).run();
     const h = reportHtml(r);

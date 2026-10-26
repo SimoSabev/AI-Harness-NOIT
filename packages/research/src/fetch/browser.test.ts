@@ -5,9 +5,9 @@ import { describe, expect, it } from "vitest";
 import { buildRenderArgs } from "@mandat/sandbox";
 import { RENDER_SCRIPT, dockerRenderer } from "./browser.js";
 
-// E9г (D-394): the browser tier. The container itself is exercised in the live run; here: its arguments, the adapter,
+// E9г (D-405): the browser tier. The container itself is exercised in the live run; here: its arguments, the adapter,
 // and the guard proxy of the runner script (it must never reach a non-public address).
-describe("the browser tier (D-394)", () => {
+describe("the browser tier (D-405)", () => {
   it("the runner script ships with the package; the container runs it with the hardening flags and no secrets", () => {
     expect(existsSync(RENDER_SCRIPT)).toBe(true);
     const a = buildRenderArgs({ image: "mandat-sandbox-ui:pw1", script: RENDER_SCRIPT, runId: "q_abc" });

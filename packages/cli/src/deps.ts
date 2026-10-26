@@ -15,7 +15,7 @@ export interface CliDeps {
   /** tests: a fake ledger database for `verify-log --org <uuid>` */
   db?: SqlClient & { end?: () => Promise<void> };
   /** E7в / D-345: hands the keys to a freshly started proxy once (POST /admin/boot on the loopback admin port) */
-  /** D-393: any of the provider keys and the saved connections' upstreams (at least one); research search keys (Exa) */
+  /** D-393: any of the provider keys and the saved connections' upstreams (at least one); D-411: research search keys (Exa) */
   bootProxy(port: number, token: string, keys: { anthropic?: string; openai?: string; upstreams?: Record<string, ProxyUpstream>; search?: { exa?: string } }): Promise<boolean>;
   /** tests: a local TSA instead of the network */
   tsaFetcher?: Fetcher;

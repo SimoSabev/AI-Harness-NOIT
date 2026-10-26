@@ -1,6 +1,6 @@
 import type { ClaimVerdict, FetchStatus, FetchTier, ResearchReport, ResearchRole, TraceEvent } from "@mandat/contract";
 
-// E9г (D-397): the numbers behind the process map, the timeline and the model table of a report — the same for the
+// E9г (D-408): the numbers behind the process map, the timeline and the model table of a report — the same for the
 // live panel and the downloaded document. Pure.
 
 export interface LaneSummary {

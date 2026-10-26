@@ -1,6 +1,6 @@
 begin;
 select plan(9);
--- E9г (D-398): research questions are queued, run by the worker (service role) with a live event trail, and read by the
+-- E9г (D-409): research questions are queued, run by the worker (service role) with a live event trail, and read by the
 -- org's members; members never write the trail or the report directly.
 insert into auth.users (id, email) values ('10000000-0000-4000-8000-000000000001', 'owner@x.invalid'), ('10000000-0000-4000-8000-000000000009', 'other@x.invalid');
 insert into public.orgs (id, name) values ('00000000-0000-4000-8000-000000000001', 'demo'), ('00000000-0000-4000-8000-000000000009', 'other');

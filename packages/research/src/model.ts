@@ -6,7 +6,7 @@ import { costUsd, costUsdOpenAi } from "@mandat/llm-proxy";
 import type { OpenAiRate } from "@mandat/llm-proxy";
 import type { RoleRoute, RouterChannel } from "./router.js";
 
-// E9г (D-393): one interface over every model the person connected. API keys go through llm-proxy with an mdt_ token
+// E9г (D-404): one interface over every model the person connected. API keys go through llm-proxy with an mdt_ token
 // (AGENTS.md rule 2: the key never leaves the proxy); a subscription is the unchanged CLI (`claude -p`, D-295) run by
 // the worker in the profile's sandbox; a local model is an OpenAI-compatible endpoint (Ollama, LM Studio, vLLM, llama.cpp).
 
@@ -114,7 +114,7 @@ export function localModel(o: { channel: RouterChannel; baseUrl: string }): Mode
 }
 
 /** argv of one model call through the unchanged Claude Code CLI: no tools, no MCP, no session on disk; the prompt on stdin.
- * Flags: `claude --help` of 2.1.198 (26.10.2026, D-393). */
+ * Flags: `claude --help` of 2.1.198 (26.10.2026, D-404). */
 export function cliArgv(model: string, system: string): string[] {
   return ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", model, "--system-prompt", system];
 }

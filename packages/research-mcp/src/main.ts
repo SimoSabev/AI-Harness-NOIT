@@ -6,7 +6,7 @@ import { DEFAULT_SEARXNG, openDb } from "@mandat/worker";
 import { ResearchBackend } from "./backend.js";
 import { dbQueue } from "./queue.js";
 
-// E9г (D-401): `mandat-research-mcp` over stdio — for an agent on this computer (`claude mcp add research -- node
+// E9г (D-412): `mandat-research-mcp` over stdio — for an agent on this computer (`claude mcp add research -- node
 // packages/research-mcp/dist/main.js`). Own search always; research_ask/recall when MANDAT_DB_URL points at the harness
 // database (pnpm local). stdout is JSON-RPC only; logs go to stderr.
 const env = process.env;

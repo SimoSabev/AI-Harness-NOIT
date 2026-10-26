@@ -5,7 +5,7 @@ import type { Fetcher, ModelClient, RoleRoute, RouterChannel, SearchProvider } f
 import { routeRoles, runResearch } from "@mandat/research";
 import type { Db } from "./db.js";
 
-// E9г (D-398): the research queue of the worker. A question queued by a person (web), an agent (research MCP) or a task
+// E9г (D-409): the research queue of the worker. A question queued by a person (web), an agent (research MCP) or a task
 // is claimed (≤ 2 running per org, SKIP LOCKED), run by the engine with every event written at once (the live panel
 // polls research_events), stopped when someone presses Stop, and finished with sources, claims and the report.
 

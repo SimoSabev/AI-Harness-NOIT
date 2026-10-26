@@ -13,7 +13,7 @@ const io = () => {
   return { io: { stdout: (s: string) => void out.push(s), stderr: (s: string) => void err.push(s), env: {} } as unknown as Io, out, err };
 };
 
-describe("mandat research (D-398)", () => {
+describe("mandat research (D-409)", () => {
   it("demo: the trace on stderr, a self-contained HTML report on stdout", async () => {
     const t = io();
     expect(await researchDemo(t.io, { format: "html" })).toBe(0);

@@ -1,4 +1,4 @@
-// E9г (D-397): the words of the report in Bulgarian and English. "auto" follows the question (Cyrillic → bg).
+// E9г (D-408): the words of the report in Bulgarian and English. "auto" follows the question (Cyrillic → bg).
 
 export type Lang = "bg" | "en";
 export function langOf(language: "auto" | "bg" | "en", question: string): Lang {

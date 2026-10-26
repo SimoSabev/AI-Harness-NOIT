@@ -1,4 +1,4 @@
-// E9г (D-394): the browser tier of the fetch ladder. Runs inside the Playwright image (docker/sandbox-ui), one page per
+// E9г (D-405): the browser tier of the fetch ladder. Runs inside the Playwright image (docker/sandbox-ui), one page per
 // container. Chromium reaches the web only through a guard proxy in this process, which resolves every host itself and
 // refuses loopback, private, link-local and other non-public addresses (so a page cannot make the browser call into the
 // host's network); WebRTC is limited to the proxy; images, fonts and media are not loaded; no cookies survive (a fresh

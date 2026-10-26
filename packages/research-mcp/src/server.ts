@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { ResearchToolInput } from "@mandat/contract";
 import type { ResearchBackend } from "./backend.js";
 
-// E9г (PRD 6.13, v5 2.5, D-401): the `research` MCP server — the seven research_* tools every connected agent gets.
+// E9г (PRD 6.13, v5 2.5, D-412): the `research` MCP server — the seven research_* tools every connected agent gets.
 // JSON results as text content, like the mandat server (packages/mcp/src/server.ts).
 const json = (v: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(v) }] });
 const fail = (msg: string) => ({ content: [{ type: "text" as const, text: JSON.stringify({ error: msg }) }], isError: true });

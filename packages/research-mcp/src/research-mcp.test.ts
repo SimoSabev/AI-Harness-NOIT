@@ -17,7 +17,7 @@ const res = (url: string): HttpResult => ({ url, finalUrl: url, status: DEMO_PAG
 const fetcher = () => new Fetcher({ get: async (u) => res(u), respectRobots: false, archive: false, politeMs: 0, sleep: async () => {} });
 const provider: SearchProvider = { name: "fake", scopes: ["web", "docs", "code", "papers"], usdPerQuery: 0, search: async () => Object.keys(DEMO_PAGES).map((url) => ({ url, title: url, snippet: "JCS UTF-16", date: null, provider: "fake" })) };
 
-describe("the research MCP server (D-401)", () => {
+describe("the research MCP server (D-412)", () => {
   it("AC-13.1: an agent sees the seven research_* tools", async () => {
     const t = new StdioClientTransport({ command: "node", args: [main], env: { PATH: process.env.PATH ?? "", MANDAT_SEARXNG_URL: "http://127.0.0.1:9" } });
     const c = new Client({ name: "t", version: "1" });
@@ -31,7 +31,7 @@ describe("the research MCP server (D-401)", () => {
   }, 60_000);
 });
 
-describe("the research backend (D-401)", () => {
+describe("the research backend (D-412)", () => {
   it("search gives source ids; read accepts only those, frames the text, gives hash and final URL", async () => {
     const b = new ResearchBackend({ providers: [provider], fetcher: fetcher(), queue: null });
     const hits = await b.search({ query: "JCS sort", scope: "web", recency: "any", max: 5 });

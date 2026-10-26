@@ -9,7 +9,7 @@ import type { CliExec, ModelClient, Renderer, RouterChannel, SearchProvider } fr
 import { loadChannels } from "./channels.js";
 import type { ResearchEnv } from "./research.js";
 
-// E9г (D-398): the research environment on this computer. Models: every enabled channel of the org — an API key through
+// E9г (D-409): the research environment on this computer. Models: every enabled channel of the org — an API key through
 // llm-proxy with a run-scoped mdt_ token (budget = the run's cap; the key never leaves the proxy, AGENTS.md rule 2), a
 // subscription profile through the unchanged CLI in its sandbox (D-295), a local OpenAI-compatible server. Search: our
 // own (SearXNG when running, Wikipedia, arXiv, Crossref, GitHub, Stack Exchange) plus Anthropic web search when an
@@ -69,7 +69,7 @@ export async function hostResearchEnv(o: HostResearchOptions, org: string, req: 
   if (await reachable(`${sx}/healthz`)) providers.unshift(searxng({ baseUrl: sx }));
   const anthropicKey = states.find((c) => c.kind === "api_key" && c.provider === "anthropic" && c.enabled && c.health === "ok");
   if (anthropicKey && o.proxy) providers.push(anthropicWebSearch({ client: anthropicViaProxy(o.proxy.url, token("anthropic", states.length + 1)), model: "claude-haiku-5-5" }));
-  // D-400: Exa when the proxy holds its key — a search provider and the last step of the fetch ladder
+  // D-411: Exa when the proxy holds its key — a search provider and the last step of the fetch ladder
   const exaOn = o.proxy?.search?.includes("exa") === true;
   const exaToken = exaOn ? token("anthropic", states.length + 2) : "";
   if (exaOn && o.proxy) providers.push(exa({ baseUrl: `${o.proxy.url}/research/exa`, token: exaToken }));

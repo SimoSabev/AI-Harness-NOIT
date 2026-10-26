@@ -3,7 +3,7 @@ import type { ResearchScope } from "@mandat/contract";
 import { MandatError } from "@mandat/contract";
 import type { Hit } from "../rank.js";
 
-// E9г (D-396): search providers. Our own first — a self-hosted SearXNG (metasearch, no key) and the open APIs of
+// E9г (D-407): search providers. Our own first — a self-hosted SearXNG (metasearch, no key) and the open APIs of
 // Wikipedia, arXiv, Crossref, GitHub and Stack Exchange — then the paid ones the person adds (Exa; Anthropic web search
 // through the proxy). A provider's key never reaches the engine: a paid provider is called through the proxy
 // (`Transport`), like a model (AGENTS.md rule 2). Results are untrusted text.
@@ -54,7 +54,7 @@ const siteOps = (q: SearchQuery) => `${q.query}${q.include.length > 0 && q.inclu
 const RECENCY_DAYS = { any: null, year: 365, month: 31, week: 7 } as const;
 const sinceIso = (q: SearchQuery, now = Date.now()) => (RECENCY_DAYS[q.recency] === null ? null : new Date(now - (RECENCY_DAYS[q.recency] as number) * 86_400_000).toISOString().slice(0, 10));
 
-/** a self-hosted SearXNG (docker/searxng, D-396): metasearch over several engines, JSON output, no key */
+/** a self-hosted SearXNG (docker/searxng, D-407): metasearch over several engines, JSON output, no key */
 export function searxng(o: { baseUrl: string; transport?: Transport }): SearchProvider {
   const t = o.transport ?? fetchTransport;
   return {
