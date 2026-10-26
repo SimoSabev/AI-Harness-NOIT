@@ -620,6 +620,15 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
+  packages/memory:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@mandat/redaction':
+        specifier: workspace:*
+        version: link:../redaction
+
   packages/onboard:
     dependencies:
       '@mandat/contract':
