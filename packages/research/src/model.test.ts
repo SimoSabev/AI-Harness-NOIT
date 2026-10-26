@@ -40,7 +40,7 @@ describe("model clients (D-393)", () => {
     expect(r.inputTokens).toBe(3000);
     expect(r.usd).toBeGreaterThan(0);
     const last = seen.at(-1)!;
-    expect(last.headers["x-api-key"]).toBe("mdt_test");
+    expect(last.headers.authorization).toBe("Bearer mdt_test");
     expect(JSON.stringify(last.body.system)).toContain("ephemeral");
   });
   it("openai responses through the proxy asks for a JSON object when json is set", async () => {

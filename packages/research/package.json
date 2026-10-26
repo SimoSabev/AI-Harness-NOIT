@@ -19,6 +19,7 @@
     "test": "vitest run --root ../.. packages/research/"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.1.0",
     "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
     "@mandat/llm-proxy": "workspace:*",

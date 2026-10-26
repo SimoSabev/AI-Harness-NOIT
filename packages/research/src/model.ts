@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
 import type { ResearchRole, RoleAssignment } from "@mandat/contract";
 import { MandatError } from "@mandat/contract";
@@ -15,6 +16,8 @@ export interface ModelRequest {
   maxTokens: number;
   /** the answer must be one JSON value */
   json: boolean;
+  /** how hard the model thinks (Anthropic output_config.effort); per-page roles use low */
+  effort?: "low" | "medium" | "high";
 }
 export interface ModelReply {
   text: string;
@@ -43,23 +46,38 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
 const num = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : 0);
 const obj = (x: unknown): Record<string, unknown> => (typeof x === "object" && x !== null ? (x as Record<string, unknown>) : {});
 
+/** the official SDK against llm-proxy: the mdt_ token is the "key", the proxy holds the real one (AGENTS.md rule 2) */
+export function anthropicViaProxy(baseUrl: string, token: string): Anthropic {
+  return new Anthropic({ apiKey: token, baseURL: baseUrl, maxRetries: 2, timeout: TIMEOUT_MS });
+}
+
 /** Anthropic Messages or OpenAI Responses through llm-proxy; the system prompt is cached (it repeats per page). */
-export function proxyModel(o: { channel: RouterChannel; baseUrl: string; token: string; provider: "anthropic" | "openai"; openaiPrices?: Record<string, OpenAiRate> }): ModelClient {
+export function proxyModel(o: { channel: RouterChannel; baseUrl: string; token: string; provider: "anthropic" | "openai"; openaiPrices?: Record<string, OpenAiRate>; client?: Anthropic }): ModelClient {
+  const anthropic = o.provider === "anthropic" ? (o.client ?? anthropicViaProxy(o.baseUrl, o.token)) : null;
   return {
     channel: o.channel,
     async complete(r, signal) {
-      if (o.provider === "anthropic") {
-        const j = obj(
-          await postJson(
-            `${o.baseUrl}/v1/messages`,
-            { "x-api-key": o.token, "anthropic-version": "2023-06-01" },
-            { model: o.channel.model, max_tokens: r.maxTokens, system: [{ type: "text", text: r.system, cache_control: { type: "ephemeral" } }], messages: [{ role: "user", content: r.user }] },
-            signal,
-          ),
-        );
-        const text = (Array.isArray(j.content) ? j.content : []).map((b) => (obj(b).type === "text" ? String(obj(b).text ?? "") : "")).join("");
-        const u = obj(j.usage);
-        const usage = { input_tokens: num(u.input_tokens), output_tokens: num(u.output_tokens), cache_creation_input_tokens: num(u.cache_creation_input_tokens), cache_read_input_tokens: num(u.cache_read_input_tokens) };
+      if (anthropic) {
+        let msg: Anthropic.Message;
+        try {
+          msg = await anthropic.messages.create(
+            {
+              model: o.channel.model,
+              max_tokens: r.maxTokens,
+              system: [{ type: "text", text: r.system, cache_control: { type: "ephemeral" } }],
+              messages: [{ role: "user", content: r.user }],
+              output_config: { effort: r.effort ?? "medium" },
+            },
+            signal ? { signal } : undefined,
+          );
+        } catch (e) {
+          // the SDK's message may quote the endpoint's body; keep only the status (AGENTS.md rule 5)
+          throw new MandatError("E_RESEARCH_MODEL", e instanceof Anthropic.APIError ? `model endpoint answered ${String(e.status)}` : "model endpoint unreachable");
+        }
+        if (msg.stop_reason === "refusal") throw new MandatError("E_RESEARCH_MODEL", "the model declined");
+        const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+        const u = msg.usage;
+        const usage = { input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_creation_input_tokens: u.cache_creation_input_tokens ?? 0, cache_read_input_tokens: u.cache_read_input_tokens ?? 0 };
         return { text, inputTokens: usage.input_tokens + usage.cache_read_input_tokens + usage.cache_creation_input_tokens, outputTokens: usage.output_tokens, usd: costUsd(o.channel.model, usage) ?? 0 };
       }
       const j = obj(await postJson(`${o.baseUrl}/v1/responses`, { authorization: `Bearer ${o.token}` }, { model: o.channel.model, instructions: r.system, input: r.user, max_output_tokens: r.maxTokens, ...(r.json ? { text: { format: { type: "json_object" } } } : {}) }, signal));
