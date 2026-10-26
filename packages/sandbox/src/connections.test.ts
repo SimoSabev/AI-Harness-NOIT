@@ -34,7 +34,7 @@ describe("connections in the sandbox (D-392)", () => {
     expect(profileVolume("codex", "rabota")).toBe("mandat-profile-codex-rabota");
   });
   it("only the agent mounts a profile volume, each at its own place (claude → PROFILE_DIR, codex → CODEX_PROFILE_DIR)", () => {
-    const spec = (source: string, target: string, role: "agent" | "seed" = "agent") => ({ role, runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", image: "img", network: "none", user: "1000:1000", envNames: [], publicEnv: {}, mounts: [{ kind: "volume" as const, source, target, readonly: false }] });
+    const spec = (source: string, target: string, role: "agent" | "seed" = "agent") => ({ role, runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", image: "img", network: "none", user: "1000:1000" as const, envNames: [], publicEnv: {}, mounts: [{ kind: "volume" as const, source, target, readonly: false }] });
     const ctx = { home: "/home/x", mandatHome: MH, runDir: path.join(MH, "runs", "r_x") };
     expect(code(() => buildRunArgs(spec(profileVolume("codex", "a"), CODEX_PROFILE_DIR), ctx))).toBeUndefined();
     expect(code(() => buildRunArgs(spec(profileVolume("codex", "a"), PROFILE_DIR), ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");

@@ -9,7 +9,7 @@ import { proxyStart } from "./commands/proxy.js";
 import type { CliDeps } from "./deps.js";
 
 const KEY = ["sk", "ant", "api03", "q".repeat(40)].join("-");
-function deps(calls: { args: string[]; env: Record<string, string> }[], boots: Record<string, string>[], bootOk = true): CliDeps {
+function deps(calls: { args: string[]; env: Record<string, string> }[], boots: Record<string, unknown>[], bootOk = true): CliDeps {
   const docker: DockerRunner = {
     run(args, o) {
       calls.push({ args, env: o.env });
@@ -32,7 +32,7 @@ describe("proxy start with sealed keys (E7в, AC-3.8)", () => {
   it("a key from env is sealed into the store; the next start (no env) uses the store", async () => {
     const home = mkdtempSync(path.join(tmpdir(), "pk-"));
     const calls: { args: string[]; env: Record<string, string> }[] = [];
-    const boots: Record<string, string>[] = [];
+    const boots: Record<string, unknown>[] = [];
     expect(await proxyStart(io({ ANTHROPIC_API_KEY: KEY }), deps(calls, boots), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
     expect(readFileSync(path.join(home, "keys.sealed.json"), "utf8")).not.toContain(KEY);
     expect(new FileKeyStore(home, loadKek({ env: {}, mandatHome: home })).get("anthropic")).toBe(KEY);
@@ -57,7 +57,7 @@ describe("proxy start with saved connections (D-393)", () => {
     new ConnectionStore(home, loadKek({ env: {}, mandatHome: home })).put({ id: "ollama", provider: "ollama", label: "Ollama", baseUrl: "http://127.0.0.1:11434", models: ["qwen3-coder"], defaultModel: "qwen3-coder" });
     const calls: { args: string[]; env: Record<string, string> }[] = [];
     const boots: Record<string, unknown>[] = [];
-    expect(await proxyStart(io({}), deps(calls, boots as Record<string, string>[]), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
+    expect(await proxyStart(io({}), deps(calls, boots), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
     expect(boots).toEqual([{ upstreams: { ollama: { wire: "anthropic", url: "http://host.docker.internal:11434", auth: "none", key: "", models: ["qwen3-coder"], prices: { "qwen3-coder": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } } } }]);
   });
 });
