@@ -20,9 +20,9 @@ export interface RecallOptions {
 const RRF_K = 60;
 const DAY = 86_400_000;
 
-/** The memories a search may see: active, the person's own (user) and this project's. */
+/** The memories a search may see: active, the person's own (user), this session's notes and this project's. */
 export function visible(items: readonly MemoryItem[], repoId: string | null): MemoryItem[] {
-  return items.filter((m) => m.status === "active" && (m.scope === "user" || (repoId !== null && m.scope === "project" && m.repo_id === repoId)));
+  return items.filter((m) => m.status === "active" && (m.scope === "user" || m.scope === "session" || (repoId !== null && m.scope === "project" && m.repo_id === repoId)));
 }
 
 function bm25(docs: readonly string[][], query: readonly string[]): number[] {

@@ -631,6 +631,22 @@ importers:
       '@mandat/redaction':
         specifier: workspace:*
         version: link:../redaction
+      '@modelcontextprotocol/server':
+        specifier: 2.3.1
+        version: 2.3.1
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.3.1
+        version: 2.3.1
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
 
   packages/onboard:
     dependencies:

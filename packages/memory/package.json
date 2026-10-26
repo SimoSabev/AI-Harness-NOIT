@@ -23,6 +23,13 @@
   },
   "dependencies": {
     "@mandat/contract": "workspace:*",
-    "@mandat/redaction": "workspace:*"
+    "@mandat/redaction": "workspace:*",
+    "@modelcontextprotocol/server": "2.3.1",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@types/pg": "8.23.1"
   }
 }

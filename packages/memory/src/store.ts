@@ -140,8 +140,13 @@ export async function recordUsage(sql: MemorySql, o: { org: string; task_id: str
     "insert into public.memory_usage (org_id, task_id, attempt, core_tokens, recall_tokens, items, block_hash) values ($1::uuid, $2, $3, $4, $5, $6, $7) on conflict (task_id, attempt) do nothing returning id",
     [o.org, o.task_id, o.attempt, o.core_tokens, o.recall_tokens, o.ids.length, o.hash],
   );
-  if (r.rows.length === 0 || o.ids.length === 0) return;
-  await sql.query("update public.memory_items set uses = uses + 1, last_used_at = now() where org_id = $1::uuid and id = any($2::uuid[])", [o.org, [...o.ids]]);
+  if (r.rows.length > 0) await markUsed(sql, o.org, o.ids);
+}
+
+/** A search in a session used these memories (more used ranks higher; never used for long → archive suggestion). */
+export async function markUsed(sql: MemorySql, org: string, ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
+  await sql.query("update public.memory_items set uses = uses + 1, last_used_at = now() where org_id = $1::uuid and id = any($2::uuid[])", [org, [...ids]]);
 }
 
 export async function usageRows(sql: MemorySql, org: string, limit = 50): Promise<{ task_id: string; core_tokens: number; recall_tokens: number; items: number }[]> {

@@ -12,6 +12,7 @@ export type { GraphEdge, GraphNode, MemoryGraph, NodeType } from "./graph.js";
 export { memoryTokens, usageSummary } from "./metrics.js";
 export type { UsageSummary } from "./metrics.js";
 export { GOLDEN, evaluate } from "./eval.js";
-export { addMemory, applyConsolidation, deleteMemory, loadMemory, memoryHistory, patchMemory, recordUsage, usageRows } from "./store.js";
+export { addMemory, applyConsolidation, deleteMemory, loadMemory, markUsed, memoryHistory, patchMemory, recordUsage, usageRows } from "./store.js";
+export { createMemoryServer, SESSION_GUIDE } from "./mcp.js";
 export type { Actor, AddResult, MemoryEvent, MemorySql, PatchResult } from "./store.js";
 export type { EvalResult, GoldenCase } from "./eval.js";
