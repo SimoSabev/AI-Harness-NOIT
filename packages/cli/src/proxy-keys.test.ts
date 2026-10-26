@@ -9,7 +9,7 @@ import { proxyStart } from "./commands/proxy.js";
 import type { CliDeps } from "./deps.js";
 
 const KEY = ["sk", "ant", "api03", "q".repeat(40)].join("-");
-function deps(calls: { args: string[]; env: Record<string, string> }[], boots: Record<string, string>[], bootOk = true): CliDeps {
+function deps(calls: { args: string[]; env: Record<string, string> }[], boots: Record<string, unknown>[], bootOk = true): CliDeps {
   const docker: DockerRunner = {
     run(args, o) {
       calls.push({ args, env: o.env });
@@ -32,7 +32,7 @@ describe("proxy start with sealed keys (E7в, AC-3.8)", () => {
   it("a key from env is sealed into the store; the next start (no env) uses the store", async () => {
     const home = mkdtempSync(path.join(tmpdir(), "pk-"));
     const calls: { args: string[]; env: Record<string, string> }[] = [];
-    const boots: Record<string, string>[] = [];
+    const boots: Record<string, unknown>[] = [];
     expect(await proxyStart(io({ ANTHROPIC_API_KEY: KEY }), deps(calls, boots), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
     expect(readFileSync(path.join(home, "keys.sealed.json"), "utf8")).not.toContain(KEY);
     expect(new FileKeyStore(home, loadKek({ env: {}, mandatHome: home })).get("anthropic")).toBe(KEY);

@@ -23,7 +23,7 @@ function docker(rules: Rule[], calls: { args: string[]; env: Record<string, stri
     },
   };
 }
-const booted: { port: number; token: string; keys: Record<string, string> }[] = [];
+const booted: { port: number; token: string; keys: Record<string, unknown> }[] = [];
 const deps = (d: DockerRunner, healthy = true): CliDeps => ({
   docker: d, healthz: () => Promise.resolve({ ok: healthy, status: healthy ? 200 : null }), procVersion: () => "", toolVersion: () => Promise.resolve("2.47.1"), nodeVersion: "24.22.0",
   bootProxy: (port, token, keys) => {
