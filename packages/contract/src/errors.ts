@@ -20,7 +20,13 @@ export type ErrorCode =
   | "E_INTERRUPTED"
   | "E_FORBIDDEN_DOCKER_FLAG"
   | "E_CHANNEL_UNSUPPORTED"
-  | "E_UNSUPPORTED_FS";
+  | "E_UNSUPPORTED_FS"
+  | "E_RESEARCH_MODEL"
+  | "E_RESEARCH_MODELS_DOWN"
+  | "E_RESEARCH_MODEL_JSON"
+  | "E_RESEARCH_FETCH"
+  | "E_RESEARCH_SSRF"
+  | "E_RESEARCH_SEARCH";
 
 export class MandatError extends Error {
   readonly code: ErrorCode;
