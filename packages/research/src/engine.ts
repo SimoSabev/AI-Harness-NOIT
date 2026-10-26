@@ -10,6 +10,7 @@ import type { ModelClient } from "./model.js";
 import { ANALYST_SYSTEM, PLANNER_SYSTEM, Plan, Queries, READER_SYSTEM, Reading, Reflection, SEARCHER_SYSTEM, VERIFIER_SYSTEM, Verified, WRITER_SYSTEM, Written } from "./prompts.js";
 import { locateQuote } from "./quotes.js";
 import { fuseHits } from "./rank.js";
+import { langOf, wordsOf } from "./report/text.js";
 import type { Hit } from "./rank.js";
 import type { RoleRoute, RouterChannel } from "./router.js";
 import type { SearchProvider } from "./search/providers.js";
@@ -77,6 +78,7 @@ export async function runResearch(input: ResearchRequestInput | ResearchRequest,
     });
   }, now);
   const lang = req.language === "auto" ? "the language of the question" : req.language === "bg" ? "Bulgarian" : "English";
+  const words = wordsOf(langOf(req.language, req.question));
   const asOf = new Date(started).toISOString().slice(0, 10);
   emit({ kind: "run_started", lane: null, question: req.question, depth: req.depth, goal: req.goal, budget_usd: cap.usd, routing: models.assignments() });
 
@@ -317,7 +319,7 @@ export async function runResearch(input: ResearchRequestInput | ResearchRequest,
         let out = r.text;
         for (const s of r.uncited) {
           out = out.replace(s, "").replace(/[ \t]{2,}/g, " ");
-          unresolved.push(`Без източник / no source: ${s}`.slice(0, 500));
+          unresolved.push(`${words.noSource}: ${s}`.slice(0, 500));
         }
         return out.replace(/\n{3,}/g, "\n\n").trim();
       };
@@ -329,8 +331,8 @@ export async function runResearch(input: ResearchRequestInput | ResearchRequest,
       emit({ kind: "note", lane: null, level: "warn", text: "the writer did not answer; the report lists the checked claims only" });
       summary = claims.slice(0, 5).map((c) => `${c.text} ${c.source_ns.map((n) => `[${n}]`).join("")}`).join(" ");
     }
-  } else unresolved.push("Нищо не беше потвърдено с цитат / nothing could be backed by a quote.");
-  for (const c of claims.filter((c) => c.verdict === "conflict")) unresolved.push(`Противоречие / conflict: ${c.text}`.slice(0, 500));
+  } else unresolved.push(words.nothingBacked);
+  for (const c of claims.filter((c) => c.verdict === "conflict")) unresolved.push(`${words.conflictOf}: ${c.text}`.slice(0, 500));
 
   const partial = budget.reason;
   const status = sources.length === 0 && claims.length === 0 ? (partial ? "partial" : "failed") : partial ? "partial" : "done";

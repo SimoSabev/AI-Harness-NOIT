@@ -17,6 +17,7 @@ const T = {
     col: { n: "№", title: "Заглавие", domain: "Домейн", published: "Публикуван", tier: "Ниво", fetched: "Прочетен", hash: "Хеш", role: "Роля", channel: "Канал", model: "Модел", calls: "Повиквания", tokens: "Токени", usd: "$", time: "Време" },
     lane: "Лента", plan: "Стратегия", noClaims: "Няма твърдения с цитат.", rejected: "отхвърлени цитата (не са дословно в страницата)", stop: "Спря, защото", generated: "Създадено от Мандат · всеки цитат е точен подниз на прочетения текст с този хеш",
     tiers: { http: "HTTP", browser: "браузър", archive: "архив", provider: "доставчик" }, json: "Данните (JSON)",
+    noSource: "Без източник", conflictOf: "Противоречие", nothingBacked: "Нищо не беше потвърдено с цитат.",
   },
   en: {
     title: "Research", asOf: "As of", depth: { quick: "quick", standard: "standard", deep: "deep" }, goal: { economy: "economy", balanced: "balanced", quality: "quality" },
@@ -29,6 +30,7 @@ const T = {
     col: { n: "#", title: "Title", domain: "Domain", published: "Published", tier: "Tier", fetched: "Read at", hash: "Hash", role: "Role", channel: "Channel", model: "Model", calls: "Calls", tokens: "Tokens", usd: "$", time: "Time" },
     lane: "Lane", plan: "Strategy", noClaims: "No claim could be backed by a quote.", rejected: "quotes rejected (not verbatim on the page)", stop: "Stopped because", generated: "Made by Mandat · every quote is an exact substring of the read text with this hash",
     tiers: { http: "HTTP", browser: "browser", archive: "archive", provider: "provider" }, json: "The data (JSON)",
+    noSource: "No source", conflictOf: "Conflict", nothingBacked: "Nothing could be backed by a quote.",
   },
 } as const;
 export type Words = (typeof T)["en"];

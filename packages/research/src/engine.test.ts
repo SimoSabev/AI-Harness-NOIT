@@ -33,7 +33,7 @@ describe("the research engine (E9г, AC-13.2–13.4, 13.7)", () => {
     expect(sorting.verdict).toBe("conflict");
     expect(sorting.quote_ids.map((i) => r.quotes[i]!.text).some((t) => t.includes("UTF-8 bytes"))).toBe(true);
     expect(r.claims.find((c) => c.text.includes("June 2020"))!.verdict).toBe("confirmed");
-    expect(r.unresolved.some((u) => u.includes("conflict"))).toBe(true);
+    expect(r.unresolved.some((u) => u.startsWith("Conflict: "))).toBe(true);
   });
   it("the trace: numbered, valid, from run_started to run_finished, with model calls, queries and fetches", async () => {
     const w = world();
