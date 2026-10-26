@@ -1,0 +1,30 @@
+{
+  "name": "@mandat/research",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Research as a harness service: plan, own search and fetch, verbatim quotes, claims with verdicts, a report with the whole trace",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/research/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/core": "workspace:*",
+    "@mandat/llm-proxy": "workspace:*",
+    "@mozilla/readability": "0.6.0",
+    "linkedom": "0.18.14",
+    "unpdf": "1.9.1",
+    "zod": "4.6.7"
+  }
+}
