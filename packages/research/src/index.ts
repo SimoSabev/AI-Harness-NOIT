@@ -29,7 +29,7 @@ export { processView } from "./report/process.js";
 export type { LaneSummary, ProcessView, RoleUsage, TimelineBar } from "./report/process.js";
 export { langOf, wordsOf } from "./report/text.js";
 export type { Lang, Words } from "./report/text.js";
-export { anthropicWebSearch, arxiv, crossref, exa, fetchTransport, github, searxng, stackexchange, webSearchToolType, wikipedia } from "./search/providers.js";
+export { anthropicWebSearch, arxiv, crossref, exa, exaExtractor, fetchTransport, github, searxng, stackexchange, webSearchToolType, wikipedia } from "./search/providers.js";
 export type { SearchProvider, SearchQuery, Transport } from "./search/providers.js";
 export { anthropicViaProxy } from "./model.js";
 export { usd as usdText } from "./report/text.js";

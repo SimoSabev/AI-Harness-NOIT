@@ -55,9 +55,11 @@ export function researchDeps(o: { db: Db; io: Io; home: string; docker: DockerRu
     db: o.db,
     log: (l) => o.io.stderr(`${l}\n`),
     envFor: async (org, req, id) => {
-      const up = existsSync(secretPath) && (await fetch(`http://127.0.0.1:${o.adminPort}/healthz`, { signal: AbortSignal.timeout(1500) }).then((r) => r.ok, () => false));
+      // the proxy's health says which keys it holds (names only): models and, for research, Exa (D-400)
+      const health = existsSync(secretPath) ? await fetch(`http://127.0.0.1:${o.adminPort}/healthz`, { signal: AbortSignal.timeout(1500) }).then(async (r) => (r.ok ? ((await r.json()) as { providers?: unknown }) : null), () => null) : null;
+      const search = Array.isArray(health?.providers) ? health.providers.filter((p): p is string => typeof p === "string") : [];
       const renderer = await browserRenderer(o.docker, id).catch(() => null);
-      return hostResearchEnv({ db: o.db, env: o.io.env, proxy: up ? { url: `http://127.0.0.1:${o.inferencePort}`, secretPath } : null, profileExec: profilePrintExec(o.docker), renderer }, org, req, id);
+      return hostResearchEnv({ db: o.db, env: o.io.env, proxy: health ? { url: `http://127.0.0.1:${o.inferencePort}`, secretPath, search } : null, profileExec: profilePrintExec(o.docker), renderer }, org, req, id);
     },
   };
 }

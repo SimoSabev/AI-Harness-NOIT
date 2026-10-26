@@ -38,6 +38,12 @@ describe("the host research environment (D-398)", () => {
     expect(e.channels.map((c) => c.kind)).toEqual(["local"]);
     expect(e.providers.map((p) => p.name)).not.toContain("anthropic-web-search");
   });
+  it("Exa only when the proxy holds its key: a search provider plus the fetch ladder's extractor", async () => {
+    const on = await hostResearchEnv({ db, env, proxy: { url: "http://127.0.0.1:1", secretPath, search: ["anthropic", "exa"] }, profileExec: null }, DEMO_ORG_ID, req, "q_exa");
+    expect(on.providers.map((p) => p.name)).toContain("exa");
+    const off = await hostResearchEnv({ db, env, proxy: { url: "http://127.0.0.1:1", secretPath, search: ["anthropic"] }, profileExec: null }, DEMO_ORG_ID, req, "q_exa2");
+    expect(off.providers.map((p) => p.name)).not.toContain("exa");
+  });
   it("the subscription channel runs `claude -p` with no tools through the profile runner", async () => {
     let seen: { profile: string; argv: string[]; stdin: string } | null = null;
     const e = await hostResearchEnv({ db, env, proxy: null, profileExec: async (profile, argv, stdin) => ((seen = { profile, argv, stdin }), JSON.stringify({ result: "ok", usage: {} })) }, DEMO_ORG_ID, req, "q_host3");

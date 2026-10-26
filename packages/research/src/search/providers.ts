@@ -173,15 +173,30 @@ export function stackexchange(o: { site?: string; transport?: Transport } = {}):
   };
 }
 
+/** Exa contents (the page text Exa fetched) as the last step of the fetch ladder, through the proxy */
+export function exaExtractor(o: { transport?: Transport; baseUrl: string; token: string }): { name: string; extract: (url: string, signal?: AbortSignal) => Promise<{ finalUrl: string; title: string; text: string; published: string | null } | null> } {
+  const t = o.transport ?? fetchTransport;
+  return {
+    name: "exa",
+    async extract(url, signal) {
+      const j = await json(t, `${o.baseUrl}/contents`, { method: "POST", signal, headers: { authorization: `Bearer ${o.token}` }, body: { urls: [url], text: { maxCharacters: 60_000 } } });
+      const r = arr(j.results)[0];
+      if (!r || str(r.text) === "") return null;
+      return { finalUrl: str(r.url) || url, title: str(r.title), text: str(r.text), published: str(r.publishedDate).slice(0, 10) || null };
+    },
+  };
+}
+
 /** Exa (neural search with highlights), through the proxy (the key lives there) */
-export function exa(o: { transport: Transport; baseUrl: string; token: string }): SearchProvider {
+export function exa(o: { transport?: Transport; baseUrl: string; token: string }): SearchProvider {
+  const t = o.transport ?? fetchTransport;
   return {
     name: "exa",
     scopes: ["web", "papers", "code", "docs"],
     usdPerQuery: 0.007,
     async search(q, signal) {
       const since = sinceIso(q);
-      const j = await json(o.transport, `${o.baseUrl}/search`, {
+      const j = await json(t, `${o.baseUrl}/search`, {
         method: "POST",
         signal,
         headers: { authorization: `Bearer ${o.token}` },

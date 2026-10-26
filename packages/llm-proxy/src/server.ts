@@ -8,6 +8,8 @@ import { ProxyState } from "./state.js";
 import type { RequestLine } from "./state.js";
 import { adminBearer, tokenPrefix8, verifyTaskToken } from "./token.js";
 import { BootGate } from "./boot.js";
+import { SEARCH_ROUTES, SEARCH_UPSTREAM, forwardSearch } from "./search-upstream.js";
+import type { SearchProviderId } from "./search-upstream.js";
 import type { BootOptions } from "./boot.js";
 
 export const PROXY_VERSION = "0.1.0";
@@ -85,6 +87,10 @@ export interface ProxyServerOptions {
   boot?: BootOptions;
   /** tests only: an http upstream on any host (the boot payload otherwise allows http to this computer only) */
   allowHttpUpstream?: boolean;
+  /** E9г (D-400): research search providers' keys (env path); with a boot gate they come in the boot payload */
+  searchKeys?: Partial<Record<SearchProviderId, string>>;
+  /** tests only: another base URL per search provider */
+  searchUpstream?: Partial<Record<SearchProviderId, URL>>;
   /** stdout log line (never bodies, headers or token values; 8.1). */
   log?: (line: RequestLine) => void;
   now?: () => number;
@@ -93,11 +99,15 @@ export interface ProxyServerOptions {
 const KEY = /^[\x21-\x7e]{20,512}$/;
 /** D-392: a saved connection as the proxy holds it (memory only). */
 interface Upstream { wire: "anthropic" | "openai"; url: URL; auth: "x-api-key" | "bearer" | "none"; key: string; models: string[]; prices: Record<string, FlatRate> }
-type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream> };
+type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream>; search: Partial<Record<SearchProviderId, string>> };
 function parseBootKeys(body: Buffer | null, allowHttp: boolean): BootKeys | null {
   try {
     const v = JSON.parse(body?.toString("utf8") ?? "") as Record<string, unknown>;
-    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai" || k === "upstreams");
+    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai" || k === "upstreams" || k === "search");
+    // E9г (D-400): {"search": {"exa": "<key>"}} — only known providers, only key-shaped values
+    const sr = v.search ?? {};
+    if (typeof sr !== "object" || sr === null || Array.isArray(sr) || Object.entries(sr).some(([k, x]) => k !== "exa" || typeof x !== "string" || !KEY.test(x))) return null;
+    const search = sr as Partial<Record<SearchProviderId, string>>;
     if (!keysOk || (v.anthropic !== undefined && (typeof v.anthropic !== "string" || !KEY.test(v.anthropic)))) return null;
     if (v.openai !== undefined && (typeof v.openai !== "string" || !KEY.test(v.openai))) return null;
     const upstreams = new Map<string, Upstream>();
@@ -109,8 +119,8 @@ function parseBootKeys(body: Buffer | null, allowHttp: boolean): BootKeys | null
       if (!ConnectionId.safeParse(id).success || !p.success || (p.data.auth !== "none" && !KEY.test(p.data.key))) return null;
       upstreams.set(id, { ...p.data, url: new URL((u as { url: string }).url) });
     }
-    if (typeof v.anthropic !== "string" && typeof v.openai !== "string" && upstreams.size === 0) return null;
-    return { anthropic: typeof v.anthropic === "string" ? v.anthropic : "", openai: typeof v.openai === "string" ? v.openai : "", upstreams };
+    if (typeof v.anthropic !== "string" && typeof v.openai !== "string" && upstreams.size === 0 && Object.keys(search).length === 0) return null;
+    return { anthropic: typeof v.anthropic === "string" ? v.anthropic : "", openai: typeof v.openai === "string" ? v.openai : "", upstreams, search };
   } catch {
     return null;
   }
@@ -130,9 +140,10 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
   // the real keys: from the options (env path) or, with a boot gate, from POST /admin/boot (memory only)
   const keys = { anthropic: o.apiKey, openai: o.openai?.apiKey ?? "" };
   let upstreams = new Map<string, Upstream>();
+  const searchKeys: Partial<Record<SearchProviderId, string>> = { ...o.searchKeys };
   const boot = o.boot ? new BootGate(o.boot) : null;
   let locked = boot !== null;
-  const providers = (): string[] => (["anthropic", "openai"] as const).filter((p) => keys[p] !== "");
+  const providers = (): string[] => [...(["anthropic", "openai"] as const).filter((p) => keys[p] !== ""), ...(searchKeys.exa ? ["exa"] : [])];
 
   const record = (l: Omit<RequestLine, "kind" | "ts">): void => {
     const line: RequestLine = { kind: "request", ts: new Date(now()).toISOString(), ...l };
@@ -151,6 +162,37 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         record({ ...base, run_id: runId, status, token_prefix8: token ? tokenPrefix8(token) : null });
         apiError(res, status, type, code, extra);
       };
+      // E9г (D-400): a research search call — the same token, revocation and budget rules, priced per call
+      const sroute = SEARCH_ROUTES[p];
+      if (method === "POST" && sroute !== undefined && req.headers.upgrade === undefined) {
+        if (locked) {
+          req.resume();
+          return reject(503, "api_error", "proxy_locked", null);
+        }
+        if (token === null) return reject(401, "authentication_error", "token_invalid", null);
+        const v = verifyTaskToken(o.secret, token, Math.floor(now() / 1000));
+        if (!v.ok) return reject(401, "authentication_error", v.code, null);
+        const runId = v.claims.r;
+        const key = searchKeys[sroute.provider] ?? "";
+        if (key === "") return reject(403, "permission_error", "provider_not_configured", runId);
+        if (state.revoked.has(runId)) return reject(401, "authentication_error", "token_revoked", runId);
+        const run = state.get(runId);
+        run.budget = v.claims.b;
+        if (run.usd >= v.claims.b) return reject(403, "permission_error", "budget_exhausted", runId, { "x-should-retry": "false" });
+        const body = await readBody(req);
+        if (body === null) return reject(403, "permission_error", "path_not_allowed", runId);
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(body.toString("utf8"));
+        } catch {
+          return reject(400, "invalid_request_error", "bad_json", runId);
+        }
+        const base2 = o.searchUpstream?.[sroute.provider] ?? SEARCH_UPSTREAM[sroute.provider];
+        const target = new URL(`${base2.pathname.replace(/\/+$/, "")}${sroute.upstreamPath}`, base2);
+        const status = await forwardSearch({ req, res, body, key, target, ...(target.protocol === "http:" ? { mod: http as unknown as typeof https } : {}) });
+        record({ ...base, model: `search:${sroute.provider}`, run_id: runId, status, usd: status > 0 && status < 400 ? sroute.usd(parsed) : 0, token_prefix8: tokenPrefix8(token) });
+        return;
+      }
       if (method !== "POST" || !INFERENCE_PATHS.has(p) || req.headers.upgrade !== undefined) {
         req.resume();
         return reject(403, "permission_error", "path_not_allowed", null);
@@ -303,6 +345,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         boot.spend();
         keys.anthropic = parsed.anthropic;
         keys.openai = parsed.openai;
+        Object.assign(searchKeys, parsed.search);
         upstreams = parsed.upstreams;
         locked = false;
         res.writeHead(204).end();

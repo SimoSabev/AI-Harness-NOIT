@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
-import { anthropicWebSearch, arxiv, crossref, exa, github, searxng, stackexchange, webSearchToolType, wikipedia } from "./providers.js";
+import { anthropicWebSearch, arxiv, crossref, exa, exaExtractor, github, searxng, stackexchange, webSearchToolType, wikipedia } from "./providers.js";
 import type { SearchQuery, Transport } from "./providers.js";
 
 const q = (o: Partial<SearchQuery> = {}): SearchQuery => ({ query: "json canonicalization", scope: "web", recency: "any", include: [], exclude: [], max: 5, language: "en", ...o });
@@ -56,6 +56,13 @@ describe("search providers with recorded answers (D-396)", () => {
     expect(body.includeDomains).toEqual(["a.org"]);
     expect(typeof body.startPublishedDate).toBe("string");
     expect(r.calls[0]!.init?.headers?.authorization).toBe("Bearer mdt_x");
+  });
+  it("exa contents as the last step of the fetch ladder: the text Exa fetched, or null", async () => {
+    const r = rec(JSON.stringify({ results: [{ url: "https://a.org/final", title: "A", text: "page text", publishedDate: "2025-02-02T00:00:00Z" }] }));
+    const x = exaExtractor({ transport: r.t, baseUrl: "http://proxy/research/exa", token: "mdt_x" });
+    expect(await x.extract("https://a.org/x")).toEqual({ finalUrl: "https://a.org/final", title: "A", text: "page text", published: "2025-02-02" });
+    expect(r.calls[0]!.url).toBe("http://proxy/research/exa/contents");
+    expect(await exaExtractor({ transport: rec(JSON.stringify({ results: [] })).t, baseUrl: "http://p", token: "t" }).extract("https://a.org")).toBeNull();
   });
   it("an error status is an error without the body", async () => {
     await expect(wikipedia({ transport: rec("secret echo", 500).t }).search(q())).rejects.toThrow(/answered 500$/);

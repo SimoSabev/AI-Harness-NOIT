@@ -46,6 +46,9 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     store.put("anthropic", envKey);
     if (envOpenai) store.put("openai", envOpenai);
   }
+  // E9г (D-400): the research search key (Exa) lives with the model keys, sealed, and reaches only the proxy
+  if (io.env.EXA_API_KEY) store.put("research:exa", io.env.EXA_API_KEY);
+  const exa = store.get("research:exa");
   const key = store.get("anthropic");
   if (key === null) {
     io.stderr("няма ключ: въведи го в „Ключове“ в UI или веднъж: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
@@ -85,7 +88,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     io.stderr("llm-proxy: healthz did not answer within 10 s\n");
     return 3;
   }
-  if (!(await deps.bootProxy(port, boot, { anthropic: key, ...(openai ? { openai } : {}) }))) {
+  if (!(await deps.bootProxy(port, boot, { anthropic: key, ...(openai ? { openai } : {}), ...(exa ? { search: { exa } } : {}) }))) {
     await dockerText(deps.docker, ["rm", "-f", NAME], 60_000);
     io.stderr("llm-proxy: the boot exchange failed\n");
     return 3;

@@ -4,7 +4,7 @@ import { depthBudget } from "@mandat/contract";
 import type { ResearchRequest } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import type { SqlClient } from "@mandat/ledger";
-import { Fetcher, anthropicViaProxy, anthropicWebSearch, arxiv, cliModel, crossref, fakeModel, github, localModel, proxyModel, searxng, stackexchange, wikipedia } from "@mandat/research";
+import { Fetcher, anthropicViaProxy, anthropicWebSearch, arxiv, cliModel, crossref, exa, exaExtractor, fakeModel, github, localModel, proxyModel, searxng, stackexchange, wikipedia } from "@mandat/research";
 import type { CliExec, ModelClient, Renderer, RouterChannel, SearchProvider } from "@mandat/research";
 import { loadChannels } from "./channels.js";
 import type { ResearchEnv } from "./research.js";
@@ -19,7 +19,7 @@ export interface HostResearchOptions {
   db: SqlClient;
   env: Record<string, string | undefined>;
   /** the proxy's inference port on loopback and its secret (null = no proxy: API-key channels are left out) */
-  proxy: { url: string; secretPath: string } | null;
+  proxy: { url: string; secretPath: string; search?: readonly string[] } | null;
   /** a subscription profile's CLI call in its sandbox (null = not available on this host) */
   profileExec: ((profile: string, argv: string[], stdin: string, signal?: AbortSignal) => Promise<string>) | null;
   renderer?: Renderer | null;
@@ -69,10 +69,14 @@ export async function hostResearchEnv(o: HostResearchOptions, org: string, req: 
   if (await reachable(`${sx}/healthz`)) providers.unshift(searxng({ baseUrl: sx }));
   const anthropicKey = states.find((c) => c.kind === "api_key" && c.provider === "anthropic" && c.enabled && c.health === "ok");
   if (anthropicKey && o.proxy) providers.push(anthropicWebSearch({ client: anthropicViaProxy(o.proxy.url, token("anthropic", states.length + 1)), model: "claude-haiku-5-5" }));
+  // D-400: Exa when the proxy holds its key — a search provider and the last step of the fetch ladder
+  const exaOn = o.proxy?.search?.includes("exa") === true;
+  const exaToken = exaOn ? token("anthropic", states.length + 2) : "";
+  if (exaOn && o.proxy) providers.push(exa({ baseUrl: `${o.proxy.url}/research/exa`, token: exaToken }));
   return {
     channels,
     clientOf: (c) => clients.get(c.id) ?? fakeModel(c, () => "{}"),
     providers,
-    fetcher: new Fetcher({ respectRobots: req.respect_robots, renderer: o.renderer ?? null }),
+    fetcher: new Fetcher({ respectRobots: req.respect_robots, renderer: o.renderer ?? null, extractors: exaOn && o.proxy ? [exaExtractor({ baseUrl: `${o.proxy.url}/research/exa`, token: exaToken })] : [] }),
   };
 }

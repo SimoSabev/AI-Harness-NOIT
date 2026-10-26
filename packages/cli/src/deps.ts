@@ -14,7 +14,7 @@ export interface CliDeps {
   /** tests: a fake ledger database for `verify-log --org <uuid>` */
   db?: SqlClient & { end?: () => Promise<void> };
   /** E7в / D-345: hands the keys to a freshly started proxy once (POST /admin/boot on the loopback admin port) */
-  bootProxy(port: number, token: string, keys: { anthropic: string; openai?: string }): Promise<boolean>;
+  bootProxy(port: number, token: string, keys: { anthropic: string; openai?: string; search?: { exa?: string } }): Promise<boolean>;
   /** tests: a local TSA instead of the network */
   tsaFetcher?: Fetcher;
 }
