@@ -23,3 +23,4 @@ export * from "./ui.js";
 export * from "./local-control.js";
 export * from "./desktop.js";
 export * from "./site.js";
+export * from "./memory.js";
