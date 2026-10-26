@@ -1,6 +1,6 @@
 import { sha256Tag } from "@mandat/contract";
 import type { Sha256 } from "@mandat/contract";
-import { NOTES_HINT, addMemory, loadMemory, memoryBlock, memoryFromNotes, recordUsage, rememberLines, renderCore, searchMemory } from "@mandat/memory";
+import { NOTES_HINT, addMemory, applyConsolidation, consolidationPlan, loadMemory, memoryBlock, memoryFromNotes, recordUsage, rememberLines, renderCore, searchMemory } from "@mandat/memory";
 import type { MemoryBlock, MemorySql } from "@mandat/memory";
 
 // D-392: memory in the worker. Before a task: the person's "запомни:" lines become memories, then the frozen core and the
@@ -34,6 +34,17 @@ export async function memoryForTask(db: MemorySql, t: { org: string; user: strin
   const coreTokens = core.tokens.user + core.tokens.project;
   await recordUsage(db, { org: t.org, task_id: t.taskId, attempt: t.attempt, core_tokens: coreTokens, recall_tokens: Math.max(0, block.tokens - coreTokens), ids: [...block.core, ...block.recall], hash });
   return { block, text, hash };
+}
+
+/**
+ * After a task: the person's and the project's active memory is tidied (duplicates merged, contradicted facts made
+ * invalid — deterministic, nothing deleted). Long-unused memories are only counted: the menu suggests them.
+ */
+export async function tidyAfterTask(db: MemorySql, t: { org: string; user: string | null; repo: string }): Promise<{ merged: number; superseded: number; stale: number }> {
+  const items = await loadMemory(db, { org: t.org, user: t.user ?? NOBODY, repo: t.repo, statuses: ["active"] });
+  const plan = consolidationPlan(items, new Date());
+  const done = await applyConsolidation(db, { org: t.org, plan });
+  return { ...done, stale: plan.stale.length };
 }
 
 /** The agent's MEMORY: lines → pending project memories (the scanner refuses rules, secrets, injections). */

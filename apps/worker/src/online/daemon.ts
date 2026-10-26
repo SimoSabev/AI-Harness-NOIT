@@ -26,7 +26,7 @@ import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 import { mainHead, rebaseOnto } from "./rebase.js";
 import { ciNote } from "./ci.js";
-import { memoryForTask, sandboxProposals } from "./memory.js";
+import { memoryForTask, sandboxProposals, tidyAfterTask } from "./memory.js";
 import { deliverLocal, mergeLocal } from "./deliver-local.js";
 
 const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
@@ -406,6 +406,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       .then((r) => (r.added + r.refused > 0 ? log(`[daemon] ${t.id}: memory proposals ${r.added} waiting, ${r.refused} refused`) : undefined))
       .catch(() => undefined);
   }
+  // D-392 (M4): memory gets tidier after every task — duplicates merged, contradicted facts made invalid
+  await tidyAfterTask(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id })
+    .then((r) => (r.merged + r.superseded > 0 ? log(`[daemon] ${t.id}: memory tidied: ${r.merged} merged, ${r.superseded} replaced`) : undefined))
+    .catch(() => undefined);
   const minutes = Math.round(((now().getTime() - t0) / 60000) * 100) / 100;
   const v = out.verdict;
   if (!v) {

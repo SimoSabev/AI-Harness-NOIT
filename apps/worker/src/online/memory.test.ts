@@ -3,7 +3,7 @@ import { sha256Tag } from "@mandat/contract";
 import { addMemory, loadMemory } from "@mandat/memory";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
 import { pgliteDb } from "./pglite-db.test-helper.js";
-import { memoryForTask, sandboxProposals } from "./memory.js";
+import { memoryForTask, sandboxProposals, tidyAfterTask } from "./memory.js";
 
 let shared: Awaited<ReturnType<typeof pgliteDb>>;
 beforeAll(async () => {
@@ -42,6 +42,16 @@ describe("паметта за задача (D-392)", () => {
     await addMemory(d, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, note: { text: "Тестовете се пускат с vitest", kind: "command", scope: "project", basis: "user_said", repo_id: DEMO_REPO_ID }, source: "human", actor: `human:${DEMO_OWNER_ID}` });
     const m = await memoryForTask(d, { org: DEMO_ORG_ID, user: null, repo: DEMO_REPO_ID, taskId: "t_mem_1", attempt: 1, text: "x" });
     expect(m?.block.text).toBe("About this project:\n- Тестовете се пускат с vitest\n");
+  });
+  it("подреждане след задача: дубликатите се сливат; противоречията стават невалидни; нищо не се трие", async () => {
+    const d = await db();
+    const add = (text: string, scope: "user" | "project" = "user") => addMemory(d, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, note: { text, kind: "preference", scope, basis: "user_said", ...(scope === "project" ? { repo_id: DEMO_REPO_ID } : {}) }, source: "human", actor: `human:${DEMO_OWNER_ID}` });
+    await add("Предпочитам малки комити");
+    await add("Малки комити предпочитам");
+    await add("Тестовете са с vitest", "project");
+    expect(await tidyAfterTask(d, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, repo: DEMO_REPO_ID })).toEqual({ merged: 1, superseded: 0, stale: 0 });
+    expect((await loadMemory(d, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID })).map((m) => [m.text, m.status])).toEqual([["Предпочитам малки комити", "active"], ["Малки комити предпочитам", "archived"], ["Тестовете са с vitest", "active"]]);
+    expect(await tidyAfterTask(d, { org: DEMO_ORG_ID, user: null, repo: DEMO_REPO_ID })).toEqual({ merged: 0, superseded: 0, stale: 0 });
   });
   it("MEMORY: редове от notes.txt на агента → чакат одобрение; правило/тайна се отказват", async () => {
     const d = await db();
