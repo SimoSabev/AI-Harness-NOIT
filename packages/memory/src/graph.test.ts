@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { memoryGraph } from "./graph.js";
 import { REPO, mem } from "./items.test-helper.js";
 
-describe("графът на паметта (D-392)", () => {
+describe("графът на паметта (D-400)", () => {
   const a = mem("Тестовете се пускат с pnpm vitest", { scope: "project", repo_id: REPO });
   const b = mem("Ползвам pnpm навсякъде", { kind: "preference" });
   const c = mem("Старо: ползвам npm", { status: "invalid", superseded_by: b.id });

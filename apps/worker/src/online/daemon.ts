@@ -73,7 +73,7 @@ interface TaskRow {
   provider: string;
   /** E9а: the night shift the task belongs to */
   shift_id: string | null;
-  /** D-392: whose memory the task gets (null: nobody started it) */
+  /** D-400: whose memory the task gets (null: nobody started it) */
   created_by: string | null;
 }
 
@@ -233,7 +233,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
   const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
   const steerable = t.agent === "fake:steer-echo" || ((t.agent === "claude" || profile !== null) && d.steer === true);
-  // D-392: the person's memory for this task (frozen core + the slice for its text); memory never stops a task
+  // D-400: the person's memory for this task (frozen core + the slice for its text); memory never stops a task
   const mem = await memoryForTask(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id, taskId: t.id, attempt: t.attempt, text: t.text }).catch((e: unknown) => {
     log(`[daemon] ${t.id}: memory skipped: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
     return null;
@@ -399,14 +399,14 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     out = await runOnce();
     await usageRow(out);
   }
-  // D-392: the agent's "MEMORY:" notes (already CANARY-checked and redacted on disk) → proposals that wait for a person
+  // D-400: the agent's "MEMORY:" notes (already CANARY-checked and redacted on disk) → proposals that wait for a person
   const notesFile = out.runDir ? path.join(out.runDir, "notes.txt") : null;
   if (notesFile && existsSync(notesFile)) {
     await sandboxProposals(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id, taskId: t.id, notes: readFileSync(notesFile, "utf8") })
       .then((r) => (r.added + r.refused > 0 ? log(`[daemon] ${t.id}: memory proposals ${r.added} waiting, ${r.refused} refused`) : undefined))
       .catch(() => undefined);
   }
-  // D-392 (M4): memory gets tidier after every task — duplicates merged, contradicted facts made invalid
+  // D-400 (M4): memory gets tidier after every task — duplicates merged, contradicted facts made invalid
   await tidyAfterTask(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id })
     .then((r) => (r.merged + r.superseded > 0 ? log(`[daemon] ${t.id}: memory tidied: ${r.merged} merged, ${r.superseded} replaced`) : undefined))
     .catch(() => undefined);

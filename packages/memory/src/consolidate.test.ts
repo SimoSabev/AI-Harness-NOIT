@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { conflictsWith, consolidationPlan } from "./consolidate.js";
 import { REPO, mem } from "./items.test-helper.js";
 
-describe("обновяване при запис: противоречия (D-392)", () => {
+describe("обновяване при запис: противоречия (D-400)", () => {
   it("нов мениджър на пакети замества стария в същия обхват", () => {
     const old = mem("Ползвам npm за всичко", { kind: "preference" });
     const fresh = mem("Вече ползвам pnpm", { kind: "preference" });

@@ -8,7 +8,7 @@ const ME = "10000000-0000-4000-8000-000000000002";
 const YOU = "10000000-0000-4000-8000-000000000003";
 const REPO = "20000000-0000-4000-8000-000000000001";
 
-describe("хранилището на паметта (D-392)", () => {
+describe("хранилището на паметта (D-400)", () => {
   let pg: { query: (q: string, p?: unknown[]) => Promise<{ rows: unknown[] }>; exec: (q: string) => Promise<unknown>; close: () => Promise<void> };
   let sql: MemorySql;
   beforeAll(async () => {

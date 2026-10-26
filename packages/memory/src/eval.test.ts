@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { GOLDEN, evaluate } from "./eval.js";
 
-// D-393: the golden set decides whether recall needs vectors. Thresholds below are the gate; if a change of the
+// D-401: the golden set decides whether recall needs vectors. Thresholds below are the gate; if a change of the
 // search drops under them, vectors (pgvector) get a spike instead of tuning the words.
-describe("златният набор на паметта (D-393)", () => {
+describe("златният набор на паметта (D-401)", () => {
   it("има всички видове въпроси: директни, друга форма на думата, същност, обновен факт, въздържане", () => {
     expect(new Set(GOLDEN.cases.map((c) => c.kind))).toEqual(new Set(["direct", "morphology", "entity", "update", "abstain"]));
     expect(GOLDEN.cases.length).toBeGreaterThanOrEqual(20);

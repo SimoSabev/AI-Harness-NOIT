@@ -7,7 +7,7 @@ import type { Key } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
 import { btn, input } from "./ui";
 
-// D-392: changing memory from the menu — add, edit, approve/reject, archive/restore, pin, delete, tidy up. The server
+// D-400: changing memory from the menu — add, edit, approve/reject, archive/restore, pin, delete, tidy up. The server
 // runs every text through the same scanner as an agent's write; its refusals come back as plain sentences.
 const KINDS: MemoryKind[] = ["preference", "convention", "command", "pitfall", "fact", "note", "episode"];
 const ERR: Record<string, Key> = {

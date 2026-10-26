@@ -1,7 +1,7 @@
 import type { MemoryItem } from "@mandat/contract";
 import { normalizeKey, similarity } from "./text.js";
 
-// D-392: memory gets better without an LLM rewriting it. Update on write (a newer fact about the same thing makes the
+// D-400: memory gets better without an LLM rewriting it. Update on write (a newer fact about the same thing makes the
 // older one invalid, never deleted — Graphiti; arXiv 2609.05441), duplicates merge, and long-unused memories are only
 // suggested for the archive: the person decides.
 

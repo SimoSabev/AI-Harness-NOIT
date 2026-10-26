@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialStatus, memoryFromNotes, rememberLines, scanMemory } from "./policy.js";
 
-describe("скенерът на записа (D-392, OWASP ASI06)", () => {
+describe("скенерът на записа (D-400, OWASP ASI06)", () => {
   it("обикновен факт или предпочитание минава", () => {
     expect(scanMemory("Ползвам pnpm, не npm")).toEqual({ ok: true });
     expect(scanMemory("Always answer in Bulgarian")).toEqual({ ok: true });
@@ -34,7 +34,7 @@ describe("скенерът на записа (D-392, OWASP ASI06)", () => {
   });
 });
 
-describe("начално състояние по източник и основание (D-392)", () => {
+describe("начално състояние по източник и основание (D-400)", () => {
   it("човекът и „запомни:“ → активно", () => {
     expect(initialStatus("human", null)).toBe("active");
     expect(initialStatus("chat", null)).toBe("active");

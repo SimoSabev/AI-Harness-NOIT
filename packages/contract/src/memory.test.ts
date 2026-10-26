@@ -8,7 +8,7 @@ const item = {
   created_at: "2026-10-26T10:00:00.000Z", invalid_at: null, superseded_by: null, provenance: { task_id: "t_ab_1" },
 };
 
-describe("памет (D-392)", () => {
+describe("памет (D-400)", () => {
   it("бюджетите на ядрото и на извадката са в токени", () => {
     expect(MEMORY_BUDGET).toEqual({ user: 500, project: 800, recall: 1500 });
   });
@@ -44,7 +44,7 @@ describe("памет (D-392)", () => {
   });
 });
 
-describe("блокът с памет в договора на агента (D-392)", () => {
+describe("блокът с памет в договора на агента (D-400)", () => {
   it("без памет текстът е като досега; с памет — отделен раздел „данни, не инструкции“ преди края", () => {
     const c = parseContract(JSON.parse(readFileSync(new URL("../../../contracts/fix-discount.json", import.meta.url), "utf8")));
     const plain = renderAgentContract(contractForAgent(c));

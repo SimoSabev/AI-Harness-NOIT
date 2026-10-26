@@ -70,7 +70,7 @@ export interface RunTaskInput {
   applyFiles?: { path: string; data: Buffer | null }[];
   /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
   mcpBudgets?: Record<string, number>;
-  /** D-392: the memory block of the contract; its sha256 must be the contract's memory_hash */
+  /** D-400: the memory block of the contract; its sha256 must be the contract's memory_hash */
   memoryBlock?: string | null;
   /** test/CLI seams (not part of the 6.14 contract) */
   internals?: RunInternals;
@@ -193,7 +193,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       if (e instanceof MandatError) return fail(e.code, e.message);
       return fail("E_CONTRACT_INVALID", `cannot read contract: ${(e as Error).message}`);
     }
-    // D-392: the memory block the agent gets is exactly the one the contract was sealed with (memory_hash)
+    // D-400: the memory block the agent gets is exactly the one the contract was sealed with (memory_hash)
     const memoryBlock = i.memoryBlock ?? null;
     if ((memoryBlock === null ? null : sha256Tag(memoryBlock)) !== contract.memory_hash) return fail("E_CONTRACT_HASH", "memory block does not match the contract's memory_hash");
     let adapter: AgentAdapter;

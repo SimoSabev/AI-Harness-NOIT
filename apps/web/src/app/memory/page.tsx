@@ -43,7 +43,7 @@ function Row({ m, q, t, repos, now }: { m: MemoryItem; q: MemoryQuery; t: T; rep
   );
 }
 
-// D-392: the memory menu. Left: what Mandat remembers (list or links), searchable and filtered; right: the chosen memory —
+// D-400: the memory menu. Left: what Mandat remembers (list or links), searchable and filtered; right: the chosen memory —
 // where it came from, its history, and changing it. On top: what memory costs in tokens.
 export default async function MemoryPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const c = await pageCtx();

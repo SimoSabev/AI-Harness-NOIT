@@ -9,7 +9,7 @@ import { addMemory, loadMemory, markUsed } from "./store.js";
 import type { MemorySql } from "./store.js";
 import { entitiesOf } from "./text.js";
 
-// D-394: memory for a person's own agent sessions (Claude Code, Codex) over MCP. The core is computed once when the
+// D-402: memory for a person's own agent sessions (Claude Code, Codex) over MCP. The core is computed once when the
 // session starts and sent as the server's instructions — frozen for the whole session, like Hermes, so the prompt prefix
 // stays cached; changes show up in the next session. Everything else comes only through memory_search.
 

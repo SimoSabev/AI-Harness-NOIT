@@ -3,7 +3,7 @@ import { freshDb } from "../../../scripts/test-db.mjs";
 import { LOCAL_MEMORY_DB, parseMemoryArgs, resolveMemoryScope } from "./mcp-args.js";
 import type { MemorySql } from "./store.js";
 
-describe("аргументите на mandat-memory-mcp (D-394)", () => {
+describe("аргументите на mandat-memory-mcp (D-402)", () => {
   it("по подразбиране базата на `pnpm local`; --repo и --user", () => {
     expect(parseMemoryArgs([], {})).toEqual({ ok: true, args: { dbUrl: LOCAL_MEMORY_DB, user: null, repo: null } });
     expect(LOCAL_MEMORY_DB).toBe("postgresql://postgres:postgres@127.0.0.1:54329/postgres");

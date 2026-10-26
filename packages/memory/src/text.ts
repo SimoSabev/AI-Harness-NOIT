@@ -1,4 +1,4 @@
-// D-392: the text side of memory — a rough token count, terms with a crude stem (bg + en), entities for the graph.
+// D-400: the text side of memory — a rough token count, terms with a crude stem (bg + en), entities for the graph.
 // Deliberately simple and deterministic: the golden set (eval.ts) measures whether it is enough before vectors.
 
 const CYRILLIC = /\p{Script=Cyrillic}/u;

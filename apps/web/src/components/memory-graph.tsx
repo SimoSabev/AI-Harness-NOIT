@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { MemoryGraph } from "@mandat/memory";
 
-// D-392: the "Links" view — the seeded layout of @mandat/memory drawn as SVG on the server (no client script). Memories are
+// D-400: the "Links" view — the seeded layout of @mandat/memory drawn as SVG on the server (no client script). Memories are
 // dots (by status), what they are about are squares, you and your projects are hexagons; each memory opens on click.
 const DOT: Record<string, string> = { active: "fill-accent", pending: "fill-warn", invalid: "fill-idle", archived: "fill-idle", rejected: "fill-idle" };
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);

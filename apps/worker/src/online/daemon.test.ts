@@ -71,7 +71,7 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     for (const e of s.events) expect(JSON.stringify(e.payload).length).toBeLessThanOrEqual(1024);
     expect(await runDaemonOnce(s.deps)).toBe(null);
   });
-  it("D-392: паметта на човека влиза в договора (memory_hash = sha256 на блока), в дневника и в memory_usage; MEMORY: от бележките на агента чака одобрение", async () => {
+  it("D-400: паметта на човека влиза в договора (memory_hash = sha256 на блока), в дневника и в memory_usage; MEMORY: от бележките на агента чака одобрение", async () => {
     const s = await setup(0);
     await s.db.query("update public.tasks set created_by = $1, text = $2 where id = 't_web_1'", [DEMO_OWNER_ID, "Fix the discount in the cart\nзапомни: отговаряй на български"]);
     await addMemory(s.db, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, note: { text: "The cart discount code is SAVE10", kind: "fact", scope: "project", basis: "user_said", repo_id: DEMO_REPO_ID }, source: "human", actor: `human:${DEMO_OWNER_ID}` });

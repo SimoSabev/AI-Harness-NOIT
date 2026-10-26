@@ -1,4 +1,4 @@
--- D-392: Mandat's memory. Facts and preferences with provenance, by trust level; an old fact is made invalid, never
+-- D-400: Mandat's memory. Facts and preferences with provenance, by trust level; an old fact is made invalid, never
 -- deleted (only the person deletes). A user-scope memory is seen by its person only; a project memory by the org's
 -- members. Only the server (service_role) writes, after the scanner and the trust rules of @mandat/memory.
 create table if not exists public.memory_items (

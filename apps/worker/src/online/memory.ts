@@ -3,7 +3,7 @@ import type { Sha256 } from "@mandat/contract";
 import { NOTES_HINT, addMemory, applyConsolidation, consolidationPlan, loadMemory, memoryBlock, memoryFromNotes, recordUsage, rememberLines, renderCore, searchMemory } from "@mandat/memory";
 import type { MemoryBlock, MemorySql } from "@mandat/memory";
 
-// D-392: memory in the worker. Before a task: the person's "запомни:" lines become memories, then the frozen core and the
+// D-400: memory in the worker. Before a task: the person's "запомни:" lines become memories, then the frozen core and the
 // slice for this task go into the contract (memory_hash) and the cost into memory_usage. After a task: the agent's
 // "MEMORY:" notes become proposals that wait for a person (the sandbox never writes memory itself).
 

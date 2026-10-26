@@ -507,7 +507,7 @@ export async function postHiddenTests(req: Request, d: ApiDeps, repoId: string):
   return done(await uploadHidden(d.db, { uid: p.uid, repoId, body: p.body, secondFactor: d.secondFactor }), d);
 }
 
-// D-392: the memory menu (the person's own memory + the org's project memory).
+// D-400: the memory menu (the person's own memory + the org's project memory).
 export async function getMemory(req: Request, d: ApiDeps): Promise<Response> {
   const c = await ctx(req, d);
   if (c instanceof Response) return c;

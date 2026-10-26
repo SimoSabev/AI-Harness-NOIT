@@ -3,7 +3,7 @@ import type { MemoryItem } from "@mandat/contract";
 import { line } from "./core.js";
 import { entitiesOf, estimateTokens, terms } from "./text.js";
 
-// D-392: recall — what memory brings when it is asked (a search, or the slice for a task). Three ranked lists fused
+// D-400: recall — what memory brings when it is asked (a search, or the slice for a task). Three ranked lists fused
 // with Reciprocal Rank Fusion: words (BM25 over stemmed terms), entities (paths, tools, `code`), and use/recency as a
 // tie-breaker only. A memory with no word and no entity in common is never returned: abstaining beats the nearest guess.
 

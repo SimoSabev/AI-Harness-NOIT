@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NAV, navActive, taskHref } from "./nav";
 
-describe("the side bar (D-384, D-395)", () => {
+describe("the side bar (D-384, D-403)", () => {
   it("has four sections: tasks, projects, memory, settings", () => {
     expect(NAV.map((n) => [n.id, n.href])).toEqual([["tasks", "/"], ["projects", "/harness"], ["memory", "/memory"], ["settings", "/settings"]]);
     expect(navActive("memory")).toBe("memory");

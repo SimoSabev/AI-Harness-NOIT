@@ -3,7 +3,7 @@ import { consolidationPlan } from "./consolidate.js";
 import { searchMemory } from "./recall.js";
 import { entitiesOf } from "./text.js";
 
-// D-393: a small golden set in the spirit of LongMemEval (direct recall, other word forms, entities, updated facts,
+// D-401: a small golden set in the spirit of LongMemEval (direct recall, other word forms, entities, updated facts,
 // abstention). It is the gate for vectors: recall stays words + entities while this passes.
 
 const REPO = "22222222-2222-4222-8222-222222222222";

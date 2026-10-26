@@ -6,7 +6,7 @@ import { UUID, asService, asUser } from "./sql";
 import type { Db } from "./sql";
 import type { Role } from "./queries";
 
-// D-392: the memory menu. Every member keeps their own memory (user scope); project memory is written by owners and
+// D-400: the memory menu. Every member keeps their own memory (user scope); project memory is written by owners and
 // approvers and read by every member. Reads go under RLS as the person; writes as the server after these checks.
 
 type Res = { status: number; body: Record<string, unknown> };

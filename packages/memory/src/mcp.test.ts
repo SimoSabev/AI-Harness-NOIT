@@ -11,7 +11,7 @@ const ME = "10000000-0000-4000-8000-000000000002";
 const REPO = "20000000-0000-4000-8000-000000000001";
 const text = (r: unknown) => JSON.parse(((r as { content: { text: string }[] }).content[0]?.text ?? "{}")) as Record<string, unknown>;
 
-describe("MCP сървърът на паметта (D-394)", () => {
+describe("MCP сървърът на паметта (D-402)", () => {
   let pg: { query: (q: string, p?: unknown[]) => Promise<{ rows: unknown[] }>; exec: (q: string) => Promise<unknown>; close: () => Promise<void> };
   let sql: MemorySql;
   let c: Client;

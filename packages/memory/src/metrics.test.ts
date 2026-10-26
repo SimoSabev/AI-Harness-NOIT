@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { REPO, mem } from "./items.test-helper.js";
 import { memoryTokens, usageSummary } from "./metrics.js";
 
-describe("токените на паметта (D-392)", () => {
+describe("токените на паметта (D-400)", () => {
   it("цялата активна памет срещу ядрото на проекта", () => {
     const items = Array.from({ length: 50 }, (_, i) => mem(`Факт номер ${i} за проекта и неговите команди`, { scope: "project", repo_id: REPO }));
     const t = memoryTokens(items, REPO);

@@ -2,7 +2,7 @@ import { MEMORY_BUDGET, hashJcs, sha256Tag } from "@mandat/contract";
 import type { MemoryItem, MemoryKind, Sha256 } from "@mandat/contract";
 import { estimateTokens } from "./text.js";
 
-// D-392: the frozen core — what is always in the context. Small, hard-capped and in a stable order, so it is the same
+// D-400: the frozen core — what is always in the context. Small, hard-capped and in a stable order, so it is the same
 // text for the whole session (prefix cache) and its hash goes to the ledger.
 
 const KIND_ORDER: readonly MemoryKind[] = ["preference", "convention", "command", "pitfall", "fact", "note", "episode"];

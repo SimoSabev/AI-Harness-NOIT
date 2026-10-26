@@ -1,7 +1,7 @@
 import type { MemoryItem } from "@mandat/contract";
 import { searchMemory } from "@mandat/memory";
 
-// D-392: what the memory page shows — from the address (view, filter, search, the open memory), pure.
+// D-400: what the memory page shows — from the address (view, filter, search, the open memory), pure.
 
 export const MEMORY_FILTERS = ["all", "mine", "project", "pending", "archive"] as const;
 export type MemoryFilter = (typeof MEMORY_FILTERS)[number];

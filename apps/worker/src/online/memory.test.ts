@@ -17,7 +17,7 @@ beforeEach(async () => {
 });
 const db = () => Promise.resolve(shared);
 
-describe("паметта за задача (D-392)", () => {
+describe("паметта за задача (D-400)", () => {
   it("без памет → няма блок, няма хеш", async () => {
     const d = await db();
     expect(await memoryForTask(d, { org: DEMO_ORG_ID, user: DEMO_OWNER_ID, repo: DEMO_REPO_ID, taskId: "t_mem_1", attempt: 1, text: "Поправи отстъпката" })).toBeNull();

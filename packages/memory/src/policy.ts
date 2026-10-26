@@ -1,7 +1,7 @@
 import type { MemoryBasis, MemorySource, MemoryStatus } from "@mandat/contract";
 import { createRedactor } from "@mandat/redaction";
 
-// D-392: who may write what. The control is at the write (OWASP ASI06): a scanner, then a status by the trust of the
+// D-400: who may write what. The control is at the write (OWASP ASI06): a scanner, then a status by the trust of the
 // source. Rules and permissions never become memory — they stay proposals with approval (PRD-9).
 
 export type ScanReason = "invisible" | "secret" | "injection" | "rule";

@@ -7,7 +7,7 @@ import type { CommandDocument } from "./desktop-commands";
 describe("commandAction", () => {
   const idle = { typing: false };
 
-  it("the View menu's four sections go to the side bar's routes (D-384, D-395)", () => {
+  it("the View menu's four sections go to the side bar's routes (D-384, D-403)", () => {
     expect(commandAction({ command: "view", view: "tasks" }, idle)).toEqual({ kind: "navigate", href: "/" });
     expect(commandAction({ command: "view", view: "projects" }, idle)).toEqual({ kind: "navigate", href: "/harness" });
     expect(commandAction({ command: "view", view: "memory" }, idle)).toEqual({ kind: "navigate", href: "/memory" });

@@ -5,7 +5,7 @@ import pg from "pg";
 import { createMemoryServer } from "./mcp.js";
 import { parseMemoryArgs, resolveMemoryScope } from "./mcp-args.js";
 
-// D-394: the memory MCP server for a person's own agent sessions. stdout is JSON-RPC only; logs go to stderr.
+// D-402: the memory MCP server for a person's own agent sessions. stdout is JSON-RPC only; logs go to stderr.
 const p = parseMemoryArgs(process.argv.slice(2), process.env);
 if (!p.ok) {
   process.stderr.write(`mandat-memory-mcp: ${p.error}\n`);

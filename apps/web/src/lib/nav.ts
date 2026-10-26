@@ -1,6 +1,6 @@
 import type { Key } from "../i18n/t";
 
-// D-384: three sections; D-395: memory is the fourth (asked for in the side bar). Every other page still opens by its
+// D-384: three sections; D-403: memory is the fourth (asked for in the side bar). Every other page still opens by its
 // link, from the section it lives under (projects → rules; settings → accounts, system, tools, roles, local access);
 // the side bar lights up that section.
 export type Page = "tasks" | "overview" | "library" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research" | "system" | "memory";

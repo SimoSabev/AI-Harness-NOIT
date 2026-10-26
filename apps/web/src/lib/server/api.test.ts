@@ -58,7 +58,7 @@ describe("API (т. 8.1)", () => {
   });
 });
 
-describe("API на паметта (D-392)", () => {
+describe("API на паметта (D-400)", () => {
   it("без вход 401; CSRF; създаване, редакция, история, подреждане, изтриване", async () => {
     who = null;
     expect((await getMemory(get("/api/memory"), deps)).status).toBe(401);

@@ -6,7 +6,7 @@ import { initialStatus, scanMemory } from "./policy.js";
 import type { ScanReason } from "./policy.js";
 import { entitiesOf, normalizeKey } from "./text.js";
 
-// D-392: the memory tables (supabase/migrations/*_memory.sql) as functions. The caller runs them as the server
+// D-400: the memory tables (supabase/migrations/*_memory.sql) as functions. The caller runs them as the server
 // (service_role) after its own permission check; every function still keeps to the org and to the person's own
 // user-scope memories. Every change is a memory_events row (the history the menu shows).
 

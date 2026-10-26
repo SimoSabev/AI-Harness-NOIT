@@ -12,7 +12,7 @@ const items = [
   mem("Чака одобрение: тестовете са бавни", { scope: "project", repo_id: REPO, status: "pending" }),
 ];
 
-describe("хибридно търсене (D-392)", () => {
+describe("хибридно търсене (D-400)", () => {
   it("думи в друга форма намират спомена (тестът ↔ тестовете)", () => {
     const r = searchMemory(items, "как се пуска тестът?", { repoId: REPO });
     expect(r[0]?.item.text).toBe("Тестовете на магазина се пускат с pnpm vitest");

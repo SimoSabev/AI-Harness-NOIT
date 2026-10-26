@@ -2,7 +2,7 @@ import type { MemoryItem } from "@mandat/contract";
 import { line, renderCore } from "./core.js";
 import { estimateTokens } from "./text.js";
 
-// D-392: what memory costs. "all" is what putting every active memory into the context would take (full replay, never
+// D-400: what memory costs. "all" is what putting every active memory into the context would take (full replay, never
 // economical — arXiv 2609.05441); "core" is what Mandat puts in; the rest comes only when a task or a search needs it.
 
 export function memoryTokens(items: readonly MemoryItem[], repoId: string | null): { active: number; all: number; core: number } {

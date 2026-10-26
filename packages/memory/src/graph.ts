@@ -1,6 +1,6 @@
 import type { MemoryItem } from "@mandat/contract";
 
-// D-392: the "Links" view of the memory menu. Nodes: you, each project, each memory, and every entity two or more
+// D-400: the "Links" view of the memory menu. Nodes: you, each project, each memory, and every entity two or more
 // memories share; edges: scope (memory → you/project), about (memory → entity), superseded (old → new). The layout is radial
 // and seeded, so the same memory always draws the same picture — no new dependency.
 

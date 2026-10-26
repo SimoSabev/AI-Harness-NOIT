@@ -164,7 +164,7 @@ describe("runTask (fake docker)", () => {
     expect(existsSync(path.join(h, "ledger.jsonl"))).toBe(false);
   });
 
-  it("D-392: блокът с памет влиза в договора на агента и хешът му в дневника; блок, различен от memory_hash → exit 5", async () => {
+  it("D-400: блокът с памет влиза в договора на агента и хешът му в дневника; блок, различен от memory_hash → exit 5", async () => {
     const h = home();
     const block = "About the person:\n- отговаряй на български\n";
     const sealed = path.join(h, "mem.json");

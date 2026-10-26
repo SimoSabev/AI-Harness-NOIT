@@ -3,7 +3,7 @@ import { memoryBlock, renderCore } from "./core.js";
 import { REPO, OTHER_REPO, mem } from "./items.test-helper.js";
 import { estimateTokens } from "./text.js";
 
-describe("замразеното ядро (D-392)", () => {
+describe("замразеното ядро (D-400)", () => {
   it("само активни; „Ти“ = обхват user, „Проект“ = обхват project на този проект", () => {
     const items = [
       mem("Отговаряй на български", { kind: "preference" }),

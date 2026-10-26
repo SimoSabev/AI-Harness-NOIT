@@ -1,6 +1,6 @@
 import type { MemorySql } from "./store.js";
 
-// D-394: `mandat-memory-mcp [--repo <name|id>] [--user <uuid>]`. The database is `pnpm local`'s (MANDAT_DB_URL overrides);
+// D-402: `mandat-memory-mcp [--repo <name|id>] [--user <uuid>]`. The database is `pnpm local`'s (MANDAT_DB_URL overrides);
 // the person is --user or the only owner (the local one); the project is optional (without it: only the person's memory).
 
 export const LOCAL_MEMORY_DB = "postgresql://postgres:postgres@127.0.0.1:54329/postgres";

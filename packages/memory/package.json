@@ -2,7 +2,7 @@
   "name": "@mandat/memory",
   "version": "0.1.0",
   "private": true,
-  "description": "Mandat's memory: trust-level writes with a scanner, the frozen core, hybrid recall, consolidation, the graph (D-392)",
+  "description": "Mandat's memory: trust-level writes with a scanner, the frozen core, hybrid recall, consolidation, the graph (D-400)",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "files": [

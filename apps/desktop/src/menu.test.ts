@@ -16,7 +16,7 @@ describe("the application menu (AC-12.7)", () => {
     expect(top(appMenu("bg", "win32", { appName: "Харнес", loginItem: false }))).toEqual(["Файл", "Редакция", "Изглед", "Прозорец", "Помощ"]);
   });
 
-  it("File has New task, Approve, Add project, Apply locally; View has the four sections (D-395)", () => {
+  it("File has New task, Approve, Add project, Apply locally; View has the four sections (D-403)", () => {
     const m = appMenu("en", "darwin", { appName: "Harness", loginItem: false });
     const file = m.find((i) => labelOf(i) === "File");
     const cmds = (i: MenuSpec | undefined) => flat(i && "submenu" in i && i.submenu ? i.submenu : []).flatMap((x) => ("command" in x && x.command ? [x.command] : []));

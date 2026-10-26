@@ -3,7 +3,7 @@ import { DEMO_ORG_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import { U, webDb } from "./web-db.test-helper";
 
-describe("паметта в уеба (D-392)", () => {
+describe("паметта в уеба (D-400)", () => {
   let db: Awaited<ReturnType<typeof webDb>>;
   beforeAll(async () => {
     db = await webDb();

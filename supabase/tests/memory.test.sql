@@ -1,6 +1,6 @@
 begin;
 select plan(11);
--- D-392: memory. A user-scope memory is seen by its person only; a project memory by the org's members; another org sees
+-- D-400: memory. A user-scope memory is seen by its person only; a project memory by the org's members; another org sees
 -- nothing; only the server writes; an invalid memory carries its time; no invisible characters; the shelf matches the scope.
 insert into auth.users (id, email) values ('10000000-0000-4000-8000-000000000002', 'approver@x.invalid'), ('10000000-0000-4000-8000-000000000003', 'viewer@x.invalid'), ('10000000-0000-4000-8000-000000000009', 'other@x.invalid');
 insert into public.orgs (id, name) values ('00000000-0000-4000-8000-000000000001', 'demo'), ('00000000-0000-4000-8000-000000000009', 'other');

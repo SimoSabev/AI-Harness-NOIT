@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TaskId } from "./schemas.js";
 
-// D-392: Mandat's memory. Facts and preferences with provenance, written by trust level; rules and permissions never
+// D-400: Mandat's memory. Facts and preferences with provenance, written by trust level; rules and permissions never
 // live here (they stay proposals with approval, PRD-9). The agent sees only the memory block of its contract.
 
 /** Token budgets: the frozen core (user, project) and one recall (the slice picked for a task or a search). */

@@ -95,7 +95,7 @@ export const AgentContract = z
     must_pass: z.array(TestId),
     limits: SecurityLimits,
     commands: z.object({ install: z.string(), test: z.literal("npx vitest run") }),
-    memory_block: z.string().max(12_000).nullable(), // D-392 (E0: always null, D-022)
+    memory_block: z.string().max(12_000).nullable(), // D-400 (E0: always null, D-022)
   })
   .strict();
 export type AgentContract = z.infer<typeof AgentContract>;
