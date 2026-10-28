@@ -40,3 +40,17 @@ describe("research schemas (v5 2.5, D-324)", () => {
     expect(r.unresolved).toEqual(["why"]);
   });
 });
+
+// D-441: the builtin research server as a layer-E MCP ref — stdio, the package baked into the sandbox image, the tools
+// hash pinned (research-mcp's own test checks it against the server), no secrets, egress named "web".
+describe("RESEARCH_MCP_REF (D-441)", () => {
+  it("is a valid McpServerRef with a pinned hash and no secrets", async () => {
+    const { McpServerRef, RESEARCH_MCP_REF, isResearchMcp } = await import("./index.js");
+    expect(McpServerRef.parse(RESEARCH_MCP_REF)).toEqual(RESEARCH_MCP_REF);
+    expect(RESEARCH_MCP_REF).toMatchObject({ name: "research", transport: "stdio", secrets: [], egress_hosts: ["*"] });
+    expect(RESEARCH_MCP_REF.tools_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(isResearchMcp(RESEARCH_MCP_REF)).toBe(true);
+    expect(isResearchMcp({ ...RESEARCH_MCP_REF, package: "@evil/research-mcp@0.1.0" })).toBe(false);
+    expect(isResearchMcp({ ...RESEARCH_MCP_REF, name: "other" })).toBe(false);
+  });
+});
