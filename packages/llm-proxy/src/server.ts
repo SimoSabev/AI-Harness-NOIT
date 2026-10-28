@@ -298,7 +298,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
           const limit = status === 429 ? { limit: limitOf(ur.headers, now()) } : {};
           if (provider === "gemini") {
             // D-424: usageMetadata (the last SSE chunk, or the JSON body); priced at the upstream's flat rate
-            let gu: Usage | null = null;
+            let gu: Usage | null;
             let usedG = false;
             if (sse) {
               gparser.end();
