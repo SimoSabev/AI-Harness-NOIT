@@ -384,6 +384,28 @@ describe("runTask (fake docker)", () => {
     expect(fake.token).toMatch(/^mdt_[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{43}$/);
   });
 
+  it("AC-3.6 (D-422): the proxy says a local model calls no tools → stopped no_tools, agent:no_tools, no export, $0", async () => {
+    const h = home();
+    mkdirSync(path.join(h, "proxy"), { recursive: true });
+    writeFileSync(path.join(h, "proxy", "secret"), randomBytes(32));
+    const usage = { usd: 0, inputTokens: 3600, outputTokens: 240, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 3, budgetStop: false, limit: null, authFailed: false, noTools: true };
+    const channel: Channel = {
+      label: "local-ollama", kind: "local", provider: "anthropic", model: "qwen3-coder:30b",
+      issueTaskCredential: () => Promise.resolve({ token: `mdt_${"a".repeat(30)}.${"b".repeat(43)}`, tokenHash: "sha256:x", expiresAt: "" }),
+      revokeTaskCredential: () => Promise.resolve(),
+      usage: () => Promise.resolve(usage),
+      sandboxEnv: (c) => ({ ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: c.token }),
+      gateRoutes: () => [],
+    };
+    const docker = new FakeDocker({ head: honest });
+    const { r } = await go({ h, docker, x: { channel, healthz: () => Promise.resolve(true), usagePollMs: 10 } });
+    expect(r.stopped).toBe("no_tools");
+    expect(r.verdict?.result).toBe("UNKNOWN");
+    expect(r.verdict?.reasons).toContain("agent:no_tools");
+    expect(r.verdict?.usage).toEqual({ usd: 0, input_tokens: 3600, output_tokens: 240, requests: 3 });
+    expect(docker.calls.some((c) => c.args.includes("--exclude=./node_modules") && c.args.includes("/m/work"))).toBe(false);
+  });
+
   it("gate policy handshake (D-044): без policy_loaded → E_GATE_POLICY", async () => {
     const h = home();
     const runDir = path.join(h, "runs", "r_01JB8Z3K4M5N6P7Q8R9S0T1V2W");
