@@ -27,27 +27,40 @@
 рестарт) и работникът с fake docker (run.test.ts: usage `noTools` → `stopped: no_tools`, причина `agent:no_tools`, без износ,
 $0). Нивото ≤ 1 — external-ladder-key.test.ts. Docker тестът на целия път не е писан: иска нов образ на проксито (чеклист 33).
 
+## Gemini докрай (втори ход, 28.10.2026, D-427–D-431; Q-072 отговорен от Симо)
+| Част | Къде | Тестове |
+| --- | --- | --- |
+| Доставчик „Google Gemini“ (api_key, agent gemini, wire gemini, x-goog-api-key), модели и цени; агент `gemini` / `gemini+<връзка>` | packages/contract/src/connections.ts | connections.test.ts |
+| Проверка на ключа: `GET /v1beta/models` с x-goog-api-key; 400/401/403 → лош ключ | packages/cli/src/commands/connections.ts | connections.test.ts |
+| „Google Gemini“ в /welcome и Настройки → Модели; „Gemini CLI · <име>“ в полето за задача; bg + en | apps/web (connections-ui.tsx, agents.ts, i18n) | agents.test.ts |
+| Gemini CLI 0.65.0 в образа (integrity), `/etc/gemini-cli/settings.json`, `GEMINI_API_KEY` само по име, средата на агента | docker/sandbox/Dockerfile, packages/agents/gemini/settings.json, packages/sandbox | sandbox.test.ts, gemini.test.ts |
+| Компилатор target `gemini`: policies TOML + `--policy` + `--include-directories` | packages/profile/src/gemini.ts | compile.test.ts |
+| Работникът: route, адаптер, токенът на канала, профилът; махане на Google ключове от средата му | apps/worker/src/run.ts, online/agent-route.ts | run.test.ts, agent-route.test.ts |
+| Docker: истинският CLI → вратата → проксито (ключът) → фалшив Gemini endpoint → VERIFIED; и с одобрен профил | apps/worker/src/gemini.docker.test.ts, packages/llm-proxy/stub | 2/2 минават (≈ 4,5 мин) |
+Намерено от Docker теста: CLI-ят пропуска системен settings файл, чиято родителска папка не е на root (/m е на агента) и
+пада с exit 41 (auth `gateway`) — затова настройките са само в образа (D-431).
+Проверено в Docker (вече не е [НП]): `http://egress-gate` като base URL; `selectedType: gemini-api-key`; ключовете в
+настройките на образа; `--policy` и `--include-directories`; имената на инструментите (`run_shell_command`) и формата на потока.
+
 ## [НП] (непроверено)
-- Gemini: `GOOGLE_GEMINI_BASE_URL` към `http://egress-gate` (документацията казва само https извън localhost); дали
-  `selectedType: gemini-api-key` предотвратява exit 41; `advanced.ignoreLocalEnv`; префиксът на MCP инструментите в потока;
-  кодът при HTTP грешка на API-то; пътищата/заглавката на API-то са от кода на @google/genai 1.30.0, не от жив рън.
+- Gemini: префиксът на MCP инструментите в потока; кодът при HTTP грешка на API-то; статусът при лош ключ (400?);
+  имената на моделите с истински ключ (Q-075); дали GEMINI.md наистина не се чете с истински модел (Q-076).
 - Тунелите за Google вход (cloudcode-pa, oauth2, www.googleapis.com) — от кода на CLI-я.
 - Тунелите на Codex с ChatGPT — от кода на Codex; жив рън потвърждава (Q-074).
 - Codex + локален модел: само ако endpoint-ът говори Responses API (vLLM) — `_WIRE=openai` е подготвено, не е пробвано.
 - Целият Docker път на AC-3.6 и истински Ollama/vLLM.
 
 ## Какво не е направено (и защо)
-- Gemini CLI в образа на пясъчника, settings.json/policies в /m/in/harness/gemini, агент `gemini` в работника и UI-я,
-  доставчик Gemini в /welcome — без ключ нищо от това не може да се провери; Q-072.
+- Gemini: hooks, MCP сървъри, скилове и подагенти не се компилират (изброени като unsupported в harness.json).
 - Вход с Google акаунт — условията на Gemini CLI не са ясни за обвивки; Q-073.
 - UI за правило по роля; review съветникът още не избира канал по роля; Q-070.
 - Ресърчът (packages/research*) и „Ключове“ не са пипани (паралелна сесия).
 
 ## Чака Симо
-- Ключ за Gemini (и решение по Q-072/Q-073) → чеклист 34; живият тест в gemini.test.ts.
+- Ключ за Gemini → чеклист 34 (поставяш го в Настройки → Модели → „Google Gemini“); живият тест в gemini.test.ts; Q-073, Q-075, Q-076.
 - `pnpm mandat login --agent codex --name …` и задача с `codex@<име>` → чеклист 35.
 - Ollama без tool calling през `MANDAT_UPSTREAM_LOCAL_*` → чеклист 33.
-- Отговори на Q-070–Q-074.
+- Отговори на Q-070, Q-071, Q-073–Q-076.
 
 ## Проверка (28.10.2026)
 `pnpm check` не стигна до CHECK OK в тази сесия: машината беше натоварена от паралелната работа с Docker (load average
