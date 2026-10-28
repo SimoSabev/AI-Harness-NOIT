@@ -7,13 +7,13 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
+  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
 import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
-import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startSidecar, stopSidecars } from "./mcp-sidecar.js";
+import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
@@ -78,6 +78,8 @@ export interface RunTaskInput {
 export interface RunInternals {
   /** E8e tests: a local package archive per MCP server name instead of the npm package */
   mcpTarballs?: Record<string, Buffer>;
+  /** D-441 tests: the research sidecar's argv instead of RESEARCH_ARGS (a local SearXNG fixture, own search only) */
+  researchArgs?: string[];
   repoRoot?: string;
   env?: Record<string, string | undefined>;
   progress?: (line: string) => void;
@@ -359,6 +361,17 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         const g = gate as RunGate;
         await g.setPolicy("install", [...installRoutes, NPM_PREFIX_ROUTE]);
         for (const ref of refs) {
+          // D-441: the builtin research server comes from the image (nothing to install), in its own sidecar
+          if (isResearchMcp(ref)) {
+            const started = await startResearchSidecar(sctx, { gate: g, ref, ...(x.researchArgs ? { args: x.researchArgs } : {}), perMin: i.mcpBudgets?.[ref.name] ?? 60 });
+            mcpStarted.push(ref.name);
+            if (started.line.event === "blocked") {
+              i.hooks?.onMcpBlocked?.({ name: ref.name, reason: started.line.reason ?? "changed", hash: started.line.hash });
+              sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name: ref.name, reason: started.line.reason ?? "changed" }, source: "worker" });
+              mcpSkipped.push({ rule: `mcp:${ref.name}`, why: `blocked at start: ${started.line.reason ?? "changed"}` });
+            } else mcpRoutes.push(...started.route);
+            continue;
+          }
           if (ref.tools_hash === null) {
             mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "not vetted in the catalog; the agent does not get it" });
             continue;
