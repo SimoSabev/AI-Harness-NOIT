@@ -18,7 +18,7 @@ describe("role mcp (sidecar)", () => {
     expect(a.join(" ")).toContain("mandat-mcp-r_x-issues:/m/mcp");
   });
   it("never an LLM key, never a lowercase or odd name", () => {
-    for (const n of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY", "token", "A-B"]) expect(() => buildRunArgs(spec({ envNames: [n] }), ctx)).toThrow(MandatError);
+    for (const n of ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "AWS_SECRET_ACCESS_KEY", "token", "A-B"]) expect(() => buildRunArgs(spec({ envNames: [n] }), ctx)).toThrow(MandatError);
   });
   it("only its own mandat-mcp-* volume, only under /m/mcp (never a run tree volume or /m/work)", () => {
     expect(() => buildRunArgs(spec({ source: "mandat-vol-r_x-agent" }), ctx)).toThrow(MandatError);

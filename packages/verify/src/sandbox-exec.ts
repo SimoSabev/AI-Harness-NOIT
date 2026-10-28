@@ -19,7 +19,7 @@ export interface SandboxRun {
   /** run network name or "none"; with a run network the tree's resolv.conf/hosts are mounted (D-011, D-081). */
   network: string;
   tree?: Tree;
-  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY"; extraPublic?: Record<string, string>; /** D-392: a saved connection's model (every Claude tier) */ model?: string };
+  env: { phase: "install" | "agent" | "test" | "none"; testsEnv?: Record<string, string>; secrets?: Record<string, string>; tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "GEMINI_API_KEY"; extraPublic?: Record<string, string>; /** D-392: a saved connection's model (every Claude tier) */ model?: string };
   /** D-295: the subscription profile volume of the agent (buildRunArgs refuses it for any other role) */
   profile?: string;
   user?: "1000:1000" | "0:0";

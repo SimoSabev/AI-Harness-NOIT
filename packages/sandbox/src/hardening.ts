@@ -33,7 +33,8 @@ export interface RunSpec {
   ipv6Sysctl?: boolean;
 }
 
-export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "OPENAI_API_KEY"] as const;
+// D-428: GEMINI_API_KEY carries Gemini CLI's mdt_ token — a secret name like the others (by name only, D-043)
+export const SECRET_ENV_NAMES = ["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"] as const;
 const SECRETS: ReadonlySet<string> = new Set(SECRET_ENV_NAMES);
 
 /** 8.2 template: every sandbox container (seed/install/agent/export/test) gets exactly these flags. */
@@ -323,7 +324,7 @@ export function profileVolume(provider: "claude" | "codex", name: string): strin
 /** 8.2: exact env sets per phase. names = secrets only (→ RunSpec.envNames); publicValues → RunSpec.publicEnv. */
 export function envForPhase(
   phase: "install" | "agent" | "test",
-  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "profile" | "profile-codex"; testsEnv?: Record<string, string>; model?: string } = {},
+  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "GEMINI_API_KEY" | "profile" | "profile-codex"; testsEnv?: Record<string, string>; model?: string } = {},
 ): { names: string[]; publicValues: Record<string, string> } {
   if (phase === "install") {
     return {
@@ -352,6 +353,14 @@ export function envForPhase(
     return {
       names: ["OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY"],
       publicValues: { ...BASE_PUBLIC, CODEX_HOME: "/m/codex-home", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+    };
+  }
+  if (phase === "agent" && o.tokenName === "GEMINI_API_KEY") {
+    // D-428: Gemini CLI. The token is the per-task mdt_; the gate is the Gemini API base URL (the proxy holds the key);
+    // the CLI keeps .gemini in the tmpfs home and trusts /m/work for this session only; no browser sign-in ever
+    return {
+      names: ["GEMINI_API_KEY", "AWS_SECRET_ACCESS_KEY"],
+      publicValues: { ...BASE_PUBLIC, GOOGLE_GEMINI_BASE_URL: "http://egress-gate", GEMINI_CLI_HOME: "/home/agent", GEMINI_CLI_TRUST_WORKSPACE: "true", NO_BROWSER: "true", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent" && o.tokenName === "profile-codex") {

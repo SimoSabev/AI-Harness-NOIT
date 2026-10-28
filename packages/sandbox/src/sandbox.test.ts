@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { MandatError } from "@mandat/contract";
 import {
   SANDBOX_HARDENING,
+  SECRET_ENV_NAMES,
   buildProxyRunArgs,
   buildRunArgs,
   compareVersions,
@@ -240,6 +241,13 @@ describe("env", () => {
     expect(cx.publicValues.CODEX_HOME).toBe("/m/codex-home");
     expect(Object.keys(cx.publicValues).some((k) => k.startsWith("ANTHROPIC_"))).toBe(false);
     expect(code(() => envForPhase("test", { testsEnv: { OPENAI_API_KEY: "x" } }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    // D-428: Gemini CLI gets GEMINI_API_KEY (the mdt_ token) by name, the gate as its base URL, the tmpfs home, no Anthropic/OpenAI variables
+    const gm = envForPhase("agent", { tokenName: "GEMINI_API_KEY" });
+    expect(gm.names).toEqual(["GEMINI_API_KEY", "AWS_SECRET_ACCESS_KEY"]);
+    expect(gm.publicValues).toMatchObject({ GOOGLE_GEMINI_BASE_URL: "http://egress-gate", GEMINI_CLI_HOME: "/home/agent", GEMINI_CLI_TRUST_WORKSPACE: "true", NO_BROWSER: "true", MANDAT_NOTES: "/m/out/notes.txt" });
+    expect(Object.keys(gm.publicValues).some((k) => k.startsWith("ANTHROPIC_") || k.startsWith("OPENAI") || k === "GEMINI_API_KEY" || k === "GOOGLE_API_KEY")).toBe(false);
+    expect(code(() => envForPhase("test", { testsEnv: { GEMINI_API_KEY: "x" } }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    expect(SECRET_ENV_NAMES).toContain("GEMINI_API_KEY");
   });
 });
 
@@ -425,5 +433,24 @@ describe("SearXNG for research (D-407)", () => {
     expect(() => buildSearxngArgs({ settings: "/s.yml", port: 8888, image: "searxng/searxng:latest" })).toThrow(MandatError);
     expect(() => buildSearxngArgs({ settings: "rel.yml", port: 8888 })).toThrow(MandatError);
     expect(() => buildSearxngArgs({ settings: "/s.yml", port: 80 })).toThrow(MandatError);
+  });
+});
+
+// D-428: the sandbox tag follows every file the image copies — the Gemini CLI system settings too
+describe("sandbox image tag (D-428)", () => {
+  it("changing packages/agents/gemini/settings.json changes the sandbox tag", async () => {
+    const { cpSync, existsSync, readdirSync, readFileSync: read, writeFileSync: write } = await import("node:fs");
+    const { imageTags } = await import("./images.js");
+    const root = mkdtempSync(path.join(tmpdir(), "tag-"));
+    const repo = path.resolve(import.meta.dirname, "../../..");
+    const pkgs = readdirSync(path.join(repo, "packages")).map((d) => `packages/${d}/package.json`).filter((f) => existsSync(path.join(repo, f)));
+    for (const f of ["docker/sandbox/Dockerfile", "packages/agents/gemini/settings.json", ...pkgs]) {
+      mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+      cpSync(path.join(repo, f), path.join(root, f));
+    }
+    const before = (await imageTags(root)).sandbox;
+    const f = path.join(root, "packages/agents/gemini/settings.json");
+    write(f, read(f, "utf8").replace("false", "true"));
+    expect((await imageTags(root)).sandbox).not.toBe(before);
   });
 });
