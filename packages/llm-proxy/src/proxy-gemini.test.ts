@@ -111,4 +111,16 @@ describe("Gemini wire through the proxy (D-424)", () => {
     expect((await call(p.inf, "/v1/messages", { headers: { "x-api-key": tok }, body: JSON.stringify({ model: "gemini-2.5-pro" }) })).status).toBe(401);
     expect(up.seen).toEqual([]);
   });
+  it("tests only (allowHttpUpstream): a plain http upstream on a container name boots; without the flag it is refused", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "gem-"));
+    const boot = async (allowHttpUpstream: boolean) => {
+      const bt = mintBootToken();
+      const p = createProxyServer({ secret, apiKey: "", upstream: "https://api.anthropic.com", usageLogPath: path.join(dir, `u${allowHttpUpstream}.jsonl`), now: () => NOW * 1000, log: () => undefined, allowHttpUpstream, boot: { tokenHash: bootTokenHash(bt), expiresAtMs: (NOW + 60) * 1000, spentFile: path.join(dir, `s${allowHttpUpstream}`) } });
+      const adm = await listen(p.admin);
+      const g = { wire: "gemini", url: "http://mandat-test-stub-ab12:9000", auth: "x-goog-api-key", key: KEY, models: ["gemini-3.8-flash"], prices: {} };
+      return (await call(adm, "/admin/boot", { headers: { authorization: `Bearer ${bt}`, "content-type": "application/json" }, body: JSON.stringify({ upstreams: { gemini: g } }) })).status;
+    };
+    expect(await boot(true)).toBe(204);
+    expect(await boot(false)).toBe(400);
+  });
 });
