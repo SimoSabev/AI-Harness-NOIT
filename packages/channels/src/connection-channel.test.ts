@@ -41,6 +41,8 @@ describe("connection channels (D-392)", () => {
     expect([ch.kind, ch.provider, ch.profileName]).toEqual(["cli_profile", "openai", "rabota"]);
     expect(ch.gateTunnels?.()).toEqual(OPENAI_TUNNELS.map((t) => ({ ...t })));
     expect(OPENAI_TUNNELS.every((t) => t.port === 443 && /(^|\.)(openai\.com|chatgpt\.com)$/.test(t.host))).toBe(true);
+    // D-426: from the Codex source — the ChatGPT backend and the token refresh; api.openai.com is the API-key path only
+    expect(OPENAI_TUNNELS.map((t) => t.host)).toEqual(["chatgpt.com", "auth.openai.com"]);
   });
 });
 

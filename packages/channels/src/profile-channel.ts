@@ -11,12 +11,13 @@ export const ANTHROPIC_TUNNELS: readonly GateTunnel[] = [
   { host: "platform.claude.com", port: 443 },
 ];
 
-/** D-392: Codex with a ChatGPT login [НП: the exact hosts — the Responses backend, the token refresh and the API; listed
- * until a live run shows which ones Codex uses (docs/setup/local-live-checklist.md)]. */
+/** D-392 / D-426: Codex with a ChatGPT login — the backend CHATGPT_CODEX_BASE_URL (https://chatgpt.com/backend-api/codex,
+ * codex-rs/model-provider-info) and the token refresh REFRESH_TOKEN_URL (https://auth.openai.com/oauth/token,
+ * codex-rs/login auth/manager.rs), openai/codex main, read 28.10.2026. api.openai.com is the API-key base URL only, so it is
+ * not opened [НП: a live run confirms nothing else is needed (docs/setup/local-live-checklist.md)]. */
 export const OPENAI_TUNNELS: readonly GateTunnel[] = [
   { host: "chatgpt.com", port: 443 },
   { host: "auth.openai.com", port: 443 },
-  { host: "api.openai.com", port: 443 },
 ];
 
 /** D-425: Gemini CLI with a Google login (oauth-personal): the Code Assist API and Google's token hosts, read from the CLI
