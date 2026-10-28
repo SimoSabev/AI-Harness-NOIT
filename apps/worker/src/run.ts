@@ -110,7 +110,8 @@ export interface RunTaskOutput {
   /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
   asks?: Ask[];
   /** why the harness stopped the agent, if it did */
-  stopped?: "timeout" | "budget_stop" | "conflict";
+  /** D-422: no_tools = a local model answered NO_TOOLS_LIMIT times in a row without a tool (spec 5.3, AC-3.6) */
+  stopped?: "timeout" | "budget_stop" | "conflict" | "no_tools";
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -120,7 +121,7 @@ export function looksLikeLoginProblem(line: string): boolean {
   return /not logged in|please run \/login|login expired|oauth token has expired|authentication_error|invalid api key/i.test(line) && !/"type":"assistant"/.test(line);
 }
 
-const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
+const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
 const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
 
 class InfraError extends Error {
@@ -294,7 +295,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     };
     const gateLogs: { tree: string; file: string }[] = [];
     let infraCode: ErrorCode | null = null;
-    let agentStop: "timeout" | "budget_stop" | "conflict" | null = null;
+    let agentStop: "timeout" | "budget_stop" | "conflict" | "no_tools" | null = null;
     const startGate = x.startGate ?? startRunGate;
     const user = x.infraUser ?? (await infraUserFor(docker).catch(() => ({ user: "1000:1000" }))).user;
     const ipv6Sysctl = x.ipv6Sysctl ?? (await probeIpv6(docker, images.sandbox));
@@ -439,7 +440,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           queue = queue.then(fn, fn);
         };
         const agentName = names.agent(runId);
-        const stopAgent = async (why: "timeout" | "budget_stop" | "conflict"): Promise<void> => {
+        const stopAgent = async (why: "timeout" | "budget_stop" | "conflict" | "no_tools"): Promise<void> => {
           if (agentStop) return;
           agentStop = why;
           await dockerText(docker, ["stop", "-t", "30", agentName], 90_000);
@@ -450,6 +451,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 usage = u;
                 i.hooks?.onUsage?.(runId, u.usd);
                 if (u.budgetStop) void stopAgent("budget_stop");
+                else if (u.noTools) void stopAgent("no_tools");
               }, () => {
                 if (!pollWarned) {
                   pollWarned = true;
@@ -536,6 +538,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (useProxy) {
           usage = await ch.usage(runId).catch(() => usage);
           await ch.revokeTaskCredential(runId).catch(() => undefined);
+          // D-422: the agent may have exited on the proxy's no_tools refusal before a poll saw it
+          if (usage.noTools && agentStop === null) agentStop = "no_tools";
         }
         if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");

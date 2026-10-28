@@ -43,7 +43,7 @@ describe("ConnectionStore (D-392)", () => {
     s.put({ id: "lichno", provider: "claude-sub", label: "Claude", baseUrl: null, models: ["claude-sonnet-5-5"], defaultModel: "claude-sonnet-5-5" });
     expect(s.upstreams()).toEqual({
       deepseek: { wire: "anthropic", url: "https://api.deepseek.com/anthropic", auth: "x-api-key", key: KEY, models: ["deepseek-v4-pro", "deepseek-flash"], prices: {} },
-      ollama: { wire: "anthropic", url: "http://host.docker.internal:11434", auth: "none", key: "", models: ["qwen3-coder"], prices: { "qwen3-coder": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } },
+      ollama: { wire: "anthropic", url: "http://host.docker.internal:11434", auth: "none", key: "", models: ["qwen3-coder"], prices: { "qwen3-coder": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }, local: true },
     });
   });
   it("preferences: the default agent and model survive a restart; a broken file reads as empty", () => {

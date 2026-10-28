@@ -111,7 +111,7 @@ export class ConnectionStore {
         const p = priceOf(c.provider, m);
         if (p) prices[m] = p;
       }
-      out[c.id] = { wire: info.wire, url: u.url, auth: info.auth, key, models: [...c.models], prices };
+      out[c.id] = { wire: info.wire, url: u.url, auth: info.auth, key, models: [...c.models], prices, ...(info.kind === "local" ? { local: true } : {}) };
     }
     return out;
   }

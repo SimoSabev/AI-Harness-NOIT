@@ -620,7 +620,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
 export async function finishOutcome(d: Pick<DaemonDeps, "db" | "broadcast">, t: { id: string; org_id: string; repo_id: string; type: string; agent: string; is_demo: boolean }, ladder: LadderState, result: "success" | "failure" | "hard_fail" | "neutral", changesetId: string, prNumber: number | null, mergeSha: string): Promise<void> {
   // D-392 (spec 5.3): a task that ran on a local model never lifts the ladder above level 1
   const kind = (await d.db.query<{ channel_kind: string | null }>("select channel_kind from public.tasks where id = $1", [t.id])).rows[0]?.channel_kind;
-  const step = ladderStepFor(t.agent, ladder, result, kind === "local" ? { cap: 1 } : undefined);
+  const step = ladderStepFor(t.agent, ladder, result, kind === "local" ? { kind } : undefined);
   const seq = await inTransaction(d.db, async (tx) => {
     await tx.query("insert into public.deliveries (org_id, changeset_id, level, kind, pr_number, head_sha) values ($1::uuid, $2::uuid, $3, 'merge', $4, $5)", [t.org_id, changesetId, step.next.level, prNumber, mergeSha]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "delivered", task_id: t.id, payload: { pr: prNumber, merge_sha: mergeSha } });

@@ -2994,3 +2994,120 @@ ask/recall). Материализацията в пясъчника (път пр
 prodException само за този пакет в harness групата (както caniuse-lite D-284, argparse D-376). Алтернатива: обратно към
 суров HTTP към проксито — отхвърлена, защото claude-api указва официалния SDK за TypeScript.
 Статус: решено от кодера; Симо може да го обърне.
+
+## D-420 Роли по модел: `routing_rules.role` и `selectChannelForRole` (28.10.2026)
+Решение: (спец. 5.3) всяко правило в routing_rules е за една роля на задачата — lead | subagent | research | review | summary
+(същите роли като слой H на профила, `ModelRole` в packages/contract/src/profile.ts; не са дублирани). Схемата на реда е
+`ChannelRule` (packages/contract/src/routing.ts) с `ruleForRole`: правилото на ролята, иначе правилото на lead, иначе auto —
+едно правило стига за всички роли. packages/channels `selectChannelForRole` избира по това правило и записва ролята в
+`channel_reason.role`. Миграция 20261028000420_routing_role.sql: колона `role` (по подразбиране lead, check). Работникът:
+`ruleFor(db, org, repo, type, role = "lead")`. Каналът `local` вече е кандидат в автоматичния избор (без дневен бюджет —
+цената му е 0); `cli_profile` остава извън оценявания избор (абонаментът идва от агента, D-295).
+Не е направено: UI за правило по роля (Настройки → Модели) и ползване на review/summary/subagent в работника — review
+съветникът (E9б) още вика своя stub/канал; ресърчът има свои роли (D-404) и не е пипан (друга сесия). Q-070.
+Тестове: contract routing.test.ts, channels select-role.test.ts, worker channels-role.test.ts (PGlite с миграцията).
+Статус: решено.
+
+## D-421 `ladderCapFor` знае вида на канала: local → ниво 1 (28.10.2026)
+Решение: спец. 5.3 казва „ниво ≤ 1 (ladderCapFor)“. D-392 таваните идваха от извикващия (`cap: 1`); сега
+`ladderCapFor(agent, kind?)` връща 1 за `kind === "local"` (и за external:*), а `ladderStepFor(..., { kind })` го ползва.
+finishOutcome в daemon.ts подава `kind` от `tasks.channel_kind`.
+Тестове: core external-ladder-key.test.ts.
+Статус: решено.
+
+## D-422 Локален канал през проксито: `MANDAT_UPSTREAM_LOCAL_<label>`, $0, спиране при `agent:no_tools` (28.10.2026)
+Решение: (спец. 5.3, AC-3.6) освен записаните връзки на Ollama/LM Studio (D-393) проксито приема локални сървъри от env:
+`MANDAT_UPSTREAM_LOCAL_<LABEL>=<адрес>` → upstream `local-<label>` (малки букви, `_` → `-`), задължително
+`MANDAT_UPSTREAM_LOCAL_<LABEL>_MODELS=<id>,<id>` (проксито пази списък позволени модели) и по избор
+`MANDAT_UPSTREAM_LOCAL_<LABEL>_WIRE=anthropic|openai` (по подразбиране anthropic; Codex иска Responses API → vLLM [НП]).
+Адресът минава през същото правило като връзките (`upstreamUrl`: http/https към този компютър → host.docker.internal или
+https към име; IP литерал в LAN → отказ, Q-071). Без ключ, цена 0, токените се броят. `mandat proxy start` подава тези
+имена като публична env на контейнера (адреси, не тайни); стига и без нито един ключ. Каналът в базата е
+`local-<label>` с kind local (channelFor → токен с `u = local-<label>`).
+Без инструменти: за upstream с `local: true` (env или записана връзка на ollama/lmstudio — `ProxyUpstream.local`) всеки
+отговор на заявка, която предлага инструменти (`tools` не е празно), се маркира `tool` / `no_tool` (Messages: блок
+`*tool_use`, JSON или SSE `content_block_start`; Responses: елемент `*_call`). `NO_TOOLS_LIMIT = 3` поредни `no_tool` →
+`noTools` в usage на рън-а, следващите повиквания → 403 `no_tools` (не се брои като отхвърлен ключ — `refused`).
+Заявки без инструменти (заглавия и др.) не се броят; повикан инструмент нулира брояча. Работникът: poll-ът или последното
+четене на usage → `stopped: "no_tools"` → причина `agent:no_tools`, без износ (UNKNOWN). Състоянието се възстановява от
+usage.jsonl след рестарт (D-116).
+Защо в проксито: само то вижда отговорите на модела; агентът (Claude Code) не казва „нямам инструменти“.
+Тестове: llm-proxy proxy-local.test.ts (AC-3.6 с фалшив endpoint: $0, токени, 3 без инструмент → no_tools, SSE, boot),
+connections-store.test.ts; cli proxy-keys.test.ts; channels connection-channel.test.ts; worker run.test.ts (AC-3.6).
+Не е проверено: Docker тест на целия път (иска нов образ на проксито; не е строен в тази сесия — unit тестовете минават
+през истинския HTTP сървър на проксито и fake docker на работника) [НП → чеклист 33]; истински Ollama/vLLM.
+Статус: решено.
+
+## D-423 Спайк SG: Gemini CLI headless; адаптерът `packages/agents/src/gemini` (28.10.2026)
+Прочетено (google-gemini/gemini-cli, main b8fa817, 28.10.2026; същите файлове в v0.65.0 и v0.66.0):
+- `-p/--prompt` → headless; stdin се слага пред текста на `-p` (8 MB таван) —
+  https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/headless.md, …/docs/cli/cli-reference.md (28.10.2026).
+- `--output-format text|json|stream-json` (`-o`); stream-json = един JSON на ред: init{session_id, model}, message{role,
+  content, delta?}, tool_use{tool_name, tool_id, parameters}, tool_result{tool_id, status, output?, error?},
+  error{severity, message}, result{status, error?, stats{total_tokens, input_tokens, output_tokens, cached, input,
+  duration_ms, tool_calls, models}}; всички с type и timestamp — packages/core/src/output/types.ts (28.10.2026).
+- `--approval-mode default|auto_edit|yolo|plan` (`--yolo` и `--allowed-tools` са остарели → policy engine), `-m`,
+  `--skip-trust`, `--policy <файл|папка>`, `--admin-policy` — cli-reference.md, packages/cli/src/config/config.ts (28.10.2026).
+- Изходни кодове: 0, 1, 42 (вход), 53 (лимит ходове); в кода още 41 (вход/удостоверяване), 44, 52, 54, 55, 130.
+- Настройки: системният файл `GEMINI_CLI_SYSTEM_SETTINGS_PATH` бие всички; `GEMINI_CLI_HOME` за ~/.gemini; GEMINI.md
+  (`context.fileName`), `.geminiignore` — docs/reference/configuration.md, docs/cli/gemini-md.md (28.10.2026).
+- Policies TOML `[[rule]]` toolName/commandPrefix/commandRegex/argsPattern/decision allow|deny|ask_user/priority 0–999;
+  headless: ask_user = deny; `.gemini/policies` в проекта днес не действа (issue #18186) —
+  docs/reference/policy-engine.md (28.10.2026).
+- Hooks: BeforeTool/AfterTool/… в settings.json, JSON на stdin/stdout, exit 2 = блок — docs/hooks/reference.md (28.10.2026).
+- Версия: @google/gemini-cli 0.66.0 (27.10.2026) е по-млада от 3 дни → адаптерът е за 0.65.0 (20.10.2026, Apache-2.0).
+Решение: адаптер `geminiAdapter` (argv.ts, stream.ts, to-stream.ts, adapter.ts): argv
+`gemini --output-format stream-json --approval-mode yolo --skip-trust -m <модел> -p <задача>`; компилираният слой (напр.
+`--policy …`) влиза преди `-p`. yolo, защото в headless всяко „питай“ е отказ, а границата е пясъчникът и вратата.
+env: само `GEMINI_API_KEY=<mdt_>`; публична env `GOOGLE_GEMINI_BASE_URL=http://egress-gate`, `GEMINI_CLI_HOME=/m/gemini-home`,
+`GEMINI_CLI_SYSTEM_SETTINGS_PATH=/m/in/harness/gemini/settings.json`, `GEMINI_CLI_TRUST_WORKSPACE=true`, `NO_BROWSER=true`.
+Системните настройки (`GEMINI_SYSTEM_SETTINGS`): `security.auth.selectedType = "gemini-api-key"` (само с
+GOOGLE_GEMINI_BASE_URL CLI-ят избира `gateway` и headless проверката отказва с 41 [НП: на живо]), без статистика (иначе
+праща installation id), без обновления и телеметрия, `advanced.ignoreLocalEnv` [НП: точното значение] (правило 4).
+Фикстури: fixtures/gemini-jsonl (ръчно писани по типовете и snapshot-а на CLI-я). Живият тест е SKIPPED (D-423).
+`pnpm test:counts` вече приема `// D-4xx:` над skip (регексът беше само D-2xx/D-3xx).
+[НП]: обикновен `http://` base URL към не-localhost (документацията казва само https, кодът не проверява); точният префикс
+на MCP инструментите в потока; къде отиват грешките в json режим; изходен код при HTTP грешка на API-то.
+Не е направено: CLI-ят в образа на пясъчника (нова зависимост в docker/sandbox, правило 8 → след 30.10 за 0.66.0 или 0.65.0
+сега) и материализацията на settings.json/policies в /m/in/harness/gemini (компилаторът на профила има target само
+claude/codex); агент `gemini`/`gemini+<връзка>` в работника и в UI-я. Q-072.
+Тестове: agents gemini/gemini.test.ts; scripts check-test-counts.test.ts.
+Статус: решено (живото и образът чакат).
+
+## D-424 Gemini API през проксито: wire `gemini`, ключът само в проксито (28.10.2026)
+Решение: (спец. 5.3 „GEMINI_API_KEY → mdt_ токен, маршрут /v1beta/* [НП]“) Wire += `gemini`, ProxyUpstream.auth +=
+`x-goog-api-key`, токенът има `p: "gemini"`. Проксито приема само `POST /v1beta/models/<модел>:{generateContent,
+streamGenerateContent,countTokens}` с празен query или `alt=sse` (никакъв `?key=`); моделът е от пътя и трябва да е в
+списъка на upstream-а; агентът праща mdt_ токена като `x-goog-api-key` (така прави @google/genai 1.30.0, който CLI-ят
+ползва — unpkg.com/@google/genai@1.30.0/dist/node/index.mjs, 28.10.2026), проксито го сменя с истинския ключ. Броене от
+`usageMetadata` (promptTokenCount − cachedContentTokenCount = вход, cached = cache read, candidates + thoughts = изход),
+при SSE последното парче; countTokens = $0; цена — плоската на връзката (без цена → оценка по Sonnet, D-392). Gemini няма
+собствен ключ в проксито — само като записана връзка (boot payload). Вратата: `GEMINI_KEY_ROUTES` (prefix
+`/v1beta/models/`); каналът `conn-<id>` с provider gemini дава `GEMINI_API_KEY` + `GOOGLE_GEMINI_BASE_URL`.
+Не е направено: доставчик „Google Gemini“ в каталога PROVIDERS и в /welcome (ProviderInfo.agent е claude|codex; иска UI) —
+Q-072. Пътищата и заглавката са от кода на SDK-а, не от жив рън [НП].
+Тестове: llm-proxy proxy-gemini.test.ts; channels connection-channel.test.ts.
+Статус: решено (живото чака ключ).
+
+## D-425 Gemini CLI с Google вход: профил `gemini-profile-<име>` и тунелите (28.10.2026)
+Решение: (спец. 5.3) непромененият CLI с `oauth-personal`; входът е в ~/.gemini/oauth_creds.json → volume на профила в
+`GEMINI_CLI_HOME`; системните настройки за профила са `GEMINI_LOGIN_SETTINGS` (същите, selectedType oauth-personal).
+Канал `gemini-profile-<име>` (kind cli_profile, provider gemini) без токен; вратата отваря CONNECT само към
+cloudcode-pa.googleapis.com, oauth2.googleapis.com, www.googleapis.com (packages/core/src/code_assist/server.ts и
+google-auth-library 10.9.0, 28.10.2026) [НП: на живо]. Входът без браузър в headless е отказан от CLI-я (exit 41) —
+затова входът е интерактивен веднъж (както `mandat login`), задачите после ползват кеша.
+Условия: docs/resources/tos-privacy.md (28.10.2026) забранява достъп до услугите зад Gemini CLI „чрез софтуер на трети
+страни“ и не казва изрично, че непромененият CLI в обвивка е позволен — D-295 може да не важи; Q-073. Затова вход с
+Google не е включен в UI/CLI (`mandat login --agent gemini` няма) — само каналът и тунелите, изключени, докато Симо реши.
+Тестове: channels connection-channel.test.ts; agents gemini.test.ts (профил без ключ).
+Статус: решено частично (входът чака Q-073).
+
+## D-426 Codex с ChatGPT: `mandat login --agent codex`, тунелите по кода на Codex (28.10.2026)
+Решение: (спец. 5.3) D-393 направи входа от уеба (`codex login --device-auth` в volume `mandat-profile-codex-<име>`).
+Липсваше терминалът: `mandat login --agent codex --name <име>` и `mandat logout --agent codex --name <име>` (по
+подразбиране claude; друго → E_USAGE). Тунелите на профила са стеснени до двата хоста от кода на Codex (openai/codex
+main, 28.10.2026): `CHATGPT_CODEX_BASE_URL = https://chatgpt.com/backend-api/codex` (codex-rs/model-provider-info/src/lib.rs)
+и `REFRESH_TOKEN_URL = https://auth.openai.com/oauth/token` (codex-rs/login/src/auth/manager.rs); api.openai.com е базата
+само при API ключ и вече не се отваря [НП: жив рън потвърждава, че друго не трябва; Q-074].
+Тестове: cli accounts.test.ts; channels connection-channel.test.ts.
+Статус: решено (живият вход и задача чакат Симо).

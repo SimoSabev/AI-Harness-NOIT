@@ -58,6 +58,17 @@ describe("proxy start with saved connections (D-393)", () => {
     const calls: { args: string[]; env: Record<string, string> }[] = [];
     const boots: Record<string, unknown>[] = [];
     expect(await proxyStart(io({}), deps(calls, boots), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
-    expect(boots).toEqual([{ upstreams: { ollama: { wire: "anthropic", url: "http://host.docker.internal:11434", auth: "none", key: "", models: ["qwen3-coder"], prices: { "qwen3-coder": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } } } } }]);
+    expect(boots).toEqual([{ upstreams: { ollama: { wire: "anthropic", url: "http://host.docker.internal:11434", auth: "none", key: "", models: ["qwen3-coder"], prices: { "qwen3-coder": { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }, local: true } } }]);
+  });
+  it("D-422: MANDAT_UPSTREAM_LOCAL_* reach the proxy container as public env and are enough to start without a key", async () => {
+    const home = mkdtempSync(path.join(tmpdir(), "pk-"));
+    const calls: { args: string[]; env: Record<string, string> }[] = [];
+    const boots: Record<string, unknown>[] = [];
+    const env = { MANDAT_UPSTREAM_LOCAL_OLLAMA: "http://127.0.0.1:11434", MANDAT_UPSTREAM_LOCAL_OLLAMA_MODELS: "qwen3-coder", MANDAT_UPSTREAM_LOCAL_OLLAMA_WIRE: "anthropic", MANDAT_UPSTREAM_LOCALX: "no" };
+    expect(await proxyStart(io(env), deps(calls, boots), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
+    const run = calls.find((c) => c.args[0] === "run")?.args ?? [];
+    for (const kv of ["MANDAT_UPSTREAM_LOCAL_OLLAMA=http://127.0.0.1:11434", "MANDAT_UPSTREAM_LOCAL_OLLAMA_MODELS=qwen3-coder", "MANDAT_UPSTREAM_LOCAL_OLLAMA_WIRE=anthropic"]) expect(run).toContain(kv);
+    expect(run.join(" ")).not.toContain("LOCALX");
+    expect(boots).toEqual([{}]);
   });
 });

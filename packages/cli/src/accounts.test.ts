@@ -74,6 +74,43 @@ describe("accounts commands with a fake docker (D-295)", () => {
   });
 });
 
+// D-426 (spec 5.3): `mandat login --agent codex --name …` — the ChatGPT sign-in from the terminal, its own volume
+describe("login/logout --agent codex (D-426)", () => {
+  const fake = (rules: ((a: string[]) => { exit?: number } | undefined)[], calls: string[][] = []) => ({
+    docker: {
+      run(args: string[]) {
+        calls.push(args);
+        for (const r of rules) {
+          const x = r(args);
+          if (x) return Promise.resolve({ exitCode: x.exit ?? 0, timedOut: false });
+        }
+        return Promise.resolve({ exitCode: 0, timedOut: false });
+      },
+    },
+    healthz: () => Promise.resolve({ ok: true, status: 200 }), procVersion: () => "", toolVersion: () => Promise.resolve("2.47.1"), nodeVersion: "24.22.0", bootProxy: () => Promise.resolve(true),
+  });
+  const io = () => {
+    const o = { out: "", err: "" };
+    return { o, io: { stdout: (s: string) => void (o.out += s), stderr: (s: string) => void (o.err += s), env: {}, cwd: process.cwd() } };
+  };
+  it("logout --agent codex signs out with codex and removes mandat-profile-codex-<name>; login without the image → 3", async () => {
+    const { loginCommand, logoutCommand } = await import("./commands/accounts.js");
+    const calls: string[][] = [];
+    expect(await logoutCommand(io().io, fake([], calls) as never, { name: "rabota", cli: "codex" })).toBe(0);
+    expect(calls.some((c) => c.includes("--entrypoint") && c[c.indexOf("--entrypoint") + 1] === "codex" && c.at(-1) === "logout")).toBe(true);
+    expect(calls.some((c) => c[0] === "volume" && c[1] === "rm" && c[2] === "mandat-profile-codex-rabota")).toBe(true);
+    const c = io();
+    expect(await loginCommand(c.io, fake([(x) => (x[0] === "image" ? { exit: 1 } : undefined)]) as never, { name: "rabota", cli: "codex" })).toBe(3);
+    expect(c.o.err).toContain("E_IMAGES_MISSING");
+  });
+  it("the CLI accepts --agent claude|codex only", async () => {
+    const { loginCliOf } = await import("./commands/accounts.js");
+    expect(loginCliOf("codex")).toBe("codex");
+    expect(loginCliOf(undefined)).toBe("claude");
+    expect(() => loginCliOf("gemini")).toThrow();
+  });
+});
+
 describe("parseCodexStatus (D-393)", () => {
   it("logged in only on exit 0 with the ChatGPT line; never an email", async () => {
     const { parseCodexStatus } = await import("./commands/accounts.js");

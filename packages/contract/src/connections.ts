@@ -12,7 +12,8 @@ export type ConnectionId = z.infer<typeof ConnectionId>;
 export const ModelId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,127}$/).refine((m) => !/mdt_|sk-ant-/.test(m), "secret-looking model id");
 export type ModelId = z.infer<typeof ModelId>;
 
-export const Wire = z.enum(["anthropic", "openai"]);
+// D-424: gemini = the Gemini API (/v1beta/models/*, x-goog-api-key) for Gemini CLI
+export const Wire = z.enum(["anthropic", "openai", "gemini"]);
 export type Wire = z.infer<typeof Wire>;
 export const ProviderId = z.enum(["claude-sub", "chatgpt-sub", "anthropic", "openai", "deepseek", "kimi", "zai", "ollama", "lmstudio", "custom"]);
 export type ProviderId = z.infer<typeof ProviderId>;
@@ -166,11 +167,13 @@ export type Preferences = z.infer<typeof Preferences>;
 export const ProxyUpstream = z.object({
   wire: Wire,
   url: z.string().max(300).refine((u) => /^https:\/\/[^/]+|^http:\/\/host\.docker\.internal(:\d+)?(\/|$)/.test(u), "https, or http to this computer"),
-  auth: z.enum(["x-api-key", "bearer", "none"]),
+  auth: z.enum(["x-api-key", "bearer", "x-goog-api-key", "none"]),
   key: z.string().max(512),
   models: Models,
   /** per model; a missing price is estimated at the Sonnet rate (budgets stay meaningful) */
   prices: z.record(z.string(), z.object({ input: z.number().min(0), output: z.number().min(0), cacheRead: z.number().min(0), cacheWrite: z.number().min(0) }).strict()),
+  /** D-422: a model on this computer (Ollama, LM Studio) — the proxy stops it after NO_TOOLS_LIMIT replies without a tool */
+  local: z.boolean().optional(),
 }).strict();
 export type ProxyUpstream = z.infer<typeof ProxyUpstream>;
 
