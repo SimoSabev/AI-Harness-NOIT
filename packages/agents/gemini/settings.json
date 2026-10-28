@@ -1,7 +1,28 @@
 {
-  "security": { "auth": { "selectedType": "gemini-api-key" } },
-  "privacy": { "usageStatisticsEnabled": false },
-  "general": { "enableAutoUpdate": false, "enableAutoUpdateNotification": false },
-  "telemetry": { "enabled": false },
-  "advanced": { "ignoreLocalEnv": true }
+  "security": {
+    "auth": {
+      "selectedType": "gemini-api-key"
+    }
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "general": {
+    "enableAutoUpdate": false,
+    "enableAutoUpdateNotification": false
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "advanced": {
+    "ignoreLocalEnv": true
+  },
+  "hooksConfig": {
+    "enabled": false
+  },
+  "context": {
+    "fileName": [
+      "instructions.md"
+    ]
+  }
 }

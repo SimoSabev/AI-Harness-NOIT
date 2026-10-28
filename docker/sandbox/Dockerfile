@@ -90,8 +90,8 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
 
 # E9в (D-428): @google/gemini-cli 0.65.0 (Apache-2.0; 0.66.0 is younger than 3 days) as a separate process, like claude
 # and codex. One self-contained bundle (bin bundle/gemini.js); the optional native modules (node-pty, keytar) are left
-# out and no install script runs. The system settings pick API-key auth (never `gateway`), no usage statistics, no
-# updates, no telemetry; a compiled profile points GEMINI_CLI_SYSTEM_SETTINGS_PATH at its own copy.
+# out and no install script runs. The system settings (root-owned, D-431) pick API-key auth (never `gateway`), no usage
+# statistics, updates, telemetry or repo hooks, and the harness instructions as the only context file.
 ARG GEMINI_CLI_VERSION=0.65.0
 ARG GEMINI_CLI_INTEGRITY=sha512-B+flaYBNqX2zO71I5/gu7ZsnI38NlpOl654HWz+bK8I/P5sGILQsbkTOQ5a9V+w1Q6QO3wf9PlqtuMsl7XxpNQ==
 RUN --mount=type=secret,id=extra_ca,required=false set -eu; \

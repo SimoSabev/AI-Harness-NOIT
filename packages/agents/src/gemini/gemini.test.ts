@@ -22,13 +22,15 @@ describe("gemini-argv (D-423)", () => {
       "gemini", "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust", "-m", "gemini-2.5-pro", "-p", "Fix it",
     ]);
   });
-  it("the system settings: API key auth (never `gateway`), no stats, no updates, no telemetry, no local .env", () => {
+  it("the system settings: API key auth (never `gateway`), no stats/updates/telemetry/hooks, the harness instructions as the context file", () => {
     expect(GEMINI_SYSTEM_SETTINGS).toEqual({
       security: { auth: { selectedType: "gemini-api-key" } },
       privacy: { usageStatisticsEnabled: false },
       general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
       telemetry: { enabled: false },
       advanced: { ignoreLocalEnv: true },
+      hooksConfig: { enabled: false },
+      context: { fileName: ["instructions.md"] },
     });
     expect(GEMINI_HOME).toBe("/home/agent");
     // D-428: the image bakes the same file as /etc/gemini-cli/settings.json (the CLI's system settings on Linux)
@@ -40,8 +42,8 @@ describe("gemini-argv (D-423)", () => {
     expect(l.publicEnv).toBeUndefined();
     expect(l.stdin).toBe("closed");
     expect(channelToken(key)).toBe("mdt_g");
-    const h = geminiAdapter({ model: "m", cliVersion: "0.65.0" }).launch({ ...ctx, harness: { argv: [], env: { GEMINI_CLI_SYSTEM_SETTINGS_PATH: "/m/in/harness/gemini/settings.json" } } }, key, canary);
-    expect(h.publicEnv).toEqual({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: "/m/in/harness/gemini/settings.json" });
+    const h = geminiAdapter({ model: "m", cliVersion: "0.65.0" }).launch({ ...ctx, harness: { argv: [], env: { X_TEST: "1" } } }, key, canary);
+    expect(h.publicEnv).toEqual({ X_TEST: "1" });
   });
   it("a Google login profile: no key, the CLI's own login; wrong channels throw", () => {
     const l = geminiAdapter({ model: "gemini-2.5-pro", cliVersion: "0.65.0" }).launch(ctx, { PROFILE: true }, canary);

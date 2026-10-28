@@ -430,7 +430,8 @@ describe("runTask (fake docker)", () => {
     const agentCall = d.calls.find((c) => c.args.includes("gemini") && c.args.includes("stream-json"));
     const a = agentCall?.args ?? [];
     expect(a.slice(a.indexOf("gemini"), a.indexOf("gemini") + 3)).toEqual(["gemini", "--output-format", "stream-json"]);
-    expect(a).toEqual(expect.arrayContaining(["GEMINI_API_KEY", "GOOGLE_GEMINI_BASE_URL=http://egress-gate", "GEMINI_CLI_SYSTEM_SETTINGS_PATH=/m/in/harness/gemini/settings.json", "--policy", "/m/in/harness/gemini/policies"]));
+    expect(a).toEqual(expect.arrayContaining(["GEMINI_API_KEY", "GOOGLE_GEMINI_BASE_URL=http://egress-gate", "--policy", "/m/in/harness/gemini/policies", "--include-directories", "/m/in/harness"]));
+    expect(a.join(" ")).not.toContain("GEMINI_CLI_SYSTEM_SETTINGS_PATH");
     expect(a.join(" ")).not.toContain("ANTHROPIC");
     expect(agentCall?.env.GEMINI_API_KEY).toBe(tok);
     expect(d.calls.map((c) => c.args.join(" ") + JSON.stringify(c.env)).join("\n")).not.toContain(key);

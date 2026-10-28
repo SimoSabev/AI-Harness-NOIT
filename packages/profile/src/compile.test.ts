@@ -127,27 +127,11 @@ describe("compile for local (prepared, E9в)", () => {
 describe("compile for Gemini CLI (D-429)", () => {
   const g = () => compileProfile(profile(), "gemini", { ...ctx, subjects: ["agent:gemini", "any"] });
   const file = (m: ReturnType<typeof g>, p: string) => m.files.find((f) => f.path === p)?.bytes ?? "";
-  it("files, argv and env: settings + policies + instructions; --policy and --include-directories; the settings path", () => {
+  it("files, argv and env: policies + instructions; --policy and --include-directories; no settings file (D-431: the CLI skips one under /m)", () => {
     const m = g();
-    expect(m.files.map((f) => f.path)).toEqual(["gemini/policies/mandat.toml", "gemini/settings.json", "instructions.md", "policy.json"]);
+    expect(m.files.map((f) => f.path)).toEqual(["gemini/policies/mandat.toml", "instructions.md", "policy.json"]);
     expect(m.argv).toEqual(["--policy", "/m/in/harness/gemini/policies", "--include-directories", "/m/in/harness"]);
-    expect(m.env).toEqual({ GEMINI_CLI_SYSTEM_SETTINGS_PATH: "/m/in/harness/gemini/settings.json" });
-  });
-  it("settings: API-key auth, no stats/updates/telemetry/hooks, the harness instructions as the only context file", () => {
-    expect(JSON.parse(file(g(), "gemini/settings.json"))).toEqual({
-      security: { auth: { selectedType: "gemini-api-key" } },
-      privacy: { usageStatisticsEnabled: false },
-      general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
-      telemetry: { enabled: false },
-      advanced: { ignoreLocalEnv: true },
-      hooksConfig: { enabled: false },
-      context: { fileName: ["instructions.md"] },
-    });
-  });
-  it("the compiled settings keep everything the image's own settings say (packages/agents/gemini/settings.json)", async () => {
-    const { readFileSync } = await import("node:fs");
-    const baked = JSON.parse(readFileSync(new URL("../../agents/gemini/settings.json", import.meta.url), "utf8")) as Record<string, unknown>;
-    expect(JSON.parse(file(g(), "gemini/settings.json"))).toMatchObject(baked);
+    expect(m.env).toEqual({});
   });
   it("policies: bash deny → commandPrefix deny; ask → deny in headless with the reason; other kinds stay out of the TOML", () => {
     const toml = file(g(), "gemini/policies/mandat.toml");

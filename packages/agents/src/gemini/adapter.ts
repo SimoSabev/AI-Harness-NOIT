@@ -5,8 +5,9 @@ import { geminiToStream } from "./to-stream.js";
 
 // E9в (spec 5.3, D-423, D-428): Gemini CLI as a separate process in the sandbox. With an API key the agent gets only the
 // mdt_ token as GEMINI_API_KEY; the gate as GOOGLE_GEMINI_BASE_URL, GEMINI_CLI_HOME and the trust flag are the sandbox's
-// public env (envForPhase, tokenName GEMINI_API_KEY); the image's /etc/gemini-cli/settings.json picks API-key auth, and a
-// compiled profile points GEMINI_CLI_SYSTEM_SETTINGS_PATH at its own copy (harness env). A Google login profile (D-295)
+// public env (envForPhase, tokenName GEMINI_API_KEY); the image's root-owned /etc/gemini-cli/settings.json picks API-key
+// auth (the CLI skips a settings file under /m, D-431); a compiled profile adds --policy and --include-directories. A
+// Google login profile (D-295)
 // would use the CLI's own login — off until Q-073.
 export function geminiAdapter(o: { model: string; cliVersion: "0.65.0" }): AgentAdapter {
   return {

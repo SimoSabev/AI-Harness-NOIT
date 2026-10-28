@@ -3,21 +3,12 @@ import { HARNESS_ALWAYS, HARNESS_DIR, instructions, policyJson, rulesFor } from 
 import type { CompileCtx, Files } from "./common.js";
 import { RULES, ruleKind } from "./rules.js";
 
-// E9в (D-429): Gemini CLI's control layer, read from github.com/google-gemini/gemini-cli docs (main b8fa817, 28.10.2026;
-// D-423). The system settings file (GEMINI_CLI_SYSTEM_SETTINGS_PATH) overrides user and project settings; `--policy`
-// loads the TOML rules (docs/reference/policy-engine.md); `--include-directories /m/in/harness` + `context.fileName`
-// makes the harness instructions the only context file (the repo's GEMINI.md is not read) [НП: live].
+// E9в (D-429, D-431): Gemini CLI's control layer, read from github.com/google-gemini/gemini-cli docs (main b8fa817,
+// 28.10.2026; D-423). `--policy` loads the TOML rules (docs/reference/policy-engine.md); `--include-directories
+// /m/in/harness` puts the harness instructions where the image's settings look for the context file (instructions.md).
+// The settings themselves are the image's /etc/gemini-cli/settings.json: the CLI skips a settings file whose parent
+// directory is not root-owned, and /m belongs to the agent (D-431, seen in the Docker test) — so none is compiled here.
 export const GEMINI_DIR = `${HARNESS_DIR}/gemini`;
-const SETTINGS = {
-  security: { auth: { selectedType: "gemini-api-key" } },
-  privacy: { usageStatisticsEnabled: false },
-  general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
-  telemetry: { enabled: false },
-  advanced: { ignoreLocalEnv: true },
-  // a repo's own .gemini/settings.json hooks never run; the harness has no Gemini hooks yet
-  hooksConfig: { enabled: false },
-  context: { fileName: ["instructions.md"] },
-};
 const PRIORITY = { deny: 900, ask: 800, allow: 100 } as const;
 const str = (s: string) => JSON.stringify(s);
 const globRegex = (g: string) => g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
@@ -42,13 +33,12 @@ export function compileGemini(p: HarnessProfile, ctx: CompileCtx): Materialized 
   }
   const files: Files = [
     { path: "gemini/policies/mandat.toml", bytes: toml.join("\n"), mode: "0444" },
-    { path: "gemini/settings.json", bytes: JSON.stringify(SETTINGS, null, 2) + "\n", mode: "0444" },
     { path: "instructions.md", bytes: instructions(p), mode: "0444" },
     { path: "policy.json", bytes: policyJson(p, ctx), mode: "0444" },
   ];
   const unsupported: Materialized["unsupported"] = [
     ...rules.filter((r) => RULES[ruleKind(r.tool)].gemini === "unsupported").map((r) => ({ rule: r.tool, why: "Gemini CLI: this kind of rule is not compiled; the harness cannot see it either" })),
-    ...(p.layers.d.length > 0 ? [{ rule: "hooks", why: "Gemini CLI hooks are not compiled yet; hooksConfig.enabled = false" }] : []),
+    ...(p.layers.d.length > 0 ? [{ rule: "hooks", why: "Gemini CLI hooks are not compiled yet; the image's settings turn hooks off" }] : []),
     ...p.layers.e.mcp.map((m) => ({ rule: `mcp server ${m.name}`, why: "Gemini CLI: MCP servers are not compiled yet" })),
     ...p.layers.e.skills.map((s) => ({ rule: `skill:${s.name}`, why: "Gemini CLI: skills are not compiled yet" })),
     ...(p.layers.f.roles.length > 0 ? [{ rule: "subagents", why: "Gemini CLI: subagent roles are not compiled yet" }] : []),
@@ -61,7 +51,7 @@ export function compileGemini(p: HarnessProfile, ctx: CompileCtx): Materialized 
   return {
     files: files.sort((a, b) => (a.path < b.path ? -1 : 1)),
     argv: ["--policy", `${GEMINI_DIR}/policies`, "--include-directories", HARNESS_DIR],
-    env: { GEMINI_CLI_SYSTEM_SETTINGS_PATH: `${GEMINI_DIR}/settings.json` },
+    env: {},
     enforced_by_harness: enforced,
     unsupported,
   };
