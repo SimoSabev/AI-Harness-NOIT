@@ -13,7 +13,7 @@ describe("rule table (E8а, v5 т. 4.1)", () => {
     expect(RULES.net.claude).toBe("harness");
     expect(RULES.bash.claude).toBe("native");
     expect(RULES.bash.codex).toBe("native");
-    expect(RULES.bash.gemini).toBe("harness");
+    expect(RULES.bash.gemini).toBe("native"); // D-429: Gemini CLI policies TOML
   });
   it("tool patterns → Claude permission rules", () => {
     expect(ruleKind("bash:git push *")).toBe("bash");
@@ -112,13 +112,60 @@ describe("compile for Codex (E8а)", () => {
   });
 });
 
-describe("compile for Gemini and local (prepared, E9в)", () => {
+describe("compile for local (prepared, E9в)", () => {
   it("only policy.json + instructions; everything else is enforced by the harness or unsupported", () => {
-    for (const t of ["gemini", "local"] as const) {
+    for (const t of ["local"] as const) {
       const m = compileProfile(profile(), t, ctx);
       expect(m.files.map((f) => f.path).sort()).toEqual(["instructions.md", "policy.json"]);
       expect(m.unsupported.length).toBeGreaterThan(0);
       expect(m.enforced_by_harness.map((x) => x.rule)).toContain("bash:git push *");
     }
+  });
+});
+
+// D-429 (spec 5.3): Gemini CLI's control layer — the system settings and the policies TOML under /m/in/harness/gemini
+describe("compile for Gemini CLI (D-429)", () => {
+  const g = () => compileProfile(profile(), "gemini", { ...ctx, subjects: ["agent:gemini", "any"] });
+  const file = (m: ReturnType<typeof g>, p: string) => m.files.find((f) => f.path === p)?.bytes ?? "";
+  it("files, argv and env: policies + instructions; --policy and --include-directories; no settings file (D-431: the CLI skips one under /m)", () => {
+    const m = g();
+    expect(m.files.map((f) => f.path)).toEqual(["gemini/policies/mandat.toml", "instructions.md", "policy.json"]);
+    expect(m.argv).toEqual(["--policy", "/m/in/harness/gemini/policies", "--include-directories", "/m/in/harness"]);
+    expect(m.env).toEqual({});
+  });
+  it("policies: bash deny → commandPrefix deny; ask → deny in headless with the reason; other kinds stay out of the TOML", () => {
+    const toml = file(g(), "gemini/policies/mandat.toml");
+    expect(toml).toBe([
+      "# Mandat harness profile → Gemini CLI policy engine (D-429). Headless: ask_user would be deny anyway.",
+      "",
+      "[[rule]]",
+      'toolName = "run_shell_command"',
+      'commandPrefix = "git push"',
+      'decision = "deny"',
+      "priority = 900",
+      'denyMessage = "the harness delivers, never the agent"',
+      "",
+      "[[rule]]",
+      'toolName = "run_shell_command"',
+      'commandPrefix = "curl"',
+      'decision = "deny"',
+      "priority = 900",
+      'denyMessage = "no network outside the gate"',
+      "",
+    ].join("\n"));
+    expect(toml).not.toContain("stripe");
+  });
+  it("glob forms: * → the whole tool; inner wildcards → commandRegex; ask → deny with the reason; allow → allow", async () => {
+    const { geminiPolicyRule } = await import("./gemini.js");
+    expect(geminiPolicyRule({ subject: "any", tool: "bash:*", decision: "deny", reason: "r" })).toEqual(['toolName = "run_shell_command"', 'decision = "deny"', "priority = 900", 'denyMessage = "r"']);
+    expect(geminiPolicyRule({ subject: "any", tool: "bash:npm * --force", decision: "ask", reason: "a person decides" })).toEqual(['toolName = "run_shell_command"', 'commandRegex = "npm .* --force"', 'decision = "deny"', "priority = 800", 'denyMessage = "needs approval: a person decides"']);
+    expect(geminiPolicyRule({ subject: "any", tool: "bash:npx vitest *", decision: "allow", reason: "" })).toEqual(['toolName = "run_shell_command"', 'commandPrefix = "npx vitest"', 'decision = "allow"', "priority = 100"]);
+    expect(geminiPolicyRule({ subject: "any", tool: "path:write:infra/**", decision: "deny", reason: "r" })).toBe(null);
+  });
+  it("enforced by the harness and unsupported are named, never silently dropped", () => {
+    const m = g();
+    expect(m.enforced_by_harness.map((x) => x.rule)).toEqual(expect.arrayContaining(["path:write:infra/**", "net:registry.npmjs.org"]));
+    expect(m.unsupported.map((x) => x.rule)).toEqual(expect.arrayContaining(["hooks", "mcp server mandat"]));
+    expect(m.unsupported.map((x) => x.rule)).not.toContain("bash:git push *");
   });
 });

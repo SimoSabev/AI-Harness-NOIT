@@ -253,6 +253,7 @@ export const en = {
   "agent.codexAccount": "Codex · {name}",
   "agent.via": "Claude Code · {name}",
   "agent.codexVia": "Codex · {name}",
+  "agent.geminiVia": "Gemini CLI · {name}",
   "agent.subscription": "subscription",
 
   // the start page (D-305)
@@ -1100,6 +1101,8 @@ export const en = {
   "conn.p.deepseek.hint": "Claude Code with DeepSeek models through DeepSeek's Anthropic-compatible API; low prices per token.",
   "conn.p.kimi.title": "Kimi (Moonshot)",
   "conn.p.kimi.hint": "Claude Code with Kimi models; a Kimi Code plan or API key.",
+  "conn.p.gemini.title": "Google Gemini",
+  "conn.p.gemini.hint": "Gemini CLI with Google's Gemini models; an API key from Google AI Studio, billed per token.",
   "conn.p.zai.title": "Z.ai GLM",
   "conn.p.zai.hint": "Claude Code with GLM models; the GLM Coding Plan or an API key.",
   "conn.p.ollama.title": "Ollama",

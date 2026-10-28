@@ -3112,6 +3112,66 @@ main, 28.10.2026): `CHATGPT_CODEX_BASE_URL = https://chatgpt.com/backend-api/cod
 Тестове: cli accounts.test.ts; channels connection-channel.test.ts.
 Статус: решено (живият вход и задача чакат Симо).
 
+## D-427 Доставчик „Google Gemini“: ключ в UI-я, агент `gemini` / `gemini+<връзка>` (28.10.2026)
+Решение: (Q-072, Симо: „довърши Gemini докрай“) PROVIDERS += `gemini` (api_key, agent gemini, wire gemini, адрес
+https://generativelanguage.googleapis.com, x-goog-api-key, ключ от https://aistudio.google.com/apikey). Модели по
+https://ai.google.dev/gemini-api/docs/models (обновена 22.10.2026) и цени по /pricing (28.10.2026): gemini-3.8-flash
+(препоръчан, $1,50/$7,50), gemini-4-argon (най-способен, $4/$20), gemini-3.5-flash-lite (бърз, $0,30/$2,50) — по-високите
+цени от 01.12.2026/01.01.2027, за да спира бюджетът по-рано; без такса за запис в кеша (cacheWrite = input) [НП: имената на
+живо]. Ключът се поставя в /welcome или Настройки → Модели („Google Gemini“ в групата „API ключове“), проверява се веднъж
+с `GET /v1beta/models` (ключът в x-goog-api-key, никога в `?key=`; https://ai.google.dev/api/models, 28.10.2026; 400/401/403
+→ лош ключ — 400 API_KEY_INVALID [НП]), запечатва се в ConnectionStore и стига само до проксито (boot payload, D-345);
+никъде не се логва и не се връща. Агент: `gemini+<връзка>` (полето за задача го предлага като „Gemini CLI · <име>“);
+`gemini` = връзката с id `gemini`; `gemini@…` няма (Q-073). Работникът: routeOf → `conn-<id>`; CLI-ят трябва да говори
+жицата на връзката (Gemini CLI само с Gemini връзка).
+Тестове: contract connections.test.ts; cli connections.test.ts; web agents.test.ts; worker agent-route.test.ts.
+Статус: решено.
+
+## D-428 Gemini CLI 0.65.0 в образа на пясъчника; средата на агента (28.10.2026)
+Решение: `@google/gemini-cli` 0.65.0 (Apache-2.0, 20.10.2026; 0.66.0 е по-млада от 3 дни), закрепен по integrity като
+claude и codex; един bundle без задължителни зависимости — optional node-pty/keytar не се инсталират, без install скриптове
+(`npm view @google/gemini-cli@0.65.0`, 28.10.2026). Ред в docs/dependencies.md. Образът носи `/etc/gemini-cli/settings.json`
+(packages/agents/gemini/settings.json = `GEMINI_SYSTEM_SETTINGS`; хешът на тага го включва). Фаза agent с tokenName
+`GEMINI_API_KEY`: тайните са само mdt_ токенът (`GEMINI_API_KEY`, вече в SECRET_ENV_NAMES — само по име, D-043) и канарчето;
+публичната среда — `GOOGLE_GEMINI_BASE_URL=http://egress-gate`, `GEMINI_CLI_HOME=/home/agent` (tmpfs),
+`GEMINI_CLI_TRUST_WORKSPACE=true`, `NO_BROWSER=true`. Работникът маха `GEMINI_API_KEY`/`GOOGLE_API_KEY` от своята среда (D-008).
+Проверено в Docker (D-430): http base URL към вратата работи; `selectedType: gemini-api-key` не дава exit 41; ключовете в
+настройките не чупят CLI-я.
+Тестове: agents gemini.test.ts; sandbox sandbox.test.ts, mcp-role.test.ts; worker run.test.ts (fake docker).
+Статус: решено.
+
+## D-429 Компилатор на профила: target `gemini` (28.10.2026)
+Решение: `compileGemini` (packages/profile/src/gemini.ts): правилата за bash → Gemini CLI policies TOML
+(`/m/in/harness/gemini/policies/mandat.toml`; `[[rule]] toolName = "run_shell_command"`, `commandPrefix` за `cmd *`,
+`commandRegex` за други шаблони, deny 900 / ask 800 / allow 100; ask = deny с „needs approval: …“, защото headless CLI-ят
+и без това прави ask_user на deny — https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/policy-engine.md,
+28.10.2026). argv: `--policy /m/in/harness/gemini/policies --include-directories /m/in/harness` (инструкциите на профила
+стават единственият контекстен файл — `context.fileName: ["instructions.md"]` в настройките на образа; GEMINI.md на
+репото не се чете [НП: с истински модел]). path:write и net остават на харнеса (D4, вратата); MCP, hooks, скилове и
+подагенти са „unsupported“ и се изброяват. RULES: bash за gemini е вече native.
+Тестове: profile compile.test.ts.
+Статус: решено.
+
+## D-430 Docker тест: истинският Gemini CLI с фалшив Gemini endpoint (28.10.2026)
+Решение: apps/worker/src/gemini.docker.test.ts — задача с агент `gemini` минава през daemon → routeOf → истинския Gemini
+CLI 0.65.0 в пясъчника → вратата → тестово прокси, заредено (boot) със записаната връзка „Google Gemini“ и фалшив ключ →
+stub-а (`/v1beta/models/<m>:{streamGenerateContent,generateContent,countTokens}`: първият ход иска `run_shell_command`
+със sed, който поправя прага; след резултата — текст). Задачата завършва с VERIFIED; дневникът на проксито показва
+provider gemini и upstream gemini, без ключа; транскриптът няма ключа. Втори случай: одобрен профил → target gemini,
+CLI-ят приема `--policy` и `--include-directories`, без предупреждения. За теста проксито приема http upstream към име на
+контейнер само с `MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM=1` (тестов флаг, както за E0 upstream-ите).
+Живият тест (истински ключ) остава SKIPPED (gemini.test.ts, D-423) до Симо — чеклист 34.
+Статус: решено.
+
+## D-431 Настройките на Gemini CLI са само в образа: CLI-ят пропуска файл под /m (28.10.2026)
+Наблюдение (Docker тестът, D-430): с `GEMINI_CLI_SYSTEM_SETTINGS_PATH=/m/in/harness/gemini/settings.json` Gemini CLI
+пише „Skipping system settings file … Parent directory '/m' is insecure: … not owned by root“ и пада на auth `gateway` →
+„Invalid auth method selected.“, exit 41 (потвърждава [НП] от D-423). /m е на агента (uid 1000) по дизайн.
+Решение: компилаторът не пише settings.json и не задава пътя; пълните настройки (вкл. `hooksConfig.enabled: false` и
+`context.fileName`) са в root-собствения `/etc/gemini-cli/settings.json` на образа — те не зависят от профила. Профилът
+носи само policies и флаговете. Docker тестът проверява, че stderr на агента няма „insecure“/„Skipping“.
+Статус: решено.
+
 ## D-440 Ключът за Exa в „Ключове“: запечатан, само в проксито (28.10.2026)
 Решение: в „Ключове“ има раздел „Търсене за ресърча (Exa)“ с поле за ключа. Пътят е същият като на ключовете за модели
 (D-293, D-345): уебът → `POST /api/keys/research` (само с `keys.manage`, CSRF) → контролният адрес на `mandat local`

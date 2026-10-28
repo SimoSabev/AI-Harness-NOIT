@@ -42,7 +42,7 @@
 | 17 | E8к спайк RS | phase/e8k-spike-research | — | ГОТОВО (живите числа чакат Симо) (docs/reports/E8k.md) | 1/2 | ключове за доставчици |
 | 18 | E9а нощна смяна | phase/e9a-night-shift | E8е, E8г | ГОТОВО (live чака Симо) (docs/reports/E9a.md) | 1/2 | нощна смяна у Симо |
 | 19 | E9б D5/D8/D12/съветник | phase/e9b-judge-full | E8б | ГОТОВО (AC-5.4 на живо чака Симо) (docs/reports/E9b.md) | 5/6, bench 40/40 | преглед на живо (Q-059); D12 и скрити тестове с твой проект (чеклист 22–23) |
-| 20 | E9в Gemini, local, роли по модел, Codex профил | phase/e9c-agents-2 (worktree claude/e9c-agents-2-7c64ed) | E8а | ГОТОВО (live чака Симо) (docs/reports/E9c.md) | AC-3.6 ✓ (фалшив endpoint), Gemini адаптер на фикстури ✓ | Gemini ключ/вход (Q-072, Q-073), Codex с ChatGPT на живо, AC-3.6 в Docker (чеклист 33–35) |
+| 20 | E9в Gemini, local, роли по модел, Codex профил | phase/e9c-agents-2 (worktree claude/e9c-agents-2-7c64ed) | E8а | ГОТОВО (live чака Симо) (docs/reports/E9c.md) | AC-3.6 ✓ (фалшив endpoint), Gemini адаптер на фикстури ✓, Gemini докрай ✓ (Docker тест с истинския CLI и фалшив endpoint) | Gemini с истински ключ (чеклист 34), вход с Google (Q-073), Codex с ChatGPT на живо, AC-3.6 в Docker (чеклист 33–35) |
 | 21 | E9г ресърч услуга | phase/e9d-research | E8д, E8к | ГОТОВО без живи ключове (docs/reports/E9d-rest.md) | 0/— | ключове; златен набор |
 | 22 | E9д учене | phase/e9e-learning | E9а | не е започната | 0/— | — |
 | 22а | E9m памет (D-400–D-403) | phase/e9m-memory | E9а | ГОТОВО (на живо чака Симо) (docs/reports/E9m.md) | M1–M4 ✓, златен набор ✓ | MCP сървърът с истински Claude Code; задача с памет (docs/setup/memory.md) |
@@ -80,6 +80,8 @@ E9ж (нощта 23→24.10.2026, клон phase/e9g-desktop-pro, docs/reports/E
 E9в (28.10.2026, D-420–D-426, docs/reports/E9c.md): роли по модел в routing_rules, локален канал от env с $0, ниво ≤ 1 и
 `agent:no_tools`, Gemini CLI адаптер + wire `gemini` в проксито + канали, `mandat login --agent codex`, тунелите на ChatGPT по
 кода на Codex. Чака Симо: Q-070–Q-074, чеклист 33–35. Каналът „review“ за съветника — правилото по роля го позволява (D-420),
-съветникът още не го ползва.
+съветникът още не го ползва. Gemini докрай (D-427–D-431, Q-072 отговорен): „Google Gemini“ в /welcome и Модели (ключът —
+запечатан, само в проксито), Gemini CLI 0.65.0 в образа, target `gemini` на компилатора, агент `gemini+<връзка>` в
+работника и полето за задача, Docker тест с истинския CLI. Чака Симо: ключ (чеклист 34), Q-073, Q-075, Q-076.
 
 ## Разход API: $0 (v5 бюджет ≤ $25, D-328)

@@ -23,14 +23,14 @@ export const AGENT_IDS = AGENTS.map((a) => a.id) as [AgentId, ...AgentId[]];
 /** D-295: Claude Code with a subscription account (`pnpm mandat login --name <account>`); D-393: Codex with ChatGPT. */
 export const ACCOUNT_AGENT = /^(claude|codex)@[a-z0-9][a-z0-9-]{0,31}$/;
 /** D-393: a CLI through a saved connection of `mandat local` (DeepSeek, Kimi, Z.ai, Ollama, a custom endpoint…). */
-export const CONNECTION_AGENT = /^(claude|codex)\+[a-z0-9][a-z0-9-]{0,31}$/;
+export const CONNECTION_AGENT = /^(claude|codex|gemini)\+[a-z0-9][a-z0-9-]{0,31}$/;
 
 const isAgentId = (id: string): id is AgentId => AGENTS.some((a) => a.id === id);
 
 export function agentLabel(id: string, lang: Lang = "en", connLabel?: string): string {
   const r = parseAgentRef(id);
   if (r && "via" in r && r.via.kind === "account") return translate(lang, r.cli === "codex" ? "agent.codexAccount" : "agent.account", { name: r.via.name });
-  if (r && "via" in r && r.via.kind === "connection") return translate(lang, r.cli === "codex" ? "agent.codexVia" : "agent.via", { name: connLabel ?? r.via.id });
+  if (r && "via" in r && r.via.kind === "connection") return translate(lang, r.cli === "codex" ? "agent.codexVia" : r.cli === "gemini" ? "agent.geminiVia" : "agent.via", { name: connLabel ?? r.via.id });
   return isAgentId(id) ? translate(lang, `agent.${id}.label`) : id;
 }
 

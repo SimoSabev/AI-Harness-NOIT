@@ -8,8 +8,8 @@ export function buildGeminiArgv(o: GeminiArgvOptions): string[] {
   return ["gemini", "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust", "-m", o.model, "-p", o.prompt];
 }
 
-/** GEMINI_CLI_HOME on the sandbox tmpfs (the user-level .gemini dir); a login profile mounts its volume here instead. */
-export const GEMINI_HOME = "/m/gemini-home";
+/** D-428: GEMINI_CLI_HOME = the sandbox tmpfs home (the CLI keeps .gemini under it); a login profile would mount its volume here. */
+export const GEMINI_HOME = "/home/agent";
 export const GEMINI_HARNESS_DIR = "/m/in/harness/gemini";
 
 /**
@@ -24,6 +24,10 @@ export const GEMINI_SYSTEM_SETTINGS = {
   general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
   telemetry: { enabled: false },
   advanced: { ignoreLocalEnv: true },
+  // D-431: a repo's own .gemini/settings.json hooks never run; the harness instructions (/m/in/harness/instructions.md,
+  // through --include-directories) are the only context file — the repo's GEMINI.md is not read [НП: live, a real model]
+  hooksConfig: { enabled: false },
+  context: { fileName: ["instructions.md"] },
 } as const;
 /** A Google login profile: the same, with the CLI's own login (oauth_creds.json in the profile volume, D-295). */
 export const GEMINI_LOGIN_SETTINGS = { ...GEMINI_SYSTEM_SETTINGS, security: { auth: { selectedType: "oauth-personal" } } } as const;

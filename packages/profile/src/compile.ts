@@ -2,6 +2,7 @@ import { HarnessProfile, Materialized } from "@mandat/contract";
 import type { CompileTarget } from "@mandat/contract";
 import { compileClaude } from "./claude.js";
 import { compileCodex } from "./codex.js";
+import { compileGemini } from "./gemini.js";
 import { HARNESS_ALWAYS, instructions, policyJson, rulesFor } from "./common.js";
 import type { CompileCtx } from "./common.js";
 import { RULES, ruleKind } from "./rules.js";
@@ -11,7 +12,8 @@ export function compileProfile(profile: HarnessProfile, target: CompileTarget, c
   const p = HarnessProfile.parse(profile);
   if (target === "claude") return Materialized.parse(compileClaude(p, ctx));
   if (target === "codex") return Materialized.parse(compileCodex(p, ctx));
-  // Gemini (E9в) and a local model: the instructions and the policy for the harness; the rest is the harness or nothing
+  if (target === "gemini") return Materialized.parse(compileGemini(p, ctx));
+  // a local model: the instructions and the policy for the harness; the rest is the harness or nothing
   const rules = rulesFor(p, ctx.subjects);
   return Materialized.parse({
     files: [

@@ -22,27 +22,32 @@ describe("gemini-argv (D-423)", () => {
       "gemini", "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust", "-m", "gemini-2.5-pro", "-p", "Fix it",
     ]);
   });
-  it("the system settings: API key auth (never `gateway`), no stats, no updates, no telemetry, no local .env", () => {
+  it("the system settings: API key auth (never `gateway`), no stats/updates/telemetry/hooks, the harness instructions as the context file", () => {
     expect(GEMINI_SYSTEM_SETTINGS).toEqual({
       security: { auth: { selectedType: "gemini-api-key" } },
       privacy: { usageStatisticsEnabled: false },
       general: { enableAutoUpdate: false, enableAutoUpdateNotification: false },
       telemetry: { enabled: false },
       advanced: { ignoreLocalEnv: true },
+      hooksConfig: { enabled: false },
+      context: { fileName: ["instructions.md"] },
     });
-    expect(GEMINI_HOME).toBe("/m/gemini-home");
+    expect(GEMINI_HOME).toBe("/home/agent");
+    // D-428: the image bakes the same file as /etc/gemini-cli/settings.json (the CLI's system settings on Linux)
+    expect(JSON.parse(readFileSync(new URL("../../gemini/settings.json", import.meta.url), "utf8"))).toEqual(GEMINI_SYSTEM_SETTINGS);
   });
-  it("env: only the mdt_ token (GEMINI_API_KEY) and the gate as the base URL; public env says where home and settings are", () => {
+  it("env: only the mdt_ token (GEMINI_API_KEY); the base URL and home are the sandbox's public env (D-428); the harness env passes through", () => {
     const l = geminiAdapter({ model: "gemini-2.5-pro", cliVersion: "0.65.0" }).launch(ctx, key, canary);
     expect(l.env).toEqual({ GEMINI_API_KEY: "mdt_g", AWS_SECRET_ACCESS_KEY: "c" });
-    expect(l.publicEnv).toEqual({ GOOGLE_GEMINI_BASE_URL: "http://egress-gate", GEMINI_CLI_HOME: GEMINI_HOME, GEMINI_CLI_SYSTEM_SETTINGS_PATH: "/m/in/harness/gemini/settings.json", GEMINI_CLI_TRUST_WORKSPACE: "true", NO_BROWSER: "true" });
+    expect(l.publicEnv).toBeUndefined();
     expect(l.stdin).toBe("closed");
     expect(channelToken(key)).toBe("mdt_g");
+    const h = geminiAdapter({ model: "m", cliVersion: "0.65.0" }).launch({ ...ctx, harness: { argv: [], env: { X_TEST: "1" } } }, key, canary);
+    expect(h.publicEnv).toEqual({ X_TEST: "1" });
   });
-  it("a Google login profile: no key, the CLI's own login (oauth-personal settings); wrong channels throw", () => {
+  it("a Google login profile: no key, the CLI's own login; wrong channels throw", () => {
     const l = geminiAdapter({ model: "gemini-2.5-pro", cliVersion: "0.65.0" }).launch(ctx, { PROFILE: true }, canary);
     expect(l.env).toEqual({ AWS_SECRET_ACCESS_KEY: "c" });
-    expect(l.publicEnv).toEqual({ GEMINI_CLI_HOME: GEMINI_HOME, GEMINI_CLI_SYSTEM_SETTINGS_PATH: "/m/in/harness/gemini/settings-login.json", GEMINI_CLI_TRUST_WORKSPACE: "true", NO_BROWSER: "true" });
     expect(() => geminiAdapter({ model: "m", cliVersion: "0.65.0" }).launch(ctx, { OPENAI_API_KEY: "mdt_x" }, canary)).toThrow();
     expect(() => claudeAdapter({ model: "m", cliVersion: "2.1.302" }).launch(ctx, key, canary)).toThrow();
     expect(() => codexAdapter({ model: "m", cliVersion: "0.160.1" }).launch(ctx, key, canary)).toThrow();

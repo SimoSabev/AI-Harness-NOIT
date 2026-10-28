@@ -73,6 +73,15 @@ describe("taskAgents (D-393)", () => {
     expect(taskAgents({ accounts, keys: [], connections: conns, demo: false, preferred: "claude+deepseek" }, "en")[0]?.id).toBe("claude+deepseek");
     expect(taskAgents({ accounts, keys: [], connections: conns, demo: false, preferred: "claude+gone" }, "en")[0]?.id).toBe("claude@lichno");
   });
+  it("D-427: a Google Gemini connection with its key → gemini+<id> (Gemini CLI); without a key it is not offered", () => {
+    const g: Connection = { id: "gemini", provider: "gemini", label: "Google Gemini", baseUrl: null, models: ["gemini-3.8-flash", "gemini-4-argon"], defaultModel: "gemini-3.8-flash", hasKey: true };
+    const r = taskAgents({ accounts: [], keys: [], connections: [g], demo: false, preferred: null }, "en");
+    expect(r.map((a) => [a.id, a.label, a.defaultModel, a.local])).toEqual([["gemini+gemini", "Gemini CLI · Google Gemini", "gemini-3.8-flash", false]]);
+    expect(taskAgents({ accounts: [], keys: [], connections: [{ ...g, hasKey: false }], demo: false, preferred: null }, "bg")).toEqual([]);
+    expect(agentLabel("gemini+gemini", "bg", "Google Gemini")).toBe("Gemini CLI · Google Gemini");
+    expect(CreateTaskBody.safeParse({ type: "free", agent: "gemini+gemini", model: "gemini-4-argon", text: "x" }).success).toBe(true);
+    expect(CreateTaskBody.safeParse({ type: "free", agent: "gemini@lichno", text: "x" }).success).toBe(false);
+  });
   it("CreateTaskBody: a connection agent and a model id; a bad model is refused", () => {
     expect(CreateTaskBody.safeParse({ type: "free", agent: "claude+deepseek", model: "deepseek-flash", text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "free", agent: "codex@rabota", text: "x" }).success).toBe(true);

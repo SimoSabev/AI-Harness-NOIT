@@ -34,6 +34,21 @@ describe("routeOf (D-392)", () => {
     expect(routeOf("claude", "qwen3-coder", conns)).toMatchObject({ model: null });
     expect(routeOf("codex", "gpt-5-codex", conns)).toMatchObject({ run: "codex", model: "gpt-5-codex" });
     expect(routeOf("fake:honest-fix", null, conns)).toMatchObject({ run: "fake:honest-fix", ref: null });
-    expect(routeOf("gemini", null, conns)).toEqual({ ok: false, reason: "unknown_agent" });
+    expect(routeOf("gemini", null, conns)).toEqual({ ok: false, reason: "no_connection" }); // D-427: known now, but not connected
+    expect(routeOf("gemini@lichno", null, conns)).toEqual({ ok: false, reason: "unknown_agent" });
+  });
+});
+
+// D-427: Gemini CLI through a saved Google Gemini connection; `gemini` alone is the connection named "gemini"
+describe("routeOf for Gemini (D-427)", () => {
+  const g: Connection = { id: "gemini", provider: "gemini", label: "Google Gemini", baseUrl: null, models: ["gemini-3.8-flash", "gemini-4-argon"], defaultModel: "gemini-3.8-flash", hasKey: true };
+  it("gemini+<id> and gemini → Gemini CLI on conn-<id>; a model from its list or its default", () => {
+    expect(routeOf("gemini+gemini", null, [g])).toEqual({ ok: true, run: "gemini", ref: { label: "conn-gemini", kind: "api_key", model: "gemini-3.8-flash" }, account: null, local: false });
+    expect(routeOf("gemini", "gemini-4-argon", [g])).toEqual({ ok: true, run: "gemini", ref: { label: "conn-gemini", kind: "api_key", model: "gemini-4-argon" }, account: null, local: false });
+  });
+  it("no Gemini connection, or no key → no_connection", () => {
+    expect(routeOf("gemini", null, [])).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("gemini", null, [{ ...g, hasKey: false }])).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("gemini+deepseek", null, [{ ...g, id: "deepseek", provider: "deepseek" }])).toEqual({ ok: false, reason: "no_connection" });
   });
 });

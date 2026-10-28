@@ -88,6 +88,24 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     cd / && rm -rf /tmp/cx /root/.npm; \
     codex --version | grep -F "${CODEX_VERSION}"
 
+# E9в (D-428): @google/gemini-cli 0.65.0 (Apache-2.0; 0.66.0 is younger than 3 days) as a separate process, like claude
+# and codex. One self-contained bundle (bin bundle/gemini.js); the optional native modules (node-pty, keytar) are left
+# out and no install script runs. The system settings (root-owned, D-431) pick API-key auth (never `gateway`), no usage
+# statistics, updates, telemetry or repo hooks, and the harness instructions as the only context file.
+ARG GEMINI_CLI_VERSION=0.65.0
+ARG GEMINI_CLI_INTEGRITY=sha512-B+flaYBNqX2zO71I5/gu7ZsnI38NlpOl654HWz+bK8I/P5sGILQsbkTOQ5a9V+w1Q6QO3wf9PlqtuMsl7XxpNQ==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    mkdir /tmp/gm && cd /tmp/gm; \
+    npm pack --silent "@google/gemini-cli@${GEMINI_CLI_VERSION}"; \
+    got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "google-gemini-cli-${GEMINI_CLI_VERSION}.tgz")"; \
+    [ "$got" = "$GEMINI_CLI_INTEGRITY" ] || { echo "integrity mismatch for gemini-cli: $got" >&2; exit 1; }; \
+    npm install -g --offline --omit=optional --ignore-scripts --no-audit --no-fund "./google-gemini-cli-${GEMINI_CLI_VERSION}.tgz"; \
+    cd / && rm -rf /tmp/gm /root/.npm; \
+    HOME=/tmp gemini --version | grep -F "${GEMINI_CLI_VERSION}"; rm -rf /tmp/.gemini
+COPY packages/agents/gemini/settings.json /etc/gemini-cli/settings.json
+RUN chmod 0444 /etc/gemini-cli/settings.json
+
 # D-301: pnpm and yarn v1 for repos that use them; pinned by integrity like the agents (no TOFU), no install scripts.
 # The base image's own yarn (unpinned here) is removed first, so `yarn` is exactly the checked tarball.
 ARG PNPM_VERSION=12.14.0

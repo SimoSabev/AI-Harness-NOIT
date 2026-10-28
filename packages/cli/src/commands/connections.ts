@@ -8,17 +8,24 @@ import type { ConnectionStore } from "@mandat/llm-proxy";
 
 const TIMEOUT = 10_000;
 type Fetch = typeof fetch;
-const authHeaders = (auth: "x-api-key" | "bearer" | "none", key: string, wire: Wire): Record<string, string> => ({
+type Auth = "x-api-key" | "bearer" | "x-goog-api-key" | "none";
+const authHeaders = (auth: Auth, key: string, wire: Wire): Record<string, string> => ({
   ...(wire === "anthropic" ? { "anthropic-version": "2023-06-01" } : {}),
-  ...(auth === "x-api-key" ? { "x-api-key": key } : auth === "bearer" ? { authorization: `Bearer ${key}` } : {}),
+  ...(auth === "x-api-key" ? { "x-api-key": key } : auth === "bearer" ? { authorization: `Bearer ${key}` } : auth === "x-goog-api-key" ? { "x-goog-api-key": key } : {}),
 });
 
 /** ok | bad_key (401/403) | unreachable. A list call first; without a list endpoint, one 1-token message decides. */
-export async function checkKey(f: Fetch, o: { wire: Wire; base: string; auth: "x-api-key" | "bearer" | "none"; key: string; model: string }): Promise<"ok" | "bad_key" | "unreachable"> {
+export async function checkKey(f: Fetch, o: { wire: Wire; base: string; auth: Auth; key: string; model: string }): Promise<"ok" | "bad_key" | "unreachable"> {
   const base = o.base.replace(/\/+$/, "");
   const headers = authHeaders(o.auth, o.key, o.wire);
   const verdict = (s: number) => (s === 401 || s === 403 ? "bad_key" : "ok");
   try {
+    // D-427: the Gemini API lists models at /v1beta/models (ai.google.dev/api/models, 28.10.2026); a bad key is 400
+    // API_KEY_INVALID there [НП: live], so 400 counts as a bad key too. The key goes in the header, never in ?key=.
+    if (o.wire === "gemini") {
+      const g = await f(`${base}/v1beta/models`, { method: "GET", headers, signal: AbortSignal.timeout(TIMEOUT) });
+      return g.status === 400 ? "bad_key" : verdict(g.status);
+    }
     const list = await f(`${base}/v1/models`, { method: "GET", headers, signal: AbortSignal.timeout(TIMEOUT) });
     if (o.auth === "none" || (list.status !== 404 && list.status !== 405)) return verdict(list.status);
     if (o.wire === "openai") return "ok";

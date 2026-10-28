@@ -121,8 +121,9 @@ function parseBootKeys(body: Buffer | null, allowHttp: boolean, allowEmpty = fal
     const raw = v.upstreams ?? {};
     if (typeof raw !== "object" || raw === null || Array.isArray(raw) || Object.keys(raw).length > 20) return null;
     for (const [id, u] of Object.entries(raw)) {
-      // the schema allows https or http to this computer; tests also point at an http stub on 127.0.0.1
-      const p = ProxyUpstream.safeParse(allowHttp && typeof u === "object" && u !== null && typeof (u as { url?: unknown }).url === "string" ? { ...u, url: String((u as { url: string }).url).replace(/^http:\/\/127\.0\.0\.1(:\d+)/, "http://host.docker.internal$1") } : u);
+      // the schema allows https or http to this computer; tests also point at an http stub (127.0.0.1, or a container
+      // name in the Docker tests, D-430) — only with allowHttp, which the real proxy never sets without the insecure flag
+      const p = ProxyUpstream.safeParse(allowHttp && typeof u === "object" && u !== null && typeof (u as { url?: unknown }).url === "string" ? { ...u, url: String((u as { url: string }).url).replace(/^http:\/\/[a-z0-9.-]+(:\d+)/, "http://host.docker.internal$1") } : u);
       if (!ConnectionId.safeParse(id).success || !p.success || (p.data.auth !== "none" && !KEY.test(p.data.key))) return null;
       upstreams.set(id, { ...p.data, url: new URL((u as { url: string }).url), local: p.data.local === true });
     }

@@ -75,6 +75,7 @@ Digest-и, сверени в E0.1 (D-146, D-145):
 | caniuse-lite (транзитивно) | 1.0.30001816 | — | CC-BY-4.0 | web (runtime, build) | данни на browserslist; поименно изключение D-284 |
 | yaml (onboard) | 2.9.1 | (вж. contract) | ISC | onboard (runtime) | четене на .github/workflows и предложението (същата версия като в contract) |
 | @openai/codex (образ mandat-sandbox) | 0.160.1 | 05.10.2026 | Apache-2.0 | sandbox image | Codex CLI като отделен процес; integrity на двата tarball-а в docker/sandbox/Dockerfile (D-288) |
+| @google/gemini-cli (образ mandat-sandbox) | 0.65.0 (integrity sha512-B+flaYBNqX2zO71I5/gu7ZsnI38NlpOl654HWz+bK8I/P5sGILQsbkTOQ5a9V+w1Q6QO3wf9PlqtuMsl7XxpNQ==) | 20.10.2026 | Apache-2.0 | sandbox image | Gemini CLI като отделен процес (D-428); един bundle без задължителни зависимости; optional node-pty/keytar не се инсталират, без install скриптове; 0.66.0 (27.10) е по-млада от 3 дни |
 | @electric-sql/pglite (worker) | 0.5.8 | 26.08.2026 | Apache-2.0 | worker (runtime) | офлайн база за `mandat demo spill --fake` (вече в root devDependencies) |
 | web-push | 3.6.7 | 16.01.2024 | MPL-2.0 | worker (runtime) | само генериране на криптираната, VAPID-подписана заявка (generateRequestDetails); изпращането е наше (D-289). Риск: неподдържан пакет (последна версия 01.2024); mpl-notice.test.ts |
 | @types/web-push | 3.6.4 | — | MIT | worker (dev) | типове |

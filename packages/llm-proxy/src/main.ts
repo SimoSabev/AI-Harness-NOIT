@@ -40,6 +40,8 @@ const { inference, admin } = createProxyServer({
   ...(bootToken !== "" ? { boot: { tokenHash: bootTokenHash(bootToken), expiresAtMs: Date.now() + BOOT_TTL_MS, spentFile: "/var/lib/mandat-proxy/boot-spent" } } : {}),
   usageLogPath: process.env.MANDAT_PROXY_USAGE_LOG ?? "/var/lib/mandat-proxy/usage.jsonl",
   localUpstreams: local.upstreams,
+  // D-430: the Docker tests boot an http stub by container name; only with the explicit insecure flag
+  ...(process.env.MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM === "1" ? { allowHttpUpstream: true } : {}),
 });
 inference.listen(8787, "0.0.0.0");
 admin.listen(8788, "0.0.0.0");

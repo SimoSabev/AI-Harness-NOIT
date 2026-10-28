@@ -406,6 +406,39 @@ describe("runTask (fake docker)", () => {
     expect(docker.calls.some((c) => c.args.includes("--exclude=./node_modules") && c.args.includes("/m/work"))).toBe(false);
   });
 
+  it("D-428: agent gemini — Gemini CLI with the mdt_ token as GEMINI_API_KEY (by name), the gate as its base URL, its stream parsed; with a profile → target gemini", async () => {
+    const h = home();
+    mkdirSync(path.join(h, "proxy"), { recursive: true });
+    writeFileSync(path.join(h, "proxy", "secret"), randomBytes(32));
+    const key = ["AIza", "x".repeat(35)].join("");
+    process.env.GEMINI_API_KEY = key;
+    const tok = `mdt_${"g".repeat(30)}.${"h".repeat(43)}`;
+    const channel: Channel = {
+      label: "conn-gemini", kind: "api_key", provider: "gemini", model: "gemini-3.8-flash",
+      issueTaskCredential: () => Promise.resolve({ token: tok, tokenHash: "sha256:x", expiresAt: "" }),
+      revokeTaskCredential: () => Promise.resolve(),
+      usage: () => Promise.resolve({ usd: 0.01, inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 2, budgetStop: false, limit: null, authFailed: false, noTools: false }),
+      sandboxEnv: (c) => ({ GEMINI_API_KEY: c.token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" }),
+      gateRoutes: () => [],
+    };
+    const stream = readFileSync(path.join(repoRoot, "fixtures", "gemini-jsonl", "honest-fix.jsonl"), "utf8").split("\n").filter(Boolean);
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const d = new FakeDocker({ head: honest, agentLines: () => stream });
+    const { r } = await go({ h, docker: d, i: { agent: "gemini", profile }, x: { channel, healthz: () => Promise.resolve(true) } });
+    expect(process.env.GEMINI_API_KEY).toBeUndefined();
+    const agentCall = d.calls.find((c) => c.args.includes("gemini") && c.args.includes("stream-json"));
+    const a = agentCall?.args ?? [];
+    expect(a.slice(a.indexOf("gemini"), a.indexOf("gemini") + 3)).toEqual(["gemini", "--output-format", "stream-json"]);
+    expect(a).toEqual(expect.arrayContaining(["GEMINI_API_KEY", "GOOGLE_GEMINI_BASE_URL=http://egress-gate", "--policy", "/m/in/harness/gemini/policies", "--include-directories", "/m/in/harness"]));
+    expect(a.join(" ")).not.toContain("GEMINI_CLI_SYSTEM_SETTINGS_PATH");
+    expect(a.join(" ")).not.toContain("ANTHROPIC");
+    expect(agentCall?.env.GEMINI_API_KEY).toBe(tok);
+    expect(d.calls.map((c) => c.args.join(" ") + JSON.stringify(c.env)).join("\n")).not.toContain(key);
+    expect(JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")).target).toBe("gemini");
+    expect(r.verdict?.result).toBe("VERIFIED");
+  });
+
   it("gate policy handshake (D-044): без policy_loaded → E_GATE_POLICY", async () => {
     const h = home();
     const runDir = path.join(h, "runs", "r_01JB8Z3K4M5N6P7Q8R9S0T1V2W");
