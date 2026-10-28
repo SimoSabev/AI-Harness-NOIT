@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Демо промпт т. 0.3 (е) / D-261: `pnpm check` is not "done". Reads the vitest JSON reports, lists every
-// skipped/pending/todo test as "НЕПОКРИТИ: <file> > <test> (D-2xx)", fails on a skip without a `// D-2xx:` comment,
+// skipped/pending/todo test as "НЕПОКРИТИ: <file> > <test> (D-2xx)", fails on a skip without a `// D-2xx:` (3xx, 4xx) comment,
 // on failed tests and on `passWithNoTests` not being false. A skip in a core package makes the phase ЧАСТИЧНО.
 // Docker tests that did not run: CI=true → fail; locally → listed as SKIPPED, never as passed.
 // D-291: MANDAT_COUNTS_REQUIRE=unit[,docker,live] names the reports that must exist (the CI `check` job has no Docker;
@@ -13,7 +13,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export const REPORTS = Object.freeze({ unit: "test-results/unit.json", docker: "test-results/docker.json", live: "test-results/live.json" });
 export const CONFIGS = Object.freeze(["vitest.config.ts", "vitest.docker.config.ts", "vitest.live.config.ts"]);
 const CORE_DIRS = ["packages/contract/", "packages/core/", "packages/ledger/", "packages/verify/", "packages/mcp/", "packages/gate-github/"];
-const DECISION = /\/\/\s*(D-[23]\d\d):/; // v5: D-3xx decisions count too
+const DECISION = /\/\/\s*(D-[234]\d\d):/; // v5: D-3xx and D-4xx decisions count too
 const NOT_RUN = new Set(["skipped", "pending", "todo", "disabled"]);
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
