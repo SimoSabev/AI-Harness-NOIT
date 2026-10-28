@@ -68,7 +68,7 @@ export function apiKeyChannel(o: {
   };
 }
 
-/** E0: only api_key; cli_profile and local → E_CHANNEL_UNSUPPORTED. */
+/** E0: api_key; D-295/D-392: profiles and saved connections; D-422: local-<label>. Anything else → E_CHANNEL_UNSUPPORTED. */
 export function channelFor(ref: ChannelRef, opts: { proxyAdminUrl: string; secretPath: string; provider?: "anthropic" | "openai" }): Channel {
   const { provider, ...o } = opts;
   // D-295: claude-profile-<name> → the subscription login in the profile volume of that name; D-392: codex-profile-<name>
@@ -77,6 +77,9 @@ export function channelFor(ref: ChannelRef, opts: { proxyAdminUrl: string; secre
   // D-392: a saved connection — its tokens name the proxy upstream; the wire is the agent's (Claude Code / Codex)
   const conn = ref.kind !== "cli_profile" ? /^conn-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
   if (conn?.[1]) return apiKeyChannel({ label: ref.label, model: ref.model, kind: ref.kind === "local" ? "local" : "api_key", provider: provider ?? "anthropic", upstream: conn[1], ...o });
+  // D-422: a local server named in the proxy's env (MANDAT_UPSTREAM_LOCAL_<label>) — the upstream id is the label itself
+  const local = ref.kind === "local" ? /^local-[a-z0-9][a-z0-9-]{0,25}$/.exec(ref.label) : null;
+  if (local) return apiKeyChannel({ label: ref.label, model: ref.model, kind: "local", provider: provider ?? "anthropic", upstream: ref.label, ...o });
   if (ref.kind !== "api_key") throw new MandatError("E_CHANNEL_UNSUPPORTED", `channel kind ${ref.kind} is not supported in E0`);
   // E3в: anthropic-key-* with the E0 model; openai-key-* (Codex, Responses API; model and price from Simo [НП])
   if (/^anthropic-key-(main|demo)$/.test(ref.label) && ALLOWED_MODELS.includes(ref.model)) return apiKeyChannel({ label: ref.label, model: ref.model, ...o });

@@ -43,3 +43,18 @@ describe("connection channels (D-392)", () => {
     expect(OPENAI_TUNNELS.every((t) => t.port === 443 && /(^|\.)(openai\.com|chatgpt\.com)$/.test(t.host))).toBe(true);
   });
 });
+
+// D-422 (spec 5.3): a local channel named in the proxy's env (MANDAT_UPSTREAM_LOCAL_<label>) is model_channels row
+// local-<label> with kind local; its tokens name the upstream local-<label>
+describe("env local channels (D-422)", () => {
+  it("local-<label> + kind local → the token names upstream local-<label>; kind api_key or a bad label is refused", async () => {
+    const ch = channelFor({ label: "local-ollama", kind: "local", model: "qwen3-coder:30b" }, o);
+    expect([ch.kind, ch.provider]).toEqual(["local", "anthropic"]);
+    const c = await ch.issueTaskCredential({ taskId: "t_x", runId: "r_l", attempt: 1, budgetUsd: 1, ttlMin: 5 });
+    const v = verifyTaskToken(secret, c.token, Math.floor(Date.now() / 1000));
+    expect(v.ok && v.claims.u).toBe("local-ollama");
+    expect(channelFor({ label: "local-vllm-box", kind: "local", model: "m" }, { ...o, provider: "openai" }).provider).toBe("openai");
+    expect(() => channelFor({ label: "local-ollama", kind: "api_key", model: "m" }, o)).toThrow(MandatError);
+    expect(() => channelFor({ label: "local-", kind: "local", model: "m" }, o)).toThrow(MandatError);
+  });
+});
