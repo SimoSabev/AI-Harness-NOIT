@@ -118,6 +118,7 @@ export const ProfileLayerG = z
 export type ProfileLayerG = z.infer<typeof ProfileLayerG>;
 
 export const ModelRole = z.enum(["lead", "subagent", "research", "review", "summary"]);
+export type ModelRole = z.infer<typeof ModelRole>;
 export const RoutingRule = z
   .object({
     task_type: TaskType.nullable(),
