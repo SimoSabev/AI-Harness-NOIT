@@ -9,6 +9,9 @@ export const KeysBody = z.object({
   openai: z.string().trim().regex(/^([\x21-\x7e]{20,512})?$/).optional(),
 }).strict();
 
+/** D-440: the research search key (Exa); it goes to the proxy like the model keys and never comes back */
+export const ResearchKeyBody = z.object({ exa: z.string().trim().regex(/^[\x21-\x7e]{20,512}$/) }).strict();
+
 export interface KeysStatus { proxy: "running" | "stopped" | "unavailable"; providers: string[] }
 export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null; /** D-393: Claude Code or Codex (ChatGPT) */ cli: "claude" | "codex" }
 /** D-369: the subscription login of `mandat local` (the code goes to the control endpoint and on to stdin, nowhere else). */
@@ -35,19 +38,22 @@ export interface KeysClient {
   status(): Promise<KeysStatus>;
   set(k: { anthropic: string; openai?: string }): Promise<KeysStatus | null>;
   clear(): Promise<KeysStatus>;
+  /** D-440: seal the Exa key and restart the proxy with it; null = the control endpoint did not take it */
+  setResearch(k: { exa: string }): Promise<KeysStatus | null>;
+  clearResearch(): Promise<KeysStatus | null>;
 }
 
 const Accounts = z.object({
   accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable(), cli: z.enum(["claude", "codex"]).default("claude") })).max(50),
 });
-const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai"])) });
+const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai", "exa"])) });
 
 export function controlKeys(env: Record<string, string | undefined>): KeysClient | null {
   const url = env.MANDAT_LOCAL_CONTROL_URL;
   const token = env.MANDAT_LOCAL_CONTROL_TOKEN;
   if (!url || !token || !/^http:\/\/127\.0\.0\.1:\d+$/.test(url)) return null;
-  const call = async (method: string, body?: unknown): Promise<KeysStatus | null> => {
-    const r = await fetch(`${url}/keys`, {
+  const call = async (method: string, body?: unknown, path = "/keys"): Promise<KeysStatus | null> => {
+    const r = await fetch(`${url}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -128,5 +134,7 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     status: async () => (await call("GET").catch(() => null)) ?? down,
     set: (k) => call("POST", k).catch(() => null),
     clear: async () => (await call("DELETE").catch(() => null)) ?? down,
+    setResearch: (k) => call("POST", k, "/keys/research").catch(() => null),
+    clearResearch: () => call("DELETE", undefined, "/keys/research").catch(() => null),
   };
 }

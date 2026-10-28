@@ -5,6 +5,7 @@ import type { Key } from "../../i18n/t";
 import { pageName } from "../../lib/brand";
 import { AccountLogin, AccountLogout } from "../../components/account-login";
 import { KeysForm } from "../../components/keys-form";
+import { ResearchKeyForm } from "../../components/research-key-form";
 import { Shell } from "../../components/shell";
 import { StatusBadge, card } from "../../components/ui";
 import { listChannels } from "../../lib/server/channels";
@@ -91,8 +92,15 @@ export default async function KeysPage() {
       {s.proxy === "unavailable" ? (
         <p className={`${card} mt-6 p-5 text-sm`}>{rich(t("keys.onlyLocal"), { cmd: <code className="font-mono">pnpm local</code> })}</p>
       ) : (
-        <KeysForm providers={s.providers} canSet={c.role === "owner"} />
+        <KeysForm providers={s.providers.filter((p) => p !== "exa")} canSet={c.role === "owner"} />
       )}
+      {/* D-440: the research search key (Exa) — sealed, only in the proxy, like the model keys */}
+      <section aria-labelledby="research-key-h" className="mt-10">
+        <h2 id="research-key-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.research")}</h2>
+        <p className="max-w-2xl text-sm text-mute">{t("keys.researchHint")}</p>
+        <ul className={`${card} mt-3 divide-y divide-line`}>{row("Exa", s.providers.includes("exa"))}</ul>
+        {s.proxy !== "unavailable" && <ResearchKeyForm isSet={s.providers.includes("exa")} canSet={c.role === "owner"} />}
+      </section>
       {channels.length > 0 && (
         <section aria-labelledby="ch-h" className="mt-10">
           <h2 id="ch-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.channels")}</h2>
