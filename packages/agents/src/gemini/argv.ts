@@ -8,8 +8,8 @@ export function buildGeminiArgv(o: GeminiArgvOptions): string[] {
   return ["gemini", "--output-format", "stream-json", "--approval-mode", "yolo", "--skip-trust", "-m", o.model, "-p", o.prompt];
 }
 
-/** GEMINI_CLI_HOME on the sandbox tmpfs (the user-level .gemini dir); a login profile mounts its volume here instead. */
-export const GEMINI_HOME = "/m/gemini-home";
+/** D-428: GEMINI_CLI_HOME = the sandbox tmpfs home (the CLI keeps .gemini under it); a login profile would mount its volume here. */
+export const GEMINI_HOME = "/home/agent";
 export const GEMINI_HARNESS_DIR = "/m/in/harness/gemini";
 
 /**
