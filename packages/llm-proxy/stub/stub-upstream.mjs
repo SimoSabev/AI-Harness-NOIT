@@ -22,7 +22,7 @@ const responses = [
 
 const usageMetadata = { promptTokenCount: 1000, cachedContentTokenCount: 0, candidatesTokenCount: 50, totalTokenCount: 1050 };
 function gemini(res, model, method, body) {
-  let j = {};
+  let j;
   try {
     j = JSON.parse(body);
   } catch {
