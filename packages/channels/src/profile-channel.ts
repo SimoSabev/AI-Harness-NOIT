@@ -19,7 +19,7 @@ export const OPENAI_TUNNELS: readonly GateTunnel[] = [
   { host: "api.openai.com", port: 443 },
 ];
 
-const ZERO: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
+const ZERO: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
 const HELLO: GateRoute = { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" };
 
 export function profileChannel(o: { label: string; model: string; profileName: string; provider?: "anthropic" | "openai" }): Channel {

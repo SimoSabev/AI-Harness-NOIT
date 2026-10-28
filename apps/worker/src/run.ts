@@ -121,7 +121,7 @@ export function looksLikeLoginProblem(line: string): boolean {
   return /not logged in|please run \/login|login expired|oauth token has expired|authentication_error|invalid api key/i.test(line) && !/"type":"assistant"/.test(line);
 }
 
-const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
+const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
 const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
 
 class InfraError extends Error {
