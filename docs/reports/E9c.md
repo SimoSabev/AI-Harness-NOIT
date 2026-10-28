@@ -49,5 +49,11 @@ $0). Нивото ≤ 1 — external-ladder-key.test.ts. Docker тестът н�
 - Ollama без tool calling през `MANDAT_UPSTREAM_LOCAL_*` → чеклист 33.
 - Отговори на Q-070–Q-074.
 
-## Проверка
-`pnpm check` → виж края на сесията (CHECK OK се записва в отчета на сесията, не тук, ако нещо падне).
+## Проверка (28.10.2026)
+`pnpm check` не стигна до CHECK OK в тази сесия: машината беше натоварена от паралелната работа с Docker (load average
+20–32). build, lint, typecheck, licenses:check и no-dotenv минават. Последното пускане: 1672 теста минават, 2 падат с
+таймаут 20 s — `packages/ledger` property тест и `packages/verify` D8 (тези пакети не са пипани); и двата минават сами.
+Предишните пускания имаха други таймаути (daemon, web), всички минават сами (10 файла, 104 теста). `test:counts` приема
+skip-а на Gemini (D-423) и пада само заради двата таймаута. Пусни `pnpm check` на ненатоварена машина.
+Бележка: в този worktree apps/desktop нямаше node_modules (инсталира се при поискване, D-303), а typecheck ги иска —
+пуснато е `ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm --dir apps/desktop install --frozen-lockfile`.
