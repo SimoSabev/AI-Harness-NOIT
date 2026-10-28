@@ -165,6 +165,11 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
   if (spec.network === "host" || spec.network.startsWith("container:") || spec.network.startsWith("-")) {
     forbid("network host/container is forbidden", { network: spec.network });
   }
+  // D-441: the internet network is for the gate and the builtin research sidecar of this run only — never the agent,
+  // never a catalog MCP server (their only way out stays the gate)
+  if (spec.network === "mandat-upstream" && spec.role !== "gate" && !(spec.role === "mcp" && spec.name === `mandat-mcp-${spec.runId}-research`)) {
+    forbid("mandat-upstream is only for the gate and the research sidecar (D-441)", { role: spec.role });
+  }
   if (spec.role === "gate") {
     if (spec.capAdd && spec.capAdd.some((c) => c !== "NET_BIND_SERVICE")) forbid("gate may only add NET_BIND_SERVICE");
   } else {
@@ -406,14 +411,17 @@ export function envForPhase(
  * network to the internet (mandat-upstream) and the runner script mounted read-only. The script's guard proxy keeps the
  * browser off every non-public address; no secret, no volume, no published port.
  */
-export function buildRenderArgs(o: { image: string; script: string; runId: string }): string[] {
+export function buildRenderArgs(o: { image: string; script: string; runId: string; fixtures?: string }): string[] {
   if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
   if (!/^[a-z0-9_]{1,48}$/.test(o.runId)) forbid("invalid run id");
   if (!path.isAbsolute(o.script) || !o.script.endsWith(".mjs")) forbid("the render script must be an absolute .mjs path");
+  if (o.fixtures !== undefined && !path.isAbsolute(o.fixtures)) forbid("the fixture folder must be an absolute path");
   const flags = SANDBOX_HARDENING.map((f) => f.replace("<run_id>", o.runId).replace("<role>", "render"));
+  // D-442: fixture mode (the Docker test) has no network at all; the page and its requests come from a read-only folder
+  const fixture = o.fixtures !== undefined ? ["-v", `${path.resolve(o.fixtures)}:/opt/mandat/ui/fixtures:ro`, "-e", "MANDAT_RENDER_FIXTURES=/opt/mandat/ui/fixtures"] : [];
   return [
-    "run", "--rm", "-i", "--network", "mandat-upstream", "--user", "1000:1000", ...flags,
-    "-e", "HOME=/home/agent", "-e", "MANDAT_RENDER_MAIN=1",
+    "run", "--rm", "-i", "--network", o.fixtures !== undefined ? "none" : "mandat-upstream", "--user", "1000:1000", ...flags,
+    "-e", "HOME=/home/agent", "-e", "MANDAT_RENDER_MAIN=1", ...fixture,
     "-v", `${path.resolve(o.script)}:/opt/mandat/ui/research-render.mjs:ro`,
     "-w", "/opt/mandat/ui", "--entrypoint", "node", o.image, "/opt/mandat/ui/research-render.mjs",
   ];
