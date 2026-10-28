@@ -11,6 +11,8 @@ import type { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply
 const Key = z.string().regex(/^[\x21-\x7e]{20,512}$/);
 export const KeysBody = z.object({ anthropic: Key, openai: Key.optional() }).strict();
 export type Keys = z.infer<typeof KeysBody>;
+/** D-440: the research search key (Exa) — the same shape as a model key */
+export const ResearchKeyBody = z.object({ exa: Key }).strict();
 
 export interface ControlDeps {
   start(k: Keys): Promise<boolean>;
@@ -25,6 +27,8 @@ export interface ControlDeps {
   system: { all(): JobState[]; start(job: SystemJob): JobState };
   /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
   addProject(path: string): Promise<AddProjectReply>;
+  /** D-440: the research search key — sealed by `mandat local` and the proxy restarted with it */
+  research?: { set(k: z.infer<typeof ResearchKeyBody>): Promise<boolean>; clear(): Promise<boolean> };
   /** D-393: saved connections, local model discovery, the task box defaults (connections.ts) */
   connections?: {
     list(): Promise<ConnectionsReply>;
@@ -143,6 +147,18 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
     }
     if (req.url?.startsWith("/accounts/")) {
       void accountsRoute(req.url, req.method ?? "GET", () => readJson(req), d).then(([code, body]) => send(code, body), () => send(500, { error: "internal" }));
+      return;
+    }
+    if (req.url === "/keys/research") {
+      const r = d.research;
+      if (!r) return send(404, { error: "not_found" });
+      if (req.method !== "POST" && req.method !== "DELETE") return send(405, { error: "method" });
+      void (async () => {
+        if (req.method === "DELETE") return (await r.clear()) ? send(200, await status()) : send(502, { error: "proxy_start_failed" });
+        const b = ResearchKeyBody.safeParse(await readJson(req));
+        if (!b.success) return send(400, { error: "bad_keys" });
+        return (await r.set(b.data)) ? send(200, await status()) : send(502, { error: "proxy_start_failed" });
+      })().catch(() => send(500, { error: "internal" }));
       return;
     }
     if (req.url !== "/keys") return send(404, { error: "not_found" });

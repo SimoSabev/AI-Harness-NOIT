@@ -53,7 +53,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   const key = store.get("anthropic");
   // D-393: the saved connections (DeepSeek, Kimi, Ollama…) are upstreams of their own; any one of them is enough
   const upstreams = new ConnectionStore(o.mandatHome, kek).upstreams();
-  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0) {
+  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0 && exa === null) {
     io.stderr("няма ключ: въведи го в „Ключове“ в UI или веднъж: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
     return 3;
   }
@@ -73,7 +73,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   for (const k of ["MANDAT_PROXY_OPENAI_PRICES", "MANDAT_UPSTREAM_ANTHROPIC", "MANDAT_UPSTREAM_OPENAI"] as const) if (io.env[k]) publicEnv[k] = io.env[k] as string;
   const openai = store.get("openai");
   // D-293: which providers have a key — names only, never values (read back by proxyProviders)
-  publicEnv.MANDAT_PROXY_PROVIDERS = [key ? "anthropic" : null, openai ? "openai" : null].filter(Boolean).join(",");
+  publicEnv.MANDAT_PROXY_PROVIDERS = [key ? "anthropic" : null, openai ? "openai" : null, exa ? "exa" : null].filter(Boolean).join(",");
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
     name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port, publishInferencePort: o.host.proxyInferencePort,
@@ -113,7 +113,17 @@ export async function proxyProviders(deps: CliDeps): Promise<string[] | null> {
   if (r.exitCode !== 0) return null;
   const line = r.stdout.split("\n").find((l) => l.startsWith("MANDAT_PROXY_PROVIDERS="));
   if (!line) return r.stdout.trim() === "" ? null : [];
-  return line.slice("MANDAT_PROXY_PROVIDERS=".length).split(",").filter((x) => x === "anthropic" || x === "openai");
+  return line.slice("MANDAT_PROXY_PROVIDERS=".length).split(",").filter((x) => x === "anthropic" || x === "openai" || x === "exa");
+}
+
+/**
+ * D-440: the research search key from „Ключове“ — sealed as research:exa next to the model keys (null removes it). The
+ * next proxy start reads it from the store; no EXA_API_KEY in any env.
+ */
+export function setSearchKey(o: { mandatHome: string; env: Record<string, string | undefined> }, provider: "exa", key: string | null): void {
+  const store = new FileKeyStore(o.mandatHome, loadKek({ env: o.env, mandatHome: o.mandatHome }));
+  if (key === null) store.delete(`research:${provider}`);
+  else store.put(`research:${provider}`, key);
 }
 
 export async function proxyStop(io: Io, deps: CliDeps, o: { json: boolean; port: number }): Promise<number> {

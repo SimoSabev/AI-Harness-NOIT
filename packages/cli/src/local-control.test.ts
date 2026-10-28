@@ -177,3 +177,40 @@ describe("mandat local control: connections (D-393)", () => {
     }
   });
 });
+
+// D-440: the Exa key of research from „Ключове“ — sealed by `mandat local` (research:exa), the proxy restarted with it;
+// the key is never echoed; only {exa} with a key-shaped value; no research side → 404.
+describe("mandat local control: the research search key (D-440)", () => {
+  it("POST /keys/research seals and restarts; DELETE removes; bad body → 400; the key is never in a response", async () => {
+    const exa = ["exa", "k".repeat(36)].join("-");
+    const got: (string | null)[] = [];
+    let providers: string[] | null = ["anthropic"];
+    const c = await startControl({
+      start: async () => true, stop: async () => undefined, providers: async () => providers, accounts: async () => [], ...base(),
+      research: {
+        set: async (k) => (got.push(k.exa), (providers = ["anthropic", "exa"]), true),
+        clear: async () => (got.push(null), (providers = ["anthropic"]), true),
+      },
+    });
+    const call = (method: string, body?: unknown) => fetch(`${c.url}/keys/research`, { method, headers: { authorization: `Bearer ${c.token}` }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+    try {
+      expect((await call("POST", { exa: "short" })).status).toBe(400);
+      expect((await call("POST", { exa, anthropic: exa })).status).toBe(400);
+      const r = await call("POST", { exa });
+      const text = await r.text();
+      expect([r.status, text.includes(exa)]).toEqual([200, false]);
+      expect(JSON.parse(text)).toEqual({ proxy: "running", providers: ["anthropic", "exa"] });
+      expect(await (await call("DELETE")).json()).toEqual({ proxy: "running", providers: ["anthropic"] });
+      expect(got).toEqual([exa, null]);
+      expect((await call("GET")).status).toBe(405);
+    } finally {
+      await c.close();
+    }
+    const bare = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base() });
+    try {
+      expect((await fetch(`${bare.url}/keys/research`, { method: "POST", headers: { authorization: `Bearer ${bare.token}` }, body: JSON.stringify({ exa }) })).status).toBe(404);
+    } finally {
+      await bare.close();
+    }
+  });
+});
