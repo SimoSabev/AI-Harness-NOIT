@@ -102,3 +102,51 @@ export class SseResponsesUsage {
     }
   }
 }
+
+/** D-424: the Gemini API's usageMetadata → Usage (fresh input, cached input, output incl. thoughts); null = none. */
+export function geminiUsageOf(j: unknown): Usage | null {
+  const m = ((j ?? {}) as { usageMetadata?: Record<string, unknown> }).usageMetadata;
+  if (!m || typeof m.promptTokenCount !== "number") return null;
+  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const cached = n(m.cachedContentTokenCount);
+  return { input_tokens: Math.max(0, m.promptTokenCount - cached), cache_read_input_tokens: cached, output_tokens: n(m.candidatesTokenCount) + n(m.thoughtsTokenCount) };
+}
+/** D-424: did a Gemini reply call a function (candidates[].content.parts[].functionCall)? */
+export function geminiToolUse(j: unknown): boolean {
+  const cs = ((j ?? {}) as { candidates?: unknown }).candidates;
+  return Array.isArray(cs) && cs.some((c) => {
+    const parts = ((c as { content?: { parts?: unknown } } | null)?.content?.parts);
+    return Array.isArray(parts) && parts.some((p) => (p as { functionCall?: unknown } | null)?.functionCall != null);
+  });
+}
+
+/** D-424: `streamGenerateContent?alt=sse` — every chunk may carry usageMetadata; the last one is the total. */
+export class SseGeminiUsage {
+  private buf = "";
+  usage: Usage | null = null;
+  toolUse = false;
+  push(chunk: string): void {
+    this.buf += chunk.replace(/\r\n/g, "\n");
+    let i: number;
+    while ((i = this.buf.indexOf("\n\n")) >= 0) {
+      this.event(this.buf.slice(0, i));
+      this.buf = this.buf.slice(i + 2);
+    }
+  }
+  end(): void {
+    if (this.buf.trim().length > 0) this.event(this.buf);
+    this.buf = "";
+  }
+  private event(block: string): void {
+    const data = block.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trimStart()).join("\n");
+    if (data.length === 0) return;
+    try {
+      const j: unknown = JSON.parse(data);
+      const u = geminiUsageOf(j);
+      if (u) this.usage = u;
+      if (geminiToolUse(j)) this.toolUse = true;
+    } catch {
+      return;
+    }
+  }
+}

@@ -3,7 +3,7 @@ import https from "node:https";
 import { ConnectionId, ProxyUpstream } from "@mandat/contract";
 import { ALLOWED_MODELS, ESTIMATE, costUsd, costUsdFlat, costUsdOpenAi } from "./pricing.js";
 import type { FlatRate, OpenAiRate, ResponsesUsage, Usage } from "./pricing.js";
-import { SseResponsesUsage, SseUsage, mergeUsage, repliedWithTool, responsesUsageOf } from "./sse-usage.js";
+import { SseGeminiUsage, SseResponsesUsage, SseUsage, geminiToolUse, geminiUsageOf, mergeUsage, repliedWithTool, responsesUsageOf } from "./sse-usage.js";
 import type { LocalUpstream } from "./local-upstream.js";
 import { ProxyState } from "./state.js";
 import type { RequestLine } from "./state.js";
@@ -15,7 +15,10 @@ import type { BootOptions } from "./boot.js";
 
 export const PROXY_VERSION = "0.1.0";
 const INFERENCE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens", "/v1/responses"]);
-const providerOf = (p: string): "anthropic" | "openai" => (p === "/v1/responses" ? "openai" : "anthropic");
+/** D-424: the Gemini API methods Gemini CLI calls; the model is in the path, the only query is alt=sse */
+const GEMINI_PATH = /^\/v1beta\/models\/([A-Za-z0-9._-]{1,128}):(generateContent|streamGenerateContent|countTokens)$/;
+const isInference = (p: string, query: string): boolean => (GEMINI_PATH.test(p) ? query === "" || query === "alt=sse" : INFERENCE_PATHS.has(p));
+const providerOf = (p: string): "anthropic" | "openai" | "gemini" => (p === "/v1/responses" ? "openai" : GEMINI_PATH.test(p) ? "gemini" : "anthropic");
 
 /** E3в (Ф3 П6): retry-after (seconds or HTTP date) and the reset time of the limit from the upstream headers. */
 export function limitOf(h: http.IncomingHttpHeaders, nowMs: number): { retry_after_s: number | null; resets_at: string | null } {
@@ -42,7 +45,7 @@ export function limitOf(h: http.IncomingHttpHeaders, nowMs: number): { retry_aft
   return { retry_after_s: retry, resets_at: resets };
 }
 const MAX_BODY = 32 * 1024 * 1024;
-const DROP_REQ = new Set(["host", "connection", "keep-alive", "proxy-authorization", "authorization", "x-api-key", "content-length", "transfer-encoding", "te", "upgrade"]);
+const DROP_REQ = new Set(["host", "connection", "keep-alive", "proxy-authorization", "authorization", "x-api-key", "x-goog-api-key", "content-length", "transfer-encoding", "te", "upgrade"]);
 const DROP_RES = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade"]);
 
 type ErrType = "authentication_error" | "permission_error" | "api_error" | "invalid_request_error";
@@ -70,7 +73,7 @@ function readBody(req: http.IncomingMessage): Promise<Buffer | null> {
 }
 
 function bearerOf(req: http.IncomingMessage): string | null {
-  const k = req.headers["x-api-key"];
+  const k = req.headers["x-api-key"] ?? req.headers["x-goog-api-key"]; // D-424: Gemini CLI sends its key as x-goog-api-key
   if (typeof k === "string" && k.length > 0) return k;
   const a = req.headers.authorization;
   if (typeof a === "string" && a.startsWith("Bearer ")) return a.slice(7);
@@ -101,7 +104,7 @@ export interface ProxyServerOptions {
 
 const KEY = /^[\x21-\x7e]{20,512}$/;
 /** D-392: a saved connection as the proxy holds it (memory only). */
-interface Upstream { wire: "anthropic" | "openai"; url: URL; auth: "x-api-key" | "bearer" | "none"; key: string; models: string[]; prices: Record<string, FlatRate>; /** D-422: a model on this computer — $0, watched for replies without a tool */ local: boolean }
+interface Upstream { wire: "anthropic" | "openai" | "gemini"; url: URL; auth: "x-api-key" | "bearer" | "x-goog-api-key" | "none"; key: string; models: string[]; prices: Record<string, FlatRate>; /** D-422: a model on this computer — $0, watched for replies without a tool */ local: boolean }
 type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream>; search: Partial<Record<SearchProviderId, string>> };
 /** `allowEmpty`: the environment already names local upstreams (D-422), so a payload with nothing else is fine. */
 function parseBootKeys(body: Buffer | null, allowHttp: boolean, allowEmpty = false): BootKeys | null {
@@ -200,7 +203,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         record({ ...base, model: `search:${sroute.provider}`, run_id: runId, status, usd: status > 0 && status < 400 ? sroute.usd(parsed) : 0, token_prefix8: tokenPrefix8(token) });
         return;
       }
-      if (method !== "POST" || !INFERENCE_PATHS.has(p) || req.headers.upgrade !== undefined) {
+      if (method !== "POST" || !isInference(p, fullPath.slice(p.length + 1)) || req.headers.upgrade !== undefined) {
         req.resume();
         return reject(403, "permission_error", "path_not_allowed", null);
       }
@@ -219,6 +222,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       const conn = v.claims.u !== undefined ? (upstreams.get(v.claims.u) ?? null) : null;
       if (v.claims.u !== undefined && conn === null) return reject(403, "permission_error", "provider_not_configured", runId);
       if (conn !== null && conn.wire !== provider) return reject(401, "authentication_error", "token_channel_mismatch", runId);
+      if (conn === null && provider === "gemini") return reject(403, "permission_error", "provider_not_configured", runId);
       if (conn === null && provider === "openai" && (!o.openai || !openaiUpstream || keys.openai === "")) return reject(403, "permission_error", "provider_not_configured", runId);
       if (conn === null && provider === "anthropic" && keys.anthropic === "") return reject(403, "permission_error", "provider_not_configured", runId);
       if (state.revoked.has(runId)) return reject(401, "authentication_error", "token_revoked", runId);
@@ -238,7 +242,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       let offered = false;
       try {
         const j = JSON.parse(body.toString("utf8")) as { model?: unknown; tools?: unknown };
-        model = typeof j.model === "string" ? j.model : null;
+        model = provider === "gemini" ? (GEMINI_PATH.exec(p)?.[1] ?? null) : typeof j.model === "string" ? j.model : null;
         offered = Array.isArray(j.tools) && j.tools.length > 0;
       } catch {
         model = null;
@@ -260,12 +264,13 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       if (conn !== null) {
         if (conn.auth === "bearer") headers.authorization = `Bearer ${conn.key}`;
         else if (conn.auth === "x-api-key") headers["x-api-key"] = conn.key;
+        else if (conn.auth === "x-goog-api-key") headers["x-goog-api-key"] = conn.key;
       } else if (provider === "openai") headers.authorization = `Bearer ${keys.openai}`;
       else headers["x-api-key"] = keys.anthropic;
       headers["content-length"] = body.length;
       const target = conn !== null ? joinPath(conn.url, fullPath) : new URL(fullPath, provider === "openai" ? (openaiUpstream as URL) : upstream);
       const mod = target.protocol === "https:" ? https : http;
-      const isCount = p === "/v1/messages/count_tokens";
+      const isCount = p === "/v1/messages/count_tokens" || p.endsWith(":countTokens");
       const up = mod.request(target, { method: "POST", headers }, (ur) => {
         const out: http.OutgoingHttpHeaders = {};
         for (const [k, val] of Object.entries(ur.headers)) if (!DROP_RES.has(k.toLowerCase()) && val !== undefined) out[k] = val;
@@ -274,10 +279,12 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         const sse = String(ur.headers["content-type"] ?? "").includes("text/event-stream");
         const parser = new SseUsage();
         const rparser = new SseResponsesUsage();
+        const gparser = new SseGeminiUsage();
         const jsonChunks: Buffer[] = [];
         let jsonBytes = 0;
         ur.on("data", (c: Buffer) => {
           if (sse && provider === "openai") rparser.push(c.toString("utf8"));
+          else if (sse && provider === "gemini") gparser.push(c.toString("utf8"));
           else if (sse) parser.push(c.toString("utf8"));
           else if (jsonBytes < MAX_BODY) {
             jsonChunks.push(c);
@@ -289,6 +296,28 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
           res.end();
           const status = ur.statusCode ?? 0;
           const limit = status === 429 ? { limit: limitOf(ur.headers, now()) } : {};
+          if (provider === "gemini") {
+            // D-424: usageMetadata (the last SSE chunk, or the JSON body); priced at the upstream's flat rate
+            let gu: Usage | null = null;
+            let usedG = false;
+            if (sse) {
+              gparser.end();
+              gu = gparser.usage;
+              usedG = gparser.toolUse;
+            } else {
+              try {
+                const j: unknown = JSON.parse(Buffer.concat(jsonChunks).toString("utf8"));
+                gu = geminiUsageOf(j);
+                usedG = geminiToolUse(j);
+              } catch {
+                gu = null;
+              }
+            }
+            const u = isCount || status >= 400 || gu === null ? { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 } : gu;
+            const usdG = isCount || status >= 400 || gu === null || connRate === null ? 0 : costUsdFlat(connRate, gu);
+            record({ method, path: p, run_id: runId, status, model, input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_read: u.cache_read_input_tokens ?? 0, cache_write: 0, usd: usdG, token_prefix8: tokenPrefix8(token), provider, ...extra, ...limit, ...toolMark(status, usedG) });
+            return;
+          }
           if (provider === "openai") {
             let ru: ResponsesUsage | null;
             if (sse) {

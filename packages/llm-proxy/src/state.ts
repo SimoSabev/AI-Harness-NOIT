@@ -48,7 +48,7 @@ export interface RequestLine {
   cache_write: number;
   usd: number;
   token_prefix8: string | null;
-  provider?: "anthropic" | "openai";
+  provider?: "anthropic" | "openai" | "gemini";
   /** D-392: the saved connection the request went to */
   upstream?: string;
   /** D-392: the model has no price; usd is the Sonnet-rate estimate */

@@ -2,7 +2,7 @@ export { adminBearer, mintTaskToken, tokenPrefix8, verifyTaskToken } from "./tok
 export type { TokenClaims } from "./token.js";
 export { ALLOWED_MODELS, ESTIMATE, costUsd, costUsdFlat, costUsdOpenAi } from "./pricing.js";
 export type { FlatRate, OpenAiRate, ResponsesUsage, Usage } from "./pricing.js";
-export { SseResponsesUsage, SseUsage, repliedWithTool, responsesUsageOf } from "./sse-usage.js";
+export { SseGeminiUsage, SseResponsesUsage, SseUsage, geminiToolUse, geminiUsageOf, repliedWithTool, responsesUsageOf } from "./sse-usage.js";
 export { createProxyServer, limitOf, PROXY_VERSION } from "./server.js";
 export { NO_TOOLS_LIMIT, ProxyState } from "./state.js";
 export { localUpstreamsFromEnv } from "./local-upstream.js";
