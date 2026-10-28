@@ -62,11 +62,11 @@ $0). Нивото ≤ 1 — external-ladder-key.test.ts. Docker тестът н�
 - Ollama без tool calling през `MANDAT_UPSTREAM_LOCAL_*` → чеклист 33.
 - Отговори на Q-070, Q-071, Q-073–Q-076.
 
-## Проверка (28.10.2026)
-`pnpm check` не стигна до CHECK OK в тази сесия: машината беше натоварена от паралелната работа с Docker (load average
-20–32). build, lint, typecheck, licenses:check и no-dotenv минават. Последното пускане: 1672 теста минават, 2 падат с
-таймаут 20 s — `packages/ledger` property тест и `packages/verify` D8 (тези пакети не са пипани); и двата минават сами.
-Предишните пускания имаха други таймаути (daemon, web), всички минават сами (10 файла, 104 теста). `test:counts` приема
-skip-а на Gemini (D-423) и пада само заради двата таймаута. Пусни `pnpm check` на ненатоварена машина.
+## Проверка (28.10.2026, след Gemini докрай)
+`pnpm check` → CHECK OK (build, lint, typecheck, 1696 unit теста минават, 3 skip-а с решения, test:counts, licenses,
+no-dotenv). „ЧАСТИЧНО“ от test:counts е старият skip в ядрото (packages/mcp, D-282), не от тази фаза.
+`pnpm vitest run -c vitest.docker.config.ts apps/worker/src/gemini.docker.test.ts` → 2/2 (истинският Gemini CLI 0.65.0,
+фалшив Gemini endpoint, без истински ключ). Пълният `pnpm test:docker` не е пускан в тази сесия.
+По-рано днес (при натоварване 20–32) ledger property тестът и няколко други падаха с таймаут; на спокойна машина минават.
 Бележка: в този worktree apps/desktop нямаше node_modules (инсталира се при поискване, D-303), а typecheck ги иска —
 пуснато е `ELECTRON_SKIP_BINARY_DOWNLOAD=1 pnpm --dir apps/desktop install --frozen-lockfile`.
