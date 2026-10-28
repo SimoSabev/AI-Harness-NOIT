@@ -50,7 +50,7 @@ describe("API /api/connections (D-393)", () => {
     expect(await (await deleteConnection(req("DELETE"), deps(fake), "deepseek")).json()).toEqual({ removed: true });
     expect((await (await getDetect(req("GET"), deps(fake))).json()).local[0].provider).toBe("ollama");
     expect((await putPreferences(req("PUT", { defaultAgent: "claude+deepseek", defaultModel: "deepseek-v4-pro", onboarded: true }), deps(fake))).status).toBe(200);
-    expect((await putPreferences(req("PUT", { defaultAgent: "gemini" }), deps(fake))).status).toBe(400);
+    expect((await putPreferences(req("PUT", { defaultAgent: "gemini@lichno" }), deps(fake))).status).toBe(400); // D-427: gemini is an agent now; a Google login is not (Q-073)
     expect((await postLogin(req("POST", { name: "rabota", cli: "codex" }), deps(fake))).status).toBe(200);
     expect(calls).toContainEqual({ kind: "start", name: "rabota", cli: "codex" });
   });
