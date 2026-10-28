@@ -171,6 +171,8 @@ export const ProxyUpstream = z.object({
   models: Models,
   /** per model; a missing price is estimated at the Sonnet rate (budgets stay meaningful) */
   prices: z.record(z.string(), z.object({ input: z.number().min(0), output: z.number().min(0), cacheRead: z.number().min(0), cacheWrite: z.number().min(0) }).strict()),
+  /** D-422: a model on this computer (Ollama, LM Studio) — the proxy stops it after NO_TOOLS_LIMIT replies without a tool */
+  local: z.boolean().optional(),
 }).strict();
 export type ProxyUpstream = z.infer<typeof ProxyUpstream>;
 

@@ -4,6 +4,8 @@ import type { ResponsesUsage, Usage } from "./pricing.js";
 export class SseUsage {
   private buf = "";
   readonly usage: Usage = { input_tokens: 0, output_tokens: 0 };
+  /** D-422: the reply opened a tool_use block */
+  toolUse = false;
 
   push(chunk: string): void {
     this.buf += chunk;
@@ -26,16 +28,29 @@ export class SseUsage {
       .map((l) => l.slice(5).trimStart())
       .join("\n");
     if (data.length === 0) return;
-    let j: { type?: string; message?: { usage?: Partial<Usage> }; usage?: Partial<Usage> };
+    let j: { type?: string; message?: { usage?: Partial<Usage> }; usage?: Partial<Usage>; content_block?: { type?: unknown } };
     try {
       j = JSON.parse(data) as typeof j;
     } catch {
       return;
     }
+    if (j.type === "content_block_start" && isToolBlock(j.content_block?.type)) this.toolUse = true;
     const u = j.type === "message_start" ? j.message?.usage : j.type === "message_delta" ? j.usage : undefined;
     if (!u) return;
     mergeUsage(this.usage, u);
   }
+}
+
+/** D-422: tool_use / server_tool_use (Messages API); function_call, custom_tool_call, local_shell_call… (Responses API). */
+const isToolBlock = (t: unknown): boolean => typeof t === "string" && /tool_use$/.test(t);
+const isToolItem = (t: unknown): boolean => typeof t === "string" && /_call$/.test(t);
+
+/** D-422: did a non-streamed reply call a tool? (Messages: content[].type; Responses: output[].type) */
+export function repliedWithTool(j: unknown): boolean {
+  const o = (j ?? {}) as { content?: unknown; output?: unknown };
+  if (Array.isArray(o.content)) return o.content.some((b) => isToolBlock((b as { type?: unknown } | null)?.type));
+  if (Array.isArray(o.output)) return o.output.some((b) => isToolItem((b as { type?: unknown } | null)?.type));
+  return false;
 }
 
 export function mergeUsage(into: Usage, u: Partial<Usage>): void {
@@ -60,6 +75,8 @@ export function responsesUsageOf(j: unknown): ResponsesUsage | null {
 export class SseResponsesUsage {
   private buf = "";
   usage: ResponsesUsage | null = null;
+  /** D-422: an output item was a tool call */
+  toolUse = false;
   push(chunk: string): void {
     this.buf += chunk;
     let i: number;
@@ -76,7 +93,9 @@ export class SseResponsesUsage {
     const data = block.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trimStart()).join("\n");
     if (data.length === 0) return;
     try {
-      const u = responsesUsageOf(JSON.parse(data));
+      const j = JSON.parse(data) as { type?: string; item?: { type?: unknown } };
+      if (j.type === "response.output_item.added" && isToolItem(j.item?.type)) this.toolUse = true;
+      const u = responsesUsageOf(j);
       if (u) this.usage = u;
     } catch {
       return;
