@@ -15,7 +15,7 @@ import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
 import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
-import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
+import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
@@ -46,7 +46,7 @@ export interface RunHooks {
 export interface RunTaskInput {
   home: string;
   contractPath: string;
-  agent: "claude" | "codex" | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
+  agent: "claude" | "codex" | "gemini" | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
   keep: boolean;
   json: boolean;
   docker?: DockerRunner;
@@ -152,6 +152,8 @@ function adapterFor(agent: string, model: string): AgentAdapter {
   // D-392: the channel's model (a picked Claude model, a subscription's default, a saved connection's model)
   if (agent === "claude") return claudeAdapter({ model, cliVersion: "2.1.302" });
   if (agent === "codex") return codexAdapter({ model, cliVersion: "0.160.1" });
+  // D-428: Gemini CLI through a saved Google Gemini connection (the key only in the proxy)
+  if (agent === "gemini") return geminiAdapter({ model, cliVersion: "0.65.0" });
   if (agent.startsWith("fake-codex:")) {
     const c = agent.slice(11);
     if (!isFakeCodexScenario(c)) throw new MandatError("E_USAGE", `unknown agent: ${agent}`);
@@ -215,6 +217,11 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     // E3в: the same for the OpenAI key (Codex never gets it; only the proxy has it)
     if (process.env.OPENAI_API_KEY !== undefined) delete process.env.OPENAI_API_KEY;
     if (env !== process.env && env.OPENAI_API_KEY !== undefined) delete env.OPENAI_API_KEY;
+    // D-428: and for Google's (Gemini CLI reads GEMINI_API_KEY or GOOGLE_API_KEY; only the proxy has the real one)
+    for (const k of ["GEMINI_API_KEY", "GOOGLE_API_KEY"] as const) {
+      if (process.env[k] !== undefined) delete process.env[k];
+      if (env !== process.env && env[k] !== undefined) delete env[k];
+    }
     // ---- 4: environment
     const host = hostConfig(env);
     const dv = await dockerText(docker, ["version", "--format", "{{.Server.Version}}"]);
@@ -227,7 +234,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
     // D-295: a subscription profile run never touches the proxy
-    if ((i.agent === "claude" || i.agent === "codex") && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
+    if ((i.agent === "claude" || i.agent === "codex" || i.agent === "gemini") && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
     const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
@@ -286,7 +293,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
-    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
+    let harness: { target: "claude" | "codex" | "gemini"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
     let asks: Ask[] = [];
     let installRoutes: GateRoute[] = [];
     const mcpRoutes: GateRoute[] = [];
@@ -325,8 +332,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
         // v5 E8а (D-311): the profile's control layer → /m/in/harness (root, read-only for the agent) before the agent
         if (i.profile) {
-          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : "claude";
-          const base = target === "codex" ? "codex" : "claude";
+          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : adapter.id === "gemini" ? "gemini" : "claude";
+          const base = target;
           const granted = i.grantOnce ?? [];
           const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
           // E8e (D-354): skills are materialized only when their text has the hash the profile was approved with
@@ -420,24 +427,24 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           return;
         }
         try {
-          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret"), provider: i.agent === "codex" || i.agent.startsWith("fake-codex:") ? "openai" : "anthropic" });
+          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret"), provider: i.agent === "codex" || i.agent.startsWith("fake-codex:") ? "openai" : i.agent === "gemini" ? "gemini" : "anthropic" });
           await g.setPolicy("agent", [...channel.gateRoutes(), ...mcpRoutes], channel.gateTunnels?.());
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
         }
         const ch = channel as Channel;
         const viaProfile = ch.kind === "cli_profile" && ch.profileName !== undefined;
-        const useProxy = !viaProfile && (i.agent === "claude" || i.agent === "codex" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret"))));
+        const useProxy = !viaProfile && (i.agent === "claude" || i.agent === "codex" || i.agent === "gemini" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret"))));
         if (useProxy) {
           const cred = await ch.issueTaskCredential({ taskId: contract.task_id, runId, attempt: 1, budgetUsd: contract.repo_config.budgets.task_usd, ttlMin: contract.repo_config.budgets.task_minutes + 5 });
           setToken(cred.token);
         } else {
-          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider === "openai" ? { p: "openai" as const } : {}) }));
+          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider !== "anthropic" ? { p: ch.provider } : {}) }));
         }
         const steerHook = adapter.supportsSteering && adapter.steerLine ? i.hooks?.steer : undefined;
         const launch = adapter.launch(
           { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}), ...(steerHook ? { steer: { sessionId: randomUUID() } } : {}) },
-          viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
+          viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : ch.provider === "gemini" ? { GEMINI_API_KEY: token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
@@ -500,7 +507,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
             ...(viaProfile && ch.profileName ? { profile: profileVolume(ch.provider === "openai" ? "codex" : "claude", ch.profileName) } : {}),
             env: {
-              phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}),
+              phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : ch.provider === "gemini" ? { tokenName: "GEMINI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}),
               // D-392: a saved connection serves its own model names — Claude Code uses the model for every tier
               ...(ch.provider === "anthropic" && ch.label.startsWith("conn-") ? { model: ch.model } : {}),
             },
