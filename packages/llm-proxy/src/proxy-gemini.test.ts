@@ -106,7 +106,8 @@ describe("Gemini wire through the proxy (D-424)", () => {
     expect((await gen(p.inf, tok, "/v1beta/models/gemini-2.5-pro:embedContent")).status).toBe(403);
     expect((await gen(p.inf, tok, "/v1beta/models/gemini-2.5-pro:generateContent?key=x")).status).toBe(403);
     expect((await gen(p.inf, tok, "/v1beta/files")).status).toBe(403);
-    expect((await gen(p.inf, token({ p: undefined }), "/v1beta/models/gemini-2.5-pro:generateContent")).status).toBe(401);
+    const anthropicTok = mintTaskToken(secret, { t: "t_x", r: `r_${ulid()}`, a: 1, e: NOW + 600, b: 50, n: "aa", u: "gemini" });
+    expect((await gen(p.inf, anthropicTok, "/v1beta/models/gemini-2.5-pro:generateContent")).status).toBe(401);
     expect((await call(p.inf, "/v1/messages", { headers: { "x-api-key": tok }, body: JSON.stringify({ model: "gemini-2.5-pro" }) })).status).toBe(401);
     expect(up.seen).toEqual([]);
   });
