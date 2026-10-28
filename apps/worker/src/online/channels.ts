@@ -1,4 +1,4 @@
-import type { ChannelRef } from "@mandat/contract";
+import type { ChannelRef, ModelRole } from "@mandat/contract";
 import type { ChannelState, Rule } from "@mandat/channels";
 import type { SqlClient } from "@mandat/ledger";
 
@@ -39,13 +39,14 @@ export async function loadChannels(db: SqlClient, org: string): Promise<(Channel
   }));
 }
 
-export async function ruleFor(db: SqlClient, org: string, repo: string, type: string): Promise<Rule> {
-  const r = await db.query<{ mode: "fixed" | "auto"; channel_id: string; fallback: string[] }>(
-    "select mode, channel_id::text as channel_id, fallback_channel_ids::text[] as fallback from public.routing_rules where org_id = $1::uuid and (repo_id is null or repo_id = $2::uuid) and (task_type is null or task_type = $3) order by (repo_id is null), (task_type is null), priority limit 1",
-    [org, repo, type],
+/** D-420: the rule of one role (its own, else the lead rule); the most specific repo/task type first. */
+export async function ruleFor(db: SqlClient, org: string, repo: string, type: string, role: ModelRole = "lead"): Promise<Rule & { role: ModelRole }> {
+  const r = await db.query<{ mode: "fixed" | "auto"; channel_id: string; fallback: string[]; role: ModelRole }>(
+    "select mode, channel_id::text as channel_id, fallback_channel_ids::text[] as fallback, role from public.routing_rules where org_id = $1::uuid and (repo_id is null or repo_id = $2::uuid) and (task_type is null or task_type = $3) and role in ($4, 'lead') order by (role <> $4), (repo_id is null), (task_type is null), priority limit 1",
+    [org, repo, type, role],
   );
   const x = r.rows[0];
-  return x ? { mode: x.mode, channel_id: x.channel_id, fallback_ids: x.fallback ?? [] } : { mode: "auto", channel_id: null, fallback_ids: [] };
+  return x ? { mode: x.mode, channel_id: x.channel_id, fallback_ids: x.fallback ?? [], role: x.role } : { mode: "auto", channel_id: null, fallback_ids: [], role: "lead" };
 }
 
 export const refOf = (c: ChannelState): ChannelRef => ({ label: c.label, kind: c.kind, model: c.model });
