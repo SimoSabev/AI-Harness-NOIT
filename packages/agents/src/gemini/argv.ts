@@ -15,7 +15,7 @@ export const GEMINI_HARNESS_DIR = "/m/in/harness/gemini";
 /**
  * The system settings file (GEMINI_CLI_SYSTEM_SETTINGS_PATH; overrides user and project settings). The auth type is named
  * because GOOGLE_GEMINI_BASE_URL alone selects `gateway`, which headless validation refuses (exit 41) [НП: live].
- * No usage statistics (they add an installation id header), no update checks, no telemetry, no `.env` from the work tree
+ * No usage statistics (they add an installation id header), no update checks, no telemetry, no dotenv file from the work tree
  * (AGENTS.md rule 4) [НП: `advanced.ignoreLocalEnv` semantics].
  */
 export const GEMINI_SYSTEM_SETTINGS = {
