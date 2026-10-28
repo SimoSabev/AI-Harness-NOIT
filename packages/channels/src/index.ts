@@ -1,6 +1,6 @@
 export type { Channel, SandboxChannelEnv, TaskCredential, TaskUsage } from "./channel.js";
-export { API_KEY_ROUTES, OPENAI_KEY_ROUTES, apiKeyChannel, channelFor } from "./api-key-channel.js";
-export { ANTHROPIC_TUNNELS, OPENAI_TUNNELS, profileChannel } from "./profile-channel.js";
+export { API_KEY_ROUTES, GEMINI_KEY_ROUTES, OPENAI_KEY_ROUTES, apiKeyChannel, channelFor } from "./api-key-channel.js";
+export { ANTHROPIC_TUNNELS, GEMINI_TUNNELS, OPENAI_TUNNELS, profileChannel } from "./profile-channel.js";
 export { excludeReason, selectChannel, selectChannelForRole } from "./select.js";
 export type { ChannelKind, ChannelReason, ChannelState, Health, Provider, Rule, Selection } from "./select.js";
 export { WAITS_MAX, WAIT_MAX_S, nextCooldownS, onLimit } from "./limit-chain.js";

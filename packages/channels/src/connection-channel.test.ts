@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MandatError } from "@mandat/contract";
 import { verifyTaskToken } from "@mandat/llm-proxy";
-import { OPENAI_TUNNELS, channelFor } from "./index.js";
+import { GEMINI_TUNNELS, OPENAI_TUNNELS, channelFor } from "./index.js";
 
 // D-392: the channel of a saved connection (conn-<id>) is an API-key channel whose tokens name that proxy upstream;
 // a ChatGPT subscription (codex-profile-<name>) is a profile channel with OpenAI's tunnels; the Anthropic key takes any
@@ -56,5 +56,23 @@ describe("env local channels (D-422)", () => {
     expect(channelFor({ label: "local-vllm-box", kind: "local", model: "m" }, { ...o, provider: "openai" }).provider).toBe("openai");
     expect(() => channelFor({ label: "local-ollama", kind: "api_key", model: "m" }, o)).toThrow(MandatError);
     expect(() => channelFor({ label: "local-", kind: "local", model: "m" }, o)).toThrow(MandatError);
+  });
+});
+
+// D-424: Gemini CLI through a saved Gemini connection (conn-<id>, provider gemini); D-425: a Google login profile
+describe("gemini channels (D-424, D-425)", () => {
+  it("conn-<id> with provider gemini: a gemini token for that upstream, GEMINI_API_KEY + the gate as base URL, /v1beta/models/ only", async () => {
+    const ch = channelFor({ label: "conn-gemini", kind: "api_key", model: "gemini-2.5-pro" }, { ...o, provider: "gemini" });
+    const c = await ch.issueTaskCredential({ taskId: "t_x", runId: "r_g", attempt: 1, budgetUsd: 1, ttlMin: 5 });
+    const v = verifyTaskToken(secret, c.token, Math.floor(Date.now() / 1000));
+    expect(v.ok && [v.claims.u, v.claims.p]).toEqual(["gemini", "gemini"]);
+    expect(ch.sandboxEnv(c)).toEqual({ GEMINI_API_KEY: c.token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" });
+    expect(ch.gateRoutes().map((r) => [r.method, r.match.kind, r.match.path])).toEqual([["POST", "prefix", "/v1beta/models/"], ["HEAD", "exact", "/api/hello"]]);
+  });
+  it("gemini-profile-<name>: a Google login — no token, Google's tunnels only", () => {
+    const ch = channelFor({ label: "gemini-profile-lichno", kind: "cli_profile", model: "gemini-2.5-pro" }, o);
+    expect([ch.kind, ch.provider, ch.profileName]).toEqual(["cli_profile", "gemini", "lichno"]);
+    expect(ch.gateTunnels?.()).toEqual(GEMINI_TUNNELS);
+    expect(GEMINI_TUNNELS.map((t) => t.host)).toEqual(["cloudcode-pa.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"]);
   });
 });

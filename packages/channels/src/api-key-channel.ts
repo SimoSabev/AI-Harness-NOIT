@@ -19,10 +19,17 @@ export const OPENAI_KEY_ROUTES: readonly GateRoute[] = [
   { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" },
 ];
 
+/** D-424: Gemini CLI's API methods (generateContent, streamGenerateContent, countTokens) under one prefix; the proxy
+ * accepts only those three and the model of the token's upstream. */
+export const GEMINI_KEY_ROUTES: readonly GateRoute[] = [
+  { id: "llm-gemini", method: "POST", match: { kind: "prefix", path: "/v1beta/models/" }, upstream: "llm_proxy" },
+  { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" },
+];
+
 export function apiKeyChannel(o: {
   label: string;
   model: string;
-  provider?: "anthropic" | "openai";
+  provider?: "anthropic" | "openai" | "gemini";
   /** D-392: the saved connection (proxy upstream) the tokens of this channel are for */
   upstream?: string;
   kind?: "api_key" | "local";
@@ -43,7 +50,7 @@ export function apiKeyChannel(o: {
     issueTaskCredential(r) {
       const now = (o.now ?? (() => new Date()))();
       const e = Math.floor(now.getTime() / 1000) + r.ttlMin * 60;
-      const token = mintTaskToken(secret(), { t: r.taskId, r: r.runId, a: 1, e, b: r.budgetUsd, n: randomBytes(8).toString("hex"), ...(provider === "openai" ? { p: "openai" as const } : {}), ...(o.upstream !== undefined ? { u: o.upstream } : {}) });
+      const token = mintTaskToken(secret(), { t: r.taskId, r: r.runId, a: 1, e, b: r.budgetUsd, n: randomBytes(8).toString("hex"), ...(provider !== "anthropic" ? { p: provider } : {}), ...(o.upstream !== undefined ? { u: o.upstream } : {}) });
       return Promise.resolve({ token, tokenHash: sha256Tag(token), expiresAt: new Date(e * 1000).toISOString() });
     },
     async revokeTaskCredential(runId) {
@@ -60,20 +67,22 @@ export function apiKeyChannel(o: {
       return (await res.json()) as TaskUsage;
     },
     sandboxEnv(c) {
+      if (provider === "gemini") return { GEMINI_API_KEY: c.token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" };
       return provider === "openai" ? { OPENAI_API_KEY: c.token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: c.token };
     },
     gateRoutes() {
-      return (provider === "openai" ? OPENAI_KEY_ROUTES : API_KEY_ROUTES).map((r) => ({ ...r, match: { ...r.match } }));
+      return (provider === "openai" ? OPENAI_KEY_ROUTES : provider === "gemini" ? GEMINI_KEY_ROUTES : API_KEY_ROUTES).map((r) => ({ ...r, match: { ...r.match } }));
     },
   };
 }
 
 /** E0: api_key; D-295/D-392: profiles and saved connections; D-422: local-<label>. Anything else → E_CHANNEL_UNSUPPORTED. */
-export function channelFor(ref: ChannelRef, opts: { proxyAdminUrl: string; secretPath: string; provider?: "anthropic" | "openai" }): Channel {
+export function channelFor(ref: ChannelRef, opts: { proxyAdminUrl: string; secretPath: string; provider?: "anthropic" | "openai" | "gemini" }): Channel {
   const { provider, ...o } = opts;
   // D-295: claude-profile-<name> → the subscription login in the profile volume of that name; D-392: codex-profile-<name>
-  const prof = ref.kind === "cli_profile" ? /^(claude|codex)-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
-  if (prof?.[2]) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[2], provider: prof[1] === "codex" ? "openai" : "anthropic" });
+  // D-425: gemini-profile-<name> → a Google login (oauth-personal) in the profile volume of that name
+  const prof = ref.kind === "cli_profile" ? /^(claude|codex|gemini)-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
+  if (prof?.[2]) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[2], provider: prof[1] === "codex" ? "openai" : prof[1] === "gemini" ? "gemini" : "anthropic" });
   // D-392: a saved connection — its tokens name the proxy upstream; the wire is the agent's (Claude Code / Codex)
   const conn = ref.kind !== "cli_profile" ? /^conn-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
   if (conn?.[1]) return apiKeyChannel({ label: ref.label, model: ref.model, kind: ref.kind === "local" ? "local" : "api_key", provider: provider ?? "anthropic", upstream: conn[1], ...o });

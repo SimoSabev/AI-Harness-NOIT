@@ -7,11 +7,12 @@ export interface TaskCredential {
   tokenHash: string; // sha256Tag(token)
   expiresAt: string;
 }
-export type SandboxChannelEnv = { ANTHROPIC_BASE_URL: "http://egress-gate"; ANTHROPIC_API_KEY: string } | { OPENAI_API_KEY: string }; // mdt_… only
+// mdt_… only; D-424: Gemini CLI reads its base URL from GOOGLE_GEMINI_BASE_URL
+export type SandboxChannelEnv = { ANTHROPIC_BASE_URL: "http://egress-gate"; ANTHROPIC_API_KEY: string } | { OPENAI_API_KEY: string } | { GEMINI_API_KEY: string; GOOGLE_GEMINI_BASE_URL: "http://egress-gate" };
 export interface Channel {
   readonly label: string;
   readonly kind: ChannelRef["kind"];
-  readonly provider: "anthropic" | "openai";
+  readonly provider: "anthropic" | "openai" | "gemini";
   readonly model: string;
   issueTaskCredential(r: { taskId: string; runId: string; attempt: 1; budgetUsd: number; ttlMin: number }): Promise<TaskCredential>;
   revokeTaskCredential(runId: string): Promise<void>;

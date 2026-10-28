@@ -19,10 +19,19 @@ export const OPENAI_TUNNELS: readonly GateTunnel[] = [
   { host: "api.openai.com", port: 443 },
 ];
 
+/** D-425: Gemini CLI with a Google login (oauth-personal): the Code Assist API and Google's token hosts, read from the CLI
+ * source (code_assist/server.ts, google-auth-library 10.9.0; spike SG, 28.10.2026) [НП: a live run shows which ones are
+ * used]. accounts.google.com is the person's browser step at sign-in, never the sandbox's. */
+export const GEMINI_TUNNELS: readonly GateTunnel[] = [
+  { host: "cloudcode-pa.googleapis.com", port: 443 },
+  { host: "oauth2.googleapis.com", port: 443 },
+  { host: "www.googleapis.com", port: 443 },
+];
+
 const ZERO: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
 const HELLO: GateRoute = { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" };
 
-export function profileChannel(o: { label: string; model: string; profileName: string; provider?: "anthropic" | "openai" }): Channel {
+export function profileChannel(o: { label: string; model: string; profileName: string; provider?: "anthropic" | "openai" | "gemini" }): Channel {
   const provider = o.provider ?? "anthropic";
   return {
     label: o.label,
@@ -39,6 +48,6 @@ export function profileChannel(o: { label: string; model: string; profileName: s
       throw new Error("a profile channel has no sandbox credential (D-295)");
     },
     gateRoutes: () => [{ ...HELLO, match: { ...HELLO.match } }],
-    gateTunnels: () => (provider === "openai" ? OPENAI_TUNNELS : ANTHROPIC_TUNNELS).map((t) => ({ ...t })),
+    gateTunnels: () => (provider === "openai" ? OPENAI_TUNNELS : provider === "gemini" ? GEMINI_TUNNELS : ANTHROPIC_TUNNELS).map((t) => ({ ...t })),
   };
 }
