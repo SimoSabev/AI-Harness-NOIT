@@ -23,3 +23,18 @@ describe("local model cap (D-392)", () => {
     expect(ladderStepFor("claude+ollama", at1, "success").next.level).toBeGreaterThanOrEqual(1);
   });
 });
+
+// D-421 (spec 5.3 „ниво ≤ 1 (ladderCapFor)“): the cap knows the channel kind too
+describe("ladderCapFor with the channel kind (D-421)", () => {
+  it("local → 1; api_key/cli_profile keep the agent's cap; external stays 1", () => {
+    expect(ladderCapFor("claude+ollama", "local")).toBe(1);
+    expect(ladderCapFor("claude", "api_key")).toBe(3);
+    expect(ladderCapFor("claude@work", "cli_profile")).toBe(3);
+    expect(ladderCapFor("external:claude-code", "api_key")).toBe(1);
+    expect(ladderCapFor("claude")).toBe(3);
+  });
+  it("ladderStepFor with kind local never goes above 1", () => {
+    const at1 = { level: 1 as const, s_up: 99, s_down: 0, pinned: false };
+    expect(ladderStepFor("claude+ollama", at1, "success", { kind: "local" }).next.level).toBe(1);
+  });
+});

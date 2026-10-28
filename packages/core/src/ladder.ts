@@ -75,15 +75,16 @@ export function simulateLadder(o: { p: number; h: number; runs: number; seed: nu
   return { mean: total / o.runs, runs: o.runs, censored };
 }
 
-/** D-207 / S38–S39: external agents have their own key and a cap of 1; MCP (external:mcp-local) has no ladder at all. */
-export function ladderCapFor(agent: string): LadderLevel {
-  return agent.startsWith("external:") ? 1 : 3;
+/** D-207 / S38–S39: external agents have their own key and a cap of 1; MCP (external:mcp-local) has no ladder at all.
+ * D-421 (spec 5.3): a task on a local channel is capped at 1 too. */
+export function ladderCapFor(agent: string, kind?: "api_key" | "cli_profile" | "local"): LadderLevel {
+  return agent.startsWith("external:") || kind === "local" ? 1 : 3;
 }
-/** D-392: `cap` lowers the agent's cap (a local model: 1, spec 5.3). */
-export function ladderStepFor(agent: string, s: LadderState, e: LadderInput, o?: { h_up?: number; h_down?: number; cap?: LadderLevel }): LadderStepResult {
+/** D-392: `cap` lowers the agent's cap (a local model: 1, spec 5.3); D-421: or name the channel `kind`. */
+export function ladderStepFor(agent: string, s: LadderState, e: LadderInput, o?: { h_up?: number; h_down?: number; cap?: LadderLevel; kind?: "api_key" | "cli_profile" | "local" }): LadderStepResult {
   if (agent === "external:mcp-local") return { next: { ...s }, delta: 0, reason: "none" };
   const r = ladderStep(s, e, o);
-  const cap = Math.min(ladderCapFor(agent), o?.cap ?? 3) as LadderLevel;
+  const cap = Math.min(ladderCapFor(agent, o?.kind), o?.cap ?? 3) as LadderLevel;
   if (r.next.level <= cap) return r;
   return { next: { ...r.next, level: cap, s_up: 0, s_down: 0 }, delta: cap - s.level, reason: r.reason };
 }
