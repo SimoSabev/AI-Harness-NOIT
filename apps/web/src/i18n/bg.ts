@@ -245,6 +245,7 @@ export const bg: Record<Key, string> = {
   "agent.codexAccount": "Codex · {name}",
   "agent.via": "Claude Code · {name}",
   "agent.codexVia": "Codex · {name}",
+  "agent.geminiVia": "Gemini CLI · {name}",
   "agent.subscription": "абонамент",
 
   "overview.word.bad": "{n} с провал",
@@ -1076,6 +1077,8 @@ export const bg: Record<Key, string> = {
   "conn.p.deepseek.hint": "Claude Code с моделите на DeepSeek през съвместимия им Anthropic API; ниски цени на токен.",
   "conn.p.kimi.title": "Kimi (Moonshot)",
   "conn.p.kimi.hint": "Claude Code с моделите на Kimi; план Kimi Code или API ключ.",
+  "conn.p.gemini.title": "Google Gemini",
+  "conn.p.gemini.hint": "Gemini CLI с моделите Gemini на Google; API ключ от Google AI Studio, плащаш на токен.",
   "conn.p.zai.title": "Z.ai GLM",
   "conn.p.zai.hint": "Claude Code с моделите GLM; GLM Coding Plan или API ключ.",
   "conn.p.ollama.title": "Ollama",

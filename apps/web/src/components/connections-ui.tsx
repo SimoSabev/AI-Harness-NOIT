@@ -21,7 +21,7 @@ const ERR: Record<string, Key> = {
 };
 const GROUPS: { title: Key; ids: ProviderId[] }[] = [
   { title: "conn.group.subscription", ids: ["claude-sub", "chatgpt-sub"] },
-  { title: "conn.group.key", ids: ["anthropic", "openai", "deepseek", "kimi", "zai", "custom"] },
+  { title: "conn.group.key", ids: ["anthropic", "openai", "gemini", "deepseek", "kimi", "zai", "custom"] },
   { title: "conn.group.local", ids: ["ollama", "lmstudio"] },
 ];
 const TIER: Record<"best" | "balanced" | "fast", Key> = { best: "conn.tier.best", balanced: "conn.tier.balanced", fast: "conn.tier.fast" };
