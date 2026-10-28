@@ -1,0 +1,4 @@
+{"type":"init","timestamp":"2026-10-28T10:00:00.000Z","session_id":"5f0c9e2a-gem-0002","model":"gemini-2.5-flash"}
+{"type":"error","timestamp":"2026-10-28T10:00:01.000Z","severity":"error","message":"Maximum session turns exceeded"}
+{"type":"result","timestamp":"2026-10-28T10:00:01.100Z","status":"error","error":{"type":"FatalTurnLimitedError","message":"Reached max session turns"},"stats":{"total_tokens":0,"input_tokens":0,"output_tokens":0,"cached":0,"input":0,"duration_ms":0,"tool_calls":0,"models":{}}}
+not json at all

@@ -22,12 +22,17 @@ export interface AnthropicChannelEnv {
 export interface OpenAiChannelEnv {
   OPENAI_API_KEY: string; // mdt_…
 }
+/** E9в (D-423): Gemini CLI talks to the Gemini API (/v1beta/models/*) through the gate; GEMINI_API_KEY is the mdt_ token. */
+export interface GeminiChannelEnv {
+  GEMINI_API_KEY: string; // mdt_…
+  GOOGLE_GEMINI_BASE_URL: "http://egress-gate";
+}
 /** D-295: a subscription profile — the CLI uses its own login (profile volume); no token at all. */
 export interface ProfileChannelEnv {
   PROFILE: true;
 }
-export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv | ProfileChannelEnv;
-export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : "PROFILE" in c ? "" : c.ANTHROPIC_API_KEY);
+export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv | GeminiChannelEnv | ProfileChannelEnv;
+export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : "GEMINI_API_KEY" in c ? c.GEMINI_API_KEY : "PROFILE" in c ? "" : c.ANTHROPIC_API_KEY);
 /** env holds ONLY the secret values (they go to the docker CLI env, D-043); public env comes from envForPhase. */
 export interface AgentLaunchSpec {
   argv: string[];
