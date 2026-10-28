@@ -1,5 +1,6 @@
 export { compileProfile } from "./compile.js";
 export { CODEX_HOME_DIR } from "./codex.js";
+export { GEMINI_DIR, geminiPolicyRule } from "./gemini.js";
 export { HARNESS_DIR, HOOKS, instructions, policyJson, rulesFor } from "./common.js";
 export type { CompileCtx } from "./common.js";
 export { RULES, claudeRule, claudeToolName, ruleKind } from "./rules.js";
