@@ -53,7 +53,9 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   const key = store.get("anthropic");
   // D-393: the saved connections (DeepSeek, Kimi, Ollama…) are upstreams of their own; any one of them is enough
   const upstreams = new ConnectionStore(o.mandatHome, kek).upstreams();
-  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0) {
+  // D-422: local model servers named in this command's env (MANDAT_UPSTREAM_LOCAL_<label>[_MODELS|_WIRE]; addresses, not secrets)
+  const localEnv = Object.fromEntries(Object.entries(io.env).filter((e): e is [string, string] => /^MANDAT_UPSTREAM_LOCAL_[A-Z0-9][A-Z0-9_]*$/.test(e[0]) && typeof e[1] === "string" && e[1] !== ""));
+  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0 && Object.keys(localEnv).length === 0) {
     io.stderr("няма ключ: въведи го в „Ключове“ в UI или веднъж: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
     return 3;
   }
@@ -71,6 +73,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   const publicEnv: Record<string, string> = { MANDAT_PROXY_SECRET_FILE: "/var/lib/mandat-proxy/secret" };
   // E3в: OpenAI only when given for this command; prices and upstreams are not secrets (S33, docs/setup/keys.md)
   for (const k of ["MANDAT_PROXY_OPENAI_PRICES", "MANDAT_UPSTREAM_ANTHROPIC", "MANDAT_UPSTREAM_OPENAI"] as const) if (io.env[k]) publicEnv[k] = io.env[k] as string;
+  Object.assign(publicEnv, localEnv);
   const openai = store.get("openai");
   // D-293: which providers have a key — names only, never values (read back by proxyProviders)
   publicEnv.MANDAT_PROXY_PROVIDERS = [key ? "anthropic" : null, openai ? "openai" : null].filter(Boolean).join(",");
