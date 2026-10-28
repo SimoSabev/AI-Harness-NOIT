@@ -31,6 +31,7 @@ export const config = defineConfig({
       project("egress-gate", "packages/egress-gate"),
       project("gate", "packages/gate-github"),
       project("mcp", "packages/mcp"),
+      project("research", "packages/research"),
       project("verify", "packages/verify"),
       project("worker", "apps/worker"),
       project("web", "apps/web"),

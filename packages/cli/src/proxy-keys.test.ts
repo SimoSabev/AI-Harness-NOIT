@@ -72,3 +72,32 @@ describe("proxy start with saved connections (D-393)", () => {
     expect(boots).toEqual([{}]);
   });
 });
+
+// D-440: the Exa key from „Ключове“ is sealed as research:exa; the proxy picks it up from the store (no EXA_API_KEY in
+// any env) and it is enough on its own to start the proxy; MANDAT_PROXY_PROVIDERS names it, never its value.
+describe("the research search key in the store (D-440)", () => {
+  const EXA = ["exa", "z".repeat(36)].join("-");
+  it("setSearchKey seals it; proxy start (no env) boots with it alone; removing it leaves nothing to start", async () => {
+    const { setSearchKey } = await import("./commands/proxy.js");
+    const { proxyProviders } = await import("./commands/proxy.js");
+    const home = mkdtempSync(path.join(tmpdir(), "pk-"));
+    setSearchKey({ mandatHome: home, env: {} }, "exa", EXA);
+    expect(readFileSync(path.join(home, "keys.sealed.json"), "utf8")).not.toContain(EXA);
+    const calls: { args: string[]; env: Record<string, string> }[] = [];
+    const boots: Record<string, unknown>[] = [];
+    expect(await proxyStart(io({}), deps(calls, boots), { mandatHome: home, host: hostConfig({}), json: true })).toBe(0);
+    expect(boots).toEqual([{ search: { exa: EXA } }]);
+    const run = calls.find((c) => c.args[0] === "run");
+    expect(run?.args).toContain("MANDAT_PROXY_PROVIDERS=exa");
+    for (const c of calls) expect(JSON.stringify(c)).not.toContain(EXA);
+    setSearchKey({ mandatHome: home, env: {} }, "exa", null);
+    expect(new FileKeyStore(home, loadKek({ env: {}, mandatHome: home })).get("research:exa")).toBeNull();
+    expect(await proxyStart(io({}), deps(calls, []), { mandatHome: home, host: hostConfig({}), json: true })).toBe(3);
+    // the running proxy's providers: the names from its public env, exa included
+    const { imageTags } = await import("@mandat/sandbox");
+    const { repoRoot } = await import("./paths.js");
+    const tag = (await imageTags(repoRoot)).proxy;
+    const insp: DockerRunner = { run: (args, o) => (o.onStdout?.(Buffer.from(args.includes("{{.State.Running}} {{.Config.Image}}") ? `true ${tag}\n` : "MANDAT_PROXY_PROVIDERS=anthropic,exa\n")), Promise.resolve({ exitCode: 0, timedOut: false })) };
+    expect(await proxyProviders({ ...deps([], []), docker: insp })).toEqual(["anthropic", "exa"]);
+  });
+});

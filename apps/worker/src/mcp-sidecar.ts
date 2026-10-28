@@ -1,7 +1,7 @@
 import { PassThrough } from "node:stream";
 import { MandatError } from "@mandat/contract";
 import type { GateRoute, McpServerRef } from "@mandat/contract";
-import { buildRunArgs, dockerText } from "@mandat/sandbox";
+import { UPSTREAM_NETWORK, buildRunArgs, dockerText } from "@mandat/sandbox";
 import { runSandbox } from "@mandat/verify";
 import type { RunGate } from "@mandat/verify";
 
@@ -100,34 +100,69 @@ export async function vetMcp(ctx: SandboxCtx, o: { volume: string; ref: McpServe
   return line;
 }
 
-/** Starts the sidecar (detached) on the MCP network and connects the gate to it; resolves with the bridge's first line. */
-export async function startSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: McpServerRef; installed: Installed; secrets: Record<string, string>; perMin?: number; timeoutMs?: number }): Promise<{ line: BridgeLine; route: GateRoute[] }> {
+/** The run's internal MCP network (created once) with the gate on it. */
+async function mcpNetwork(ctx: SandboxCtx, gate: RunGate): Promise<string> {
   const net = mcpNames.net(ctx.runId);
   const exists = (await dockerText(ctx.docker, ["network", "inspect", net])).exitCode === 0;
   if (!exists) {
     if ((await dockerText(ctx.docker, ["network", "create", "--internal", "--label", `mandat.run=${ctx.runId}`, net])).exitCode !== 0) throw new MandatError("E_DOCKER", "mcp network create failed");
-    if ((await dockerText(ctx.docker, ["network", "connect", net, o.gate.name])).exitCode !== 0) throw new MandatError("E_DOCKER", "gate cannot join the mcp network");
+    if ((await dockerText(ctx.docker, ["network", "connect", net, gate.name])).exitCode !== 0) throw new MandatError("E_DOCKER", "gate cannot join the mcp network");
   }
+  return net;
+}
+
+/** Waits for the bridge's /status and turns it into the gate routes (only when it serves). */
+async function bridgeUp(ctx: SandboxCtx, o: { name: string; container: string; perMin?: number; timeoutMs?: number }): Promise<{ line: BridgeLine; route: GateRoute[] }> {
+  const deadline = Date.now() + (o.timeoutMs ?? 60_000);
+  for (;;) {
+    const st = await sidecarStatus(ctx, o.container);
+    if (st) {
+      const line: BridgeLine = { event: st.state === "serving" ? "serving" : "blocked", name: o.name, reason: st.reason, hash: st.hash, tools: st.tools };
+      const target = `http://${o.container}:8080`;
+      const route: GateRoute[] = line.event === "serving"
+        ? (["POST", "GET"] as const).map((method) => ({ id: `mcp-${o.name}-${method}`, method, match: { kind: "exact" as const, path: `/mcp/${o.name}` }, upstream: "mcp" as const, mcp: { target, per_min: o.perMin ?? 60 } }))
+        : [];
+      return { line, route };
+    }
+    if (Date.now() > deadline) throw new MandatError("E_DOCKER", `mcp ${o.name}: the bridge did not answer`);
+    await new Promise((res) => setTimeout(res, 500));
+  }
+}
+
+/** Starts the sidecar (detached) on the MCP network and connects the gate to it; resolves with the bridge's first line. */
+export async function startSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: McpServerRef; installed: Installed; secrets: Record<string, string>; perMin?: number; timeoutMs?: number }): Promise<{ line: BridgeLine; route: GateRoute[] }> {
+  const net = await mcpNetwork(ctx, o.gate);
   const name = mcpNames.container(ctx.runId, o.ref.name);
   const args = sidecarArgs(ctx, { volume: mcpNames.vol(ctx.runId, o.ref.name), network: net, name, secrets: Object.keys(o.secrets), detach: true });
   const at = args.indexOf(ctx.image);
   args.splice(at, 0, "-e", `MANDAT_MCP_SPEC=${specEnv(o.ref, o.installed.bin, o.ref.tools_hash)}`);
   const r = await ctx.docker.run([...args, "node", BRIDGE], { env: o.secrets, stdin: "closed", timeoutMs: 60_000 });
   if (r.exitCode !== 0) throw new MandatError("E_DOCKER", `mcp ${o.ref.name}: sidecar did not start`);
-  const deadline = Date.now() + (o.timeoutMs ?? 60_000);
-  for (;;) {
-    const st = await sidecarStatus(ctx, name);
-    if (st) {
-      const line: BridgeLine = { event: st.state === "serving" ? "serving" : "blocked", name: o.ref.name, reason: st.reason, hash: st.hash, tools: st.tools };
-      const target = `http://${name}:8080`;
-      const route: GateRoute[] = line.event === "serving"
-        ? (["POST", "GET"] as const).map((method) => ({ id: `mcp-${o.ref.name}-${method}`, method, match: { kind: "exact" as const, path: `/mcp/${o.ref.name}` }, upstream: "mcp" as const, mcp: { target, per_min: o.perMin ?? 60 } }))
-        : [];
-      return { line, route };
-    }
-    if (Date.now() > deadline) throw new MandatError("E_DOCKER", `mcp ${o.ref.name}: the bridge did not answer`);
-    await new Promise((res) => setTimeout(res, 500));
-  }
+  return bridgeUp(ctx, { name: o.ref.name, container: name, ...(o.perMin !== undefined ? { perMin: o.perMin } : {}), ...(o.timeoutMs !== undefined ? { timeoutMs: o.timeoutMs } : {}) });
+}
+
+/** E9г (D-441): the research server baked into the sandbox image, and how the sidecar reaches Mandat's own SearXNG. */
+export const RESEARCH_MAIN = "/opt/mandat/research-mcp/dist/main.js";
+export const RESEARCH_ARGS: readonly string[] = ["--searxng", "http://mandat-searxng:8080"];
+
+/**
+ * E9г (D-441): the builtin research server in its own sidecar — role mcp (the same hardening), no volume, no secret, no
+ * work tree. It reads the public web, so it starts on mandat-upstream (buildRunArgs allows that for this one container
+ * only) and then joins the run's internal MCP network, where the gate reaches it. The agent still has only the gate:
+ * http://egress-gate/mcp/research, with the per-minute budget; the bridge serves only the pinned tools hash.
+ */
+export async function startResearchSidecar(ctx: SandboxCtx, o: { gate: RunGate; ref: McpServerRef; args?: readonly string[]; perMin?: number; timeoutMs?: number }): Promise<{ line: BridgeLine; route: GateRoute[] }> {
+  const net = await mcpNetwork(ctx, o.gate);
+  const name = mcpNames.container(ctx.runId, o.ref.name);
+  const spec = JSON.stringify({ name: o.ref.name, command: "node", args: [RESEARCH_MAIN, ...(o.args ?? RESEARCH_ARGS)], approved_hash: o.ref.tools_hash, enabled_tools: o.ref.enabled_tools, secrets: [] });
+  const args = buildRunArgs(
+    { role: "mcp", runId: ctx.runId, image: ctx.image, network: UPSTREAM_NETWORK, user: "1000:1000", mounts: [], envNames: [], publicEnv: { MANDAT_MCP_SPEC: spec }, workdir: "/tmp", ipv6Sysctl: ctx.ipv6Sysctl, detach: true, name },
+    { home: ctx.home, mandatHome: ctx.mandatHome, runDir: ctx.runDir },
+  );
+  const r = await ctx.docker.run([...args, "node", BRIDGE], { env: {}, stdin: "closed", timeoutMs: 60_000 });
+  if (r.exitCode !== 0) throw new MandatError("E_DOCKER", "mcp research: sidecar did not start");
+  if ((await dockerText(ctx.docker, ["network", "connect", net, name])).exitCode !== 0) throw new MandatError("E_DOCKER", "mcp research: cannot join the mcp network");
+  return bridgeUp(ctx, { name: o.ref.name, container: name, ...(o.perMin !== undefined ? { perMin: o.perMin } : {}), ...(o.timeoutMs !== undefined ? { timeoutMs: o.timeoutMs } : {}) });
 }
 
 /**

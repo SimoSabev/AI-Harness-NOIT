@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 # mandat-sandbox: unmodified Claude Code + the fake agents. Built ONLY locally, never published (4.1).
 
-# E8e (D-354): the MCP sidecar bridge (stdio MCP server → streamable HTTP), deployed with its production dependencies.
+# E8e (D-354): the MCP sidecar bridge (stdio MCP server → streamable HTTP), deployed with its production dependencies;
+# E9г (D-441): the builtin research MCP server next to it.
 # The sidecar runs this same image with role mcp; the agent never runs it.
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS mcpbridge
 WORKDIR /src
@@ -12,11 +13,14 @@ COPY . .
 # D-389: the pnpm store survives between builds (a code change no longer downloads every dependency again).
 RUN --mount=type=cache,id=mandat-pnpm-store,target=/pnpm-store --mount=type=secret,id=extra_ca,required=false set -eu; \
     if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
-    pnpm install --frozen-lockfile --store-dir /pnpm-store --filter "@mandat/mcp-bridge..." \
- && pnpm --filter "@mandat/mcp-bridge..." build \
+    pnpm install --frozen-lockfile --store-dir /pnpm-store --filter "@mandat/mcp-bridge..." --filter "@mandat/research-mcp..." \
+ && pnpm --filter "@mandat/mcp-bridge..." --filter "@mandat/research-mcp..." build \
  && pnpm --filter @mandat/mcp-bridge --prod deploy /out \
- && find /out -type d \( -name tests -o -name __tests__ -o -name test \) -prune -exec rm -rf {} + \
- && find /out -type f \( -name "*.test.*" -o -name "*.spec.*" \) -delete
+ && pnpm --filter @mandat/research-mcp --prod deploy /out-research \
+ && for d in /out /out-research; do \
+      find "$d" -type d \( -name tests -o -name __tests__ -o -name test \) -prune -exec rm -rf {} + ; \
+      find "$d" -type f \( -name "*.test.*" -o -name "*.spec.*" \) -delete ; \
+    done
 # (the dependencies' own test files carry sample tokens; the R8 keyscan must see none in the sandbox image)
 
 FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
@@ -145,11 +149,14 @@ COPY packages/agents/hooks/ /opt/mandat/hooks/
 # E8и (D-358): test reporters the harness passes to runners without a JSON report of their own (node --test)
 COPY packages/verify/reporters/ /opt/mandat/reporters/
 COPY --from=mcpbridge /out /opt/mandat/mcp-bridge
+# E9г (D-441): the builtin research MCP server; the worker runs it behind the bridge in its own sidecar (role mcp)
+COPY --from=mcpbridge /out-research /opt/mandat/research-mcp
 # E4 (т. 9.0): recorded transcripts + fixed patches for the deterministic replay agents
 COPY demo/recordings/*.jsonl demo/recordings/*.patch /opt/mandat/replay/
 RUN chmod 0555 /opt/mandat/fakes /opt/mandat/replay /opt/mandat/hooks /opt/mandat/reporters && chmod 0444 /opt/mandat/fakes/* /opt/mandat/replay/* /opt/mandat/hooks/* /opt/mandat/reporters/* \
  && mkdir -p /m/work /m/out /m/in /home/agent \
- && chown 1000:1000 /m /m/work /m/out && chown root:root /m/in && chmod 0755 /m/in
+ && chown 1000:1000 /m /m/work /m/out && chown root:root /m/in && chmod 0755 /m/in \
+ && test -f /opt/mandat/research-mcp/dist/main.js && test -f /opt/mandat/mcp-bridge/dist/main.js
 
 USER 1000:1000
 WORKDIR /m/work

@@ -49,4 +49,19 @@ describe("the browser tier (D-405)", () => {
     expect(plain).toBe(403);
     proxy.close();
   });
+  // D-442: the browser tier is checked against a local page: fixture mode has no network at all (--network none) and
+  // answers every request from a read-only folder, by host and path; nothing outside the folder is ever served
+  it("fixture mode: no network, the folder read-only, the same hardening; paths stay inside the folder", async () => {
+    const a = buildRenderArgs({ image: "mandat-sandbox-ui:pw1", script: RENDER_SCRIPT, runId: "q_abc", fixtures: "/srv/fx" });
+    expect(a.slice(a.indexOf("--network"), a.indexOf("--network") + 2)).toEqual(["--network", "none"]);
+    expect(a).not.toContain("mandat-upstream");
+    expect(a).toEqual(expect.arrayContaining(["--cap-drop=ALL", "--read-only", "/srv/fx:/opt/mandat/ui/fixtures:ro", "MANDAT_RENDER_FIXTURES=/opt/mandat/ui/fixtures"]));
+    expect(() => buildRenderArgs({ image: "img", script: RENDER_SCRIPT, runId: "q", fixtures: "rel/dir" })).toThrow();
+    const mod = (await import(RENDER_SCRIPT)) as { fixtureFile: (dir: string, url: string) => string | null };
+    expect(mod.fixtureFile("/fx", "https://app.example.org/guide/")).toBe("/fx/app.example.org/guide/index.html");
+    expect(mod.fixtureFile("/fx", "https://app.example.org/data.json?x=1")).toBe("/fx/app.example.org/data.json");
+    expect(mod.fixtureFile("/fx", "https://app.example.org/%2e%2e/%2e%2e/etc/passwd")).toBe("/fx/app.example.org/etc/passwd"); // the URL parser keeps it inside
+    expect(mod.fixtureFile("/fx", "https://app.example.org/%2F..%2F..%2Fsecret")).toBe(null);
+    expect(mod.fixtureFile("/fx", "file:///etc/passwd")).toBe(null);
+  });
 });

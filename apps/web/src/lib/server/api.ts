@@ -5,7 +5,7 @@ import type { RateLimiter } from "./guard";
 import { SwitchBody, listChannels, switchChannel } from "./channels";
 import { SubscribeBody, subscribePush } from "./push";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
-import { KeysBody } from "./keys";
+import { KeysBody, ResearchKeyBody } from "./keys";
 import type { KeysClient, LoginReply } from "./keys";
 import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
@@ -285,6 +285,27 @@ export async function deleteKeys(req: Request, d: ApiDeps): Promise<Response> {
   if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   return json(200, await d.keys.clear());
+}
+
+// D-440: the research search key (Exa) — keys.manage, like the model keys; to the proxy only, never echoed
+export async function postResearchKey(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!d.keys) return json(503, { error: "keys_unavailable" });
+  const b = ResearchKeyBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_keys" });
+  const s = await d.keys.setResearch({ exa: b.data.exa });
+  return s ? json(200, s) : json(502, { error: "proxy_start_failed" });
+}
+
+export async function deleteResearchKey(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!d.keys) return json(503, { error: "keys_unavailable" });
+  const s = await d.keys.clearResearch();
+  return s ? json(200, s) : json(502, { error: "proxy_start_failed" });
 }
 
 // D-369: the subscription login from the web (owner with keys.manage). The pasted code goes on to the control endpoint

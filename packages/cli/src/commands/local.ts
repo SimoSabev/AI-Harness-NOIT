@@ -13,7 +13,7 @@ import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
-import { proxyProviders, proxyStart, proxyStop } from "./proxy.js";
+import { proxyProviders, proxyStart, proxyStop, setSearchKey } from "./proxy.js";
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
 import { listAccounts, loginDeps, logoutProfile } from "./accounts.js";
 import { Connections } from "./connections.js";
@@ -316,6 +316,16 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     start: startProxy,
     stop: async () => void (await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort })),
     providers: () => proxyProviders(deps),
+    // D-440: the Exa key of research — sealed (research:exa), then the proxy restarts from the store; without any key left it stops
+    research: {
+      set: async (k) => (setSearchKey({ mandatHome: o.home, env: io.env }, "exa", k.exa), restartProxy()),
+      clear: async () => {
+        setSearchKey({ mandatHome: o.home, env: io.env }, "exa", null);
+        if (await restartProxy()) return true;
+        await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort });
+        return true;
+      },
+    },
     accounts: () => listAccounts(deps),
     login: new LoginSessions(loginDeps(deps)),
     logout: async (name, cli) => {

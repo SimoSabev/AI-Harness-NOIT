@@ -27,4 +27,14 @@ describe("role mcp (sidecar)", () => {
   it("other roles still refuse non-LLM secret names", () => {
     expect(() => buildRunArgs({ ...spec(), role: "agent" }, ctx)).toThrow(MandatError);
   });
+  // D-441: the builtin research server reads the public web — the one sidecar that may sit on mandat-upstream; no other
+  // MCP sidecar and no other sandbox role may (the agent's only way out stays the gate)
+  it("mandat-upstream only for the research sidecar of this run", () => {
+    const up = { ...spec(), network: "mandat-upstream", mounts: [], envNames: [] };
+    expect(buildRunArgs({ ...up, name: "mandat-mcp-r_x-research" }, ctx)).toContain("mandat-upstream");
+    expect(() => buildRunArgs({ ...up, name: "mandat-mcp-r_x-issues" }, ctx)).toThrow(MandatError);
+    expect(() => buildRunArgs({ ...up, name: "mandat-mcp-r_y-research" }, ctx)).toThrow(MandatError);
+    expect(() => buildRunArgs(up, ctx)).toThrow(MandatError);
+    for (const role of ["agent", "install", "test", "export", "seed"] as const) expect(() => buildRunArgs({ ...up, role, name: "mandat-mcp-r_x-research" }, ctx)).toThrow(MandatError);
+  });
 });
