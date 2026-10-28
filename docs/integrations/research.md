@@ -1,7 +1,8 @@
 # Ресърч (E9г)
 
 Ресърчът е услуга на харнеса: въпрос → план → ленти паралелно (заявки → собствено търсене → четене на страници → дословни
-цитати → празнини) → твърдения с присъда → отговор с цитати → доклад. Всяка стъпка се вижда на живо. Решения: D-404…D-413;
+цитати → празнини) → твърдения с присъда → отговор с цитати → доклад. Всяка стъпка се вижда на живо. Решения: D-404…D-413,
+D-440…D-442;
 стратегиите: [docs/prd/research/research-strategies.md](../prd/research/research-strategies.md).
 
 ## Бърз старт
@@ -27,18 +28,24 @@ pnpm local                                         # уеб + работник; 
 ## Търсене
 - Винаги: SearXNG (ако върви), Wikipedia, arXiv, GitHub, Stack Exchange; Crossref с `MANDAT_RESEARCH_MAILTO`.
 - С Anthropic ключ: Anthropic web search през проксито.
-- Exa: `EXA_API_KEY=… pnpm mandat proxy start` (ключът се запечатва и живее само в проксито).
+- Exa: „Ключове“ → „Търсене за ресърча (Exa)“ (D-440) или веднъж `EXA_API_KEY=… pnpm mandat proxy start`. Ключът се
+  запечатва (`research:exa`) и живее само в проксито; проксито го взима от склада при всяко пускане, без променлива в средата.
 
 ## Четене на страници
 HTTP (robots.txt, ≤ 2 заявки на сайт, SSRF защита) → истински Chromium за JS страници (нужен е UI образът:
-`pnpm mandat images build --ui`) → копие от Wayback Machine при отказ → Exa contents. Стените срещу ботове и CAPTCHA не се
+`pnpm mandat images build --ui`; работникът го ползва сам, щом образът е там; Docker тест срещу локална страница без мрежа,
+D-442) → копие от Wayback Machine при отказ → Exa contents. Стените срещу ботове и CAPTCHA не се
 заобикалят: източникът е „blocked“ и ресърчът минава към копие или друг източник.
 
 ## За агентите
 - Умението `research` е вградено (packages/profile/src/research-skill.ts).
 - MCP сървър за агент на този компютър: `claude mcp add research -- node packages/research-mcp/dist/main.js`
-  (с `MANDAT_DB_URL` за research_ask/research_recall). В пясъчника — след бриджа на E8д.
+  (с `MANDAT_DB_URL` за research_ask/research_recall; `--providers searxng,wikipedia,…` стеснява търсачките).
+- В пясъчника (D-441): сложи `RESEARCH_MCP_REF` (packages/contract) в слой E на профила. Работникът пуска вградения сървър
+  от образа на пясъчника в собствен сайдкар (роля mcp, заключен хеш на инструментите) и агентът го вика само през
+  `http://egress-gate/mcp/research`. В сайдкара: собственото търсене (`mandat-searxng`, ако върви) и HTTP четене; без
+  браузър, Exa и research_ask/recall (Q-082). Нужен е образът след `pnpm mandat images build`.
 
 ## Променливи
 `MANDAT_SEARXNG_URL`, `MANDAT_LOCAL_MODEL_URL`, `MANDAT_RESEARCH_MAILTO`, `MANDAT_PROXY_INFERENCE_PORT` (8787),
-`MANDAT_RESEARCH=0` (работникът без ресърч), `EXA_API_KEY` (само при `proxy start`).
+`MANDAT_RESEARCH=0` (работникът без ресърч), `EXA_API_KEY` (по желание, само при `proxy start`; иначе „Ключове“).
