@@ -1,6 +1,7 @@
 import { lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { MandatError, TaskType, UiRoutes, parseMandatYml, ulid } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, VerifyOutcome } from "@mandat/contract";
 import { ev } from "@mandat/core";
@@ -49,7 +50,8 @@ export interface VerifyArgs {
 
 const TASK_TYPES = TaskType.options; // D-360: "free" too
 const ZERO = "0".repeat(40);
-const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
+/** D-414: fileURLToPath, not URL.pathname ("/C:/…" became "C:\C:\…" on Windows) */
+export const defaultRepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args: VerifyArgs } | { ok: false; error: string } {
   const a: Partial<VerifyArgs> & { external: boolean; json: boolean } = { external: false, json: false };

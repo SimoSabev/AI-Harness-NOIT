@@ -4,6 +4,7 @@ import type { ReviewCall } from "@mandat/review";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
@@ -121,7 +122,8 @@ export function looksLikeLoginProblem(line: string): boolean {
 }
 
 const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
-const defaultRepoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
+/** D-414: fileURLToPath, not URL.pathname ("/C:/…" became "C:\C:\…" on Windows) */
+export const defaultRepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 class InfraError extends Error {
   constructor(readonly code: ErrorCode, message: string) {

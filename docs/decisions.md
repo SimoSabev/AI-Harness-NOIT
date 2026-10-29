@@ -2994,3 +2994,10 @@ ask/recall). Материализацията в пясъчника (път пр
 prodException само за този пакет в harness групата (както caniuse-lite D-284, argparse D-376). Алтернатива: обратно към
 суров HTTP към проксито — отхвърлена, защото claude-api указва официалния SDK за TypeScript.
 Статус: решено от кодера; Симо може да го обърне.
+
+## D-414 Коренът на хранилището през `fileURLToPath` (29.10.2026)
+Решение: `defaultRepoRoot` в `apps/worker/src/run.ts` и `packages/verify/src/cli.ts` се смята с
+`fileURLToPath(import.meta.url)`, както `packages/cli/src/paths.ts`. `new URL(import.meta.url).pathname` дава `/C:/…`
+на Windows и `path.resolve` го правеше `C:\C:\…`; worker-ът падаше с ENOENT при първата задача (`imageTags`).
+Тест: `repo-root.test.ts` в двата пакета.
+Статус: решено от кодера; Симо може да го обърне.
