@@ -63,10 +63,11 @@ describe("egress gate (docker)", () => {
     const common = { image: env.images.proxy, user: env.user, mandatHome: run.mandatHome, publishAdminPort: null, envNames: [] as string[] };
     try {
       expect((await dockerText(env.docker, buildProxyRunArgs({ ...common, name: stub as `mandat-test-stub-${string}`, publicEnv: {}, command: ["node", "/opt/mandat/stub-upstream.mjs"] }))).exitCode).toBe(0);
-      expect((await dockerText(env.docker, buildProxyRunArgs({
-        ...common, name: proxy as `mandat-llm-proxy-test-${string}`,
+      // D-392: a proxy without a key answers provider_not_configured; the stub gets a placeholder key by name, never in argv
+      expect((await env.docker.run(buildProxyRunArgs({
+        ...common, name: proxy as `mandat-llm-proxy-test-${string}`, envNames: ["ANTHROPIC_API_KEY"],
         publicEnv: { MANDAT_PROXY_SECRET_FILE: "/var/lib/mandat-proxy/secret", MANDAT_PROXY_UPSTREAM_URL: `http://${stub}:9000`, MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM: "1" },
-      }))).exitCode).toBe(0);
+      }), { env: { ANTHROPIC_API_KEY: "stub-key" }, stdin: "closed", timeoutMs: 60_000 })).exitCode).toBe(0);
       await sleep(1500);
       const gate = await startRunGate(gateCtx({ llmProxyUrl: `http://${proxy}:8787` }), { phase: "agent", routes: [...API_KEY_ROUTES] });
       try {
