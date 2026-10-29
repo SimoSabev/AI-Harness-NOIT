@@ -2,7 +2,18 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEMO_OWNER_ID } from "@mandat/worker";
-import { LOCAL_DB, dbRunArgs, imageEvent, imagesStep, localBanner, waitForDocker, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, imageEvent, imagesStep, localBanner, waitForDocker, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt, webPort } from "./commands/local.js";
+
+describe("the web port (D-393)", () => {
+  it("3000 by default; MANDAT_WEB_PORT moves it when 3000 is taken by another project", () => {
+    expect(webPort({})).toBe(3000);
+    expect(webPort({ MANDAT_WEB_PORT: "" })).toBe(3000);
+    expect(webPort({ MANDAT_WEB_PORT: "3100" })).toBe(3100);
+  });
+  it("a value that is not a port is a usage error, not a silent 3000", () => {
+    for (const v of ["abc", "0", "70000", "31.5"]) expect(() => webPort({ MANDAT_WEB_PORT: v })).toThrow(/MANDAT_WEB_PORT/);
+  });
+});
 
 // D-292: `pnpm local` — Postgres in Docker (no Supabase CLI), web + worker, one command.
 describe("mandat local (D-292)", () => {

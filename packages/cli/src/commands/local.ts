@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statfsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import path from "node:path";
+import { MandatError } from "@mandat/contract";
 import { ConnectionStore, loadKek } from "@mandat/llm-proxy";
 import { compareVersions, imageTags } from "@mandat/sandbox";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, addLocalProject, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
@@ -26,7 +27,15 @@ import { slotsFrom, workerCommand } from "./worker.js";
 // Supabase CLI), the demo repo, the images, the web UI and the worker. D-368: no login — the web serves the one local
 // owner, listens on 127.0.0.1 only and answers only a loopback Host (apps/web local-auth.ts).
 export const LOCAL_DB = Object.freeze({ container: "mandat-local-db", volume: "mandat-local-db", image: "postgres:17.6-alpine" });
-export const WEB_PORT = 3000;
+/** D-393: 3000 unless MANDAT_WEB_PORT says otherwise (another project already on 3000); a bad value stops here. */
+export function webPort(env: Record<string, string | undefined>): number {
+  const v = env.MANDAT_WEB_PORT;
+  if (v === undefined || v === "") return 3000;
+  const n = Number(v);
+  if (!/^\d+$/.test(v) || n < 1 || n > 65535) throw new MandatError("E_USAGE", `MANDAT_WEB_PORT: not a port (${v})`);
+  return n;
+}
+export const WEB_PORT = webPort(process.env);
 
 export function dbRunArgs(port: number): string[] {
   return ["run", "-d", "--name", LOCAL_DB.container, "-v", `${LOCAL_DB.volume}:/var/lib/postgresql/data`, "-e", "POSTGRES_PASSWORD=postgres", "-p", `127.0.0.1:${port}:5432`, LOCAL_DB.image];
