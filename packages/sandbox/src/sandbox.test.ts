@@ -254,6 +254,8 @@ describe("docker helpers", () => {
     expect(infraUser("rootless", { uid: 1000, gid: 1000 })).toBe("0:0");
     expect(infraUser("rootful", { uid: 1001, gid: 1002 })).toBe("1001:1002");
     expect(infraUser("desktop", { uid: 501, gid: 20 })).toBe("501:20");
+    // D-416: on Windows os.userInfo() gives uid/gid -1 → the image's default 1000:1000, never "-1:-1"
+    expect(infraUser("desktop", { uid: -1, gid: -1 })).toBe("1000:1000");
   });
 
   it("ensureUpstreamNetwork е идемпотентна", async () => {

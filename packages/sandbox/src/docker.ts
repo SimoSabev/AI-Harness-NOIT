@@ -102,7 +102,10 @@ export async function detectDockerMode(r: DockerRunner): Promise<DockerMode> {
 
 /** D-034 / D-119: user for proxy and gate containers. */
 export function infraUser(mode: DockerMode, ids: { uid: number; gid: number }): string {
-  return mode === "rootless" ? "0:0" : `${ids.uid}:${ids.gid}`;
+  if (mode === "rootless") return "0:0";
+  // D-416: Windows has no POSIX ids (os.userInfo() → -1); Docker Desktop maps the bind mounts, so the image default
+  if (ids.uid < 0 || ids.gid < 0) return "1000:1000";
+  return `${ids.uid}:${ids.gid}`;
 }
 
 export function compareVersions(a: string, b: string): number {
