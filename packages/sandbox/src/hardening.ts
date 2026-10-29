@@ -132,23 +132,26 @@ function checkBind(m: MountSpec, role: RunRole, ctx: { home: string; mandatHome:
   if (src.includes("docker.sock") || m.target.includes("docker.sock")) forbid("docker.sock mount is forbidden");
   if (isAncestorOrSame(src, path.resolve(ctx.home))) forbid("bind source is $HOME or its ancestor (D-066)", { source: src });
   const runDir = path.resolve(ctx.runDir);
+  // D-415: the patterns below are written with "/"; on Windows path.resolve gives "\" — compare in posix form
+  const fwd = (p: string): string => p.split(path.sep).join("/");
+  const srcFwd = fwd(src);
   if (role === "gate") {
     const x = "(?:/(?:base|a|b))?";
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const roPolicy = new RegExp(`^${esc(runDir)}/gate${x}/policy$`);
-    const rwLog = new RegExp(`^${esc(runDir)}/gate${x}/log$`);
+    const roPolicy = new RegExp(`^${esc(fwd(runDir))}/gate${x}/policy$`);
+    const rwLog = new RegExp(`^${esc(fwd(runDir))}/gate${x}/log$`);
     const npmCache = path.join(path.resolve(ctx.mandatHome), "cache", "npm");
     const ok =
-      (m.readonly && roPolicy.test(src)) ||
-      (!m.readonly && rwLog.test(src)) ||
+      (m.readonly && roPolicy.test(srcFwd)) ||
+      (!m.readonly && rwLog.test(srcFwd)) ||
       (!m.readonly && src === npmCache) ||
       (m.readonly && caFile !== undefined && src === path.resolve(caFile));
     if (!ok) forbid("bind mount not allowed for role gate (D-118)", { source: src, readonly: m.readonly });
     return;
   }
   if (!m.readonly) forbid("rw bind mounts are forbidden in the sandbox (D-066)", { source: src });
-  const allowed = new RegExp(`^${runDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/etc(?:/(?:base|a|b))?/(?:resolv\\.conf|hosts)$`);
-  if (!allowed.test(src)) forbid("only ro files under ${runDir}/etc/ may be bind-mounted (D-066, D-081)", { source: src });
+  const allowed = new RegExp(`^${fwd(runDir).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/etc(?:/(?:base|a|b))?/(?:resolv\\.conf|hosts)$`);
+  if (!allowed.test(srcFwd)) forbid("only ro files under ${runDir}/etc/ may be bind-mounted (D-066, D-081)", { source: src });
 }
 
 /**

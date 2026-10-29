@@ -3001,3 +3001,11 @@ prodException само за този пакет в harness групата (ка�
 на Windows и `path.resolve` го правеше `C:\C:\…`; worker-ът падаше с ENOENT при първата задача (`imageTags`).
 Тест: `repo-root.test.ts` в двата пакета.
 Статус: решено от кодера; Симо може да го обърне.
+
+## D-415 Проверката на bind mount-овете сравнява в posix вид (29.10.2026)
+Решение: `checkBind` (`packages/sandbox/src/hardening.ts`) превръща `src` и `runDir` в posix вид (`\` → `/`) преди
+regex-ите за `gate/policy`, `gate/log` и `etc/{resolv.conf,hosts}`. На Windows `path.resolve` дава `\` и всеки
+mount на gate-а се отхвърляше (D-118) → `E_GATE_START` на всяка задача. Правилата не са разширени: на Windows `/` и `\`
+са един и същ разделител. Тестовете за mount-овете в `sandbox.test.ts` минават и на Windows; три snapshot-а остават
+червени там, защото очакват POSIX пътища (`/home/simo/...`).
+Статус: решено от кодера; Симо може да го обърне.
