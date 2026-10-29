@@ -3213,3 +3213,13 @@ research-sidecar.docker.test.ts (worker: инструментите през в�
 тестът дава 90 s на страница (по подразбиране в работника остават 20 s + 25 s).
 Тестове: browser.test.ts, browser.docker.test.ts (нов проект `research` във vitest.docker.config.ts).
 Статус: решено.
+
+## D-443 Кешът на Turborepo пази и `.next` на уеба (29.10.2026)
+Решение: `apps/web/turbo.json` (по образеца на `apps/site/turbo.json`, D-371) разширява главния `turbo.json` с изходи
+`.next/**` без `.next/cache/**` и с входове src/**, public/**, next.config.ts, postcss.config.mjs, tsconfig.json, package.json.
+Защо: при попадение в кеша turbo връща само обявените изходи, а главната задача обявява само `dist/**`. След сливането на
+E9в уебът беше построен в друг worktree със същите входове; `pnpm build` тук отчете „cached“, но `.next` остана отпреди
+сливането и `pnpm local` показа стария интерфейс без Gemini. Главният `turbo.json` не е пипан, защото влиза в хеша на
+таговете на образите (D-078) и би ги сменил.
+Тестове: scripts/turbo-outputs.test.ts.
+Статус: решено.
