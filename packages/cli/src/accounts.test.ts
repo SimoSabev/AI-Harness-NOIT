@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClaudeStatus, subscriptionLabel } from "./commands/accounts.js";
+import { parseClaudeStatus, sharedWhileRunning, subscriptionLabel } from "./commands/accounts.js";
 
 // D-295: what `claude auth status --json` tells about a profile (no token is ever read).
 describe("accounts (D-295)", () => {
@@ -117,5 +117,36 @@ describe("parseCodexStatus (D-393)", () => {
     expect(parseCodexStatus("Logged in using ChatGPT\n", 0)).toEqual({ loggedIn: true, email: null, plan: "ChatGPT" });
     expect(parseCodexStatus("Not logged in\n", 1)).toEqual({ loggedIn: false, email: null, plan: null });
     expect(parseCodexStatus("Logged in using an API key - sk-…\n", 0).loggedIn).toBe(false);
+  });
+});
+
+// D-445: a page render lists the accounts, one container per account; renders must not pile containers up
+describe("sharedWhileRunning (D-445)", () => {
+  it("едновременните извиквания чакат една и съща работа; следващото започва наново", async () => {
+    let runs = 0;
+    let finish: (v: number) => void = () => undefined;
+    const shared = sharedWhileRunning(() => {
+      runs++;
+      return new Promise<number>((resolve) => (finish = resolve));
+    });
+    const a = shared();
+    const b = shared();
+    expect(runs).toBe(1);
+    finish(7);
+    expect(await Promise.all([a, b])).toEqual([7, 7]);
+    const c = shared();
+    expect(runs).toBe(2);
+    finish(8);
+    expect(await c).toBe(8);
+  });
+
+  it("след грешка следващото извикване опитва наново", async () => {
+    let runs = 0;
+    const shared = sharedWhileRunning(async () => {
+      if (++runs === 1) throw new Error("docker down");
+      return 1;
+    });
+    await expect(shared()).rejects.toThrow("docker down");
+    await expect(shared()).resolves.toBe(1);
   });
 });

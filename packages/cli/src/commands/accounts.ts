@@ -50,6 +50,15 @@ const PREFIX = { claude: "mandat-profile-claude-", codex: "mandat-profile-codex-
 
 export interface Account extends ProfileStatus { name: string; agent: string; cli: LoginCli }
 
+/** D-445: calls made while a run is in progress wait for that run. A page render lists the accounts (one container each);
+ * without this, renders on a slow machine pile containers up and starve the database. */
+export function sharedWhileRunning<T>(fn: () => Promise<T>): () => Promise<T> {
+  let running: Promise<T> | null = null;
+  return () => (running ??= fn().finally(() => {
+    running = null;
+  }));
+}
+
 export async function listAccounts(deps: CliDeps): Promise<Account[]> {
   const r = await dockerText(deps.docker, ["volume", "ls", "--filter", "label=mandat.profile=1", "--format", "{{.Name}}"]);
   if (r.exitCode !== 0) return [];

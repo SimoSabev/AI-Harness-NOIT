@@ -15,7 +15,7 @@ import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
 import { proxyProviders, proxyStart, proxyStop, setSearchKey } from "./proxy.js";
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
-import { listAccounts, loginDeps, logoutProfile } from "./accounts.js";
+import { listAccounts, loginDeps, logoutProfile, sharedWhileRunning } from "./accounts.js";
 import { Connections } from "./connections.js";
 import { LoginSessions } from "./login-session.js";
 import { SystemJobs } from "./system-jobs.js";
@@ -302,7 +302,8 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     }
   };
   const restartProxy = async () => (await proxyStart({ ...io, stdout: () => undefined, env: clean }, deps, { mandatHome: o.home, host, json: true, force: true })) === 0;
-  const connections = new Connections({ store: connStore, fetch, restartProxy, accounts: async () => (await listAccounts(deps)).map((a) => ({ name: a.name, cli: a.cli })) });
+  const accounts = sharedWhileRunning(() => listAccounts(deps));
+  const connections = new Connections({ store: connStore, fetch, restartProxy, accounts: async () => (await accounts()).map((a) => ({ name: a.name, cli: a.cli })) });
   const fromStore = async () => {
     if (!(hasSealedKeys(o.home) || hasUpstreams()) || !(await proxyLocked(host.proxyAdminPort))) return;
     io.stderr(`${tt(lang, "local.proxy.saved")}\n`);
@@ -326,7 +327,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
         return true;
       },
     },
-    accounts: () => listAccounts(deps),
+    accounts,
     login: new LoginSessions(loginDeps(deps)),
     logout: async (name, cli) => {
       const ok = await logoutProfile(deps, name, cli);
