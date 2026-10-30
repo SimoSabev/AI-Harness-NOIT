@@ -1,7 +1,7 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { NightTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, nightShiftTick, openDb, pgKeyStore, pollCi, runBaseline, runDaemonOnce, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, isDbConnectionError, nightShiftTick, openDb, pgKeyStore, pollCi, runBaseline, runDaemonOnce, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { researchDeps, researchLoop } from "./research.js";
@@ -36,15 +36,35 @@ export interface SlotLoop {
   signal?: AbortSignal;
   tick: () => Promise<string | null>;
   drain: () => Promise<void>;
+  log?: (line: string) => void;
 }
 
 /** N task loops + ONE effects loop (harness, approvals, push), so a long task never holds an approval back. */
 export async function workerSlots(o: SlotLoop): Promise<void> {
   let tasksDone = false;
   const sleep = () => new Promise((r) => setTimeout(r, o.pollMs));
+  // D-444: a lost database connection waits for the next pass; --once and any other error still reach the caller
+  let down = false;
+  const surviving = async <T>(fn: () => Promise<T>, whileDown: T): Promise<T> => {
+    try {
+      const v = await fn();
+      if (down) {
+        down = false;
+        o.log?.("[db] connection back");
+      }
+      return v;
+    } catch (e) {
+      if (o.once || !isDbConnectionError(e)) throw e;
+      if (!down) {
+        down = true;
+        o.log?.("[db] connection lost; retrying");
+      }
+      return whileDown;
+    }
+  };
   const loop = async () => {
     for (;;) {
-      const id = await o.tick();
+      const id = await surviving(o.tick, null);
       if (o.once || o.signal?.aborted) return;
       if (!id) await sleep();
       if (o.signal?.aborted) return;
@@ -52,7 +72,7 @@ export async function workerSlots(o: SlotLoop): Promise<void> {
   };
   const effects = async () => {
     for (;;) {
-      await o.drain();
+      await surviving(o.drain, undefined);
       if (o.once ? tasksDone : o.signal?.aborted) return;
       await sleep();
     }
@@ -95,6 +115,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       once: o.once,
       pollMs: o.pollMs ?? 2000,
       ...(o.signal ? { signal: o.signal } : {}),
+      log: (l) => io.stderr(`${l}\n`),
       // E8g (D-353): steering a live Claude Code waits for spike S2 (live); MANDAT_STEER=1 turns it on
       tick: () => runDaemonOnce({ db, home: o.home, gh, ghRepo: repo, localGh, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(l + "\n"), ...(env.MANDAT_STEER === "1" ? { steer: true } : {}), mcpSecrets }),
       drain: async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { slotsFrom, workerSlots } from "./commands/worker.js";
 
 describe("worker slots (D-299)", () => {
@@ -44,5 +44,47 @@ describe("worker slots (D-299)", () => {
     let n = 0;
     await workerSlots({ slots: 2, once: true, pollMs: 1, tick: async () => `t${++n}`, drain: async () => undefined });
     expect(n).toBe(2);
+  });
+
+  // D-444: one lost connection to the database never stops `pnpm local`
+  describe("загубена връзка с базата (D-444)", () => {
+    const lost = () => Object.assign(new Error("Connection terminated due to connection timeout"), { cause: new Error("Connection terminated unexpectedly") });
+
+    it("ефектите и задачите продължават; един ред при загуба и един при връщане", async () => {
+      const ac = new AbortController();
+      const log = vi.fn();
+      let ticks = 0;
+      let drains = 0;
+      const stillDown = () => ticks + drains <= 4; // the outage ends once for both loops
+      await workerSlots({
+        slots: 1,
+        once: false,
+        signal: ac.signal,
+        pollMs: 1,
+        log,
+        tick: async () => {
+          ticks++;
+          if (stillDown()) throw lost();
+          return null;
+        },
+        drain: async () => {
+          drains++;
+          if (stillDown()) throw lost();
+          if (drains >= 5) ac.abort();
+        },
+      });
+      expect(ticks).toBeGreaterThan(1);
+      expect(drains).toBeGreaterThanOrEqual(5);
+      expect(log.mock.calls.flat()).toEqual(["[db] connection lost; retrying", "[db] connection back"]);
+    });
+
+    it("друга грешка не се скрива", async () => {
+      const ac = new AbortController();
+      await expect(workerSlots({ slots: 1, once: false, signal: ac.signal, pollMs: 1, tick: async () => { throw new Error("a bug"); }, drain: async () => ac.abort() })).rejects.toThrow("a bug");
+    });
+
+    it("--once: грешката стига до извикващия", async () => {
+      await expect(workerSlots({ slots: 1, once: true, pollMs: 1, tick: async () => { throw lost(); }, drain: async () => undefined })).rejects.toThrow("Connection terminated");
+    });
   });
 });
