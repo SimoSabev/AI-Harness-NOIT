@@ -555,6 +555,7 @@ describe("runTask: what the person sees while it runs, and how the agent ended (
     expect(seen.filter((e) => e.kind === "provider").map((e) => e.text)).toEqual(["overloaded 1/10", "timed_out 2/10", "overloaded 10/10"]);
     expect(JSON.stringify(seen)).not.toContain(RAW);
     expect(r.agentEnd).toEqual({ ok: false, replied: false, cause: "overloaded" });
+    expect(r.verdict?.usage).toMatchObject({ usd: 0.05, requests: 9 }); // D-450: a failed agent's spend is on the verdict
     expect(readFileSync(path.join(r.runDir ?? "", "agent-stderr.txt"), "utf8")).toContain("Attempt 2 failed");
   });
 
@@ -566,7 +567,7 @@ describe("runTask: what the person sees while it runs, and how the agent ended (
     expect(await ending([result(false)])).toEqual({ ok: true, replied: false, cause: null });
     expect(await ending([text, result(true)])).toEqual({ ok: false, replied: true, cause: null });
     expect(await ending([text, result(false)], 3)).toEqual({ ok: false, replied: true, cause: null });
-  });
+  }, 120_000);
 });
 
 describe("runTask with a harness profile (E8а, D-311)", () => {

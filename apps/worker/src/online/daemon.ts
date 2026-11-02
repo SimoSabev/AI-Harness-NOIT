@@ -438,14 +438,16 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     await bc("BLOCKED", seq, { wait_reason: `infra:${out.error?.code ?? "error"}` });
     return { state: "BLOCKED", verdict: null };
   }
+  // D-450: what the proxy recorded for this run, in every ending below (replies the client threw away, a failed agent)
+  const usd = v.usage.usd;
   const emptyChange = v.evidence.some((e) => e.detector === "EXPORT" && /^0 file\(s\) changed/.test(e.summary));
   if (keyRejected({ authFailed: out.authFailed === true, result: v.result, emptyChange })) {
     seq = await inTransaction(d.db, async (tx) => {
-      const s2 = await setState(tx, t, "HELD", { wait_reason: "key_rejected", minutes });
+      const s2 = await setState(tx, t, "HELD", { wait_reason: "key_rejected", usd, minutes });
       await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "key_rejected", run_id: v.run_id } });
       return s2;
     });
-    await bc("HELD", seq, { wait_reason: "key_rejected" });
+    await bc("HELD", seq, { wait_reason: "key_rejected", usd, minutes });
     return { state: "HELD", verdict: v };
   }
   // E8g (D-316/D-352): the agent hit an "ask" rule → a person decides (once / always / deny) before anything is delivered
@@ -455,12 +457,12 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
       for (const a of asks) {
         await tx.query("insert into public.tool_asks (org_id, task_id, attempt, tool, reason) values ($1::uuid, $2, $3, $4, $5) on conflict (task_id, attempt, tool) do nothing", [t.org_id, t.id, t.attempt, a.tool, a.reason.slice(0, 200)]);
       }
-      const s2 = await setState(tx, t, "HELD", { wait_reason: "tool_approval", minutes, last_result: v.result });
+      const s2 = await setState(tx, t, "HELD", { wait_reason: "tool_approval", usd, minutes, last_result: v.result });
       await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "tool_approval", run_id: v.run_id, tools: asks.map((a) => a.tool) } });
       return s2;
     });
     await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:waiting`, payload: { task_id: t.id, kind: "waiting" } });
-    await bc("HELD", seq, { wait_reason: "tool_approval" });
+    await bc("HELD", seq, { wait_reason: "tool_approval", usd, minutes });
     return { state: "HELD", verdict: v };
   }
   // D-288 (EXPORT:empty_change, т. 5.7): an empty change is never VERIFIED online — no delivery, no ladder credit.
@@ -470,12 +472,12 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     // D-448: no change, so nothing was judged and nothing is delivered; what is left to say is how the agent ended
     const end = emptyEnding(out);
     seq = await inTransaction(d.db, async (tx) => {
-      const s2 = await setState(tx, t, end.state, { wait_reason: end.wait, minutes, ...(end.state === "CLOSED" ? { outcome_decided: true } : {}) });
+      const s2 = await setState(tx, t, end.state, { wait_reason: end.wait, usd, minutes, ...(end.state === "CLOSED" ? { outcome_decided: true } : {}) });
       await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: end.reason, run_id: v.run_id, result: v.result, reasons: v.reasons, ...(end.cause ? { cause: end.cause } : {}) } });
       return s2;
     });
     if (end.reason === "agent_failed") await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:failed`, payload: { task_id: t.id, kind: "failed" } });
-    await bc(end.state, seq, { wait_reason: end.wait });
+    await bc(end.state, seq, { wait_reason: end.wait, usd, minutes });
     return { state: end.state, verdict: v };
   }
   // level: ladder (repo, type, agent) × risk cap × our harness cap 3 × ruleset × D7 assumed pass after VERIFY_1 (т. 3.3)
@@ -487,7 +489,6 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   let action = decideDelivery({ result: v.result, effectiveLevel: lvl.level, mode: "full", origin: "mandat" });
   // E9а: at night only what the shift allows merges by itself (level ≥ min_level, changed lines ≤ max_lines); the rest waits
   if (night && action.kind === "pr_then_auto_merge" && (lvl.level < night.auto_merge.min_level || patchLines(diffPatch) > night.auto_merge.max_lines)) action = { kind: "draft_pr" };
-  const usd = v.usage.usd;
   // D-367 (Симо: „питай ме само ако е абсолютно нужно“): a verified safe change in a local project goes into main by
   // itself (mergeLocal below); every other case keeps the person, with the reasons written down for the card
   const aa = autoApply({ result: v.result, origin: "mandat", files: diffStat(diffPatch.toString("utf8")) });

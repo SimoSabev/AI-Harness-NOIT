@@ -197,6 +197,36 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(JSON.stringify(stopped)).toContain("EXPORT:empty_change:-");
     expect(JSON.stringify(stopped)).toContain("UNKNOWN");
   });
+  describe("D-450: the task's cost is what the proxy recorded for the run, however the run ended", () => {
+    const empty = (base: string) => {
+      const v = { ...verdict("UNKNOWN", base), reasons: ["EXPORT:empty_change:-"], tree_sha: null };
+      v.evidence = [{ detector: "EXPORT", phase: 1, status: "unknown", summary: "0 file(s) changed; not checked", data: { files: 0, verification: "skipped" }, source: "export", agent_visible: true, signature: "EXPORT:empty_change:-" }];
+      return v;
+    };
+    const cases: [string, Partial<RunTaskOutput>, string][] = [
+      ["the agent failed on a provider that did not answer", { agentEnd: { ok: false, replied: false, cause: "overloaded" } }, "agent_failed:overloaded"],
+      ["a plain reply", { agentEnd: { ok: true, replied: true, cause: null } }, "answered"],
+      ["no reply at all", {}, "empty_change"],
+      ["the key was rejected", { authFailed: true }, "key_rejected"],
+    ];
+    for (const [name, extra, wait] of cases) {
+      it(name, async () => {
+        const s = await setup(0);
+        s.deps.run = () => Promise.resolve({ verdict: empty(s.fx.sha), exit: 10, runDir: null, ledger: null, agentExit: 0, ...extra });
+        await runDaemonOnce(s.deps);
+        const r = (await s.db.query<{ usd: string; wait_reason: string }>("select usd, wait_reason from public.tasks where id = 't_web_1'")).rows[0];
+        expect(r?.wait_reason).toBe(wait);
+        expect(Number(r?.usd)).toBeCloseTo(0.12);
+        expect(s.events.find((e) => e.topic === "task:t_web_1" && e.payload.wait_reason === wait)?.payload.usd).toBeCloseTo(0.12);
+      });
+    }
+    it("the agent asked for a tool: the spend so far is on the task while it waits", async () => {
+      const s = await setup(0);
+      s.deps.run = () => Promise.resolve({ verdict: verdict("VERIFIED", s.fx.sha), exit: 0, runDir: null, ledger: null, agentExit: 0, asks: [{ tool: "Bash", reason: "r" }] });
+      await runDaemonOnce(s.deps);
+      expect(Number((await s.db.query<{ usd: string }>("select usd from public.tasks where id = 't_web_1'")).rows[0]?.usd)).toBeCloseTo(0.12);
+    });
+  });
   describe("D-448: how a task with no change ends", () => {
     const emptyRun = (s: Awaited<ReturnType<typeof setup>>, agentEnd: RunTaskOutput["agentEnd"], extra: Partial<RunTaskOutput> = {}, agentExit = 0) => {
       s.deps.run = () => {
