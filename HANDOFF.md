@@ -1,5 +1,7 @@
 # HANDOFF — от облачната сесия към локален Claude Code (23.10.2026)
 
+> По-ново: за продължаване на Windows и за състоянието от 02.11.2026 виж `HANDOFF-WINDOWS.md`.
+
 Един файл: какво е Мандат, докъде е стигнал, как да го пуснеш локално и **готов промпт** за локалния Claude Code (най-долу).
 Всичко е в клона `claude/exciting-heisenberg-uekl8c` на `SimoSabev/AI-Harness-NOIT`.
 
