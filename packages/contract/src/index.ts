@@ -14,6 +14,7 @@ export { INSTALL_ARGV, LOCKFILE, bunAllowlist, installCommand, isBerryLock, lock
 export type { LockAllowlistResult, PackageManager } from "./lockfiles.js";
 export * from "./workbench.js";
 export * from "./agent-stream.js";
+export * from "./run-status.js";
 export * from "./profile.js";
 export * from "./roles.js";
 export * from "./research.js";

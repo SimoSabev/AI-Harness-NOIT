@@ -194,10 +194,12 @@ describe("retry after a rejected key (D-293)", () => {
       db.query(`insert into public.tasks (id, org_id, repo_id, type, agent, text, state, wait_reason) select $1, org_id, repo_id, type, 'claude', 'x', 'HELD', $2 from public.tasks where id = 't_seed_bugfix'`, [id, wait]);
     await mk("t_key_rej", "key_rejected");
     await mk("t_empty_ch", "empty_change");
+    await mk("t_agent_f", "agent_failed:overloaded");
     await mk("t_appr_wait", "approval");
     const r = (id: string) => postRetry(req("POST", {}), deps(fake), id);
     expect((await r("t_key_rej")).status).toBe(200);
     expect((await r("t_empty_ch")).status).toBe(200);
+    expect((await r("t_agent_f")).status).toBe(200);
     expect((await r("t_appr_wait")).status).toBe(409);
   });
 });

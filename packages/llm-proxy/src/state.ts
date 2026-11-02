@@ -48,6 +48,10 @@ export interface RequestLine {
   cache_write: number;
   usd: number;
   token_prefix8: string | null;
+  /** D-449: how long the proxy spent on the request */
+  duration_ms?: number;
+  /** D-449: the client disconnected and the upstream request was aborted; the numbers are only what was seen until then */
+  aborted?: true;
   provider?: "anthropic" | "openai" | "gemini";
   /** D-392: the saved connection the request went to */
   upstream?: string;

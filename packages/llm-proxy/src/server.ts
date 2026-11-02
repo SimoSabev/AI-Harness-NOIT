@@ -164,13 +164,15 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
 
   const inference = http.createServer((req, res) => {
     void (async () => {
+      const started = now();
+      const rec = (l: Omit<RequestLine, "kind" | "ts">): void => record({ ...l, duration_ms: Math.max(0, now() - started) });
       const method = req.method ?? "GET";
       const fullPath = req.url ?? "/";
       const p = fullPath.split("?")[0] ?? "/";
       const token = bearerOf(req);
       const base = { method, path: p, model: null, input_tokens: 0, output_tokens: 0, cache_read: 0, cache_write: 0, usd: 0 };
       const reject = (status: number, type: ErrType, code: string, runId: string | null, extra: Record<string, string> = {}) => {
-        record({ ...base, run_id: runId, status, token_prefix8: token ? tokenPrefix8(token) : null, ...(code === "no_tools" ? { refused: "no_tools" as const } : {}) });
+        rec({ ...base, run_id: runId, status, token_prefix8: token ? tokenPrefix8(token) : null, ...(code === "no_tools" ? { refused: "no_tools" as const } : {}) });
         apiError(res, status, type, code, extra);
       };
       // E9г (D-411): a research search call — the same token, revocation and budget rules, priced per call
@@ -201,7 +203,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         const base2 = o.searchUpstream?.[sroute.provider] ?? SEARCH_UPSTREAM[sroute.provider];
         const target = new URL(`${base2.pathname.replace(/\/+$/, "")}${sroute.upstreamPath}`, base2);
         const status = await forwardSearch({ req, res, body, key, target, ...(target.protocol === "http:" ? { mod: http as unknown as typeof https } : {}) });
-        record({ ...base, model: `search:${sroute.provider}`, run_id: runId, status, usd: status > 0 && status < 400 ? sroute.usd(parsed) : 0, token_prefix8: tokenPrefix8(token) });
+        rec({ ...base, model: `search:${sroute.provider}`, run_id: runId, status, usd: status > 0 && status < 400 ? sroute.usd(parsed) : 0, token_prefix8: tokenPrefix8(token) });
         return;
       }
       if (method !== "POST" || !isInference(p, fullPath.slice(p.length + 1)) || req.headers.upgrade !== undefined) {
@@ -272,6 +274,9 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       const target = conn !== null ? joinPath(conn.url, fullPath) : new URL(fullPath, provider === "openai" ? (openaiUpstream as URL) : upstream);
       const mod = target.protocol === "https:" ? https : http;
       const isCount = p === "/v1/messages/count_tokens" || p.endsWith(":countTokens");
+      // D-449: one line per request; the reply ended, or the client left first and the upstream request is aborted
+      let settled = false;
+      let replyLine: ((aborted: boolean) => void) | null = null;
       const up = mod.request(target, { method: "POST", headers }, (ur) => {
         const out: http.OutgoingHttpHeaders = {};
         for (const [k, val] of Object.entries(ur.headers)) if (!DROP_RES.has(k.toLowerCase()) && val !== undefined) out[k] = val;
@@ -293,9 +298,9 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
           }
           res.write(c);
         });
-        ur.on("end", () => {
-          res.end();
+        replyLine = (aborted) => {
           const status = ur.statusCode ?? 0;
+          const mark = (st: number, used: boolean): ReturnType<typeof toolMark> | { aborted: true } => (aborted ? { aborted: true } : toolMark(st, used));
           const limit = status === 429 ? { limit: limitOf(ur.headers, now()) } : {};
           if (provider === "gemini") {
             // D-424: usageMetadata (the last SSE chunk, or the JSON body); priced at the upstream's flat rate
@@ -316,7 +321,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
             }
             const u = isCount || status >= 400 || gu === null ? { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0 } : gu;
             const usdG = isCount || status >= 400 || gu === null || connRate === null ? 0 : costUsdFlat(connRate, gu);
-            record({ method, path: p, run_id: runId, status, model, input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_read: u.cache_read_input_tokens ?? 0, cache_write: 0, usd: usdG, token_prefix8: tokenPrefix8(token), provider, ...extra, ...limit, ...toolMark(status, usedG) });
+            rec({ method, path: p, run_id: runId, status, model, input_tokens: u.input_tokens, output_tokens: u.output_tokens, cache_read: u.cache_read_input_tokens ?? 0, cache_write: 0, usd: usdG, token_prefix8: tokenPrefix8(token), provider, ...extra, ...limit, ...mark(status, usedG) });
             return;
           }
           if (provider === "openai") {
@@ -340,7 +345,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
                 usedO = false;
               }
             }
-            record({ method, path: p, run_id: runId, status, model, input_tokens: ru?.input_tokens ?? 0, output_tokens: ru?.output_tokens ?? 0, cache_read: ru?.cached_tokens ?? 0, cache_write: 0, usd: usdO, token_prefix8: tokenPrefix8(token), provider, ...extra, ...limit, ...toolMark(status, usedO) });
+            rec({ method, path: p, run_id: runId, status, model, input_tokens: ru?.input_tokens ?? 0, output_tokens: ru?.output_tokens ?? 0, cache_read: ru?.cached_tokens ?? 0, cache_write: 0, usd: usdO, token_prefix8: tokenPrefix8(token), provider, ...extra, ...limit, ...mark(status, usedO) });
             return;
           }
           let usage: Usage = { input_tokens: 0, output_tokens: 0 };
@@ -363,15 +368,32 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
             usage.cache_creation !== undefined
               ? (usage.cache_creation.ephemeral_5m_input_tokens ?? 0) + (usage.cache_creation.ephemeral_1h_input_tokens ?? 0)
               : (usage.cache_creation_input_tokens ?? 0);
-          record({
+          rec({
             method, path: p, run_id: runId, status: ur.statusCode ?? 0, model,
             input_tokens: isCount ? 0 : usage.input_tokens, output_tokens: isCount ? 0 : usage.output_tokens,
             cache_read: isCount ? 0 : (usage.cache_read_input_tokens ?? 0), cache_write: isCount ? 0 : cacheWrite,
-            usd, token_prefix8: tokenPrefix8(token), ...extra, ...limit, ...toolMark(ur.statusCode ?? 0, used),
+            usd, token_prefix8: tokenPrefix8(token), ...extra, ...limit, ...mark(ur.statusCode ?? 0, used),
           });
+        };
+        ur.on("end", () => {
+          if (settled) return;
+          settled = true;
+          res.end();
+          replyLine?.(false);
         });
       });
+      const clientGone = (): void => {
+        if (settled) return;
+        settled = true;
+        up.destroy();
+        if (replyLine) replyLine(true);
+        else rec({ method, path: p, run_id: runId, status: 499, model, input_tokens: 0, output_tokens: 0, cache_read: 0, cache_write: 0, usd: 0, token_prefix8: tokenPrefix8(token), ...(provider !== "anthropic" ? { provider } : {}), ...extra, aborted: true });
+      };
+      res.on("close", clientGone);
+      if (req.socket.destroyed) clientGone();
       up.on("error", () => {
+        if (settled) return;
+        settled = true;
         if (!res.headersSent) reject(502, "api_error", "upstream_unreachable", runId);
         else res.destroy();
       });
