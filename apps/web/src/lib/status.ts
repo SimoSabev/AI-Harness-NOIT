@@ -1,15 +1,16 @@
+import { agentFailedCause } from "@mandat/contract";
 import type { ProviderNotice, RunPhase } from "@mandat/contract";
 import { LOCALE, translate } from "../i18n/t";
 import type { Key, Lang } from "../i18n/t";
 
 // D-292: what the person sees — one status word + one sentence per task, never the internal state names.
-export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "key" | "stopped" | "approved" | "applied" | "closed" | "expired" | "ask" | "base" | "ci";
+export type StatusKey = "queued" | "running" | "checking" | "review" | "failed" | "unknown" | "empty" | "agent" | "answered" | "key" | "stopped" | "approved" | "applied" | "closed" | "expired" | "ask" | "base" | "ci";
 export type Tone = "gray" | "blue" | "green" | "red" | "amber";
 export interface Status { key: StatusKey; label: string; tone: Tone; headline: string }
 
 // D-386: what waits for the person is amber (or red when it failed) — never green like a finished task.
 const TONES: Record<StatusKey, Tone> = {
-  queued: "gray", running: "blue", checking: "blue", review: "amber", failed: "red", unknown: "amber", empty: "amber", key: "red", stopped: "gray", approved: "green", applied: "green", closed: "gray", expired: "gray", ask: "amber", base: "amber", ci: "red",
+  queued: "gray", running: "blue", checking: "blue", review: "amber", failed: "red", unknown: "amber", empty: "amber", agent: "red", answered: "gray", key: "red", stopped: "gray", approved: "green", applied: "green", closed: "gray", expired: "gray", ask: "amber", base: "amber", ci: "red",
 };
 
 const RUNNING = new Set(["PROVISIONING", "RUNNING", "EXPORTING", "RETRY"]);
@@ -27,6 +28,7 @@ function keyOf(t: StatusInput): StatusKey {
   if (CHECKING.has(t.state)) return "checking";
   if (t.state === "BLOCKED" && t.wait_reason === "stopped") return "stopped";
   if (t.state === "CLOSED" && t.wait_reason === "expired") return "expired";
+  if (t.state === "CLOSED" && t.wait_reason === "answered") return "answered";
   if (t.last_result === "FAILED" || t.state === "BLOCKED") return "failed";
   if (t.approved_by_human && t.last_result === "VERIFIED") return "approved";
   if (t.state === "HELD" && t.wait_reason === "tool_approval") return "ask";
@@ -34,6 +36,7 @@ function keyOf(t: StatusInput): StatusKey {
   if (t.state === "HELD" && t.wait_reason === "ci_failed") return "ci";
   if (t.state === "HELD" && t.wait_reason === "key_rejected") return "key";
   if (t.state === "HELD" && t.wait_reason === "empty_change") return "empty";
+  if (t.state === "HELD" && t.wait_reason?.startsWith("agent_failed:")) return "agent";
   if (t.last_result === "UNKNOWN" && (t.state === "HELD" || t.state === "GATED")) return "unknown";
   if (t.state === "HELD" || (t.state === "GATED" && t.approval_needed)) return "review";
   if (t.state === "GATED") return "checking";
@@ -51,7 +54,7 @@ export function outcomeTone(result: string | null, status: Tone): Tone {
 /** D-386: what the person can do in each status. `note` = a note to the agent that starts a new attempt with it. */
 export interface Actions { decide: boolean; again: boolean; note: boolean; fixCi: boolean; stop: boolean }
 export function actionsOf(k: StatusKey): Actions {
-  const again = k === "failed" || k === "unknown" || k === "empty" || k === "key" || k === "base";
+  const again = k === "failed" || k === "unknown" || k === "empty" || k === "agent" || k === "key" || k === "base";
   return { decide: k === "review", again, note: k === "review" || k === "ci" || (again && k !== "key"), fixCi: k === "ci", stop: k === "queued" || k === "running" || k === "checking" };
 }
 
@@ -60,7 +63,7 @@ export function groupTitle(g: Group, lang: Lang = "en"): string {
   return translate(lang, `group.${g}`);
 }
 export function groupOf(k: StatusKey): Group {
-  if (k === "review" || k === "failed" || k === "unknown" || k === "empty" || k === "key" || k === "ask" || k === "base" || k === "ci") return "waiting";
+  if (k === "review" || k === "failed" || k === "unknown" || k === "empty" || k === "agent" || k === "key" || k === "ask" || k === "base" || k === "ci") return "waiting";
   if (k === "queued" || k === "running" || k === "checking") return "active";
   return "done";
 }
@@ -80,6 +83,12 @@ export function noticeLine(n: ProviderNotice, agent: string, lang: Lang = "en"):
   const text = translate(lang, `provider.live.${n.problem}`, { who });
   if (n.attempt === null) return text;
   return n.max === null ? translate(lang, "provider.live.attemptOnly", { text, n: n.attempt }) : translate(lang, "provider.live.attempt", { text, n: n.attempt, max: n.max });
+}
+
+/** D-448: why the agent ended without a result, from the code in wait_reason; null when it did not fail or the code is unknown. */
+export function causeLine(waitReason: string | null, agent: string, lang: Lang = "en"): string | null {
+  const c = agentFailedCause(waitReason);
+  return c === null ? null : translate(lang, `provider.end.${c}`, { who: providerWho(agent, lang) });
 }
 
 /** The checks of a verdict in plain words (the detector id stays visible small, for the curious). */

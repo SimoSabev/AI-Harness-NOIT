@@ -3,10 +3,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../i18n/client";
 import type { T } from "../i18n/t";
-import { chatItems, liveStatusOf, toolIcon, usageOf, whyOf } from "../lib/chat";
+import { chatItems, lastReply, liveStatusOf, toolIcon, usageOf, whyOf } from "../lib/chat";
 import type { ChatItem, Feed, FeedCheck, ToolIcon } from "../lib/chat";
 import { errorText, postJson } from "../lib/client/api";
-import { noticeLine, outcomeTone, phaseLine, statusOf } from "../lib/status";
+import { causeLine, noticeLine, outcomeTone, phaseLine, statusOf } from "../lib/status";
 import type { Tone } from "../lib/status";
 import { reasonText } from "../lib/verdict-view";
 import { splitDiff } from "../lib/diff-view";
@@ -152,6 +152,8 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
   const appliedNote = [...notes].reverse().find((n) => n.kind === "auto_applied" || n.kind === "applied");
   const waitingYou = s.key === "review" || s.key === "unknown";
   const failed = view.evidence.filter((e) => e.status === "fail" || e.status === "unknown");
+  const cause = causeLine(task.wait_reason, task.agent, t.lang);
+  const reply = s.key === "answered" ? lastReply(items) : null;
 
   const conversation = (
     <>
@@ -185,8 +187,10 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
           </>
         ) : (
           <>
+            {reply !== null && <Markdown src={reply} className="max-w-[46rem] text-[15px]" />}
             <section aria-label={t("ws.outcome")} className={`rounded-xl px-4 py-3 text-sm ${BOX[outcomeTone(task.last_result, s.tone)]}`}>
               <p className="font-medium">{s.headline}</p>
+              {cause && <p className="mt-1">{cause}</p>}
               {appliedNote && <p className="mt-1 font-mono text-xs">{t("ws.applied", { range: appliedNote.text })}</p>}
               {waitingYou && ask && (
                 <ul className="mt-2 list-disc space-y-0.5 pl-5">

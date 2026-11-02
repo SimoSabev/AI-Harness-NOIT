@@ -13,7 +13,7 @@ import { DEMO_CHANNELS, DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedChannels, 
 import { contractForTask, runDaemonOnce } from "./daemon.js";
 import type { DaemonDeps } from "./daemon.js";
 import { pgliteDb } from "./pglite-db.test-helper.js";
-import type { RunTaskInput } from "../run.js";
+import type { RunTaskInput, RunTaskOutput } from "../run.js";
 
 const verdict = (result: "VERIFIED" | "FAILED" | "UNKNOWN", base: string) =>
   Verdict.parse({
@@ -196,6 +196,70 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     const stopped = (await readLedgerOnline(s.db, DEMO_ORG_ID)).filter((r) => r.kind === "task_stopped");
     expect(JSON.stringify(stopped)).toContain("EXPORT:empty_change:-");
     expect(JSON.stringify(stopped)).toContain("UNKNOWN");
+  });
+  describe("D-448: how a task with no change ends", () => {
+    const emptyRun = (s: Awaited<ReturnType<typeof setup>>, agentEnd: RunTaskOutput["agentEnd"], extra: Partial<RunTaskOutput> = {}, agentExit = 0) => {
+      s.deps.run = () => {
+        const v = { ...verdict("UNKNOWN", s.fx.sha), reasons: ["EXPORT:empty_change:-"], tree_sha: null };
+        v.evidence = [{ detector: "EXPORT", phase: 1, status: "unknown", summary: "0 file(s) changed; not checked", data: { files: 0, verification: "skipped" }, source: "export", agent_visible: true, signature: "EXPORT:empty_change:-" }];
+        return Promise.resolve({ verdict: v, exit: 10, runDir: null, ledger: null, agentExit, ...(agentEnd ? { agentEnd } : {}), ...extra });
+      };
+    };
+    const row = async (s: Awaited<ReturnType<typeof setup>>) => (await s.db.query<{ state: string; wait_reason: string; last_result: string | null }>("select state, wait_reason, last_result from public.tasks where id = 't_web_1'")).rows[0];
+    const nothingDelivered = async (s: Awaited<ReturnType<typeof setup>>) => {
+      expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
+      expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
+      expect((await s.db.query("select 1 from public.deliveries")).rows).toHaveLength(0);
+    };
+    it("a provider that did not answer: HELD with the real cause (a code), retryable, the person is told", async () => {
+      const s = await setup(2);
+      emptyRun(s, { ok: false, replied: false, cause: "overloaded" }, {}, 247);
+      await runDaemonOnce(s.deps);
+      expect(await row(s)).toMatchObject({ state: "HELD", wait_reason: "agent_failed:overloaded" });
+      await nothingDelivered(s);
+      expect((await s.db.query<{ payload: { kind: string } }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload.kind)).toEqual(["failed"]);
+      expect(JSON.stringify((await readLedgerOnline(s.db, DEMO_ORG_ID)).filter((r) => r.kind === "task_stopped"))).toContain("agent_failed");
+    });
+    it("an error with no known cause says so; a 429 the proxy saw is a known cause", async () => {
+      const a = await setup(0);
+      emptyRun(a, { ok: false, replied: false, cause: null }, {}, 1);
+      await runDaemonOnce(a.deps);
+      expect((await row(a))?.wait_reason).toBe("agent_failed:unknown");
+      const b = await setup(0);
+      emptyRun(b, { ok: false, replied: false, cause: null }, { limit: { retry_after_s: 5, resets_at: null, at: "2026-11-02T08:00:00.000Z" } }, 1);
+      await runDaemonOnce(b.deps);
+      expect((await row(b))?.wait_reason).toBe("agent_failed:rate_limited");
+    });
+    it("an agent that replied and then crashed is still a failure, its words do not rescue it", async () => {
+      const s = await setup(0);
+      emptyRun(s, { ok: false, replied: true, cause: "timed_out" }, {}, 1);
+      await runDaemonOnce(s.deps);
+      expect((await row(s))?.wait_reason).toBe("agent_failed:timed_out");
+    });
+    it("a reply and no change (answering “hi”): closed, nothing waits, no warning, no delivery, no ladder", async () => {
+      const s = await setup(2);
+      emptyRun(s, { ok: true, replied: true, cause: null });
+      await runDaemonOnce(s.deps);
+      expect(await row(s)).toMatchObject({ state: "CLOSED", wait_reason: "answered", last_result: null });
+      await nothingDelivered(s);
+      expect((await s.db.query("select 1 from public.outbox where kind = 'web_push'")).rows).toHaveLength(0);
+      const stopped = JSON.stringify((await readLedgerOnline(s.db, DEMO_ORG_ID)).filter((r) => r.kind === "task_stopped"));
+      expect(stopped).toContain("answered");
+      expect(stopped).toContain("EXPORT:empty_change:-");
+    });
+    it("no reply, no error, no change: HELD empty_change, as before", async () => {
+      const s = await setup(0);
+      emptyRun(s, { ok: true, replied: false, cause: null });
+      await runDaemonOnce(s.deps);
+      expect((await row(s))?.wait_reason).toBe("empty_change");
+    });
+    it("a reply with a real change is judged and delivered as always: talking changes nothing", async () => {
+      const s = await setup(0);
+      const run = s.deps.run;
+      s.deps.run = async (i) => ({ ...(await (run as NonNullable<typeof s.deps.run>)(i)), agentEnd: { ok: true, replied: true, cause: null } });
+      await runDaemonOnce(s.deps);
+      expect(await row(s)).toMatchObject({ state: "HELD", wait_reason: "approval", last_result: "VERIFIED" });
+    });
   });
   it("D-447: an empty change with another open question is not swallowed: it goes the usual way, with its reasons", async () => {
     const s = await setup(0);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatItems, liveStatusOf, toolIcon, usageOf, whyOf } from "./chat";
+import { chatItems, lastReply, liveStatusOf, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -117,5 +117,15 @@ describe("what the run is doing now (D-446)", () => {
   });
   it("the chat itself does not show these lines", () => {
     expect(chatItems([l(0, "phase", "agent"), l(1, "provider", "overloaded 4/10")])).toEqual([]);
+  });
+});
+
+describe("the reply a person came for (D-448)", () => {
+  const L2 = (seq: number, kind: string, text: string) => ({ seq, kind, text, at: "2026-11-02T08:00:00.000Z" });
+  it("the agent's last words, without tools and status lines", () => {
+    expect(lastReply(chatItems([L2(0, "phase", "agent"), L2(1, "text", "Let me look."), L2(2, "tool_call", "Read: a.ts"), L2(3, "text", "Hello!"), L2(4, "result", "done"), L2(5, "phase", "export")]))).toBe("Hello!");
+  });
+  it("no reply: null", () => {
+    expect(lastReply(chatItems([L2(0, "phase", "agent"), L2(1, "result", "failed: x")]))).toBeNull();
   });
 });

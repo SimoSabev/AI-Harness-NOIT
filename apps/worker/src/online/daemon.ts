@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, NightRules, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
+import { HarnessProfile, NightRules, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } from "@mandat/contract";
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -467,13 +467,16 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // D-447: the worker skips the trees for it (UNKNOWN EXPORT:empty_change); any other open question goes the usual way.
   const onlyEmpty = emptyChange && (v.result === "VERIFIED" || (v.result === "UNKNOWN" && v.reasons.every((r) => r === "EXPORT:empty_change:-")));
   if (onlyEmpty) {
+    // D-448: no change, so nothing was judged and nothing is delivered; what is left to say is how the agent ended
+    const end = emptyEnding(out);
     seq = await inTransaction(d.db, async (tx) => {
-      const s2 = await setState(tx, t, "HELD", { wait_reason: "empty_change", minutes });
-      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "empty_change", run_id: v.run_id, result: v.result, reasons: v.reasons } });
+      const s2 = await setState(tx, t, end.state, { wait_reason: end.wait, minutes, ...(end.state === "CLOSED" ? { outcome_decided: true } : {}) });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: end.reason, run_id: v.run_id, result: v.result, reasons: v.reasons, ...(end.cause ? { cause: end.cause } : {}) } });
       return s2;
     });
-    await bc("HELD", seq, { wait_reason: "empty_change" });
-    return { state: "HELD", verdict: v };
+    if (end.reason === "agent_failed") await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:failed`, payload: { task_id: t.id, kind: "failed" } });
+    await bc(end.state, seq, { wait_reason: end.wait });
+    return { state: end.state, verdict: v };
   }
   // level: ladder (repo, type, agent) × risk cap × our harness cap 3 × ruleset × D7 assumed pass after VERIFY_1 (т. 3.3)
   const lad = await d.db.query<{ level: number; s_up: number; s_down: number; pinned: boolean }>("select level, s_up, s_down, pinned from public.ladder_state where repo_id = $1 and task_type = $2 and agent = $3", [t.repo_id, t.type, t.agent]);
@@ -655,6 +658,20 @@ export function broadcasterFromEnv(env: Record<string, string | undefined>): ((t
   const url = env.SUPABASE_URL;
   const key = env.SUPABASE_SERVICE_ROLE_KEY;
   return url && key ? realtimeBroadcaster({ url, serviceKey: key }) : undefined;
+}
+
+/**
+ * D-448: how a task with no change ends, from what the worker saw of the agent. An error or a non-zero exit is a failure even
+ * if the agent said something; a plain reply is a finished task; silence is the old empty change.
+ */
+export function emptyEnding(o: Pick<RunTaskOutput, "agentEnd" | "limit">): { state: "HELD" | "CLOSED"; wait: string; reason: "agent_failed" | "answered" | "empty_change"; cause: string | null } {
+  const e = o.agentEnd;
+  if (e && !e.ok) {
+    const cause = e.cause ?? (o.limit ? "rate_limited" : "unknown");
+    return { state: "HELD", wait: agentFailedReason(cause), reason: "agent_failed", cause };
+  }
+  if (e?.replied) return { state: "CLOSED", wait: "answered", reason: "answered", cause: null };
+  return { state: "HELD", wait: "empty_change", reason: "empty_change", cause: null };
 }
 
 /** D-293: the provider rejected the key (proxy saw 401/403) and no real change was verified → say that. */

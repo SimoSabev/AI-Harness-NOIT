@@ -116,6 +116,15 @@ export function liveStatusOf(lines: StreamLine[]): LiveStatus {
   return { phase, notice };
 }
 
+/** D-448: the agent's last words, for a task whose result is the reply itself. */
+export function lastReply(items: ChatItem[]): string | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    if (it?.kind === "say") return it.text;
+  }
+  return null;
+}
+
 /** The last token/cost line of the stream ("tokens in X · out Y[ · $Z]"). */
 export function usageOf(lines: StreamLine[]): { input: number; output: number; usd: number | null } | null {
   for (let i = lines.length - 1; i >= 0; i--) {
