@@ -54,6 +54,7 @@ describe("stream → workbench (E7д, AC-6.1/6.2)", () => {
     expect((await written()).at(-1)).toBe("phase:export");
     await rec.close();
     expect((await db.query<{ state: string }>("select state from public.agent_sessions where id = $1", [sessionIdFor(run)])).rows[0]?.state).toBe("failed");
+    await db.query("delete from public.agent_sessions where id = $1", [sessionIdFor(run)]); // the next test counts all sessions
   });
   it("the synthetic Claude run → lead + subagent sessions, tool calls with decisions, the denied push, ended states", async () => {
     let now = 0;
