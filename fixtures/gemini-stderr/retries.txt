@@ -1,0 +1,16 @@
+Warning: 256-color support not detected. Using a terminal with at least 256-color support is recommended for a better visual experience.
+YOLO mode is enabled. All tool calls will be automatically approved.
+Ripgrep is not available. Falling back to GrepTool.
+Attempt 1 failed with status 503. Retrying with backoff... _ApiError: {"error":{"message":"(masked)"}}
+    at throwErrorIfNotOK (file:///usr/local/lib/node_modules/@google/gemini-cli/bundle/chunk.js:1:1)
+    at async retryWithBackoff (file:///usr/local/lib/node_modules/@google/gemini-cli/bundle/chunk.js:2:2) {
+  status: 503
+}
+Attempt 2 failed. Retrying with backoff... Error: exception TypeError: fetch failed sending request
+    at file:///usr/local/lib/node_modules/@google/gemini-cli/bundle/chunk.js:3:3
+Attempt 3 failed with status 429. Retrying with backoff... _ApiError: {"error":{"message":"(masked)"}}
+Attempt 4 failed with status 403. Retrying with backoff... _ApiError: {"error":{"message":"(masked)"}}
+Attempt 5 failed with status 500. Retrying with backoff... _ApiError: {"error":{"message":"(masked)"}}
+Attempt 6 failed. Retrying with backoff... Error: something nobody has seen yet
+Attempt 10 failed: This model is currently experiencing high demand. (masked)
+Error when talking to Gemini API Full report available at: /tmp/gemini-client-error.json

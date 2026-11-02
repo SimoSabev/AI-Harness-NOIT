@@ -1,5 +1,5 @@
 import { frameUntrusted } from "@mandat/contract";
-import type { StreamCtx, StreamEvent } from "@mandat/contract";
+import type { ProviderNotice, StreamCtx, StreamEvent } from "@mandat/contract";
 export interface AgentRunContext {
   runId: string;
   taskId: string;
@@ -65,6 +65,8 @@ export interface AgentAdapter {
   toStream(line: string, ctx: StreamCtx, windows?: Readonly<Record<string, number>>): StreamEvent[];
   launch(ctx: AgentRunContext, channel: SandboxChannelEnv, canary: { name: "AWS_SECRET_ACCESS_KEY"; value: string }): AgentLaunchSpec;
   parseLine(line: string): AgentEvent[];
+  /** D-446: one line of the agent's stderr → a provider problem. Only for a CLI whose format is known; absent = no notices. */
+  providerNotice?(stderrLine: string): ProviderNotice | null;
   /** E8g (D-353): one stdin line carrying a person's steer text (framed as untrusted input); only when supportsSteering */
   steerLine?(text: string, author: string): string;
 }

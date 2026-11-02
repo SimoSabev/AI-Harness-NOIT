@@ -1,5 +1,6 @@
 import type { AgentAdapter } from "../adapter.js";
 import { buildGeminiArgv } from "./argv.js";
+import { geminiProviderNotice } from "./notice.js";
 import { parseGeminiLine } from "./stream.js";
 import { geminiToStream } from "./to-stream.js";
 
@@ -24,5 +25,6 @@ export function geminiAdapter(o: { model: string; cliVersion: "0.65.0" }): Agent
     },
     parseLine: parseGeminiLine,
     toStream: geminiToStream,
+    providerNotice: geminiProviderNotice,
   };
 }
