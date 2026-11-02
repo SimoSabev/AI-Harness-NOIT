@@ -329,6 +329,55 @@ describe("gate server", () => {
     expect((await req(base, "POST", "/v1/messages", {}, "{}")).status).toBe(502);
   });
 
+  it("D-449: the client disconnects → the gate aborts its forward, before a reply and in the middle of one", async () => {
+    let closed = 0;
+    const up = await stub((rq, res) => {
+      res.on("close", () => {
+        if (!res.writableFinished) closed++;
+      });
+      rq.resume();
+      rq.on("end", () => {
+        if (rq.url?.includes("half")) {
+          res.writeHead(200, { "content-type": "text/event-stream" });
+          res.write("data: 1\n\n");
+        }
+      });
+    });
+    const { base, lines } = await gate(pol("agent", [...LLM, { id: "half", method: "POST", match: { kind: "exact", path: "/v1/half" }, upstream: "llm_proxy" }]), { llmProxyUrl: up.url });
+    const silent = http.request(`${base}/v1/messages`, { method: "POST" });
+    silent.on("error", () => undefined);
+    silent.end("{}");
+    await waitFor(() => up.calls() === 1);
+    silent.destroy();
+    await waitFor(() => closed === 1);
+    const half = http.request(`${base}/v1/half`, { method: "POST" }, (res) => {
+      res.on("error", () => undefined);
+      res.once("data", () => half.destroy());
+    });
+    half.on("error", () => undefined);
+    half.end("{}");
+    await waitFor(() => closed === 2);
+    await waitFor(() => lines().filter((l) => l.kind === "allow" && l.status === 499).length === 2);
+    expect(lines().filter((l) => l.kind === "allow" && l.path === "/v1/half")).toEqual([expect.objectContaining({ status: 499, bytes: 9 })]);
+  });
+
+  it("D-449: a reply read to the end is not aborted and logs its real status", async () => {
+    let closed = 0;
+    const up = await stub((rq, res) => {
+      res.on("close", () => {
+        if (!res.writableFinished) closed++;
+      });
+      rq.resume();
+      rq.on("end", () => res.writeHead(200).end("done"));
+    });
+    const { base, lines } = await gate(pol("agent"), { llmProxyUrl: up.url });
+    expect((await req(base, "POST", "/v1/messages", {}, "{}")).status).toBe(200);
+    await waitFor(() => lines().some((l) => l.kind === "allow" && l.status === 200));
+    await sleep(30);
+    expect(closed).toBe(0);
+    expect(lines().filter((l) => l.kind === "allow")).toHaveLength(1);
+  });
+
   it("npm кеш (D-111) и packument", async () => {
     const reg = await stub((rq, res) => {
       if (rq.url?.endsWith(".tgz")) {
