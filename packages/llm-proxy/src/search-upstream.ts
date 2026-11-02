@@ -22,6 +22,12 @@ export function forwardSearch(o: { req: http.IncomingMessage; res: http.ServerRe
       ur.pipe(o.res);
       ur.on("end", () => done(ur.statusCode ?? 0));
     });
+    // D-449: the client left → stop waiting; a call nobody reads is not priced (status 0)
+    o.res.on("close", () => {
+      if (o.res.writableFinished) return;
+      up.destroy();
+      done(0);
+    });
     up.on("error", () => {
       if (!o.res.headersSent) o.res.writeHead(502, { "content-type": "application/json" }).end(JSON.stringify({ error: "upstream_unreachable" }));
       done(0);
