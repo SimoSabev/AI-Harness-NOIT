@@ -1,3 +1,4 @@
+import type { ProviderNotice, RunPhase } from "@mandat/contract";
 import { LOCALE, translate } from "../i18n/t";
 import type { Key, Lang } from "../i18n/t";
 
@@ -62,6 +63,23 @@ export function groupOf(k: StatusKey): Group {
   if (k === "review" || k === "failed" || k === "unknown" || k === "empty" || k === "key" || k === "ask" || k === "base" || k === "ci") return "waiting";
   if (k === "queued" || k === "running" || k === "checking") return "active";
   return "done";
+}
+
+/** D-446: who a provider problem is about. Only an agent that always talks to one provider can name it. */
+function providerWho(agent: string, lang: Lang): string {
+  return translate(lang, agent === "gemini" || agent.startsWith("gemini+") ? "provider.who.google" : "provider.who.generic");
+}
+/** D-446: the phase of a run, in plain words. */
+export function phaseLine(p: RunPhase, lang: Lang = "en"): string {
+  return translate(lang, `ws.phase.${p}`);
+}
+/** D-446: a provider problem as fixed text: typed codes in, a catalog sentence out, never a CLI's words. */
+export function noticeLine(n: ProviderNotice, agent: string, lang: Lang = "en"): string {
+  const who = providerWho(agent, lang);
+  if (n.attempt !== null && n.max !== null && n.attempt >= n.max) return translate(lang, "provider.live.last", { who, n: n.attempt });
+  const text = translate(lang, `provider.live.${n.problem}`, { who });
+  if (n.attempt === null) return text;
+  return n.max === null ? translate(lang, "provider.live.attemptOnly", { text, n: n.attempt }) : translate(lang, "provider.live.attempt", { text, n: n.attempt, max: n.max });
 }
 
 /** The checks of a verdict in plain words (the detector id stays visible small, for the curious). */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHECK_LABEL, actionsOf, ago, checkLabel, groupOf, groupTitle, outcomeTone, statusOf } from "./status";
+import { CHECK_LABEL, noticeLine, phaseLine, actionsOf, ago, checkLabel, groupOf, groupTitle, outcomeTone, statusOf } from "./status";
 
 const t = (o: Partial<Parameters<typeof statusOf>[0]>) => ({ state: "CREATED", last_result: null, wait_reason: null, approval_needed: false, approved_by_human: false, ...o });
 
@@ -107,5 +107,20 @@ describe("waiting on you, the verdict box, the actions (D-386)", () => {
     expect(actionsOf("ci")).toEqual({ decide: false, again: false, note: true, fixCi: true, stop: false });
     for (const k of ["queued", "running", "checking"] as const) expect(actionsOf(k).stop, k).toBe(true);
     for (const k of ["approved", "applied", "closed", "expired", "stopped", "ask"] as const) expect(Object.values(actionsOf(k)).some(Boolean), k).toBe(false);
+  });
+});
+
+describe("live status in plain words (D-446)", () => {
+  it("every phase has a sentence in both languages", () => {
+    for (const p of ["provision", "install", "agent", "export", "verify", "verdict"] as const) for (const lang of ["en", "bg"] as const) expect(phaseLine(p, lang)).not.toContain("ws.phase");
+    expect(phaseLine("install")).toBe("Installing dependencies…");
+    expect(phaseLine("install", "bg")).toBe("Инсталирам зависимостите…");
+  });
+  it("provider problems are fixed text, with the attempt when known", () => {
+    expect(noticeLine({ problem: "overloaded", attempt: 4, max: 10 }, "gemini+gemini")).toBe("Google is overloaded right now, retrying (attempt 4 of 10)");
+    expect(noticeLine({ problem: "overloaded", attempt: 4, max: 10 }, "gemini+gemini", "bg")).toBe("Google е претоварен в момента, опитвам отново (опит 4 от 10)");
+    expect(noticeLine({ problem: "timed_out", attempt: 2, max: null }, "gemini")).toBe("The model is taking too long to answer, retrying (attempt 2)");
+    expect(noticeLine({ problem: "rate_limited", attempt: null, max: null }, "claude+my-connection")).toBe("The model provider is limiting requests right now, retrying");
+    expect(noticeLine({ problem: "overloaded", attempt: 10, max: 10 }, "gemini+x")).toBe("Google did not answer after 10 attempts, stopping");
   });
 });

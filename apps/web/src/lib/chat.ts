@@ -1,5 +1,8 @@
 // The workspace chat: the agent's stream lines (session_lines, already redacted by the worker) → what the person reads.
 // Pure, so the browser and the tests share it.
+import { RunPhase, decodeProviderNotice } from "@mandat/contract";
+import type { ProviderNotice } from "@mandat/contract";
+
 export interface StreamLine { seq: number; kind: string; text: string; at: string }
 export interface SteerLine { text: string; at: string }
 
@@ -93,6 +96,24 @@ export function chatItems(lines: StreamLine[], steers: SteerLine[] = []): ChatIt
     }
   }
   return out;
+}
+
+/** D-446: what the run is doing now: its last phase, and a provider problem until the model answers or the phase moves on. */
+export interface LiveStatus { phase: RunPhase | null; notice: ProviderNotice | null }
+export function liveStatusOf(lines: StreamLine[]): LiveStatus {
+  let phase: RunPhase | null = null;
+  let notice: ProviderNotice | null = null;
+  for (const l of lines) {
+    if (l.kind === "phase") {
+      const p = RunPhase.safeParse(l.text);
+      if (p.success) {
+        phase = p.data;
+        notice = null;
+      }
+    } else if (l.kind === "provider") notice = decodeProviderNotice(l.text) ?? notice;
+    else if (l.kind === "text" || l.kind === "tool_call" || l.kind === "tool_result") notice = null;
+  }
+  return { phase, notice };
 }
 
 /** The last token/cost line of the stream ("tokens in X · out Y[ · $Z]"). */

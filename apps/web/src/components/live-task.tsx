@@ -3,10 +3,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useT } from "../i18n/client";
 import type { T } from "../i18n/t";
-import { chatItems, toolIcon, usageOf, whyOf } from "../lib/chat";
+import { chatItems, liveStatusOf, toolIcon, usageOf, whyOf } from "../lib/chat";
 import type { ChatItem, Feed, FeedCheck, ToolIcon } from "../lib/chat";
 import { errorText, postJson } from "../lib/client/api";
-import { outcomeTone, statusOf } from "../lib/status";
+import { noticeLine, outcomeTone, phaseLine, statusOf } from "../lib/status";
 import type { Tone } from "../lib/status";
 import { reasonText } from "../lib/verdict-view";
 import { splitDiff } from "../lib/diff-view";
@@ -120,6 +120,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
   const task = feed?.task ?? null;
   const items = useMemo(() => chatItems(feed?.lines ?? [], feed?.steers ?? []), [feed?.lines, feed?.steers]);
   const usage = useMemo(() => usageOf(feed?.lines ?? []), [feed?.lines]);
+  const live = useMemo(() => liveStatusOf(feed?.lines ?? []), [feed?.lines]);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   useEffect(() => {
@@ -177,8 +178,9 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
             {conversation}
             <p className="flex items-center gap-2 text-sm text-mute">
               <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
-              {s.key === "checking" ? t("ws.checking") : s.key === "running" ? t("ws.typing") : t("ws.waiting")}
+              {s.key === "checking" ? t("ws.checking") : s.key === "running" ? (live.phase ? phaseLine(live.phase, t.lang) : t("ws.typing")) : t("ws.waiting")}
             </p>
+            {s.key === "running" && live.notice && <p role="status" className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{noticeLine(live.notice, task.agent, t.lang)}</p>}
             <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} />
           </>
         ) : (
