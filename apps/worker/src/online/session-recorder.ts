@@ -145,6 +145,13 @@ export function sessionRecorder(sink: SessionSink, o: RecorderOptions) {
             if (c) writeCall(s, c, decision);
           }
           break;
+        case "phase":
+        case "provider":
+          // D-446: the person waits for this line, it does not wait for the next beat (written even after the agent's result)
+          if (ev.kind === "phase" && !s.ended && ev.text) s.step = ev.text;
+          s.dirty = true;
+          flush(s, true);
+          return;
         case "usage":
           if (ev.usage?.context_pct != null) s.context = ev.usage.context_pct;
           if (ev.usage?.usd != null) s.usd = ev.usage.usd;

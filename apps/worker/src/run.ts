@@ -7,9 +7,9 @@ import path from "node:path";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
+  MandatError, Verdict, contractForAgent, createStreamCtx, encodeProviderNotice, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, streamEvent, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
+import type { AgentEnding, Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
@@ -111,6 +111,8 @@ export interface RunTaskOutput {
   authFailed?: boolean;
   /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
   asks?: Ask[];
+  /** D-448: how the agent's process ended; absent when no agent ran */
+  agentEnd?: AgentEnding;
   /** why the harness stopped the agent, if it did */
   /** D-422: no_tools = a local model answered NO_TOOLS_LIMIT times in a row without a tool (spec 5.3, AC-3.6) */
   stopped?: "timeout" | "budget_stop" | "conflict" | "no_tools";
@@ -121,6 +123,24 @@ const base62 = (n: number): string => Array.from(randomBytes(n), (b) => BASE62[b
 /** D-295: the CLI's own words for a missing / expired / rejected subscription login (Claude Code 2.1.302) [НП: exact texts]. */
 export function looksLikeLoginProblem(line: string): boolean {
   return /not logged in|please run \/login|login expired|oauth token has expired|authentication_error|invalid api key/i.test(line) && !/"type":"assistant"/.test(line);
+}
+
+/** D-446: complete lines out of stderr chunks (a line may come in two); a line too long to be a notice is dropped. */
+const MAX_NOTICE_LINE = 65_536;
+function lineSplitter(onLine: (line: string) => void): { push: (chunk: string) => void; end: () => void } {
+  let rest = "";
+  return {
+    push(chunk) {
+      const parts = (rest + chunk).split("\n");
+      rest = parts.pop() ?? "";
+      for (const l of parts) onLine(l);
+      if (rest.length > MAX_NOTICE_LINE) rest = "";
+    },
+    end() {
+      if (rest !== "") onLine(rest);
+      rest = "";
+    },
+  };
 }
 
 const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
@@ -312,10 +332,26 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const gctx = (tree: "agent" | "base" | "a" | "b") => ({ docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, gateImage: images.gate, user, extraCa: host.extraCa, ...(x.llmProxyUrl !== undefined ? { llmProxyUrl: x.llmProxyUrl } : {}) });
     let baseDir = "";
 
+    // D-446: the stream of the run: the agent's lines, and the phases and provider problems the worker itself reports
+    const streamCtx = createStreamCtx(runId);
+    const report = (e: StreamInput): void => {
+      try {
+        i.hooks?.onStream?.(streamEvent(streamCtx, e));
+      } catch {
+        // the live view is best effort
+      }
+    };
+    const phase = (p: RunPhase): void => report({ kind: "phase", text: p });
+    let agentRan = false;
+    let agentReplied = false;
+    let agentErrored = false;
+    let agentProblem: ProviderProblem | null = null;
+
     const pm = packageManagerOf(contract.repo_config); // D-301
     let berry = false; // E8и (D-358): yarn.lock with __metadata
     try {
       // ---------- PROVISION (7.4)
+      phase("provision");
       await timed("provision", async () => {
         const clone = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "base" });
         baseDir = clone.dir;
@@ -356,6 +392,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- INSTALL (7.5)
+      phase("install");
       await timed("install", async () => {
         const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm, berry), timeoutMs: 300_000 });
         if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `${pm} install exit ${r.exitCode}`);
@@ -404,6 +441,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- AGENT (7.6)
+      phase("agent");
       await timed("agent", async () => {
         const g = gate as RunGate;
         if (i.applyFiles) {
@@ -449,8 +487,15 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         );
         let events = 0;
         const denied: string[] = [];
-        const streamCtx = createStreamCtx(runId);
         const onStream = i.hooks?.onStream;
+        agentRan = true;
+        // D-446: only a closed code leaves this function, never the CLI's words (they stay in agent-stderr.txt)
+        const stderrLines = lineSplitter((line) => {
+          const n = adapter.providerNotice?.(line) ?? null;
+          if (!n) return;
+          agentProblem = n.problem;
+          report({ kind: "provider", text: encodeProviderNotice(n) });
+        });
         let loginProblem = false;
         let lastTool = "";
         let pollWarned = false;
@@ -519,6 +564,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
+                if (e.type === "assistant_text" && e.text.trim() !== "") agentReplied = true;
+                if (e.type === "result" && e.isError) agentErrored = true;
                 if (e.type === "result" && stdin && !stdin.writableEnded) stdin.end();
               }
               if (onStream || harness) {
@@ -543,11 +590,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             onStderr: (c) => {
               const text = c.toString("utf8");
               if (viaProfile && looksLikeLoginProblem(text)) loginProblem = true;
+              stderrLines.push(text);
               enqueue(() => w.text("agent-stderr.txt", text, { append: true, maxBytes: 1048576 }));
             },
           });
           agentExit = agentStop ? null : r.exitCode;
         } finally {
+          stderrLines.end();
           clearTimeout(limit);
           if (poll) clearInterval(poll);
           if (stopPoll) clearInterval(stopPoll);
@@ -603,6 +652,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         set(ev("AGENT", "unknown", `agent stopped: ${agentStop}`, {}, { cls: agentStop, id: "-" }));
       } else {
         // ---------- EXPORT (7.7)
+        phase("export");
         let notes = "";
         await timed("export", async () => {
           const stream = new PassThrough();
@@ -669,6 +719,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         }
         const ex = exportResult as ChangesetExport | null;
         if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
+          phase("verify");
           await timed("verify", async () => {
             const redactReport = (raw: string | null): string => (raw === null ? "" : raw.includes(canary) || raw.includes(token) ? JSON.stringify({ redacted: true }) : raw);
             try {
@@ -735,6 +786,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
 
     // ---------- VERDICT (7.9)
+    phase("verdict");
     const s = Date.now();
     if (infraCode) {
       aliases.push(`infra:${infraCode.replace(/^E_/, "").toLowerCase()}`);
@@ -785,6 +837,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       ...(usage.authFailed ? { authFailed: true } : {}),
       ...(asks.length > 0 ? { asks } : {}),
       ...(agentStop ? { stopped: agentStop } : {}),
+      ...(agentRan ? { agentEnd: { ok: (agentExit as number | null) === 0 && !agentErrored, replied: agentReplied, cause: agentProblem } } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

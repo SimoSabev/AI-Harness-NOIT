@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UnsealedContract, Verdict, hashJcs, parseVitestReport, sealContract, sha256Tag } from "@mandat/contract";
+import type { StreamEvent } from "@mandat/contract";
 import type { Channel } from "@mandat/channels";
 import { verifyLedger } from "@mandat/ledger";
 import { createRedactor } from "@mandat/redaction";
@@ -459,6 +460,60 @@ describe("runTask (fake docker)", () => {
     const { r } = await go({ docker: new FakeDocker({ head: () => shopCopy(), tarExit: 2, tarStderr: "tar: ./src/x.ts: Cannot open: Permission denied\n" }) });
     expect(r.verdict?.reasons).toEqual(["export:unreadable", "EXPORT:unreadable:src/x.ts"]);
 
+  });
+});
+
+describe("runTask: what the person sees while it runs, and how the agent ended (D-446, D-448)", () => {
+  const geminiChannel = (): Channel => ({
+    label: "conn-gemini", kind: "api_key", provider: "gemini", model: "gemini-3.8-flash",
+    issueTaskCredential: () => Promise.resolve({ token: `mdt_${"g".repeat(30)}.${"h".repeat(43)}`, tokenHash: "sha256:x", expiresAt: "" }),
+    revokeTaskCredential: () => Promise.resolve(),
+    usage: () => Promise.resolve({ usd: 0.05, inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 9, budgetStop: false, limit: null, authFailed: false, noTools: false }),
+    sandboxEnv: (c) => ({ GEMINI_API_KEY: c.token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" }),
+    gateRoutes: () => [],
+  });
+  const withSecret = () => {
+    const h = home();
+    mkdirSync(path.join(h, "proxy"), { recursive: true });
+    writeFileSync(path.join(h, "proxy", "secret"), randomBytes(32));
+    return h;
+  };
+  const RAW = "RAW-PROVIDER-WORDS";
+  const failedStream = ['{"type":"init","session_id":"s","model":"gemini-3.8-flash"}', JSON.stringify({ type: "result", status: "error", error: { type: "unknown", message: "failed" } })];
+
+  it("every phase of the run reaches the stream as a code, in order", async () => {
+    const seen: StreamEvent[] = [];
+    await go({ docker: new FakeDocker({ head: honest }), i: { hooks: { onStream: (e) => seen.push(e) } } });
+    expect(seen.filter((e) => e.kind === "phase").map((e) => e.text)).toEqual(["provision", "install", "agent", "export", "verify", "verdict"]);
+    expect(new Set(seen.map((e) => e.session)).size).toBe(1);
+  });
+
+  it("a failing stream hook never stops the run", async () => {
+    const { r } = await go({ docker: new FakeDocker({ head: honest }), i: { hooks: { onStream: () => { throw new Error("no"); } } } });
+    expect(r.verdict?.result).toBe("VERIFIED");
+  });
+
+  it("Gemini's retries on stderr become provider codes, also when a line comes in two chunks; its words never leave the run dir", async () => {
+    const seen: StreamEvent[] = [];
+    const docker = new FakeDocker({
+      head: () => shopCopy(), agentLines: () => failedStream, agentExit: 247,
+      agentStderr: [`YOLO mode\nAttempt 1 failed with status 503. Retrying… ${RAW}\n    at x\nAttempt 2 fai`, `led. Retrying with backoff... fetch failed sending request ${RAW}\nAttempt 10 failed: ${RAW} high demand`],
+    });
+    const { r } = await go({ h: withSecret(), docker, i: { agent: "gemini", hooks: { onStream: (e) => seen.push(e) } }, x: { channel: geminiChannel(), healthz: () => Promise.resolve(true) } });
+    expect(seen.filter((e) => e.kind === "provider").map((e) => e.text)).toEqual(["overloaded 1/10", "timed_out 2/10", "overloaded 10/10"]);
+    expect(JSON.stringify(seen)).not.toContain(RAW);
+    expect(r.agentEnd).toEqual({ ok: false, replied: false, cause: "overloaded" });
+    expect(readFileSync(path.join(r.runDir ?? "", "agent-stderr.txt"), "utf8")).toContain("Attempt 2 failed");
+  });
+
+  it("the ending is what the worker saw: a reply, an error result, a non-zero exit", async () => {
+    const text = '{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}';
+    const result = (isError: boolean) => JSON.stringify({ type: "result", subtype: isError ? "error" : "success", is_error: isError, total_cost_usd: 0, num_turns: 1 });
+    const ending = async (lines: string[], agentExit = 0) => (await go({ docker: new FakeDocker({ head: () => shopCopy(), agentLines: () => lines, agentExit }), tests: () => ok(BASE_RAW) })).r.agentEnd;
+    expect(await ending([text, result(false)])).toEqual({ ok: true, replied: true, cause: null });
+    expect(await ending([result(false)])).toEqual({ ok: true, replied: false, cause: null });
+    expect(await ending([text, result(true)])).toEqual({ ok: false, replied: true, cause: null });
+    expect(await ending([text, result(false)], 3)).toEqual({ ok: false, replied: true, cause: null });
   });
 });
 
