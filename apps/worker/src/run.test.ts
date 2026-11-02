@@ -463,6 +463,58 @@ describe("runTask (fake docker)", () => {
   });
 });
 
+describe("runTask: nothing to check → nothing is verified, and the verdict says so (D-447)", () => {
+  const noMustPass = (h: string) => {
+    const f = path.join(h, "no-must-pass.json");
+    const { contract_hash: _c, config_hash: _k, ...rest } = JSON.parse(readFileSync(CONTRACT, "utf8")) as Record<string, unknown>;
+    writeFileSync(f, JSON.stringify(sealContract(UnsealedContract.parse({ ...rest, must_pass: [] }))));
+    return f;
+  };
+  const NOT_RUN = ["D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "D10.lockfile"];
+
+  it("zero changed files and no test the contract demands: no verification tree, UNKNOWN EXPORT:empty_change, never VERIFIED", async () => {
+    const h = home();
+    const seen: string[] = [];
+    const { r, testsCalls } = await go({ h, docker: new FakeDocker({ head: () => shopCopy() }), i: { contractPath: noMustPass(h), hooks: { onStream: (e) => { if (e.kind === "phase") seen.push(e.text ?? ""); } } } });
+    expect(testsCalls).toEqual([]);
+    expect(r.verdict?.result).toBe("UNKNOWN");
+    expect(r.exit).toBe(10);
+    expect(r.verdict?.reasons).toEqual(["EXPORT:empty_change:-"]);
+    expect(det(r, "EXPORT")).toMatchObject({ status: "unknown", data: { files: 0, verification: "skipped" } });
+    for (const d of NOT_RUN) expect(det(r, d)?.status, d).toBe("n/a");
+    expect(r.verdict?.timings_ms.verify).toBe(0);
+    expect(seen).toEqual(["provision", "install", "agent", "export", "verdict"]);
+    const rows = readFileSync(path.join(r.runDir ?? "", "ledger-payloads.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { payload: { result?: string; reasons?: string[] } });
+    expect(rows.find((x) => x.payload.result)?.payload).toMatchObject({ result: "UNKNOWN", reasons: ["EXPORT:empty_change:-"] });
+  });
+  it("what does not need trees still runs: a canary in the notes of an empty change is still FAILED", async () => {
+    const h = home();
+    const { r, testsCalls } = await go({ h, docker: new FakeDocker({ head: () => shopCopy(), notes: (c) => `leak ${c.canary}` }), i: { contractPath: noMustPass(h) } });
+    expect(testsCalls).toEqual([]);
+    expect(r.verdict?.result).toBe("FAILED");
+    expect(det(r, "CANARY")?.status).toBe("fail");
+    expect(det(r, "INTEGRITY")?.status).toBe("pass");
+  });
+  it("any change gets the full verification, whatever the agent says and however it exits", async () => {
+    const h = home();
+    const contractPath = noMustPass(h);
+    const claim = ['{"type":"assistant","message":{"content":[{"type":"text","text":"I changed nothing, no need to check."}]}}', '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}'];
+    const deleted = await go({ h, docker: new FakeDocker({ agentLines: () => claim, head: () => shopCopy((d) => rmSync(path.join(d, "src/money.ts"))) }), i: { contractPath } });
+    expect(deleted.testsCalls.length).toBeGreaterThan(0);
+    expect(det(deleted.r, "EXPORT")).toMatchObject({ status: "pass", data: { files: 1 } });
+    expect(det(deleted.r, "D1.base_tests")?.status).not.toBe("n/a");
+    const crashed = await go({ h, docker: new FakeDocker({ agentLines: () => claim, agentExit: 247, head: honest }), i: { contractPath } });
+    expect(crashed.testsCalls.length).toBeGreaterThan(0);
+    expect(det(crashed.r, "D1.base_tests")?.status).not.toBe("n/a");
+  });
+  it("a contract that demands tests is always answered: an empty change with must_pass runs them (B12)", async () => {
+    const { r, testsCalls } = await go({ docker: new FakeDocker({ head: () => shopCopy() }), tests: () => ok(BASE_RAW) });
+    expect(testsCalls.length).toBeGreaterThan(0);
+    expect(r.verdict?.reasons).toContain(`MUST_PASS:not_passed:${M}`);
+    expect(r.verdict?.result).toBe("FAILED");
+  });
+});
+
 describe("runTask: what the person sees while it runs, and how the agent ended (D-446, D-448)", () => {
   const geminiChannel = (): Channel => ({
     label: "conn-gemini", kind: "api_key", provider: "gemini", model: "gemini-3.8-flash",

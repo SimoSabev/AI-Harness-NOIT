@@ -464,10 +464,12 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     return { state: "HELD", verdict: v };
   }
   // D-288 (EXPORT:empty_change, т. 5.7): an empty change is never VERIFIED online — no delivery, no ladder credit.
-  if (v.result === "VERIFIED" && emptyChange) {
+  // D-447: the worker skips the trees for it (UNKNOWN EXPORT:empty_change); any other open question goes the usual way.
+  const onlyEmpty = emptyChange && (v.result === "VERIFIED" || (v.result === "UNKNOWN" && v.reasons.every((r) => r === "EXPORT:empty_change:-")));
+  if (onlyEmpty) {
     seq = await inTransaction(d.db, async (tx) => {
       const s2 = await setState(tx, t, "HELD", { wait_reason: "empty_change", minutes });
-      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "empty_change", run_id: v.run_id } });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "empty_change", run_id: v.run_id, result: v.result, reasons: v.reasons } });
       return s2;
     });
     await bc("HELD", seq, { wait_reason: "empty_change" });

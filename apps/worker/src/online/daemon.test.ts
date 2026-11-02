@@ -182,6 +182,35 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
     expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
   });
+  it("D-447: a change nobody checked (UNKNOWN EXPORT:empty_change) → no delivery, no ladder, and the ledger says it was not checked", async () => {
+    const s = await setup(2);
+    s.deps.run = () => {
+      const v = { ...verdict("UNKNOWN", s.fx.sha), reasons: ["EXPORT:empty_change:-"], tree_sha: null };
+      v.evidence = [{ detector: "EXPORT", phase: 1, status: "unknown", summary: "0 file(s) changed; not checked", data: { files: 0, verification: "skipped" }, source: "export", agent_visible: true, signature: "EXPORT:empty_change:-" }];
+      return Promise.resolve({ verdict: v, exit: 10, runDir: null, ledger: null, agentExit: 0 });
+    };
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", wait_reason: "empty_change" });
+    expect(s.gh.state.calls.filter((c) => /^(createRef|createPull|merge)/.test(c))).toEqual([]);
+    expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
+    const stopped = (await readLedgerOnline(s.db, DEMO_ORG_ID)).filter((r) => r.kind === "task_stopped");
+    expect(JSON.stringify(stopped)).toContain("EXPORT:empty_change:-");
+    expect(JSON.stringify(stopped)).toContain("UNKNOWN");
+  });
+  it("D-447: an empty change with another open question is not swallowed: it goes the usual way, with its reasons", async () => {
+    const s = await setup(0);
+    s.deps.run = () => {
+      const v = { ...verdict("UNKNOWN", s.fx.sha), reasons: ["AGENT:config_change:codex/config.toml", "EXPORT:empty_change:-"], tree_sha: null };
+      v.evidence = [
+        { detector: "EXPORT", phase: 1, status: "unknown", summary: "0 file(s) changed; not checked", data: {}, source: "export", agent_visible: true, signature: "EXPORT:empty_change:-" },
+        { detector: "AGENT", phase: 1, status: "unknown", summary: "the agent changed its control layer", data: {}, source: "worker", agent_visible: true, signature: "AGENT:config_change:codex/config.toml" },
+      ];
+      return Promise.resolve({ verdict: v, exit: 10, runDir: null, ledger: null, agentExit: 0 });
+    };
+    await runDaemonOnce(s.deps);
+    expect((await s.db.query<{ state: string; last_result: string }>("select state, last_result from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "HELD", last_result: "UNKNOWN" });
+    expect((await s.db.query("select 1 from public.verdicts")).rows).toHaveLength(1);
+  });
   it("E9б (D12): the before/after screenshots named by D12 go to changeset_shots with the verdict; nothing outside runs/<id>/ui", async () => {
     const s = await setup(0, "UNKNOWN");
     const run = s.deps.run as NonNullable<DaemonDeps["run"]>;

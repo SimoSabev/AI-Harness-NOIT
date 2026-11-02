@@ -19,7 +19,7 @@ import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, fakeCodexAdapt
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
-import { buildReasons, canaryCheck, decideVerdict, ev, na } from "@mandat/core";
+import { buildReasons, canaryCheck, decideVerdict, ev, na, nothingToCheck } from "@mandat/core";
 import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha } from "@mandat/export";
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
@@ -718,7 +718,12 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           uiCheck = { paths: uiPaths, devCommand: i.profile?.layers.b.commands.dev ?? null, image: present ? tag : null, routes: i.profile?.layers.g.ui_routes ?? ["/"] };
         }
         const ex = exportResult as ChangesetExport | null;
-        if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
+        // D-447: nothing changed and the contract demands no test → no trees; recorded as not checked, never VERIFIED
+        const skip = ex !== null && nothingToCheck({ changedFiles: ex.files.length, mustPass: contract.must_pass });
+        if (skip) {
+          set(ev("EXPORT", "unknown", "0 file(s) changed; not checked", { files: 0, verification: "skipped" }, { cls: "empty_change", id: "-" }));
+          out("[verify]    skipped: nothing changed, nothing to check");
+        } else if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
           phase("verify");
           await timed("verify", async () => {
             const redactReport = (raw: string | null): string => (raw === null ? "" : raw.includes(canary) || raw.includes(token) ? JSON.stringify({ redacted: true }) : raw);
