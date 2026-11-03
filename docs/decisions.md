@@ -3016,3 +3016,301 @@ mount на gate-а се отхвърляше (D-118) → `E_GATE_START` на в�
 Docker Desktop сам превежда правата по bind mount-овете, затова потребителят по подразбиране на образите (1000) стига;
 същата стойност ползва и резервът в `runTask`. Rootless остава `0:0`. Тест: `sandbox.test.ts` (D-034).
 Статус: решено от кодера; Симо може да го обърне.
+
+## D-420 Роли по модел: `routing_rules.role` и `selectChannelForRole` (28.10.2026)
+Решение: (спец. 5.3) всяко правило в routing_rules е за една роля на задачата — lead | subagent | research | review | summary
+(същите роли като слой H на профила, `ModelRole` в packages/contract/src/profile.ts; не са дублирани). Схемата на реда е
+`ChannelRule` (packages/contract/src/routing.ts) с `ruleForRole`: правилото на ролята, иначе правилото на lead, иначе auto —
+едно правило стига за всички роли. packages/channels `selectChannelForRole` избира по това правило и записва ролята в
+`channel_reason.role`. Миграция 20261028000420_routing_role.sql: колона `role` (по подразбиране lead, check). Работникът:
+`ruleFor(db, org, repo, type, role = "lead")`. Каналът `local` вече е кандидат в автоматичния избор (без дневен бюджет —
+цената му е 0); `cli_profile` остава извън оценявания избор (абонаментът идва от агента, D-295).
+Не е направено: UI за правило по роля (Настройки → Модели) и ползване на review/summary/subagent в работника — review
+съветникът (E9б) още вика своя stub/канал; ресърчът има свои роли (D-404) и не е пипан (друга сесия). Q-070.
+Тестове: contract routing.test.ts, channels select-role.test.ts, worker channels-role.test.ts (PGlite с миграцията).
+Статус: решено.
+
+## D-421 `ladderCapFor` знае вида на канала: local → ниво 1 (28.10.2026)
+Решение: спец. 5.3 казва „ниво ≤ 1 (ladderCapFor)“. D-392 таваните идваха от извикващия (`cap: 1`); сега
+`ladderCapFor(agent, kind?)` връща 1 за `kind === "local"` (и за external:*), а `ladderStepFor(..., { kind })` го ползва.
+finishOutcome в daemon.ts подава `kind` от `tasks.channel_kind`.
+Тестове: core external-ladder-key.test.ts.
+Статус: решено.
+
+## D-422 Локален канал през проксито: `MANDAT_UPSTREAM_LOCAL_<label>`, $0, спиране при `agent:no_tools` (28.10.2026)
+Решение: (спец. 5.3, AC-3.6) освен записаните връзки на Ollama/LM Studio (D-393) проксито приема локални сървъри от env:
+`MANDAT_UPSTREAM_LOCAL_<LABEL>=<адрес>` → upstream `local-<label>` (малки букви, `_` → `-`), задължително
+`MANDAT_UPSTREAM_LOCAL_<LABEL>_MODELS=<id>,<id>` (проксито пази списък позволени модели) и по избор
+`MANDAT_UPSTREAM_LOCAL_<LABEL>_WIRE=anthropic|openai` (по подразбиране anthropic; Codex иска Responses API → vLLM [НП]).
+Адресът минава през същото правило като връзките (`upstreamUrl`: http/https към този компютър → host.docker.internal или
+https към име; IP литерал в LAN → отказ, Q-071). Без ключ, цена 0, токените се броят. `mandat proxy start` подава тези
+имена като публична env на контейнера (адреси, не тайни); стига и без нито един ключ. Каналът в базата е
+`local-<label>` с kind local (channelFor → токен с `u = local-<label>`).
+Без инструменти: за upstream с `local: true` (env или записана връзка на ollama/lmstudio — `ProxyUpstream.local`) всеки
+отговор на заявка, която предлага инструменти (`tools` не е празно), се маркира `tool` / `no_tool` (Messages: блок
+`*tool_use`, JSON или SSE `content_block_start`; Responses: елемент `*_call`). `NO_TOOLS_LIMIT = 3` поредни `no_tool` →
+`noTools` в usage на рън-а, следващите повиквания → 403 `no_tools` (не се брои като отхвърлен ключ — `refused`).
+Заявки без инструменти (заглавия и др.) не се броят; повикан инструмент нулира брояча. Работникът: poll-ът или последното
+четене на usage → `stopped: "no_tools"` → причина `agent:no_tools`, без износ (UNKNOWN). Състоянието се възстановява от
+usage.jsonl след рестарт (D-116).
+Защо в проксито: само то вижда отговорите на модела; агентът (Claude Code) не казва „нямам инструменти“.
+Тестове: llm-proxy proxy-local.test.ts (AC-3.6 с фалшив endpoint: $0, токени, 3 без инструмент → no_tools, SSE, boot),
+connections-store.test.ts; cli proxy-keys.test.ts; channels connection-channel.test.ts; worker run.test.ts (AC-3.6).
+Не е проверено: Docker тест на целия път (иска нов образ на проксито; не е строен в тази сесия — unit тестовете минават
+през истинския HTTP сървър на проксито и fake docker на работника) [НП → чеклист 33]; истински Ollama/vLLM.
+Статус: решено.
+
+## D-423 Спайк SG: Gemini CLI headless; адаптерът `packages/agents/src/gemini` (28.10.2026)
+Прочетено (google-gemini/gemini-cli, main b8fa817, 28.10.2026; същите файлове в v0.65.0 и v0.66.0):
+- `-p/--prompt` → headless; stdin се слага пред текста на `-p` (8 MB таван) —
+  https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/headless.md, …/docs/cli/cli-reference.md (28.10.2026).
+- `--output-format text|json|stream-json` (`-o`); stream-json = един JSON на ред: init{session_id, model}, message{role,
+  content, delta?}, tool_use{tool_name, tool_id, parameters}, tool_result{tool_id, status, output?, error?},
+  error{severity, message}, result{status, error?, stats{total_tokens, input_tokens, output_tokens, cached, input,
+  duration_ms, tool_calls, models}}; всички с type и timestamp — packages/core/src/output/types.ts (28.10.2026).
+- `--approval-mode default|auto_edit|yolo|plan` (`--yolo` и `--allowed-tools` са остарели → policy engine), `-m`,
+  `--skip-trust`, `--policy <файл|папка>`, `--admin-policy` — cli-reference.md, packages/cli/src/config/config.ts (28.10.2026).
+- Изходни кодове: 0, 1, 42 (вход), 53 (лимит ходове); в кода още 41 (вход/удостоверяване), 44, 52, 54, 55, 130.
+- Настройки: системният файл `GEMINI_CLI_SYSTEM_SETTINGS_PATH` бие всички; `GEMINI_CLI_HOME` за ~/.gemini; GEMINI.md
+  (`context.fileName`), `.geminiignore` — docs/reference/configuration.md, docs/cli/gemini-md.md (28.10.2026).
+- Policies TOML `[[rule]]` toolName/commandPrefix/commandRegex/argsPattern/decision allow|deny|ask_user/priority 0–999;
+  headless: ask_user = deny; `.gemini/policies` в проекта днес не действа (issue #18186) —
+  docs/reference/policy-engine.md (28.10.2026).
+- Hooks: BeforeTool/AfterTool/… в settings.json, JSON на stdin/stdout, exit 2 = блок — docs/hooks/reference.md (28.10.2026).
+- Версия: @google/gemini-cli 0.66.0 (27.10.2026) е по-млада от 3 дни → адаптерът е за 0.65.0 (20.10.2026, Apache-2.0).
+Решение: адаптер `geminiAdapter` (argv.ts, stream.ts, to-stream.ts, adapter.ts): argv
+`gemini --output-format stream-json --approval-mode yolo --skip-trust -m <модел> -p <задача>`; компилираният слой (напр.
+`--policy …`) влиза преди `-p`. yolo, защото в headless всяко „питай“ е отказ, а границата е пясъчникът и вратата.
+env: само `GEMINI_API_KEY=<mdt_>`; публична env `GOOGLE_GEMINI_BASE_URL=http://egress-gate`, `GEMINI_CLI_HOME=/m/gemini-home`,
+`GEMINI_CLI_SYSTEM_SETTINGS_PATH=/m/in/harness/gemini/settings.json`, `GEMINI_CLI_TRUST_WORKSPACE=true`, `NO_BROWSER=true`.
+Системните настройки (`GEMINI_SYSTEM_SETTINGS`): `security.auth.selectedType = "gemini-api-key"` (само с
+GOOGLE_GEMINI_BASE_URL CLI-ят избира `gateway` и headless проверката отказва с 41 [НП: на живо]), без статистика (иначе
+праща installation id), без обновления и телеметрия, `advanced.ignoreLocalEnv` [НП: точното значение] (правило 4).
+Фикстури: fixtures/gemini-jsonl (ръчно писани по типовете и snapshot-а на CLI-я). Живият тест е SKIPPED (D-423).
+`pnpm test:counts` вече приема `// D-4xx:` над skip (регексът беше само D-2xx/D-3xx).
+[НП]: обикновен `http://` base URL към не-localhost (документацията казва само https, кодът не проверява); точният префикс
+на MCP инструментите в потока; къде отиват грешките в json режим; изходен код при HTTP грешка на API-то.
+Не е направено: CLI-ят в образа на пясъчника (нова зависимост в docker/sandbox, правило 8 → след 30.10 за 0.66.0 или 0.65.0
+сега) и материализацията на settings.json/policies в /m/in/harness/gemini (компилаторът на профила има target само
+claude/codex); агент `gemini`/`gemini+<връзка>` в работника и в UI-я. Q-072.
+Тестове: agents gemini/gemini.test.ts; scripts check-test-counts.test.ts.
+Статус: решено (живото и образът чакат).
+
+## D-424 Gemini API през проксито: wire `gemini`, ключът само в проксито (28.10.2026)
+Решение: (спец. 5.3 „GEMINI_API_KEY → mdt_ токен, маршрут /v1beta/* [НП]“) Wire += `gemini`, ProxyUpstream.auth +=
+`x-goog-api-key`, токенът има `p: "gemini"`. Проксито приема само `POST /v1beta/models/<модел>:{generateContent,
+streamGenerateContent,countTokens}` с празен query или `alt=sse` (никакъв `?key=`); моделът е от пътя и трябва да е в
+списъка на upstream-а; агентът праща mdt_ токена като `x-goog-api-key` (така прави @google/genai 1.30.0, който CLI-ят
+ползва — unpkg.com/@google/genai@1.30.0/dist/node/index.mjs, 28.10.2026), проксито го сменя с истинския ключ. Броене от
+`usageMetadata` (promptTokenCount − cachedContentTokenCount = вход, cached = cache read, candidates + thoughts = изход),
+при SSE последното парче; countTokens = $0; цена — плоската на връзката (без цена → оценка по Sonnet, D-392). Gemini няма
+собствен ключ в проксито — само като записана връзка (boot payload). Вратата: `GEMINI_KEY_ROUTES` (prefix
+`/v1beta/models/`); каналът `conn-<id>` с provider gemini дава `GEMINI_API_KEY` + `GOOGLE_GEMINI_BASE_URL`.
+Не е направено: доставчик „Google Gemini“ в каталога PROVIDERS и в /welcome (ProviderInfo.agent е claude|codex; иска UI) —
+Q-072. Пътищата и заглавката са от кода на SDK-а, не от жив рън [НП].
+Тестове: llm-proxy proxy-gemini.test.ts; channels connection-channel.test.ts.
+Статус: решено (живото чака ключ).
+
+## D-425 Gemini CLI с Google вход: профил `gemini-profile-<име>` и тунелите (28.10.2026)
+Решение: (спец. 5.3) непромененият CLI с `oauth-personal`; входът е в ~/.gemini/oauth_creds.json → volume на профила в
+`GEMINI_CLI_HOME`; системните настройки за профила са `GEMINI_LOGIN_SETTINGS` (същите, selectedType oauth-personal).
+Канал `gemini-profile-<име>` (kind cli_profile, provider gemini) без токен; вратата отваря CONNECT само към
+cloudcode-pa.googleapis.com, oauth2.googleapis.com, www.googleapis.com (packages/core/src/code_assist/server.ts и
+google-auth-library 10.9.0, 28.10.2026) [НП: на живо]. Входът без браузър в headless е отказан от CLI-я (exit 41) —
+затова входът е интерактивен веднъж (както `mandat login`), задачите после ползват кеша.
+Условия: docs/resources/tos-privacy.md (28.10.2026) забранява достъп до услугите зад Gemini CLI „чрез софтуер на трети
+страни“ и не казва изрично, че непромененият CLI в обвивка е позволен — D-295 може да не важи; Q-073. Затова вход с
+Google не е включен в UI/CLI (`mandat login --agent gemini` няма) — само каналът и тунелите, изключени, докато Симо реши.
+Тестове: channels connection-channel.test.ts; agents gemini.test.ts (профил без ключ).
+Статус: решено частично (входът чака Q-073).
+
+## D-426 Codex с ChatGPT: `mandat login --agent codex`, тунелите по кода на Codex (28.10.2026)
+Решение: (спец. 5.3) D-393 направи входа от уеба (`codex login --device-auth` в volume `mandat-profile-codex-<име>`).
+Липсваше терминалът: `mandat login --agent codex --name <име>` и `mandat logout --agent codex --name <име>` (по
+подразбиране claude; друго → E_USAGE). Тунелите на профила са стеснени до двата хоста от кода на Codex (openai/codex
+main, 28.10.2026): `CHATGPT_CODEX_BASE_URL = https://chatgpt.com/backend-api/codex` (codex-rs/model-provider-info/src/lib.rs)
+и `REFRESH_TOKEN_URL = https://auth.openai.com/oauth/token` (codex-rs/login/src/auth/manager.rs); api.openai.com е базата
+само при API ключ и вече не се отваря [НП: жив рън потвърждава, че друго не трябва; Q-074].
+Тестове: cli accounts.test.ts; channels connection-channel.test.ts.
+Статус: решено (живият вход и задача чакат Симо).
+
+## D-427 Доставчик „Google Gemini“: ключ в UI-я, агент `gemini` / `gemini+<връзка>` (28.10.2026)
+Решение: (Q-072, Симо: „довърши Gemini докрай“) PROVIDERS += `gemini` (api_key, agent gemini, wire gemini, адрес
+https://generativelanguage.googleapis.com, x-goog-api-key, ключ от https://aistudio.google.com/apikey). Модели по
+https://ai.google.dev/gemini-api/docs/models (обновена 22.10.2026) и цени по /pricing (28.10.2026): gemini-3.8-flash
+(препоръчан, $1,50/$7,50), gemini-4-argon (най-способен, $4/$20), gemini-3.5-flash-lite (бърз, $0,30/$2,50) — по-високите
+цени от 01.12.2026/01.01.2027, за да спира бюджетът по-рано; без такса за запис в кеша (cacheWrite = input) [НП: имената на
+живо]. Ключът се поставя в /welcome или Настройки → Модели („Google Gemini“ в групата „API ключове“), проверява се веднъж
+с `GET /v1beta/models` (ключът в x-goog-api-key, никога в `?key=`; https://ai.google.dev/api/models, 28.10.2026; 400/401/403
+→ лош ключ — 400 API_KEY_INVALID [НП]), запечатва се в ConnectionStore и стига само до проксито (boot payload, D-345);
+никъде не се логва и не се връща. Агент: `gemini+<връзка>` (полето за задача го предлага като „Gemini CLI · <име>“);
+`gemini` = връзката с id `gemini`; `gemini@…` няма (Q-073). Работникът: routeOf → `conn-<id>`; CLI-ят трябва да говори
+жицата на връзката (Gemini CLI само с Gemini връзка).
+Тестове: contract connections.test.ts; cli connections.test.ts; web agents.test.ts; worker agent-route.test.ts.
+Статус: решено.
+
+## D-428 Gemini CLI 0.65.0 в образа на пясъчника; средата на агента (28.10.2026)
+Решение: `@google/gemini-cli` 0.65.0 (Apache-2.0, 20.10.2026; 0.66.0 е по-млада от 3 дни), закрепен по integrity като
+claude и codex; един bundle без задължителни зависимости — optional node-pty/keytar не се инсталират, без install скриптове
+(`npm view @google/gemini-cli@0.65.0`, 28.10.2026). Ред в docs/dependencies.md. Образът носи `/etc/gemini-cli/settings.json`
+(packages/agents/gemini/settings.json = `GEMINI_SYSTEM_SETTINGS`; хешът на тага го включва). Фаза agent с tokenName
+`GEMINI_API_KEY`: тайните са само mdt_ токенът (`GEMINI_API_KEY`, вече в SECRET_ENV_NAMES — само по име, D-043) и канарчето;
+публичната среда — `GOOGLE_GEMINI_BASE_URL=http://egress-gate`, `GEMINI_CLI_HOME=/home/agent` (tmpfs),
+`GEMINI_CLI_TRUST_WORKSPACE=true`, `NO_BROWSER=true`. Работникът маха `GEMINI_API_KEY`/`GOOGLE_API_KEY` от своята среда (D-008).
+Проверено в Docker (D-430): http base URL към вратата работи; `selectedType: gemini-api-key` не дава exit 41; ключовете в
+настройките не чупят CLI-я.
+Тестове: agents gemini.test.ts; sandbox sandbox.test.ts, mcp-role.test.ts; worker run.test.ts (fake docker).
+Статус: решено.
+
+## D-429 Компилатор на профила: target `gemini` (28.10.2026)
+Решение: `compileGemini` (packages/profile/src/gemini.ts): правилата за bash → Gemini CLI policies TOML
+(`/m/in/harness/gemini/policies/mandat.toml`; `[[rule]] toolName = "run_shell_command"`, `commandPrefix` за `cmd *`,
+`commandRegex` за други шаблони, deny 900 / ask 800 / allow 100; ask = deny с „needs approval: …“, защото headless CLI-ят
+и без това прави ask_user на deny — https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/policy-engine.md,
+28.10.2026). argv: `--policy /m/in/harness/gemini/policies --include-directories /m/in/harness` (инструкциите на профила
+стават единственият контекстен файл — `context.fileName: ["instructions.md"]` в настройките на образа; GEMINI.md на
+репото не се чете [НП: с истински модел]). path:write и net остават на харнеса (D4, вратата); MCP, hooks, скилове и
+подагенти са „unsupported“ и се изброяват. RULES: bash за gemini е вече native.
+Тестове: profile compile.test.ts.
+Статус: решено.
+
+## D-430 Docker тест: истинският Gemini CLI с фалшив Gemini endpoint (28.10.2026)
+Решение: apps/worker/src/gemini.docker.test.ts — задача с агент `gemini` минава през daemon → routeOf → истинския Gemini
+CLI 0.65.0 в пясъчника → вратата → тестово прокси, заредено (boot) със записаната връзка „Google Gemini“ и фалшив ключ →
+stub-а (`/v1beta/models/<m>:{streamGenerateContent,generateContent,countTokens}`: първият ход иска `run_shell_command`
+със sed, който поправя прага; след резултата — текст). Задачата завършва с VERIFIED; дневникът на проксито показва
+provider gemini и upstream gemini, без ключа; транскриптът няма ключа. Втори случай: одобрен профил → target gemini,
+CLI-ят приема `--policy` и `--include-directories`, без предупреждения. За теста проксито приема http upstream към име на
+контейнер само с `MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM=1` (тестов флаг, както за E0 upstream-ите).
+Живият тест (истински ключ) остава SKIPPED (gemini.test.ts, D-423) до Симо — чеклист 34.
+Статус: решено.
+
+## D-431 Настройките на Gemini CLI са само в образа: CLI-ят пропуска файл под /m (28.10.2026)
+Наблюдение (Docker тестът, D-430): с `GEMINI_CLI_SYSTEM_SETTINGS_PATH=/m/in/harness/gemini/settings.json` Gemini CLI
+пише „Skipping system settings file … Parent directory '/m' is insecure: … not owned by root“ и пада на auth `gateway` →
+„Invalid auth method selected.“, exit 41 (потвърждава [НП] от D-423). /m е на агента (uid 1000) по дизайн.
+Решение: компилаторът не пише settings.json и не задава пътя; пълните настройки (вкл. `hooksConfig.enabled: false` и
+`context.fileName`) са в root-собствения `/etc/gemini-cli/settings.json` на образа — те не зависят от профила. Профилът
+носи само policies и флаговете. Docker тестът проверява, че stderr на агента няма „insecure“/„Skipping“.
+Статус: решено.
+
+## D-440 Ключът за Exa в „Ключове“: запечатан, само в проксито (28.10.2026)
+Решение: в „Ключове“ има раздел „Търсене за ресърча (Exa)“ с поле за ключа. Пътят е същият като на ключовете за модели
+(D-293, D-345): уебът → `POST /api/keys/research` (само с `keys.manage`, CSRF) → контролният адрес на `mandat local`
+(`/keys/research`, 127.0.0.1 + bearer) → `setSearchKey` запечатва ключа като `research:exa` в keys.sealed.json (KEK,
+E7в) → проксито се пуска наново и го взима от склада в boot payload-а (`{"search":{"exa":…}}`, D-411). `EXA_API_KEY` в
+средата вече не е нужен (остава като еднократен вход за `proxy start`). Само ключът за Exa стига, за да тръгне проксито
+(ресърч с абонамент + Exa). `MANDAT_PROXY_PROVIDERS` назовава `exa` (име, никога стойност); страницата показва „Готов“.
+Махане: ключът се трие от склада и проксито се пуска без него (или спира, ако не остане ключ). Ключът не се връща в
+отговор, не се пише в лог, не е в env или argv на контейнер.
+Тестове: local-control.test.ts, proxy-keys.test.ts (cli), keys.test.ts (web).
+Статус: решено.
+
+## D-441 Ресърчът в пясъчника: вграденият сървър `research` в собствен сайдкар зад вратата (28.10.2026)
+Решение: агентът в пясъчника ползва research_* през същия път като всеки MCP сървър от E8д: `http://egress-gate/mcp/research`
+(маршрут на вратата с бюджет в минута) → бриджът на E8д (stdio → streamable HTTP, заключен хеш на инструментите) в сайдкар с
+роля `mcp` (същото hardening, 1000:1000, без volume, без тайни, без /m/work, без LLM ключ). Сървърът не се тегли от npm:
+образът на пясъчника го носи (`/opt/mandat/research-mcp`, `pnpm deploy` до бриджа), затова research-mcp вече не зависи от
+worker-а (pg направо). В профила той е ред в слой E: `RESEARCH_MCP_REF` (contract; `@mandat/research-mcp@0.1.0`,
+`tools_hash` заключен — pin.test.ts го сверява със самия сървър; друг хеш → блок `mcp_definition_changed`). Ресърчът чете
+публичния уеб, затова само този сайдкар тръгва на `mandat-upstream` (buildRunArgs го позволява само на роля mcp с име
+`mandat-mcp-<run>-research`; на агента и на сървърите от каталога — отказ) и после влиза във вътрешната MCP мрежа на рън-а,
+където го стига вратата. Агентът няма друг изход освен вратата. В сайдкара: собственото търсене (SearXNG
+`http://mandat-searxng:8080` + отворените API, `--providers` стеснява списъка) и HTTP стълбата със SSRF проверките (D-405);
+без браузърно ниво (няма Docker в сайдкара), без Exa и Anthropic търсене (няма токен), research_ask/recall казват, че искат
+работника (няма база). Рискът: текстът на заявките стига до търсачките (канал навън, извън вратата) — затова сървърът е
+по избор в профила (не се добавя сам) и вратата брои повикванията. Отворено: Q-080, Q-081, Q-082.
+Тестове: mcp-role.test.ts (sandbox), pin.test.ts (research-mcp), research-schemas.test.ts (contract),
+research-sidecar.docker.test.ts (worker: инструментите през вратата, търсене в локален SearXNG фикстур, частен адрес и
+измислен URL — отказ, VERIFIED).
+Статус: решено от кодера; Симо може да го обърне (Q-080, Q-081).
+
+## D-442 Браузърното ниво с UI образа, проверено срещу локална страница (28.10.2026)
+Решение: стълбата за четене вече ползва UI образа (`pnpm mandat images build --ui`, Playwright 1.63.0) в работника, когато
+образът е там (`browserRenderer`, D-405). За Docker теста `buildRenderArgs` има режим с фикстури: `--network none`, папка
+само за четене в `/opt/mandat/ui/fixtures`, `MANDAT_RENDER_FIXTURES`; render.mjs отговаря на всяка заявка на страницата от
+`<папка>/<хост>/<път>` (`fixtureFile`: нищо извън папката), иначе 404. Hardening флаговете са същите (SANDBOX_HARDENING).
+Тестът: HTTP дава само JS обвивката → „thin“ → истински Chromium пуска скрипта (той тегли /data.json от същия произход) →
+текстът е от браузъра (`tier: browser`). Без външна мрежа. Под натоварен Colima първото пускане на Chromium отнема до ~2 мин;
+тестът дава 90 s на страница (по подразбиране в работника остават 20 s + 25 s).
+Тестове: browser.test.ts, browser.docker.test.ts (нов проект `research` във vitest.docker.config.ts).
+Статус: решено.
+
+## D-443 Кешът на Turborepo пази и `.next` на уеба (29.10.2026)
+Решение: `apps/web/turbo.json` (по образеца на `apps/site/turbo.json`, D-371) разширява главния `turbo.json` с изходи
+`.next/**` без `.next/cache/**` и с входове src/**, public/**, next.config.ts, postcss.config.mjs, tsconfig.json, package.json.
+Защо: при попадение в кеша turbo връща само обявените изходи, а главната задача обявява само `dist/**`. След сливането на
+E9в уебът беше построен в друг worktree със същите входове; `pnpm build` тук отчете „cached“, но `.next` остана отпреди
+сливането и `pnpm local` показа стария интерфейс без Gemini. Главният `turbo.json` не е пипан, защото влиза в хеша на
+таговете на образите (D-078) и би ги сменил.
+Тестове: scripts/turbo-outputs.test.ts.
+Статус: решено.
+
+## D-444 Загубена връзка с базата не спира worker-а (30.10.2026)
+Една изтекла връзка събаряше целия `pnpm local`: цикълът на ефектите отхвърляше обещание, което никой не чака, а `pg`
+изпраща `error` за умряла връзка и без слушател това спира процеса. Сега пулът и заетите връзки имат слушател, а
+`workerSlots` чака следващия цикъл при загубена връзка и пише по един ред при загуба и при връщане.
+Само грешките за връзка се преживяват (`isDbConnectionError`): SQL грешка или бъг си остават видими, а `--once` ги връща на
+извикващия. Задача, която е вървяла по време на прекъсването, не е част от тази поправка.
+Тестове: apps/worker/src/online/db.test.ts, packages/cli/src/worker-slots.test.ts.
+Статус: решено.
+
+## D-445 Списъкът с входовете не трупа контейнери (30.10.2026)
+Началната страница и „Модели“ при всяко зареждане питат за входовете в абонамент, а това пуска по един контейнер
+`claude auth status` за всеки вход. При бавна машина заявките се застъпват: видяхме 14 контейнера наведнъж, натоварване 55 във
+виртуалната машина на Docker, уебът спря да отговаря, а връзките към базата изтичаха. Сега едновременните заявки чакат една и
+съща проверка (`sharedWhileRunning`). Кеш с време нарочно няма: след вход или изход страницата трябва да покаже новото веднага.
+Тестове: packages/cli/src/accounts.test.ts.
+Статус: решено.
+
+## D-446 Какво прави задачата в момента: фази и проблеми на доставчика в потока (02.11.2026)
+Решение: докато задачата тече, интерфейсът винаги казва какво става, на прост език (bg/en). Работникът отчита два нови вида
+редове в `session_lines`: `phase` (затворен списък `RunPhase`: provision, install, agent, export, verify, verdict) и
+`provider` (затворен списък `ProviderProblem`: overloaded, rate_limited, timed_out, key_rejected, unknown, с опита: `overloaded 4/10`).
+Уебът превежда само кодовете към фиксиран текст (`phaseLine`, `noticeLine`); известието изчезва при отговор на модела или нова фаза.
+Защо `session_lines` с нови видове: четат се и от viewer (`task_activities` е approver+), вече стигат до браузъра през SSE с курсор,
+редът им спрямо редовете на агента е даден от `seq`. Отделен вид, не `step` с префикс: адаптерите излъчват само старите видове,
+така агент с текст „verify“ или „overloaded 4/10“ не може да се представи за фаза или за известие. Цена: една миграция за CHECK ограничението.
+Състоянието остава RUNNING: сменяне на състоянията би минало през board_column, TONES и потока на статусите без нужда, а фазата се вижда и така. Значката в задачата е „Running“, не „Agent working“: иначе лъже по време на подготовка и проверка.
+Сесията на водача вече се създава при първата фаза, не при първия ред на агента (иначе няма къде да се запише provision).
+Сурови думи от stderr не стигат нито до базата, нито до екрана: `providerNotice` на адаптера връща само код и номер на опит, тестът го проверява с белязан низ в stderr. Самият `agent-stderr.txt` остава в директорията на изпълнението, както досега.
+Форматът е по адаптер (`AgentAdapter.providerNotice`, незадължително). Само Gemini го има; Claude и Codex нямат познат формат от stderr и затова просто не дават известие, не се преструваме. Несходен ред = без известие; разпознат опит с непозната причина = `unknown`.
+Източник за формата на Gemini CLI 0.65.0: реалното изпълнение r_01M6DNMT6P4ZVBWX622FMVMSK5, 02.11.2026 (fixtures/gemini-stderr/retries.txt с маскирани съобщения).
+[НП] 10 опита като твърда граница на CLI-я: толкова направи това изпълнение; кодът на CLI-я не е четен. Спайк: прочети `maxAttempts` в gemini-cli при следващото вдигане на версия. Ако е грешно, „опит 4 от 10“ лъже само в знаменателя.
+Алтернативи: `task_activities` (viewer не вижда), нови състояния PROVISIONING/EXPORTING (шире промяна, не дава повече), тълкуване на stderr в браузъра (сурови думи в базата, забранено).
+Тестове: run-status.test.ts, provider-notice.test.ts, run.test.ts, stream-to-workbench.test.ts, chat.test.ts, status.test.ts. Статус: решено.
+
+## D-447 Без проверка, когато няма какво да се провери (02.11.2026)
+Решение: ако износът има 0 променени файла и договорът няма `must_pass`, дърветата за проверка не се пускат (`nothingToCheck` в packages/core, чиста функция). Записва се честно: EXPORT unknown с подпис `EXPORT:empty_change:-`, данни `{files: 0, verification: "skipped"}`, резултат UNKNOWN, D1–D11 n/a, изход 10. Никога VERIFIED.
+Защо: задача „hi“ чака 143 s пълна проверка на непроменен код и накрая получава VERIFIED за нищо; това е и загуба на време, и лъжа за това какво е проверено.
+Защо така, не с нов режим или поле на присъдата: подписът `EXPORT:empty_change:-` вече съществува и значи точно това (verify-change.ts, D-288, explain.ts дава текста), mandat verify го ползва. `VerifyMode` описва откъде идва промяната, не дали е проверена. Нов резултат би пипнал `decideVerdict`, стълбата и доставката, без да казва нещо повече. CANARY и INTEGRITY продължават да вървят (нямат нужда от дървета): canary в бележките на празна промяна пак е FAILED.
+Правилото е само от факти: броят файлове идва от износа, `must_pass` е запечатан в договора преди агента. Думите на агента, изходът му и резултатът му нямат вход във функцията (агентът не може да се измъкне от съдията с приказки). Изтрит файл е променен файл; всяка промяна минава пълната проверка, каквото и да каже агентът и както и да е излязъл (тестове в run.test.ts).
+Отклонение от заръката „0 файла → без дървета“: изключение при непразен `must_pass`. Причина: сценарий B12 (`b12-empty`, bench/scenarios.ts) и тестът „edge: no-op“ очакват FAILED `MUST_PASS:not_passed` за празна промяна. Договор, който изисква тест, трябва да получи отговор, иначе агент, който не прави нищо, ще е UNKNOWN вместо FAILED: това отслабва съдията. Сценарият не е променен. Онлайн `contractForTask` дава `must_pass: []`, затова случаят „hi“ се покрива изцяло. Всички договори в contracts/ имат `must_pass`, така че bench и redteam вървят както преди. Дали B12 да остане така е решение на Симо.
+Демонът: `onlyEmpty` (само EXPORT:empty_change или старото VERIFIED с 0 файла) → HELD empty_change, както D-288, със записан резултат и причини в `task_stopped`. Празна промяна с друг отворен въпрос (напр. AGENT:config_change) минава обичайния път с причините си.
+Тестове: nothing-to-check.test.ts, run.test.ts (D-447), daemon.test.ts (D-447). Статус: решено; B12 чака преглед.
+
+## D-448 Честен край: истинската причина, а отговорът е резултат (02.11.2026)
+Решение: задача без промяна завършва според това, което работникът е видял от агента (`AgentEnding`: изход, грешка в резултата, текст към човека, последен проблем с доставчика), никога според твърденията му:
+- грешка или ненулев изход → HELD `agent_failed:<код>`; кодът е истинската причина (ProviderProblem; 429 от проксито значи rate_limited, иначе unknown). Показва се на прост език, например „Google беше претоварен и не отговори…“. Известие web_push „failed“. Повторно пускане има. Агент, който отговори и после падна, пак е провал.
+- успех и текст → CLOSED `answered`, `outcome_decided`, без предупреждение, без доставка, без стълба. Отговорът се показва отгоре, под него „Няма променени файлове.“ (факт, не провал).
+- успех без текст → HELD `empty_change`, както D-288; текстът вече казва и че агентът не е казал нищо.
+Промяна + каквото и да е приказване минава съда и доставката както винаги (тест „talking changes nothing“).
+Защо CLOSED, не HELD, за отговор: HELD значи „чака човек“ и задачата влиза във „Чакат те“; при отговор на „hi“ нищо не чака. Има прецедент: CLOSED с `wait_reason` „rejected“ и „expired“. Защо `wait_reason` с код, не ново състояние или колона: прецедент `infra:<код>`, няма миграция и няма нов преход. Без присъда в таблицата `verdicts`: нищо не е съдено; `task_stopped` пази резултата и причините (D-447).
+Защо „нова задача с друг модел“: повторното пускане пази модела; смяна на модела при повторение няма, а изборът съществува само при нова задача. Текстът казва това, което наистина може да се направи.
+Известно ограничение: агент, помолен да поправи бъг, който каже „готово“ без промяна, също завършва `answered`. Не се доставя нищо, а „Няма променени файлове.“ стои под отговора; разликата „въпрос“ / „задача“ не може да се реши от факти.
+Тестове: daemon.test.ts (D-448), status.test.ts, chat.test.ts, keys.test.ts. Статус: решено.
+
+## D-449 Проксито и вратата спират да чакат, когато клиентът си отиде; `duration_ms` в дневника (02.11.2026)
+Решение: при прекъсване от клиента llm-proxy прекъсва заявката си към доставчика (и към търсачката, D-411), а egress-gate прекъсва препращането си. В дневника на проксито всяка заявка има `duration_ms` (без тела); прекъснатата има `aborted: true`.
+Защо: Gemini CLI се отказва от заявка след 60 s без заглавки и пробва пак, а проксито продължаваше да чете: 3 закъснели отговора за ~$0.05, които никой не прочете. Веригата е CLI → врата → прокси → доставчик, затова спират и двете звена; вратата сама не би спряла проксито.
+Какво се записва при прекъсване: само видяното. Преди отговор: статус 499 (без отговор от доставчика, 499 е обичайният код за „клиентът затвори“), 0 токена, $0. По време на поток: истинският статус и последната видяна употреба, оценена по цената. Не допълваме числа: ако доставчикът все пак таксува прекъсната заявка, това не се вижда тук. Ред с `aborted` не брои към no_tools (отговорът не е цял, D-422). 401/403/429 вървят както досега, защото статусът е истински. Прекъсната заявка се брои в `requests`.
+Търсенето: прекъснато търсене излиза със статус 0 и $0, по същото правило за цена като недостъпен доставчик.
+Вратата пише ред `allow` със статус 499 и видяните байтове; иначе прекъснатото препращане нямаше да остави следа. Кешираното изтегляне на npm .tgz остава незасегнато: то пише във файл и няма защо да спира.
+Тестове: proxy-abort.test.ts (бавен доставчик: мълчи, половин поток, цял отговор), gate.test.ts (D-449). Статус: решено.
+
+## D-450 Цената на задачата е това, което проксито е записало, при всеки край (02.11.2026)
+Решение: `tasks.usd` (и събитието към таблото) се записва от `v.usage.usd` при всеки край с присъда, не само по пътя на доставката: отказан ключ, искане за инструмент, празна промяна, провал на агента и отговор вече я пишат.
+Защо стоеше на 0: присъдата носеше $0.0504 (9 заявки в r_01M6DNMT6P4ZVBWX622FMVMSK5), проксито я беше отчело вярно. Но `usd` се четеше чак след клона `empty_change` и той правеше `setState` без нея; същото важеше и за `key_rejected` и `tool_approval`. Парите са изхарчени и при провал, затова показваме и тях.
+Отговори, които клиентът е изхвърлил, влизат само доколкото проксито ги е видяло (D-449): числа не се измислят.
+Известно, непроменено: при нов опит (retry, rebase, изчакване на лимит) `tasks.usd` се презаписва с цената на последното изпълнение, а не се събира. Заявката е за цената на изпълнението; сумирането е отделно решение.
+Тестове: daemon.test.ts (D-450), run.test.ts. Статус: решено.

@@ -2,9 +2,11 @@ export { adminBearer, mintTaskToken, tokenPrefix8, verifyTaskToken } from "./tok
 export type { TokenClaims } from "./token.js";
 export { ALLOWED_MODELS, ESTIMATE, costUsd, costUsdFlat, costUsdOpenAi } from "./pricing.js";
 export type { FlatRate, OpenAiRate, ResponsesUsage, Usage } from "./pricing.js";
-export { SseResponsesUsage, SseUsage, responsesUsageOf } from "./sse-usage.js";
+export { SseGeminiUsage, SseResponsesUsage, SseUsage, geminiToolUse, geminiUsageOf, repliedWithTool, responsesUsageOf } from "./sse-usage.js";
 export { createProxyServer, limitOf, PROXY_VERSION } from "./server.js";
-export { ProxyState } from "./state.js";
+export { NO_TOOLS_LIMIT, ProxyState } from "./state.js";
+export { localUpstreamsFromEnv } from "./local-upstream.js";
+export type { LocalUpstream } from "./local-upstream.js";
 export type { Limit, TaskUsage, RequestLine } from "./state.js";
 export { BOOT_TTL_MS, BootGate, bootTokenHash, mintBootToken } from "./boot.js";
 export type { BootOptions } from "./boot.js";

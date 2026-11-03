@@ -70,6 +70,24 @@ describe("connections: ids, models, addresses (D-392)", () => {
   });
 });
 
+// D-427: Google Gemini with an API key — Gemini CLI, the Gemini API wire, the key in x-goog-api-key (through the proxy)
+describe("Google Gemini provider (D-427)", () => {
+  it("api_key, agent gemini, wire gemini; models with prices; the key page is Google AI Studio", () => {
+    expect(PROVIDERS.gemini).toMatchObject({ id: "gemini", label: "Google Gemini", kind: "api_key", agent: "gemini", wire: "gemini", baseUrl: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key", keyPage: "https://aistudio.google.com/apikey" });
+    expect(PROVIDERS.gemini.models.map((m) => [m.id, m.tier])).toEqual([["gemini-3.8-flash", "balanced"], ["gemini-4-argon", "best"], ["gemini-3.5-flash-lite", "fast"]]);
+    expect(PROVIDERS.gemini.models.find((m) => m.recommended)?.id).toBe("gemini-3.8-flash");
+    expect(priceOf("gemini", "gemini-4-argon")).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite: 4 });
+  });
+  it("gemini and gemini+<connection> parse; a Google login (gemini@…) does not (Q-073)", () => {
+    for (const s of ["gemini", "gemini+gemini", "gemini+rabota"]) expect(formatAgentRef(parseAgentRef(s)!)).toBe(s);
+    expect(parseAgentRef("gemini@lichno")).toBeNull();
+    expect(agentOf("gemini+rabota")).toBe("gemini");
+    expect(AddConnectionBody.safeParse({ provider: "gemini", key: KEY, models: ["gemini-3.8-flash"] }).success).toBe(true);
+    expect(AddConnectionBody.safeParse({ provider: "gemini", models: ["gemini-3.8-flash"] }).success).toBe(false);
+    expect(ProxyUpstream.safeParse({ wire: "gemini", url: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key", key: KEY, models: ["gemini-3.8-flash"], prices: {} }).success).toBe(true);
+  });
+});
+
 describe("agent refs (D-392)", () => {
   it("parse and format round-trip every form", () => {
     for (const s of ["claude", "codex", "claude@lichno", "codex@rabota", "claude+deepseek", "codex+openrouter", "fake:honest-fix", "fake-codex:delete-test"]) {
@@ -77,7 +95,7 @@ describe("agent refs (D-392)", () => {
       expect(r).not.toBeNull();
       expect(formatAgentRef(r!)).toBe(s);
     }
-    for (const bad of ["", "gemini", "claude@", "claude+", "claude@A", "claude+x+y", "codex@a b"]) expect(parseAgentRef(bad)).toBeNull();
+    for (const bad of ["", "gemin", "claude@", "claude+", "claude@A", "claude+x+y", "codex@a b"]) expect(parseAgentRef(bad)).toBeNull();
   });
   it("agentOf and connectionLabel: which CLI runs and the channel label the worker resolves", () => {
     expect(agentOf("claude+deepseek")).toBe("claude");

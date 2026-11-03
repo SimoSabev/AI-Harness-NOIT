@@ -117,7 +117,7 @@ export async function retryTask(db: Db, o: { uid: string; taskId: string }): Pro
   if (!t) return err(404, "unknown_task");
   if (!(await canAct(db, o.uid, t.org_id))) return err(403, "not_an_approver");
   // D-293: also after a rejected key / no change / no channel (fix the key, then run again)
-  const retryable = t.state === "BLOCKED" || (t.state === "HELD" && (t.last_result === "UNKNOWN" || ["key_rejected", "empty_change", "no_channel", "base_moved"].includes(t.wait_reason ?? "")));
+  const retryable = t.state === "BLOCKED" || (t.state === "HELD" && (t.last_result === "UNKNOWN" || ["key_rejected", "empty_change", "no_channel", "base_moved"].includes(t.wait_reason ?? "") || t.wait_reason?.startsWith("agent_failed:") === true));
   if (!retryable) return err(409, "not_retryable");
   if (t.attempt >= t.attempts_max) return err(409, "no_attempts_left");
   await asService(db, async (sql) => {

@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { ResearchReport, ResearchRequest } from "@mandat/contract";
-import type { Db } from "@mandat/worker";
-
-type SqlClient = Pick<Db, "query">;
 import type { QueueSide } from "./backend.js";
+
+/** the harness database as the queue needs it (the worker's Db fits; D-441: no worker dependency here) */
+export interface SqlClient { query<T>(text: string, params?: unknown[]): Promise<{ rows: T[] }> }
 
 // E9г (D-412): research_ask / research_recall over the harness database — the same queue the web uses; the worker runs it.
 export function dbQueue(db: SqlClient, org: string): QueueSide {

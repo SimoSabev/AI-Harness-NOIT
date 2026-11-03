@@ -23,6 +23,22 @@ function fakeFetch(answer: (c: Call) => number | Error | { status: number; json:
   return { f, calls };
 }
 
+// D-427: Google Gemini — the list is GET /v1beta/models with x-goog-api-key; Google answers a bad key with 400
+// (API_KEY_INVALID) as well as 401/403 [НП: the exact status in a live check]
+describe("checkKey for Google Gemini (D-427)", () => {
+  const g = { wire: "gemini" as const, base: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key" as const, key: KEY, model: "gemini-3.8-flash" };
+  it("one list call with the key in x-goog-api-key (never in the query); 400/401/403 → bad_key", async () => {
+    const ok = fakeFetch(() => 200);
+    expect(await checkKey(ok.f, g)).toBe("ok");
+    expect(ok.calls).toHaveLength(1);
+    expect(ok.calls[0]).toMatchObject({ url: "https://generativelanguage.googleapis.com/v1beta/models", method: "GET" });
+    expect(ok.calls[0]?.headers["x-goog-api-key"]).toBe(KEY);
+    expect(ok.calls[0]?.url).not.toContain(KEY);
+    for (const s of [400, 401, 403]) expect(await checkKey(fakeFetch(() => s).f, g)).toBe("bad_key");
+    expect(await checkKey(fakeFetch(() => new Error("ECONNREFUSED")).f, g)).toBe("unreachable");
+  });
+});
+
 describe("checkKey (D-393)", () => {
   const ds = { wire: "anthropic" as const, base: "https://api.deepseek.com/anthropic", auth: "x-api-key" as const, key: KEY, model: "deepseek-v4-pro" };
   it("a list call with the key in its header; 401/403 → bad_key; a network error → unreachable", async () => {

@@ -13,7 +13,13 @@ export interface RunUsage {
   limit: Limit | null;
   /** D-293: the provider answered 401/403 — the key was rejected */
   authFailed: boolean;
+  /** D-422: replies in a row without a tool on a local upstream (tools offered) */
+  noToolStreak: number;
+  /** D-422: the streak reached NO_TOOLS_LIMIT — the model does not call tools; the run is refused from now on */
+  noTools: boolean;
 }
+/** D-422 (spec 5.3, AC-3.6): a local model that answers this many times in a row without a tool stops with agent:no_tools. */
+export const NO_TOOLS_LIMIT = 3;
 export interface Limit { retry_after_s: number | null; resets_at: string | null; at: string }
 export interface TaskUsage {
   usd: number;
@@ -25,6 +31,8 @@ export interface TaskUsage {
   budgetStop: boolean;
   limit: Limit | null;
   authFailed: boolean;
+  /** D-422: a local model answered NO_TOOLS_LIMIT times in a row without a tool */
+  noTools: boolean;
 }
 export interface RequestLine {
   kind: "request";
@@ -40,12 +48,21 @@ export interface RequestLine {
   cache_write: number;
   usd: number;
   token_prefix8: string | null;
-  provider?: "anthropic" | "openai";
+  /** D-449: how long the proxy spent on the request */
+  duration_ms?: number;
+  /** D-449: the client disconnected and the upstream request was aborted; the numbers are only what was seen until then */
+  aborted?: true;
+  provider?: "anthropic" | "openai" | "gemini";
   /** D-392: the saved connection the request went to */
   upstream?: string;
   /** D-392: the model has no price; usd is the Sonnet-rate estimate */
   estimated?: true;
   limit?: Omit<Limit, "at">;
+  /** D-422: a local upstream's reply to a request that offered tools — it called one (tool) or not (no_tool) */
+  tool?: true;
+  no_tool?: true;
+  /** D-422: the proxy refused the call itself (not the provider rejecting a key) */
+  refused?: "no_tools";
 }
 export interface RevokeLine {
   kind: "revoke";
@@ -53,7 +70,7 @@ export interface RevokeLine {
   run_id: string;
 }
 
-const empty = (): RunUsage => ({ usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budget: null, limit: null, authFailed: false });
+const empty = (): RunUsage => ({ usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budget: null, limit: null, authFailed: false, noToolStreak: 0, noTools: false });
 
 /** D-116: usage.jsonl is the durable state; it is replayed on start so restarts keep spent and revoked. */
 export class ProxyState {
@@ -95,7 +112,10 @@ export class ProxyState {
     u.cacheReadTokens += j.cache_read;
     u.cacheWriteTokens += j.cache_write;
     u.requests += 1;
-    if (j.status === 401 || j.status === 403) u.authFailed = true;
+    if ((j.status === 401 || j.status === 403) && j.refused === undefined) u.authFailed = true;
+    if (j.tool) u.noToolStreak = 0;
+    if (j.no_tool) u.noToolStreak += 1;
+    if (u.noToolStreak >= NO_TOOLS_LIMIT) u.noTools = true;
     if (j.status === 429) u.limit = { retry_after_s: j.limit?.retry_after_s ?? null, resets_at: j.limit?.resets_at ?? null, at: j.ts };
   }
 
@@ -121,6 +141,7 @@ export class ProxyState {
       budgetStop: u.budget !== null && u.usd >= u.budget,
       limit: u.limit,
       authFailed: u.authFailed,
+      noTools: u.noTools,
     };
   }
 

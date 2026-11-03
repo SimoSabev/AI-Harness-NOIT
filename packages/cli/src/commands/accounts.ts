@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { z } from "zod";
 import { buildProfileArgs, dockerText, ensureUpstreamNetwork, imageTags, profileVolume } from "@mandat/sandbox";
+import { MandatError } from "@mandat/contract";
 import type { CliDeps } from "../deps.js";
 import { printJson } from "../output.js";
 import type { Io } from "../output.js";
@@ -48,6 +49,15 @@ export function parseCodexStatus(stdout: string, exitCode: number): ProfileStatu
 const PREFIX = { claude: "mandat-profile-claude-", codex: "mandat-profile-codex-" } as const;
 
 export interface Account extends ProfileStatus { name: string; agent: string; cli: LoginCli }
+
+/** D-445: calls made while a run is in progress wait for that run. A page render lists the accounts (one container each);
+ * without this, renders on a slow machine pile containers up and starve the database. */
+export function sharedWhileRunning<T>(fn: () => Promise<T>): () => Promise<T> {
+  let running: Promise<T> | null = null;
+  return () => (running ??= fn().finally(() => {
+    running = null;
+  }));
+}
 
 export async function listAccounts(deps: CliDeps): Promise<Account[]> {
   const r = await dockerText(deps.docker, ["volume", "ls", "--filter", "label=mandat.profile=1", "--format", "{{.Name}}"]);
@@ -121,17 +131,28 @@ export function loginDeps(deps: CliDeps): LoginDeps {
 }
 
 /** Interactive: needs the user's terminal (the browser flow prints a URL and asks for the code). */
-export async function loginCommand(io: Io, deps: CliDeps, o: { name: string }): Promise<number> {
-  const p = await prepareProfile(deps, o.name);
+/** D-426: `--agent` of login/logout — the CLI whose own sign-in runs (claude: claude.ai; codex: ChatGPT device code). */
+export function loginCliOf(agent: string | undefined): LoginCli {
+  if (agent === undefined || agent === "claude") return "claude";
+  if (agent === "codex") return "codex";
+  throw new MandatError("E_USAGE", "--agent must be claude or codex");
+}
+
+export async function loginCommand(io: Io, deps: CliDeps, o: { name: string; cli?: LoginCli }): Promise<number> {
+  const cli = o.cli ?? "claude";
+  const p = await prepareProfile(deps, o.name, cli);
   if (!p.ok) {
     if (p.reason === "images_missing") io.stderr(`E_IMAGES_MISSING: ${p.image}; пусни pnpm mandat images build\n`);
     return 3;
   }
-  io.stderr(`Акаунт „${o.name}“: стартирам Claude Code. Отвори адреса, който ще покаже, влез в claude.ai и постави кода тук.\n`);
+  // D-426: Codex signs in with `codex login --device-auth` (a one-time code typed on OpenAI's page), unmodified
+  io.stderr(cli === "codex"
+    ? `Акаунт „${o.name}“: стартирам Codex. Отвори адреса, който ще покаже, влез с ChatGPT и въведи кода там.\n`
+    : `Акаунт „${o.name}“: стартирам Claude Code. Отвори адреса, който ще покаже, влез в claude.ai и постави кода тук.\n`);
   const r = spawnSync("docker", buildProfileArgs("login", { image: p.image, volume: p.volume }), { stdio: "inherit" });
   if (r.status !== 0) return 3;
-  const s = await profileStatus(deps, o.name);
-  io.stdout(s.loggedIn ? `Готово: ${s.email ?? o.name} · ${s.plan ?? "абонамент"} → агент claude@${o.name}\n` : "Входът не завърши.\n");
+  const s = await profileStatus(deps, o.name, cli);
+  io.stdout(s.loggedIn ? `Готово: ${s.email ?? o.name} · ${s.plan ?? "абонамент"} → агент ${cli}@${o.name}\n` : "Входът не завърши.\n");
   return s.loggedIn ? 0 : 3;
 }
 
@@ -143,8 +164,8 @@ export async function logoutProfile(deps: CliDeps, name: string, cli: LoginCli =
   return (await dockerText(deps.docker, ["volume", "rm", vol], 60_000)).exitCode === 0;
 }
 
-export async function logoutCommand(io: Io, deps: CliDeps, o: { name: string }): Promise<number> {
-  const ok = await logoutProfile(deps, o.name);
+export async function logoutCommand(io: Io, deps: CliDeps, o: { name: string; cli?: LoginCli }): Promise<number> {
+  const ok = await logoutProfile(deps, o.name, o.cli ?? "claude");
   io.stdout(ok ? `Акаунт „${o.name}“ е махнат.\n` : `Няма акаунт „${o.name}“.\n`);
   return ok ? 0 : 3;
 }

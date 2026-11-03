@@ -8,19 +8,19 @@ import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, createStreamCtx, hashJcs, parseContract, renderAgentContract, sha256Tag, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
+  MandatError, Verdict, contractForAgent, createStreamCtx, encodeProviderNotice, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, streamEvent, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
 } from "@mandat/contract";
-import type { Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, SecurityEvent, StreamEvent } from "@mandat/contract";
+import type { AgentEnding, Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
-import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startSidecar, stopSidecars } from "./mcp-sidecar.js";
+import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
-import { claudeAdapter, codexAdapter, fakeAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
+import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
-import { buildReasons, canaryCheck, decideVerdict, ev, na } from "@mandat/core";
+import { buildReasons, canaryCheck, decideVerdict, ev, na, nothingToCheck } from "@mandat/core";
 import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha } from "@mandat/export";
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
@@ -47,7 +47,7 @@ export interface RunHooks {
 export interface RunTaskInput {
   home: string;
   contractPath: string;
-  agent: "claude" | "codex" | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
+  agent: "claude" | "codex" | "gemini" | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
   keep: boolean;
   json: boolean;
   docker?: DockerRunner;
@@ -79,6 +79,8 @@ export interface RunTaskInput {
 export interface RunInternals {
   /** E8e tests: a local package archive per MCP server name instead of the npm package */
   mcpTarballs?: Record<string, Buffer>;
+  /** D-441 tests: the research sidecar's argv instead of RESEARCH_ARGS (a local SearXNG fixture, own search only) */
+  researchArgs?: string[];
   repoRoot?: string;
   env?: Record<string, string | undefined>;
   progress?: (line: string) => void;
@@ -110,8 +112,11 @@ export interface RunTaskOutput {
   authFailed?: boolean;
   /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
   asks?: Ask[];
+  /** D-448: how the agent's process ended; absent when no agent ran */
+  agentEnd?: AgentEnding;
   /** why the harness stopped the agent, if it did */
-  stopped?: "timeout" | "budget_stop" | "conflict";
+  /** D-422: no_tools = a local model answered NO_TOOLS_LIMIT times in a row without a tool (spec 5.3, AC-3.6) */
+  stopped?: "timeout" | "budget_stop" | "conflict" | "no_tools";
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -121,7 +126,25 @@ export function looksLikeLoginProblem(line: string): boolean {
   return /not logged in|please run \/login|login expired|oauth token has expired|authentication_error|invalid api key/i.test(line) && !/"type":"assistant"/.test(line);
 }
 
-const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false };
+/** D-446: complete lines out of stderr chunks (a line may come in two); a line too long to be a notice is dropped. */
+const MAX_NOTICE_LINE = 65_536;
+function lineSplitter(onLine: (line: string) => void): { push: (chunk: string) => void; end: () => void } {
+  let rest = "";
+  return {
+    push(chunk) {
+      const parts = (rest + chunk).split("\n");
+      rest = parts.pop() ?? "";
+      for (const l of parts) onLine(l);
+      if (rest.length > MAX_NOTICE_LINE) rest = "";
+    },
+    end() {
+      if (rest !== "") onLine(rest);
+      rest = "";
+    },
+  };
+}
+
+const ZERO_USAGE: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
 /** D-414: fileURLToPath, not URL.pathname ("/C:/…" became "C:\C:\…" on Windows) */
 export const defaultRepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -151,6 +174,8 @@ function adapterFor(agent: string, model: string): AgentAdapter {
   // D-392: the channel's model (a picked Claude model, a subscription's default, a saved connection's model)
   if (agent === "claude") return claudeAdapter({ model, cliVersion: "2.1.302" });
   if (agent === "codex") return codexAdapter({ model, cliVersion: "0.160.1" });
+  // D-428: Gemini CLI through a saved Google Gemini connection (the key only in the proxy)
+  if (agent === "gemini") return geminiAdapter({ model, cliVersion: "0.65.0" });
   if (agent.startsWith("fake-codex:")) {
     const c = agent.slice(11);
     if (!isFakeCodexScenario(c)) throw new MandatError("E_USAGE", `unknown agent: ${agent}`);
@@ -214,6 +239,11 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     // E3в: the same for the OpenAI key (Codex never gets it; only the proxy has it)
     if (process.env.OPENAI_API_KEY !== undefined) delete process.env.OPENAI_API_KEY;
     if (env !== process.env && env.OPENAI_API_KEY !== undefined) delete env.OPENAI_API_KEY;
+    // D-428: and for Google's (Gemini CLI reads GEMINI_API_KEY or GOOGLE_API_KEY; only the proxy has the real one)
+    for (const k of ["GEMINI_API_KEY", "GOOGLE_API_KEY"] as const) {
+      if (process.env[k] !== undefined) delete process.env[k];
+      if (env !== process.env && env[k] !== undefined) delete env[k];
+    }
     // ---- 4: environment
     const host = hostConfig(env);
     const dv = await dockerText(docker, ["version", "--format", "{{.Server.Version}}"]);
@@ -226,7 +256,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
     // D-295: a subscription profile run never touches the proxy
-    if ((i.agent === "claude" || i.agent === "codex") && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
+    if ((i.agent === "claude" || i.agent === "codex" || i.agent === "gemini") && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
     const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
@@ -285,7 +315,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
-    let harness: { target: "claude" | "codex"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
+    let harness: { target: "claude" | "codex" | "gemini"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
     let asks: Ask[] = [];
     let installRoutes: GateRoute[] = [];
     const mcpRoutes: GateRoute[] = [];
@@ -296,7 +326,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     };
     const gateLogs: { tree: string; file: string }[] = [];
     let infraCode: ErrorCode | null = null;
-    let agentStop: "timeout" | "budget_stop" | "conflict" | null = null;
+    let agentStop: "timeout" | "budget_stop" | "conflict" | "no_tools" | null = null;
     const startGate = x.startGate ?? startRunGate;
     const user = x.infraUser ?? (await infraUserFor(docker).catch(() => ({ user: "1000:1000" }))).user;
     const ipv6Sysctl = x.ipv6Sysctl ?? (await probeIpv6(docker, images.sandbox));
@@ -304,10 +334,26 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const gctx = (tree: "agent" | "base" | "a" | "b") => ({ docker, runId, runDir, mandatHome: i.home, home: os.homedir(), tree, gateImage: images.gate, user, extraCa: host.extraCa, ...(x.llmProxyUrl !== undefined ? { llmProxyUrl: x.llmProxyUrl } : {}) });
     let baseDir = "";
 
+    // D-446: the stream of the run: the agent's lines, and the phases and provider problems the worker itself reports
+    const streamCtx = createStreamCtx(runId);
+    const report = (e: StreamInput): void => {
+      try {
+        i.hooks?.onStream?.(streamEvent(streamCtx, e));
+      } catch {
+        // the live view is best effort
+      }
+    };
+    const phase = (p: RunPhase): void => report({ kind: "phase", text: p });
+    let agentRan = false;
+    let agentReplied = false;
+    let agentErrored = false;
+    let agentProblem: ProviderProblem | null = null;
+
     const pm = packageManagerOf(contract.repo_config); // D-301
     let berry = false; // E8и (D-358): yarn.lock with __metadata
     try {
       // ---------- PROVISION (7.4)
+      phase("provision");
       await timed("provision", async () => {
         const clone = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "base" });
         baseDir = clone.dir;
@@ -324,8 +370,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
         // v5 E8а (D-311): the profile's control layer → /m/in/harness (root, read-only for the agent) before the agent
         if (i.profile) {
-          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : "claude";
-          const base = target === "codex" ? "codex" : "claude";
+          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : adapter.id === "gemini" ? "gemini" : "claude";
+          const base = target;
           const granted = i.grantOnce ?? [];
           const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
           // E8e (D-354): skills are materialized only when their text has the hash the profile was approved with
@@ -348,6 +394,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- INSTALL (7.5)
+      phase("install");
       await timed("install", async () => {
         const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm, berry), timeoutMs: 300_000 });
         if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `${pm} install exit ${r.exitCode}`);
@@ -361,6 +408,17 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         const g = gate as RunGate;
         await g.setPolicy("install", [...installRoutes, NPM_PREFIX_ROUTE]);
         for (const ref of refs) {
+          // D-441: the builtin research server comes from the image (nothing to install), in its own sidecar
+          if (isResearchMcp(ref)) {
+            const started = await startResearchSidecar(sctx, { gate: g, ref, ...(x.researchArgs ? { args: x.researchArgs } : {}), perMin: i.mcpBudgets?.[ref.name] ?? 60 });
+            mcpStarted.push(ref.name);
+            if (started.line.event === "blocked") {
+              i.hooks?.onMcpBlocked?.({ name: ref.name, reason: started.line.reason ?? "changed", hash: started.line.hash });
+              sec({ kind: "mcp_definition_changed", severity: "warn", detail: { name: ref.name, reason: started.line.reason ?? "changed" }, source: "worker" });
+              mcpSkipped.push({ rule: `mcp:${ref.name}`, why: `blocked at start: ${started.line.reason ?? "changed"}` });
+            } else mcpRoutes.push(...started.route);
+            continue;
+          }
           if (ref.tools_hash === null) {
             mcpSkipped.push({ rule: `mcp:${ref.name}`, why: "not vetted in the catalog; the agent does not get it" });
             continue;
@@ -385,6 +443,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       });
       if (interrupted) infra("E_INTERRUPTED", "interrupted");
       // ---------- AGENT (7.6)
+      phase("agent");
       await timed("agent", async () => {
         const g = gate as RunGate;
         if (i.applyFiles) {
@@ -408,30 +467,37 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           return;
         }
         try {
-          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret"), provider: i.agent === "codex" || i.agent.startsWith("fake-codex:") ? "openai" : "anthropic" });
+          channel = x.channel ?? channelFor(contract.channel, { proxyAdminUrl: `http://127.0.0.1:${host.proxyAdminPort}`, secretPath: path.join(i.home, "proxy", "secret"), provider: i.agent === "codex" || i.agent.startsWith("fake-codex:") ? "openai" : i.agent === "gemini" ? "gemini" : "anthropic" });
           await g.setPolicy("agent", [...channel.gateRoutes(), ...mcpRoutes], channel.gateTunnels?.());
         } catch (e) {
           infra((e as { code?: ErrorCode }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_CHANNEL_UNSUPPORTED", (e as Error).message);
         }
         const ch = channel as Channel;
         const viaProfile = ch.kind === "cli_profile" && ch.profileName !== undefined;
-        const useProxy = !viaProfile && (i.agent === "claude" || i.agent === "codex" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret"))));
+        const useProxy = !viaProfile && (i.agent === "claude" || i.agent === "codex" || i.agent === "gemini" || (proxyUp && existsSync(path.join(i.home, "proxy", "secret"))));
         if (useProxy) {
           const cred = await ch.issueTaskCredential({ taskId: contract.task_id, runId, attempt: 1, budgetUsd: contract.repo_config.budgets.task_usd, ttlMin: contract.repo_config.budgets.task_minutes + 5 });
           setToken(cred.token);
         } else {
-          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider === "openai" ? { p: "openai" as const } : {}) }));
+          setToken(mintTaskToken(randomBytes(32), { t: contract.task_id, r: runId, a: 1, e: Math.floor(now().getTime() / 1000) + 3600, b: contract.repo_config.budgets.task_usd, n: randomBytes(8).toString("hex"), ...(ch.provider !== "anthropic" ? { p: ch.provider } : {}) }));
         }
         const steerHook = adapter.supportsSteering && adapter.steerLine ? i.hooks?.steer : undefined;
         const launch = adapter.launch(
           { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}), ...(steerHook ? { steer: { sessionId: randomUUID() } } : {}) },
-          viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
+          viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : ch.provider === "gemini" ? { GEMINI_API_KEY: token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );
         let events = 0;
         const denied: string[] = [];
-        const streamCtx = createStreamCtx(runId);
         const onStream = i.hooks?.onStream;
+        agentRan = true;
+        // D-446: only a closed code leaves this function, never the CLI's words (they stay in agent-stderr.txt)
+        const stderrLines = lineSplitter((line) => {
+          const n = adapter.providerNotice?.(line) ?? null;
+          if (!n) return;
+          agentProblem = n.problem;
+          report({ kind: "provider", text: encodeProviderNotice(n) });
+        });
         let loginProblem = false;
         let lastTool = "";
         let pollWarned = false;
@@ -441,7 +507,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           queue = queue.then(fn, fn);
         };
         const agentName = names.agent(runId);
-        const stopAgent = async (why: "timeout" | "budget_stop" | "conflict"): Promise<void> => {
+        const stopAgent = async (why: "timeout" | "budget_stop" | "conflict" | "no_tools"): Promise<void> => {
           if (agentStop) return;
           agentStop = why;
           await dockerText(docker, ["stop", "-t", "30", agentName], 90_000);
@@ -452,6 +518,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 usage = u;
                 i.hooks?.onUsage?.(runId, u.usd);
                 if (u.budgetStop) void stopAgent("budget_stop");
+                else if (u.noTools) void stopAgent("no_tools");
               }, () => {
                 if (!pollWarned) {
                   pollWarned = true;
@@ -487,7 +554,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
             ...(viaProfile && ch.profileName ? { profile: profileVolume(ch.provider === "openai" ? "codex" : "claude", ch.profileName) } : {}),
             env: {
-              phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}),
+              phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : ch.provider === "gemini" ? { tokenName: "GEMINI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}),
               // D-392: a saved connection serves its own model names — Claude Code uses the model for every tier
               ...(ch.provider === "anthropic" && ch.label.startsWith("conn-") ? { model: ch.model } : {}),
             },
@@ -499,6 +566,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               for (const e of adapter.parseLine(line)) {
                 events++;
                 if (e.type === "tool_use") lastTool = e.name;
+                if (e.type === "assistant_text" && e.text.trim() !== "") agentReplied = true;
+                if (e.type === "result" && e.isError) agentErrored = true;
                 if (e.type === "result" && stdin && !stdin.writableEnded) stdin.end();
               }
               if (onStream || harness) {
@@ -523,11 +592,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             onStderr: (c) => {
               const text = c.toString("utf8");
               if (viaProfile && looksLikeLoginProblem(text)) loginProblem = true;
+              stderrLines.push(text);
               enqueue(() => w.text("agent-stderr.txt", text, { append: true, maxBytes: 1048576 }));
             },
           });
           agentExit = agentStop ? null : r.exitCode;
         } finally {
+          stderrLines.end();
           clearTimeout(limit);
           if (poll) clearInterval(poll);
           if (stopPoll) clearInterval(stopPoll);
@@ -538,6 +609,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (useProxy) {
           usage = await ch.usage(runId).catch(() => usage);
           await ch.revokeTaskCredential(runId).catch(() => undefined);
+          // D-422: the agent may have exited on the proxy's no_tools refusal before a poll saw it
+          if (usage.noTools && agentStop === null) agentStop = "no_tools";
         }
         if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
@@ -581,6 +654,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         set(ev("AGENT", "unknown", `agent stopped: ${agentStop}`, {}, { cls: agentStop, id: "-" }));
       } else {
         // ---------- EXPORT (7.7)
+        phase("export");
         let notes = "";
         await timed("export", async () => {
           const stream = new PassThrough();
@@ -646,7 +720,13 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           uiCheck = { paths: uiPaths, devCommand: i.profile?.layers.b.commands.dev ?? null, image: present ? tag : null, routes: i.profile?.layers.g.ui_routes ?? ["/"] };
         }
         const ex = exportResult as ChangesetExport | null;
-        if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
+        // D-447: nothing changed and the contract demands no test → no trees; recorded as not checked, never VERIFIED
+        const skip = ex !== null && nothingToCheck({ changedFiles: ex.files.length, mustPass: contract.must_pass });
+        if (skip) {
+          set(ev("EXPORT", "unknown", "0 file(s) changed; not checked", { files: 0, verification: "skipped" }, { cls: "empty_change", id: "-" }));
+          out("[verify]    skipped: nothing changed, nothing to check");
+        } else if (ex && evd.get("INTEGRITY")?.status === "pass" && evd.get("CANARY")?.status === "pass") {
+          phase("verify");
           await timed("verify", async () => {
             const redactReport = (raw: string | null): string => (raw === null ? "" : raw.includes(canary) || raw.includes(token) ? JSON.stringify({ redacted: true }) : raw);
             try {
@@ -713,6 +793,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
 
     // ---------- VERDICT (7.9)
+    phase("verdict");
     const s = Date.now();
     if (infraCode) {
       aliases.push(`infra:${infraCode.replace(/^E_/, "").toLowerCase()}`);
@@ -763,6 +844,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       ...(usage.authFailed ? { authFailed: true } : {}),
       ...(asks.length > 0 ? { asks } : {}),
       ...(agentStop ? { stopped: agentStop } : {}),
+      ...(agentRan ? { agentEnd: { ok: (agentExit as number | null) === 0 && !agentErrored, replied: agentReplied, cause: agentProblem } } : {}),
     };
   } finally {
     process.off("SIGINT", onSigint);

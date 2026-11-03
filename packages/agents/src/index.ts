@@ -13,3 +13,8 @@ export { codexAdapter } from "./codex/adapter.js";
 export { fakeCodexAdapter } from "./fake/adapter.js";
 export { claudeTool, claudeToStream } from "./claude/to-stream.js";
 export { codexToStream } from "./codex/to-stream.js";
+export { GEMINI_HARNESS_DIR, GEMINI_HOME, GEMINI_LOGIN_SETTINGS, GEMINI_SYSTEM_SETTINGS, buildGeminiArgv } from "./gemini/argv.js";
+export type { GeminiArgvOptions } from "./gemini/argv.js";
+export { geminiClaimedDone, parseGeminiLine } from "./gemini/stream.js";
+export { geminiToStream } from "./gemini/to-stream.js";
+export { geminiAdapter } from "./gemini/adapter.js";

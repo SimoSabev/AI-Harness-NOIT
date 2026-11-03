@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHECK_LABEL, actionsOf, ago, checkLabel, groupOf, groupTitle, outcomeTone, statusOf } from "./status";
+import { CHECK_LABEL, causeLine, noticeLine, phaseLine, actionsOf, ago, checkLabel, groupOf, groupTitle, outcomeTone, statusOf } from "./status";
 
 const t = (o: Partial<Parameters<typeof statusOf>[0]>) => ({ state: "CREATED", last_result: null, wait_reason: null, approval_needed: false, approved_by_human: false, ...o });
 
@@ -19,7 +19,7 @@ describe("status (D-292)", () => {
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED" })).key).toBe("closed");
     expect(statusOf(t({ state: "GATED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
     expect(statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "key_rejected" }))).toMatchObject({ key: "key", label: "Key rejected", tone: "red" });
-    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "key", "stopped", "approved", "applied", "closed", "expired", "ask", "base", "ci"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
+    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "agent", "answered", "key", "stopped", "approved", "applied", "closed", "expired", "ask", "base", "ci"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
   });
   it("D-367: a change that went into main by itself → applied (green, done); approved by a person stays approved", () => {
     const st = statusOf(t({ state: "CLOSED", last_result: "VERIFIED", delivered: "merge" }));
@@ -78,6 +78,7 @@ function stateFor(k: string): Partial<Parameters<typeof statusOf>[0]> {
   const m: Record<string, Partial<Parameters<typeof statusOf>[0]>> = {
     queued: { state: "CREATED" }, running: { state: "RUNNING" }, checking: { state: "VERDICT" },
     review: { state: "HELD", last_result: "VERIFIED", wait_reason: "approval", approval_needed: true }, failed: { state: "BLOCKED", last_result: "FAILED" },
+    agent: { state: "HELD", wait_reason: "agent_failed:overloaded" }, answered: { state: "CLOSED", wait_reason: "answered" },
     unknown: { state: "HELD", last_result: "UNKNOWN" }, key: { state: "HELD", wait_reason: "key_rejected" }, empty: { state: "HELD", last_result: "VERIFIED", wait_reason: "empty_change" },
     stopped: { state: "BLOCKED", wait_reason: "stopped" }, approved: { state: "DELIVERED", last_result: "VERIFIED", approved_by_human: true }, applied: { state: "CLOSED", last_result: "VERIFIED", delivered: "merge" }, closed: { state: "CLOSED" },
     expired: { state: "CLOSED", wait_reason: "expired" },
@@ -107,5 +108,46 @@ describe("waiting on you, the verdict box, the actions (D-386)", () => {
     expect(actionsOf("ci")).toEqual({ decide: false, again: false, note: true, fixCi: true, stop: false });
     for (const k of ["queued", "running", "checking"] as const) expect(actionsOf(k).stop, k).toBe(true);
     for (const k of ["approved", "applied", "closed", "expired", "stopped", "ask"] as const) expect(Object.values(actionsOf(k)).some(Boolean), k).toBe(false);
+  });
+});
+
+describe("live status in plain words (D-446)", () => {
+  it("every phase has a sentence in both languages", () => {
+    for (const p of ["provision", "install", "agent", "export", "verify", "verdict"] as const) for (const lang of ["en", "bg"] as const) expect(phaseLine(p, lang)).not.toContain("ws.phase");
+    expect(phaseLine("install")).toBe("Installing dependencies…");
+    expect(phaseLine("install", "bg")).toBe("Инсталирам зависимостите…");
+  });
+  it("provider problems are fixed text, with the attempt when known", () => {
+    expect(noticeLine({ problem: "overloaded", attempt: 4, max: 10 }, "gemini+gemini")).toBe("Google is overloaded right now, retrying (attempt 4 of 10)");
+    expect(noticeLine({ problem: "overloaded", attempt: 4, max: 10 }, "gemini+gemini", "bg")).toBe("Google е претоварен в момента, опитвам отново (опит 4 от 10)");
+    expect(noticeLine({ problem: "timed_out", attempt: 2, max: null }, "gemini")).toBe("The model is taking too long to answer, retrying (attempt 2)");
+    expect(noticeLine({ problem: "rate_limited", attempt: null, max: null }, "claude+my-connection")).toBe("The model provider is limiting requests right now, retrying");
+    expect(noticeLine({ problem: "overloaded", attempt: 10, max: 10 }, "gemini+x")).toBe("Google did not answer after 10 attempts, stopping");
+  });
+});
+
+describe("an honest ending (D-448)", () => {
+  it("a failed agent waits for the person, in red, and can be run again; no failure wording talks about files", () => {
+    const st = statusOf(t(stateFor("agent")));
+    expect([st.key, st.tone, groupOf(st.key)]).toEqual(["agent", "red", "waiting"]);
+    expect(st.headline).not.toMatch(/did not change a single file/);
+    expect(actionsOf("agent").again).toBe(true);
+    expect(actionsOf("agent").stop).toBe(false);
+  });
+  it("the real cause comes from the code, in both languages", () => {
+    expect(causeLine("agent_failed:overloaded", "gemini+gemini")).toBe("Google was overloaded and did not answer. Try again later, or start a new task with another model.");
+    expect(causeLine("agent_failed:overloaded", "gemini+gemini", "bg")).toContain("Google беше претоварен");
+    expect(causeLine("agent_failed:timed_out", "gemini")).toContain("The model took too long to answer");
+    expect(causeLine("agent_failed:unknown", "claude")).toContain("ended with an error and gave no reply");
+    for (const c of ["overloaded", "rate_limited", "timed_out", "key_rejected", "unknown"]) for (const lang of ["en", "bg"] as const) expect(causeLine(`agent_failed:${c}`, "codex", lang)).not.toContain("provider.end");
+  });
+  it("no cause when there is no failed agent, and a bad code is not shown", () => {
+    for (const w of [null, "empty_change", "agent_failed:raw provider words"]) expect(causeLine(w, "gemini")).toBeNull();
+  });
+  it("a plain reply is done: nothing waits, no failure wording, nothing to run again", () => {
+    const st = statusOf(t(stateFor("answered")));
+    expect([st.key, st.tone, groupOf(st.key)]).toEqual(["answered", "gray", "done"]);
+    expect(st.headline).not.toMatch(/fail|error|did not|could not/i);
+    expect(actionsOf("answered")).toEqual({ decide: false, again: false, note: false, fixCi: false, stop: false });
   });
 });

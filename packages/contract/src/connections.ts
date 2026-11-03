@@ -12,9 +12,10 @@ export type ConnectionId = z.infer<typeof ConnectionId>;
 export const ModelId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,127}$/).refine((m) => !/mdt_|sk-ant-/.test(m), "secret-looking model id");
 export type ModelId = z.infer<typeof ModelId>;
 
-export const Wire = z.enum(["anthropic", "openai"]);
+// D-424: gemini = the Gemini API (/v1beta/models/*, x-goog-api-key) for Gemini CLI
+export const Wire = z.enum(["anthropic", "openai", "gemini"]);
 export type Wire = z.infer<typeof Wire>;
-export const ProviderId = z.enum(["claude-sub", "chatgpt-sub", "anthropic", "openai", "deepseek", "kimi", "zai", "ollama", "lmstudio", "custom"]);
+export const ProviderId = z.enum(["claude-sub", "chatgpt-sub", "anthropic", "openai", "gemini", "deepseek", "kimi", "zai", "ollama", "lmstudio", "custom"]);
 export type ProviderId = z.infer<typeof ProviderId>;
 
 /** USD per million tokens (cacheWrite = the 5-minute write). */
@@ -25,12 +26,12 @@ export interface ProviderInfo {
   /** the product name (never translated) */
   label: string;
   kind: "subscription" | "api_key" | "local";
-  /** the CLI that runs in the sandbox */
-  agent: "claude" | "codex";
+  /** the CLI that runs in the sandbox (D-427: gemini = Gemini CLI) */
+  agent: "claude" | "codex" | "gemini";
   wire: Wire;
   /** null: the person gives the address (custom) or there is none (a subscription goes through its own CONNECT tunnel) */
   baseUrl: string | null;
-  auth: "x-api-key" | "bearer" | "none";
+  auth: "x-api-key" | "bearer" | "x-goog-api-key" | "none";
   /** where the person gets a key (null: no key) */
   keyPage: string | null;
   docs: string;
@@ -55,6 +56,14 @@ export const PROVIDERS: Readonly<Record<ProviderId, ProviderInfo>> = {
   "chatgpt-sub": { id: "chatgpt-sub", label: "ChatGPT", kind: "subscription", agent: "codex", wire: "openai", baseUrl: null, auth: "none", keyPage: null, docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
   anthropic: { id: "anthropic", label: "Anthropic API", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.anthropic.com", auth: "x-api-key", keyPage: "https://platform.claude.com/settings/keys", docs: "https://platform.claude.com/docs/en/about-claude/models", checked: "2026-10-26", live: true, models: CLAUDE },
   openai: { id: "openai", label: "OpenAI API", kind: "api_key", agent: "codex", wire: "openai", baseUrl: "https://api.openai.com", auth: "bearer", keyPage: "https://platform.openai.com/api-keys", docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
+  // D-427: ai.google.dev/gemini-api/docs/models (updated 22.10.2026) and /pricing (read 28.10.2026): the key in
+  // x-goog-api-key, Gemini CLI as the agent. Prices are the ones from 01.12.2026 (argon) / 01.01.2027 (flash) — the higher
+  // ones, so a budget stops early; there is no cache-write fee, so cacheWrite = input. [НП: a live run with these names]
+  gemini: { id: "gemini", label: "Google Gemini", kind: "api_key", agent: "gemini", wire: "gemini", baseUrl: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key", keyPage: "https://aistudio.google.com/apikey", docs: "https://ai.google.dev/gemini-api/docs/api-key", checked: "2026-10-28", live: false, models: [
+    { id: "gemini-3.8-flash", tier: "balanced", recommended: true, price: p(1.5, 7.5, 0.15, 1.5) },
+    { id: "gemini-4-argon", tier: "best", price: p(4, 20, 0.2, 4) },
+    { id: "gemini-3.5-flash-lite", tier: "fast", price: p(0.3, 2.5, 0.03, 0.3) },
+  ] },
   // api-docs.deepseek.com/guides/anthropic_api: x-api-key; names outside the list → 400
   deepseek: { id: "deepseek", label: "DeepSeek", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.deepseek.com/anthropic", auth: "x-api-key", keyPage: "https://platform.deepseek.com/api_keys", docs: "https://api-docs.deepseek.com/guides/anthropic_api", checked: "2026-10-26", live: false, models: [{ id: "deepseek-v4-pro", tier: "best", recommended: true }, { id: "deepseek-flash", tier: "fast" }] },
   // kimi.com/code/docs/en/third-party-tools/claude-code.html: ANTHROPIC_API_KEY (x-api-key), the Kimi Code plan
@@ -166,28 +175,32 @@ export type Preferences = z.infer<typeof Preferences>;
 export const ProxyUpstream = z.object({
   wire: Wire,
   url: z.string().max(300).refine((u) => /^https:\/\/[^/]+|^http:\/\/host\.docker\.internal(:\d+)?(\/|$)/.test(u), "https, or http to this computer"),
-  auth: z.enum(["x-api-key", "bearer", "none"]),
+  auth: z.enum(["x-api-key", "bearer", "x-goog-api-key", "none"]),
   key: z.string().max(512),
   models: Models,
   /** per model; a missing price is estimated at the Sonnet rate (budgets stay meaningful) */
   prices: z.record(z.string(), z.object({ input: z.number().min(0), output: z.number().min(0), cacheRead: z.number().min(0), cacheWrite: z.number().min(0) }).strict()),
+  /** D-422: a model on this computer (Ollama, LM Studio) — the proxy stops it after NO_TOOLS_LIMIT replies without a tool */
+  local: z.boolean().optional(),
 }).strict();
 export type ProxyUpstream = z.infer<typeof ProxyUpstream>;
 
 // ---- agent refs: which CLI runs and how it reaches its model
 // claude | codex (the provider's API key) · claude@<account> | codex@<account> (a subscription) · claude+<connection> |
-// codex+<connection> (a saved connection through the proxy) · fake:<scenario> | fake-codex:<scenario> (demo agents)
+// codex+<connection> (a saved connection through the proxy) · fake:<scenario> | fake-codex:<scenario> (demo agents) ·
+// D-427: gemini (the saved Gemini connection "gemini") | gemini+<connection>; no gemini@<account> (Google login is off, Q-073)
 export type AgentRef =
-  | { cli: "claude" | "codex"; via: { kind: "key" } | { kind: "account"; name: string } | { kind: "connection"; id: string } }
+  | { cli: "claude" | "codex" | "gemini"; via: { kind: "key" } | { kind: "account"; name: string } | { kind: "connection"; id: string } }
   | { cli: "fake" | "fake-codex"; scenario: string };
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export function parseAgentRef(s: string): AgentRef | null {
   const fake = /^(fake|fake-codex):([a-z0-9-]{1,40})$/.exec(s);
   if (fake) return { cli: fake[1] as "fake" | "fake-codex", scenario: fake[2] as string };
-  const m = /^(claude|codex)(?:([@+])(.*))?$/.exec(s);
+  const m = /^(claude|codex|gemini)(?:([@+])(.*))?$/.exec(s);
   if (!m) return null;
-  const cli = m[1] as "claude" | "codex";
+  const cli = m[1] as "claude" | "codex" | "gemini";
+  if (cli === "gemini" && m[2] === "@") return null;
   if (m[2] === undefined) return { cli, via: { kind: "key" } };
   const name = m[3] ?? "";
   if (!NAME.test(name)) return null;
@@ -200,9 +213,9 @@ export function formatAgentRef(r: AgentRef): string {
 }
 export const AgentRefString = z.string().max(64).refine((s) => parseAgentRef(s) !== null, "unknown agent");
 /** The CLI of an agent ref ("claude" for the Claude fakes too). */
-export function agentOf(s: string): "claude" | "codex" | null {
+export function agentOf(s: string): "claude" | "codex" | "gemini" | null {
   const r = parseAgentRef(s);
-  return r === null ? null : r.cli === "codex" || r.cli === "fake-codex" ? "codex" : "claude";
+  return r === null ? null : r.cli === "codex" || r.cli === "fake-codex" ? "codex" : r.cli === "gemini" ? "gemini" : "claude";
 }
 /** The channel label of a saved connection (packages/channels channelFor resolves it to the proxy upstream of that id). */
 export const connectionLabel = (id: string): string => `conn-${id}`;

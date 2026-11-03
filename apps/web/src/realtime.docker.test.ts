@@ -23,6 +23,7 @@ const password = randomBytes(18).toString("base64url");
 const email = (u: string) => `rt-${u.slice(0, 8)}@test.mandat.invalid`;
 let db: pg.Client;
 
+// D-276: without the local Supabase stack the suite is skipped, never counted as passed
 describe.skipIf(!st)("realtime (local Supabase)", () => {
   beforeAll(async () => {
     db = new pg.Client({ connectionString: (st as Status).DB_URL });

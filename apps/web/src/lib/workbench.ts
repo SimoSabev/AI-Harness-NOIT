@@ -63,7 +63,7 @@ export function nightPlan(queue: { text: string; repo: string; risk: string; est
 
 /** E7e: the read-only terminal of the card — one line per stream event (already redacted by the worker), ≤ 50 000. */
 export interface TerminalLine { seq: number; mark: string; text: string }
-const MARK: Record<string, string> = { init: "▶", text: " ", step: "·", tool_call: "$", tool_result: "←", permission: "✕", subagent_start: "┬", subagent_stop: "┴", usage: "Σ", result: "■", unparsed: "?" };
+const MARK: Record<string, string> = { init: "▶", text: " ", step: "·", tool_call: "$", tool_result: "←", permission: "✕", subagent_start: "┬", subagent_stop: "┴", usage: "Σ", phase: "»", provider: "!", result: "■", unparsed: "?" };
 export function terminalLines(rows: { seq: number; kind: string; text: string }[]): TerminalLine[] {
   return rows.slice(0, 50_000).map((r) => ({ seq: r.seq, mark: MARK[r.kind] ?? "?", text: r.text }));
 }

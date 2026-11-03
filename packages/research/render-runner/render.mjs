@@ -5,8 +5,10 @@
 // context). Nothing here tries to pass a bot wall or a CAPTCHA: the page is read as a normal browser shows it.
 // stdin: {"url": "...", "timeoutMs": 20000}  →  stdout: {"finalUrl": "...", "status": 200, "html": "..."}
 import { lookup } from "node:dns/promises";
+import { readFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
+import path from "node:path";
 
 const V4_BLOCK = [[0x00000000, 8], [0x0a000000, 8], [0x64400000, 10], [0x7f000000, 8], [0xa9fe0000, 16], [0xac100000, 12], [0xc0000000, 24], [0xc0000200, 24], [0xc0a80000, 16], [0xc6120000, 15], [0xc6336400, 24], [0xcb007100, 24], [0xe0000000, 4], [0xf0000000, 4]];
 const v4int = (ip) => ip.split(".").reduce((a, p) => (a << 8) + Number(p), 0) >>> 0;
@@ -76,6 +78,29 @@ export function startGuardProxy() {
   return new Promise((ok) => server.listen(0, "127.0.0.1", () => ok(server)));
 }
 
+/**
+ * D-442: fixture mode (MANDAT_RENDER_FIXTURES, the Docker test; the container has no network): a request is answered
+ * from <dir>/<host>/<path> (a folder → index.html); anything that would leave the folder → null.
+ */
+export function fixtureFile(dir, raw) {
+  let u;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  let p;
+  try {
+    p = decodeURIComponent(u.pathname);
+  } catch {
+    return null;
+  }
+  const file = path.resolve(dir, u.hostname, `.${p.endsWith("/") ? `${p}index.html` : p}`);
+  return file.startsWith(path.resolve(dir, u.hostname) + path.sep) ? file : null;
+}
+const TYPES = { ".html": "text/html; charset=utf-8", ".json": "application/json", ".js": "text/javascript", ".css": "text/css", ".txt": "text/plain" };
+
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36 MandatResearch/0.1";
 const MAX_HTML = 5 * 1024 * 1024;
 
@@ -93,7 +118,14 @@ async function main() {
   });
   try {
     const ctx = await browser.newContext({ userAgent: UA, javaScriptEnabled: true, acceptDownloads: false, serviceWorkers: "block", locale: "en-US" });
-    await ctx.route("**/*", (r) => (["image", "font", "media"].includes(r.request().resourceType()) ? r.abort() : r.continue()));
+    const fixtures = process.env.MANDAT_RENDER_FIXTURES;
+    await ctx.route("**/*", async (r) => {
+      if (["image", "font", "media"].includes(r.request().resourceType())) return r.abort();
+      if (!fixtures) return r.continue();
+      const file = fixtureFile(fixtures, r.request().url());
+      const body = file ? await readFile(file).catch(() => null) : null;
+      return body ? r.fulfill({ status: 200, contentType: TYPES[path.extname(file)] ?? "application/octet-stream", body }) : r.fulfill({ status: 404, body: "" });
+    });
     const page = await ctx.newPage();
     const resp = await page.goto(url, { waitUntil: "domcontentloaded", timeout: timeoutMs });
     // let the app render: wait until the text stops growing (≤ 6 s), then scroll once for lazy content

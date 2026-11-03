@@ -19,7 +19,7 @@ import { workerCommand } from "./commands/worker.js";
 import { researchAsk, researchDemo, researchEngine } from "./commands/research.js";
 import { tuiCommand } from "./commands/tui.js";
 import { localCommand } from "./commands/local.js";
-import { accountsCommand, loginCommand, logoutCommand } from "./commands/accounts.js";
+import { accountsCommand, loginCliOf, loginCommand, logoutCommand } from "./commands/accounts.js";
 import { realDeps } from "./deps.js";
 import type { CliDeps } from "./deps.js";
 import { MandatError, exitCodeOf } from "@mandat/contract";
@@ -293,10 +293,11 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
   // D-295: subscription accounts (one profile volume per account)
   program
     .command("login")
-    .description("sign in to a Claude subscription account (Anthropic's own flow, in your terminal)")
+    .description("sign in to a subscription account with the CLI's own flow, in your terminal (Claude: claude.ai; Codex: ChatGPT)")
     .option("--name <name>", "a short name for this account (a-z, 0-9, -)", "default")
-    .action(async (o: { name: string }) => {
-      code = await loginCommand(io, deps(), { name: o.name });
+    .option("--agent <agent>", "claude | codex (D-426)", "claude")
+    .action(async (o: { name: string; agent: string }) => {
+      code = await loginCommand(io, deps(), { name: o.name, cli: loginCliOf(o.agent) });
     });
   program
     .command("accounts")
@@ -309,8 +310,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .command("logout")
     .description("sign out of a subscription account and remove its profile")
     .requiredOption("--name <name>", "the account name")
-    .action(async (o: { name: string }) => {
-      code = await logoutCommand(io, deps(), { name: o.name });
+    .option("--agent <agent>", "claude | codex (D-426)", "claude")
+    .action(async (o: { name: string; agent: string }) => {
+      code = await logoutCommand(io, deps(), { name: o.name, cli: loginCliOf(o.agent) });
     });
   program
     .command("local")

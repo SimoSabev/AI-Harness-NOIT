@@ -104,10 +104,11 @@ export async function startGate(o: GateOptions): Promise<{ close(): Promise<void
 
   const forward = (req: http.IncomingMessage, res: http.ServerResponse, target: URL, method: string, p: string): void => {
     const mod = target.protocol === "https:" ? https : http;
+    let bytes = 0;
+    let clientLeft = false;
     const up = mod.request(target, { method, headers: { ...cleanHeaders(req.headers), host: target.host } }, (ur) => {
       res.writeHead(ur.statusCode ?? 502, cleanResponseHeaders(ur.headers));
       res.flushHeaders();
-      let bytes = 0;
       ur.on("data", (c: Buffer) => {
         bytes += c.length;
       });
@@ -115,7 +116,15 @@ export async function startGate(o: GateOptions): Promise<{ close(): Promise<void
       ur.on("end", () => log({ kind: "allow", method, path: p, status: ur.statusCode ?? 0, bytes }));
     });
     up.setNoDelay(true);
+    // D-449: the client left → the forward stops too (a reply nobody reads is not worth waiting for)
+    res.on("close", () => {
+      if (res.writableFinished) return;
+      clientLeft = true;
+      up.destroy();
+      log({ kind: "allow", method, path: p, status: 499, bytes });
+    });
     up.on("error", () => {
+      if (clientLeft) return;
       if (!res.headersSent) {
         res.writeHead(502, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "mandat_gate_upstream_unreachable" }));

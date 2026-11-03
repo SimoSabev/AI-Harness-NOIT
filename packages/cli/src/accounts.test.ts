@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseClaudeStatus, subscriptionLabel } from "./commands/accounts.js";
+import { parseClaudeStatus, sharedWhileRunning, subscriptionLabel } from "./commands/accounts.js";
 
 // D-295: what `claude auth status --json` tells about a profile (no token is ever read).
 describe("accounts (D-295)", () => {
@@ -74,11 +74,79 @@ describe("accounts commands with a fake docker (D-295)", () => {
   });
 });
 
+// D-426 (spec 5.3): `mandat login --agent codex --name …` — the ChatGPT sign-in from the terminal, its own volume
+describe("login/logout --agent codex (D-426)", () => {
+  const fake = (rules: ((a: string[]) => { exit?: number } | undefined)[], calls: string[][] = []) => ({
+    docker: {
+      run(args: string[]) {
+        calls.push(args);
+        for (const r of rules) {
+          const x = r(args);
+          if (x) return Promise.resolve({ exitCode: x.exit ?? 0, timedOut: false });
+        }
+        return Promise.resolve({ exitCode: 0, timedOut: false });
+      },
+    },
+    healthz: () => Promise.resolve({ ok: true, status: 200 }), procVersion: () => "", toolVersion: () => Promise.resolve("2.47.1"), nodeVersion: "24.22.0", bootProxy: () => Promise.resolve(true),
+  });
+  const io = () => {
+    const o = { out: "", err: "" };
+    return { o, io: { stdout: (s: string) => void (o.out += s), stderr: (s: string) => void (o.err += s), env: {}, cwd: process.cwd() } };
+  };
+  it("logout --agent codex signs out with codex and removes mandat-profile-codex-<name>; login without the image → 3", async () => {
+    const { loginCommand, logoutCommand } = await import("./commands/accounts.js");
+    const calls: string[][] = [];
+    expect(await logoutCommand(io().io, fake([], calls) as never, { name: "rabota", cli: "codex" })).toBe(0);
+    expect(calls.some((c) => c.includes("--entrypoint") && c[c.indexOf("--entrypoint") + 1] === "codex" && c.at(-1) === "logout")).toBe(true);
+    expect(calls.some((c) => c[0] === "volume" && c[1] === "rm" && c[2] === "mandat-profile-codex-rabota")).toBe(true);
+    const c = io();
+    expect(await loginCommand(c.io, fake([(x) => (x[0] === "image" ? { exit: 1 } : undefined)]) as never, { name: "rabota", cli: "codex" })).toBe(3);
+    expect(c.o.err).toContain("E_IMAGES_MISSING");
+  });
+  it("the CLI accepts --agent claude|codex only", async () => {
+    const { loginCliOf } = await import("./commands/accounts.js");
+    expect(loginCliOf("codex")).toBe("codex");
+    expect(loginCliOf(undefined)).toBe("claude");
+    expect(() => loginCliOf("gemini")).toThrow();
+  });
+});
+
 describe("parseCodexStatus (D-393)", () => {
   it("logged in only on exit 0 with the ChatGPT line; never an email", async () => {
     const { parseCodexStatus } = await import("./commands/accounts.js");
     expect(parseCodexStatus("Logged in using ChatGPT\n", 0)).toEqual({ loggedIn: true, email: null, plan: "ChatGPT" });
     expect(parseCodexStatus("Not logged in\n", 1)).toEqual({ loggedIn: false, email: null, plan: null });
     expect(parseCodexStatus("Logged in using an API key - sk-…\n", 0).loggedIn).toBe(false);
+  });
+});
+
+// D-445: a page render lists the accounts, one container per account; renders must not pile containers up
+describe("sharedWhileRunning (D-445)", () => {
+  it("едновременните извиквания чакат една и съща работа; следващото започва наново", async () => {
+    let runs = 0;
+    let finish: (v: number) => void = () => undefined;
+    const shared = sharedWhileRunning(() => {
+      runs++;
+      return new Promise<number>((resolve) => (finish = resolve));
+    });
+    const a = shared();
+    const b = shared();
+    expect(runs).toBe(1);
+    finish(7);
+    expect(await Promise.all([a, b])).toEqual([7, 7]);
+    const c = shared();
+    expect(runs).toBe(2);
+    finish(8);
+    expect(await c).toBe(8);
+  });
+
+  it("след грешка следващото извикване опитва наново", async () => {
+    let runs = 0;
+    const shared = sharedWhileRunning(async () => {
+      if (++runs === 1) throw new Error("docker down");
+      return 1;
+    });
+    await expect(shared()).rejects.toThrow("docker down");
+    await expect(shared()).resolves.toBe(1);
   });
 });

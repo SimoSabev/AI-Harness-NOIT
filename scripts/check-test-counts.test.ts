@@ -73,5 +73,8 @@ describe("check-test-counts (т. 0.3 е)", () => {
   it("decisionFor без location търси по заглавие", () => {
     expect(decisionFor(["// D-265: y", 'it.skipIf(true)("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe("D-265");
     expect(decisionFor(['it("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe(null);
+    // D-423: decisions are in the 4xx range now
+    expect(decisionFor(["// D-423: no key", 'it.skip("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe("D-423");
+    expect(decisionFor(["// D-123: old", 'it.skip("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe(null);
   });
 });

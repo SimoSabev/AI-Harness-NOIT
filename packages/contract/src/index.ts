@@ -14,9 +14,11 @@ export { INSTALL_ARGV, LOCKFILE, bunAllowlist, installCommand, isBerryLock, lock
 export type { LockAllowlistResult, PackageManager } from "./lockfiles.js";
 export * from "./workbench.js";
 export * from "./agent-stream.js";
+export * from "./run-status.js";
 export * from "./profile.js";
 export * from "./roles.js";
 export * from "./research.js";
+export * from "./research-mcp.js";
 export { demoProfileLayers } from "./profile.fixture.js";
 export * from "./research-golden.js";
 export * from "./research-run.js";
@@ -26,3 +28,4 @@ export * from "./desktop.js";
 export * from "./site.js";
 export * from "./connections.js";
 export * from "./memory.js";
+export * from "./routing.js";

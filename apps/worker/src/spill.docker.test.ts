@@ -41,7 +41,9 @@ beforeAll(async () => {
     MANDAT_PROXY_SECRET_FILE: "/var/lib/mandat-proxy/secret", MANDAT_UPSTREAM_ANTHROPIC: `http://${stub}:9000`, MANDAT_UPSTREAM_OPENAI: `http://${stub}:9000`,
     MANDAT_PROXY_ALLOW_INSECURE_UPSTREAM: "1", MANDAT_PROXY_OPENAI_PRICES: JSON.stringify({ "gpt-5-codex": { input: 1.25, cached_input: 0.125, output: 10 } }),
   };
-  expect((await dockerText(env.docker, buildProxyRunArgs({ ...common, name: proxy, publishAdminPort: port, publicEnv }))).exitCode).toBe(0);
+  // D-392: a proxy without keys answers provider_not_configured; the stub gets placeholder keys by name, never in argv
+  const keyed = buildProxyRunArgs({ ...common, name: proxy, publishAdminPort: port, publicEnv, envNames: ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] });
+  expect((await env.docker.run(keyed, { env: { ANTHROPIC_API_KEY: "stub-key", OPENAI_API_KEY: "stub-key" }, stdin: "closed", timeoutMs: 60_000 })).exitCode).toBe(0);
   for (let i = 0; i < 50; i++) {
     const ok = await fetch(`http://127.0.0.1:${port}/healthz`).then((r) => r.ok).catch(() => false);
     if (ok) break;

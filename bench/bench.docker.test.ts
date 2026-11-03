@@ -21,5 +21,5 @@ describe("bench (docker)", () => {
     const r = cli("redteam", "--json");
     const j = JSON.parse(r.stdout.trim()) as { pass: number; total: number; rows: { ok: boolean }[] };
     expect([r.status, j.pass, j.total, j.rows.length]).toEqual([0, 10, 10, 14]);
-  });
+  }, 1_800_000); // 10 scenarios take ~10 min on a quiet machine; the 600 s default fails under load
 });

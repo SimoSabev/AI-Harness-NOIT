@@ -5,7 +5,7 @@ import type { CompileTarget } from "@mandat/contract";
 export type Support = "native" | "harness" | "unsupported";
 export type RuleKind = "bash" | "path:write" | "path:read" | "mcp" | "net" | "skill" | "builtin" | "mandat" | "hooks" | "subagents" | "mcp_servers" | "skills" | "instructions";
 export const RULES: Record<RuleKind, Record<CompileTarget, Support>> = {
-  bash: { claude: "native", codex: "native", gemini: "harness", local: "harness" },
+  bash: { claude: "native", codex: "native", gemini: "native", local: "harness" },
   "path:write": { claude: "native", codex: "harness", gemini: "harness", local: "harness" },
   "path:read": { claude: "native", codex: "unsupported", gemini: "unsupported", local: "unsupported" },
   mcp: { claude: "native", codex: "native", gemini: "unsupported", local: "unsupported" },

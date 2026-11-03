@@ -2,7 +2,7 @@ import { z } from "zod";
 import { RelPath, redactSummary, redactText } from "./workbench.js";
 
 // v5 2.1 / D-310: one stream for every agent adapter. Leader: session = run id; a subagent: run id + ":" + child id.
-export const StreamEventKind = z.enum(["init", "text", "step", "tool_call", "tool_result", "permission", "subagent_start", "subagent_stop", "usage", "result", "unparsed"]);
+export const StreamEventKind = z.enum(["init", "text", "step", "tool_call", "tool_result", "permission", "subagent_start", "subagent_stop", "usage", "result", "unparsed", "phase", "provider"]);
 export type StreamEventKind = z.infer<typeof StreamEventKind>;
 export const StreamToolKind = z.enum(["mcp", "skill", "builtin", "bash", "mandat"]);
 export const StreamTool = z

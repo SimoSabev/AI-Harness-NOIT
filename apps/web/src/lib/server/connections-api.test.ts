@@ -14,7 +14,7 @@ const KEY = ["sk", "ds", "k".repeat(40)].join("-");
 const REJECTED = ["sk", "rejected", "0123456789abc"].join("-"); // D-095: key-looking values are built at runtime
 const conn = { id: "deepseek", provider: "deepseek" as const, label: "DeepSeek", baseUrl: "https://api.deepseek.com/anthropic", models: ["deepseek-v4-pro"], defaultModel: "deepseek-v4-pro", hasKey: true };
 const fake = {
-  status: async () => ({ proxy: "running" as const, providers: [] }), set: async () => null, clear: async () => ({ proxy: "stopped" as const, providers: [] }), accounts: async () => [],
+  status: async () => ({ proxy: "running" as const, providers: [] }), set: async () => null, clear: async () => ({ proxy: "stopped" as const, providers: [] }), setResearch: async () => null, clearResearch: async () => null, accounts: async () => [],
   login: async (op: unknown) => (calls.push(op), { ok: true as const, state: { state: "starting" as const, name: "rabota" } }),
   logout: async () => true, jobs: async () => [], runJob: async () => null, addProject: async () => null,
   connections: async () => ({ connections: [conn], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }),
@@ -50,7 +50,7 @@ describe("API /api/connections (D-393)", () => {
     expect(await (await deleteConnection(req("DELETE"), deps(fake), "deepseek")).json()).toEqual({ removed: true });
     expect((await (await getDetect(req("GET"), deps(fake))).json()).local[0].provider).toBe("ollama");
     expect((await putPreferences(req("PUT", { defaultAgent: "claude+deepseek", defaultModel: "deepseek-v4-pro", onboarded: true }), deps(fake))).status).toBe(200);
-    expect((await putPreferences(req("PUT", { defaultAgent: "gemini" }), deps(fake))).status).toBe(400);
+    expect((await putPreferences(req("PUT", { defaultAgent: "gemini@lichno" }), deps(fake))).status).toBe(400); // D-427: gemini is an agent now; a Google login is not (Q-073)
     expect((await postLogin(req("POST", { name: "rabota", cli: "codex" }), deps(fake))).status).toBe(200);
     expect(calls).toContainEqual({ kind: "start", name: "rabota", cli: "codex" });
   });

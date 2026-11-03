@@ -1,5 +1,5 @@
 import { frameUntrusted } from "@mandat/contract";
-import type { StreamCtx, StreamEvent } from "@mandat/contract";
+import type { ProviderNotice, StreamCtx, StreamEvent } from "@mandat/contract";
 export interface AgentRunContext {
   runId: string;
   taskId: string;
@@ -22,12 +22,17 @@ export interface AnthropicChannelEnv {
 export interface OpenAiChannelEnv {
   OPENAI_API_KEY: string; // mdt_…
 }
+/** E9в (D-423): Gemini CLI talks to the Gemini API (/v1beta/models/*) through the gate; GEMINI_API_KEY is the mdt_ token. */
+export interface GeminiChannelEnv {
+  GEMINI_API_KEY: string; // mdt_…
+  GOOGLE_GEMINI_BASE_URL: "http://egress-gate";
+}
 /** D-295: a subscription profile — the CLI uses its own login (profile volume); no token at all. */
 export interface ProfileChannelEnv {
   PROFILE: true;
 }
-export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv | ProfileChannelEnv;
-export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : "PROFILE" in c ? "" : c.ANTHROPIC_API_KEY);
+export type SandboxChannelEnv = AnthropicChannelEnv | OpenAiChannelEnv | GeminiChannelEnv | ProfileChannelEnv;
+export const channelToken = (c: SandboxChannelEnv): string => ("OPENAI_API_KEY" in c ? c.OPENAI_API_KEY : "GEMINI_API_KEY" in c ? c.GEMINI_API_KEY : "PROFILE" in c ? "" : c.ANTHROPIC_API_KEY);
 /** env holds ONLY the secret values (they go to the docker CLI env, D-043); public env comes from envForPhase. */
 export interface AgentLaunchSpec {
   argv: string[];
@@ -60,6 +65,8 @@ export interface AgentAdapter {
   toStream(line: string, ctx: StreamCtx, windows?: Readonly<Record<string, number>>): StreamEvent[];
   launch(ctx: AgentRunContext, channel: SandboxChannelEnv, canary: { name: "AWS_SECRET_ACCESS_KEY"; value: string }): AgentLaunchSpec;
   parseLine(line: string): AgentEvent[];
+  /** D-446: one line of the agent's stderr → a provider problem. Only for a CLI whose format is known; absent = no notices. */
+  providerNotice?(stderrLine: string): ProviderNotice | null;
   /** E8g (D-353): one stdin line carrying a person's steer text (framed as untrusted input); only when supportsSteering */
   steerLine?(text: string, author: string): string;
 }
@@ -70,7 +77,7 @@ export function claudeSteerLine(text: string, author: string): string {
 }
 export const FAKE_SCENARIOS = [
   "honest-fix", "skip-test", "delete-test", "delete-and-add-empty", "echo-pass", "out-of-contract", "partial-fix", "it-only",
-  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude", "untested-extra", "sh2-probe", "steer-echo", "ask-probe", "mcp-probe", "slow-edit",
+  "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude", "untested-extra", "sh2-probe", "steer-echo", "ask-probe", "mcp-probe", "research-probe", "slow-edit",
   "b9-special-case", "b10-ci-change", "b11-dep-no-lock", "b12-empty", "b13-rename-test", "b14-mandat-yml", "b15-remove-expect", "b16-weak-same-count",
   "b17-vitest-config", "b18-mocks", "b19-todo", "b20-claude-settings", "b34-type-error", "b35-console-log", "b36-test-env", "b37-snapshot", "b38-npmrc", "b39-agents-md", "r15-injection", "r17-control-files", "r18-foreign-registry", "r19-dns-exfil", "r20-tunnel", "d5-probe",
 ] as const;

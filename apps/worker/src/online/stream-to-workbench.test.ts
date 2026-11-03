@@ -35,6 +35,27 @@ describe("stream → workbench (E7д, AC-6.1/6.2)", () => {
     expect(sub).toBe(sessionIdFor(`${RUN}:toolu_task1`));
     expect(sub).not.toBe(sessionIdFor(`${RUN}:toolu_task2`));
   });
+  it("D-446: phase and provider lines are written at once, under one lead session, also after the agent's result, and a beat keeps ≤ 2/s", async () => {
+    const run = "r_01JABCDEFGHJKMNPQRSTVWXYZ1";
+    let t = 0;
+    const ctx = createStreamCtx(run, () => new Date(1_792_454_400_000 + t).toISOString());
+    const rec = sessionRecorder(workbench(db, DEMO_ORG_ID), { taskId: null, repoId: DEMO_REPO_ID, agent: "gemini", model: "gemini-3.8-flash", account: null, now: () => t });
+    const written = async () => {
+      await new Promise((r) => setTimeout(r, 50));
+      return (await db.query<{ kind: string; text: string }>("select kind, text from public.session_lines where session_id = $1 order by seq", [sessionIdFor(run)])).rows.map((l) => `${l.kind}:${l.text}`);
+    };
+    rec.push(streamEvent(ctx, { kind: "phase", text: "provision" }));
+    expect(await written()).toEqual(["phase:provision"]);
+    rec.push(streamEvent(ctx, { kind: "provider", text: "overloaded 4/10" })); // same millisecond: still written
+    expect(await written()).toEqual(["phase:provision", "provider:overloaded 4/10"]);
+    t = 1000;
+    rec.push(streamEvent(ctx, { kind: "result", result: { ok: false, claimed_done: false, error: null } }));
+    rec.push(streamEvent(ctx, { kind: "phase", text: "export" }));
+    expect((await written()).at(-1)).toBe("phase:export");
+    await rec.close();
+    expect((await db.query<{ state: string }>("select state from public.agent_sessions where id = $1", [sessionIdFor(run)])).rows[0]?.state).toBe("failed");
+    await db.query("delete from public.agent_sessions where id = $1", [sessionIdFor(run)]); // the next test counts all sessions
+  });
   it("the synthetic Claude run → lead + subagent sessions, tool calls with decisions, the denied push, ended states", async () => {
     let now = 0;
     const rec = sessionRecorder(workbench(db, DEMO_ORG_ID), { taskId: null, repoId: DEMO_REPO_ID, agent: "claude", model: "claude-sonnet-5-5", account: null, now: () => now });

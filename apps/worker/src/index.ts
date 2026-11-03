@@ -7,7 +7,7 @@ export { DEMO_SHOP_FILES, FIXTURES, SHOP_FILES, buildFixture, buildShopFixture }
 export type { FixtureName } from "./fixtures.js";
 export { runTask } from "./run.js";
 export type { RunHooks, RunInternals, RunTaskInput, RunTaskOutput } from "./run.js";
-export { LOCAL_DB_URL, dbUrl, inTransaction, openDb } from "./online/db.js";
+export { LOCAL_DB_URL, dbUrl, inTransaction, isDbConnectionError, openDb } from "./online/db.js";
 export type { Db } from "./online/db.js";
 export { MemoryOutbox, drainOutbox } from "./online/outbox.js";
 export type { OutboxKind, OutboxRow, OutboxStore } from "./online/outbox.js";

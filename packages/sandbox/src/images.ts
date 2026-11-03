@@ -63,6 +63,8 @@ export async function imageTags(repoRoot: string): Promise<{ sandbox: string; ga
     ...root,
     ...walk(path.join(repoRoot, "packages", "agents", "fakes")),
     ...walk(path.join(repoRoot, "packages", "agents", "hooks")),
+    // D-428: Gemini CLI's system settings (/etc/gemini-cli/settings.json in the image)
+    ...walk(path.join(repoRoot, "packages", "agents", "gemini")),
     ...walk(path.join(repoRoot, "packages", "verify", "reporters")),
     // E8e: the MCP sidecar bridge and its workspace dependencies are built into the image
     ...(existsSync(path.join(repoRoot, "packages", "mcp-bridge", "package.json")) ? [...workspaceDeps(repoRoot, "mcp-bridge")].flatMap((p) => packageFiles(repoRoot, p)) : []),

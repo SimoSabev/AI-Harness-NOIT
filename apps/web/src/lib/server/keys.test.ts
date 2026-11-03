@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deleteKeys, deleteLogin, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postProject, postRetry, postSystemJob } from "./api";
+import { deleteKeys, deleteLogin, deleteResearchKey, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postProject, postResearchKey, postRetry, postSystemJob } from "./api";
 import type { ApiDeps } from "./api";
 import { RateLimiter } from "./guard";
 import { controlKeys } from "./keys";
@@ -15,6 +15,8 @@ const fake: KeysClient = {
   status: async () => ({ proxy: "stopped", providers: [] }),
   set: async (k) => (set.push(k), { proxy: "running", providers: k.openai ? ["anthropic", "openai"] : ["anthropic"] }),
   clear: async () => ({ proxy: "stopped", providers: [] }),
+  setResearch: async (k) => (set.push(k), { proxy: "running", providers: ["anthropic", "exa"] }),
+  clearResearch: async () => (set.push("cleared"), { proxy: "running", providers: ["anthropic"] }),
   accounts: async () => [],
   login: async (op) => {
     calls.push(op);
@@ -65,6 +67,27 @@ describe("API /api/keys (D-293)", () => {
   });
 });
 
+// D-440: the Exa key of research — the same path as the model keys: owner only, to the proxy, never echoed.
+describe("API /api/keys/research (D-440)", () => {
+  it("owner: set → status names exa, not the key; bad body → 400; approver → 403; clear; no control → 503", async () => {
+    who = U.owner;
+    set.length = 0;
+    const exa = ["exa", "q".repeat(36)].join("-");
+    const r = await postResearchKey(req("POST", { exa }), deps(fake));
+    const text = await r.text();
+    expect([r.status, text.includes(exa)]).toEqual([200, false]);
+    expect(JSON.parse(text)).toEqual({ proxy: "running", providers: ["anthropic", "exa"] });
+    expect((await postResearchKey(req("POST", { exa: "x" }), deps(fake))).status).toBe(400);
+    expect((await postResearchKey(req("POST", { exa, anthropic }), deps(fake))).status).toBe(400);
+    expect(await (await deleteResearchKey(req("DELETE"), deps(fake))).json()).toEqual({ proxy: "running", providers: ["anthropic"] });
+    expect(set).toEqual([{ exa }, "cleared"]);
+    who = U.approver;
+    expect((await postResearchKey(req("POST", { exa }), deps(fake))).status).toBe(403);
+    who = U.owner;
+    expect((await postResearchKey(req("POST", { exa }), deps(null))).status).toBe(503);
+  });
+});
+
 describe("API /api/accounts (D-369: subscription login from the web)", () => {
   it("owner: start, state, code (never echoed), cancel, logout; approver/viewer → 403; bad input → 400; no control → 503", async () => {
     who = U.owner;
@@ -112,10 +135,12 @@ describe("API /api/system (D-370: the CLI commands from the web)", () => {
 describe("controlKeys (D-293)", () => {
   it("bearer token to the control endpoint; null without env", async () => {
     let auth = "";
+    const paths: string[] = [];
     const srv = createServer((q, s) => {
       auth = String(q.headers.authorization);
       s.writeHead(200, { "content-type": "application/json" });
-      s.end(JSON.stringify(q.url === "/accounts" ? { accounts: [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }] } : { proxy: "running", providers: ["anthropic"] }));
+      paths.push(`${q.method} ${q.url}`);
+      s.end(JSON.stringify(q.url === "/accounts" ? { accounts: [{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max" }] } : { proxy: "running", providers: q.url === "/keys/research" ? ["anthropic", "exa"] : ["anthropic"] }));
     });
     await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
     const port = (srv.address() as { port: number }).port;
@@ -125,6 +150,10 @@ describe("controlKeys (D-293)", () => {
       expect(await c?.status()).toEqual({ proxy: "running", providers: ["anthropic"] });
       expect(auth).toBe(`Bearer ${"t".repeat(64)}`);
       expect(await c?.accounts()).toEqual([{ name: "work", agent: "claude@work", loggedIn: true, email: "s@example.com", plan: "Max", cli: "claude" }]); // D-393: an older `mandat local` without cli → Claude
+      // D-440: the research key goes to /keys/research; the status may name exa
+      expect(await c?.setResearch({ exa: ["exa", "q".repeat(36)].join("-") })).toEqual({ proxy: "running", providers: ["anthropic", "exa"] });
+      expect(await c?.clearResearch()).toEqual({ proxy: "running", providers: ["anthropic", "exa"] });
+      expect(paths.slice(-2)).toEqual(["POST /keys/research", "DELETE /keys/research"]);
     } finally {
       srv.close();
     }
@@ -165,10 +194,12 @@ describe("retry after a rejected key (D-293)", () => {
       db.query(`insert into public.tasks (id, org_id, repo_id, type, agent, text, state, wait_reason) select $1, org_id, repo_id, type, 'claude', 'x', 'HELD', $2 from public.tasks where id = 't_seed_bugfix'`, [id, wait]);
     await mk("t_key_rej", "key_rejected");
     await mk("t_empty_ch", "empty_change");
+    await mk("t_agent_f", "agent_failed:overloaded");
     await mk("t_appr_wait", "approval");
     const r = (id: string) => postRetry(req("POST", {}), deps(fake), id);
     expect((await r("t_key_rej")).status).toBe(200);
     expect((await r("t_empty_ch")).status).toBe(200);
+    expect((await r("t_agent_f")).status).toBe(200);
     expect((await r("t_appr_wait")).status).toBe(409);
   });
 });

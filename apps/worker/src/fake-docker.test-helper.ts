@@ -14,6 +14,8 @@ export interface FakeOpts {
   installExit?: number;
   agentLines?: (ctx: { token: string; canary: string }) => string[];
   agentExit?: number;
+  /** what the agent writes to stderr, chunk by chunk */
+  agentStderr?: string[];
   /** returns the dir whose files are the agent's work tree at export time */
   head?: (ctx: { canary: string; token: string }) => string | Buffer;
   tarExit?: number;
@@ -67,8 +69,10 @@ export class FakeDocker implements DockerRunner {
       return { exitCode: 0, timedOut: false };
     }
     if (cmd[0] === "npm") return { exitCode: this.o.installExit ?? 0, timedOut: false };
-    if (cmd[0] === "node" && cmd[1]?.startsWith("/opt/mandat/fakes/")) {
+    // D-428: the real Gemini CLI (`gemini …`) answers like a fake agent here
+    if ((cmd[0] === "node" && cmd[1]?.startsWith("/opt/mandat/fakes/")) || cmd[0] === "gemini") {
       for (const l of this.o.agentLines?.(ctx) ?? ['{"type":"system","subtype":"init","session_id":"fake","model":"fake","tools":[],"mcp_servers":[]}', '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}']) out(l + "\n");
+      for (const c of this.o.agentStderr ?? []) ro.onStderr?.(Buffer.from(c));
       if (ro.stdin !== "closed") for await (const c of ro.stdin as AsyncIterable<Buffer>) this.agentStdin += c.toString("utf8");
       return { exitCode: this.o.agentExit ?? 0, timedOut: false };
     }

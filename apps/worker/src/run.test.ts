@@ -4,6 +4,7 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UnsealedContract, Verdict, hashJcs, parseVitestReport, sealContract, sha256Tag } from "@mandat/contract";
+import type { StreamEvent } from "@mandat/contract";
 import type { Channel } from "@mandat/channels";
 import { verifyLedger } from "@mandat/ledger";
 import { createRedactor } from "@mandat/redaction";
@@ -384,6 +385,61 @@ describe("runTask (fake docker)", () => {
     expect(fake.token).toMatch(/^mdt_[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{43}$/);
   });
 
+  it("AC-3.6 (D-422): the proxy says a local model calls no tools → stopped no_tools, agent:no_tools, no export, $0", async () => {
+    const h = home();
+    mkdirSync(path.join(h, "proxy"), { recursive: true });
+    writeFileSync(path.join(h, "proxy", "secret"), randomBytes(32));
+    const usage = { usd: 0, inputTokens: 3600, outputTokens: 240, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 3, budgetStop: false, limit: null, authFailed: false, noTools: true };
+    const channel: Channel = {
+      label: "local-ollama", kind: "local", provider: "anthropic", model: "qwen3-coder:30b",
+      issueTaskCredential: () => Promise.resolve({ token: `mdt_${"a".repeat(30)}.${"b".repeat(43)}`, tokenHash: "sha256:x", expiresAt: "" }),
+      revokeTaskCredential: () => Promise.resolve(),
+      usage: () => Promise.resolve(usage),
+      sandboxEnv: (c) => ({ ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: c.token }),
+      gateRoutes: () => [],
+    };
+    const docker = new FakeDocker({ head: honest });
+    const { r } = await go({ h, docker, x: { channel, healthz: () => Promise.resolve(true), usagePollMs: 10 } });
+    expect(r.stopped).toBe("no_tools");
+    expect(r.verdict?.result).toBe("UNKNOWN");
+    expect(r.verdict?.reasons).toContain("agent:no_tools");
+    expect(r.verdict?.usage).toEqual({ usd: 0, input_tokens: 3600, output_tokens: 240, requests: 3 });
+    expect(docker.calls.some((c) => c.args.includes("--exclude=./node_modules") && c.args.includes("/m/work"))).toBe(false);
+  });
+
+  it("D-428: agent gemini — Gemini CLI with the mdt_ token as GEMINI_API_KEY (by name), the gate as its base URL, its stream parsed; with a profile → target gemini", async () => {
+    const h = home();
+    mkdirSync(path.join(h, "proxy"), { recursive: true });
+    writeFileSync(path.join(h, "proxy", "secret"), randomBytes(32));
+    const key = ["AIza", "x".repeat(35)].join("");
+    process.env.GEMINI_API_KEY = key;
+    const tok = `mdt_${"g".repeat(30)}.${"h".repeat(43)}`;
+    const channel: Channel = {
+      label: "conn-gemini", kind: "api_key", provider: "gemini", model: "gemini-3.8-flash",
+      issueTaskCredential: () => Promise.resolve({ token: tok, tokenHash: "sha256:x", expiresAt: "" }),
+      revokeTaskCredential: () => Promise.resolve(),
+      usage: () => Promise.resolve({ usd: 0.01, inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 2, budgetStop: false, limit: null, authFailed: false, noTools: false }),
+      sandboxEnv: (c) => ({ GEMINI_API_KEY: c.token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" }),
+      gateRoutes: () => [],
+    };
+    const stream = readFileSync(path.join(repoRoot, "fixtures", "gemini-jsonl", "honest-fix.jsonl"), "utf8").split("\n").filter(Boolean);
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const d = new FakeDocker({ head: honest, agentLines: () => stream });
+    const { r } = await go({ h, docker: d, i: { agent: "gemini", profile }, x: { channel, healthz: () => Promise.resolve(true) } });
+    expect(process.env.GEMINI_API_KEY).toBeUndefined();
+    const agentCall = d.calls.find((c) => c.args.includes("gemini") && c.args.includes("stream-json"));
+    const a = agentCall?.args ?? [];
+    expect(a.slice(a.indexOf("gemini"), a.indexOf("gemini") + 3)).toEqual(["gemini", "--output-format", "stream-json"]);
+    expect(a).toEqual(expect.arrayContaining(["GEMINI_API_KEY", "GOOGLE_GEMINI_BASE_URL=http://egress-gate", "--policy", "/m/in/harness/gemini/policies", "--include-directories", "/m/in/harness"]));
+    expect(a.join(" ")).not.toContain("GEMINI_CLI_SYSTEM_SETTINGS_PATH");
+    expect(a.join(" ")).not.toContain("ANTHROPIC");
+    expect(agentCall?.env.GEMINI_API_KEY).toBe(tok);
+    expect(d.calls.map((c) => c.args.join(" ") + JSON.stringify(c.env)).join("\n")).not.toContain(key);
+    expect(JSON.parse(readFileSync(path.join(r.runDir ?? "", "harness.json"), "utf8")).target).toBe("gemini");
+    expect(r.verdict?.result).toBe("VERIFIED");
+  });
+
   it("gate policy handshake (D-044): без policy_loaded → E_GATE_POLICY", async () => {
     const h = home();
     const runDir = path.join(h, "runs", "r_01JB8Z3K4M5N6P7Q8R9S0T1V2W");
@@ -405,6 +461,113 @@ describe("runTask (fake docker)", () => {
     expect(r.verdict?.reasons).toEqual(["export:unreadable", "EXPORT:unreadable:src/x.ts"]);
 
   });
+});
+
+describe("runTask: nothing to check → nothing is verified, and the verdict says so (D-447)", () => {
+  const noMustPass = (h: string) => {
+    const f = path.join(h, "no-must-pass.json");
+    const { contract_hash: _c, config_hash: _k, ...rest } = JSON.parse(readFileSync(CONTRACT, "utf8")) as Record<string, unknown>;
+    writeFileSync(f, JSON.stringify(sealContract(UnsealedContract.parse({ ...rest, must_pass: [] }))));
+    return f;
+  };
+  const NOT_RUN = ["D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "D10.lockfile"];
+
+  it("zero changed files and no test the contract demands: no verification tree, UNKNOWN EXPORT:empty_change, never VERIFIED", async () => {
+    const h = home();
+    const seen: string[] = [];
+    const { r, testsCalls } = await go({ h, docker: new FakeDocker({ head: () => shopCopy() }), i: { contractPath: noMustPass(h), hooks: { onStream: (e) => { if (e.kind === "phase") seen.push(e.text ?? ""); } } } });
+    expect(testsCalls).toEqual([]);
+    expect(r.verdict?.result).toBe("UNKNOWN");
+    expect(r.exit).toBe(10);
+    expect(r.verdict?.reasons).toEqual(["EXPORT:empty_change:-"]);
+    expect(det(r, "EXPORT")).toMatchObject({ status: "unknown", data: { files: 0, verification: "skipped" } });
+    for (const d of NOT_RUN) expect(det(r, d)?.status, d).toBe("n/a");
+    expect(r.verdict?.timings_ms.verify).toBe(0);
+    expect(seen).toEqual(["provision", "install", "agent", "export", "verdict"]);
+    const rows = readFileSync(path.join(r.runDir ?? "", "ledger-payloads.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as { payload: { result?: string; reasons?: string[] } });
+    expect(rows.find((x) => x.payload.result)?.payload).toMatchObject({ result: "UNKNOWN", reasons: ["EXPORT:empty_change:-"] });
+  });
+  it("what does not need trees still runs: a canary in the notes of an empty change is still FAILED", async () => {
+    const h = home();
+    const { r, testsCalls } = await go({ h, docker: new FakeDocker({ head: () => shopCopy(), notes: (c) => `leak ${c.canary}` }), i: { contractPath: noMustPass(h) } });
+    expect(testsCalls).toEqual([]);
+    expect(r.verdict?.result).toBe("FAILED");
+    expect(det(r, "CANARY")?.status).toBe("fail");
+    expect(det(r, "INTEGRITY")?.status).toBe("pass");
+  });
+  it("any change gets the full verification, whatever the agent says and however it exits", async () => {
+    const h = home();
+    const contractPath = noMustPass(h);
+    const claim = ['{"type":"assistant","message":{"content":[{"type":"text","text":"I changed nothing, no need to check."}]}}', '{"type":"result","subtype":"success","is_error":false,"total_cost_usd":0,"num_turns":1}'];
+    const deleted = await go({ h, docker: new FakeDocker({ agentLines: () => claim, head: () => shopCopy((d) => rmSync(path.join(d, "src/money.ts"))) }), i: { contractPath } });
+    expect(deleted.testsCalls.length).toBeGreaterThan(0);
+    expect(det(deleted.r, "EXPORT")).toMatchObject({ status: "pass", data: { files: 1 } });
+    expect(det(deleted.r, "D1.base_tests")?.status).not.toBe("n/a");
+    const crashed = await go({ h, docker: new FakeDocker({ agentLines: () => claim, agentExit: 247, head: honest }), i: { contractPath } });
+    expect(crashed.testsCalls.length).toBeGreaterThan(0);
+    expect(det(crashed.r, "D1.base_tests")?.status).not.toBe("n/a");
+  });
+  it("a contract that demands tests is always answered: an empty change with must_pass runs them (B12)", async () => {
+    const { r, testsCalls } = await go({ docker: new FakeDocker({ head: () => shopCopy() }), tests: () => ok(BASE_RAW) });
+    expect(testsCalls.length).toBeGreaterThan(0);
+    expect(r.verdict?.reasons).toContain(`MUST_PASS:not_passed:${M}`);
+    expect(r.verdict?.result).toBe("FAILED");
+  });
+});
+
+describe("runTask: what the person sees while it runs, and how the agent ended (D-446, D-448)", () => {
+  const geminiChannel = (): Channel => ({
+    label: "conn-gemini", kind: "api_key", provider: "gemini", model: "gemini-3.8-flash",
+    issueTaskCredential: () => Promise.resolve({ token: `mdt_${"g".repeat(30)}.${"h".repeat(43)}`, tokenHash: "sha256:x", expiresAt: "" }),
+    revokeTaskCredential: () => Promise.resolve(),
+    usage: () => Promise.resolve({ usd: 0.05, inputTokens: 100, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 9, budgetStop: false, limit: null, authFailed: false, noTools: false }),
+    sandboxEnv: (c) => ({ GEMINI_API_KEY: c.token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" }),
+    gateRoutes: () => [],
+  });
+  const withSecret = () => {
+    const h = home();
+    mkdirSync(path.join(h, "proxy"), { recursive: true });
+    writeFileSync(path.join(h, "proxy", "secret"), randomBytes(32));
+    return h;
+  };
+  const RAW = "RAW-PROVIDER-WORDS";
+  const failedStream = ['{"type":"init","session_id":"s","model":"gemini-3.8-flash"}', JSON.stringify({ type: "result", status: "error", error: { type: "unknown", message: "failed" } })];
+
+  it("every phase of the run reaches the stream as a code, in order", async () => {
+    const seen: StreamEvent[] = [];
+    await go({ docker: new FakeDocker({ head: honest }), i: { hooks: { onStream: (e) => seen.push(e) } } });
+    expect(seen.filter((e) => e.kind === "phase").map((e) => e.text)).toEqual(["provision", "install", "agent", "export", "verify", "verdict"]);
+    expect(new Set(seen.map((e) => e.session)).size).toBe(1);
+  });
+
+  it("a failing stream hook never stops the run", async () => {
+    const { r } = await go({ docker: new FakeDocker({ head: honest }), i: { hooks: { onStream: () => { throw new Error("no"); } } } });
+    expect(r.verdict?.result).toBe("VERIFIED");
+  });
+
+  it("Gemini's retries on stderr become provider codes, also when a line comes in two chunks; its words never leave the run dir", async () => {
+    const seen: StreamEvent[] = [];
+    const docker = new FakeDocker({
+      head: () => shopCopy(), agentLines: () => failedStream, agentExit: 247,
+      agentStderr: [`YOLO mode\nAttempt 1 failed with status 503. Retrying… ${RAW}\n    at x\nAttempt 2 fai`, `led. Retrying with backoff... fetch failed sending request ${RAW}\nAttempt 10 failed: ${RAW} high demand`],
+    });
+    const { r } = await go({ h: withSecret(), docker, i: { agent: "gemini", hooks: { onStream: (e) => seen.push(e) } }, x: { channel: geminiChannel(), healthz: () => Promise.resolve(true) } });
+    expect(seen.filter((e) => e.kind === "provider").map((e) => e.text)).toEqual(["overloaded 1/10", "timed_out 2/10", "overloaded 10/10"]);
+    expect(JSON.stringify(seen)).not.toContain(RAW);
+    expect(r.agentEnd).toEqual({ ok: false, replied: false, cause: "overloaded" });
+    expect(r.verdict?.usage).toMatchObject({ usd: 0.05, requests: 9 }); // D-450: a failed agent's spend is on the verdict
+    expect(readFileSync(path.join(r.runDir ?? "", "agent-stderr.txt"), "utf8")).toContain("Attempt 2 failed");
+  });
+
+  it("the ending is what the worker saw: a reply, an error result, a non-zero exit", async () => {
+    const text = '{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}';
+    const result = (isError: boolean) => JSON.stringify({ type: "result", subtype: isError ? "error" : "success", is_error: isError, total_cost_usd: 0, num_turns: 1 });
+    const ending = async (lines: string[], agentExit = 0) => (await go({ docker: new FakeDocker({ head: () => shopCopy(), agentLines: () => lines, agentExit }), tests: () => ok(BASE_RAW) })).r.agentEnd;
+    expect(await ending([text, result(false)])).toEqual({ ok: true, replied: true, cause: null });
+    expect(await ending([result(false)])).toEqual({ ok: true, replied: false, cause: null });
+    expect(await ending([text, result(true)])).toEqual({ ok: false, replied: true, cause: null });
+    expect(await ending([text, result(false)], 3)).toEqual({ ok: false, replied: true, cause: null });
+  }, 120_000);
 });
 
 describe("runTask with a harness profile (E8а, D-311)", () => {
