@@ -1,8 +1,12 @@
 // T3-8 (демо промпт т. 3.4, D-211): every working state has a deadline; the sweeper never leaves a task "working" forever.
 
-export type WorkingState = "PROVISIONING" | "RUNNING" | "EXPORTING" | "VERIFY_1" | "VERIFY_2" | "PUSHED";
-export const WORKING_STATES: readonly WorkingState[] = ["PROVISIONING", "RUNNING", "EXPORTING", "VERIFY_1", "VERIFY_2", "PUSHED"];
-export const DEFAULT_MAX_MIN: Record<Exclude<WorkingState, "RUNNING">, number> = { PROVISIONING: 10, EXPORTING: 10, VERIFY_1: 30, VERIFY_2: 60, PUSHED: 30 };
+// D-451: also the steps between them (CONTRACTED, RETRY, REBASING, VERDICT); a crash there left the task live forever
+export type WorkingState = "CONTRACTED" | "PROVISIONING" | "RUNNING" | "EXPORTING" | "RETRY" | "VERIFY_1" | "REBASING" | "PUSHED" | "VERIFY_2" | "VERDICT";
+export const WORKING_STATES: readonly WorkingState[] = ["CONTRACTED", "PROVISIONING", "RUNNING", "EXPORTING", "RETRY", "VERIFY_1", "REBASING", "PUSHED", "VERIFY_2", "VERDICT"];
+export const DEFAULT_MAX_MIN: Record<Exclude<WorkingState, "RUNNING">, number> = { CONTRACTED: 10, PROVISIONING: 10, EXPORTING: 10, RETRY: 30, VERIFY_1: 30, REBASING: 10, PUSHED: 30, VERIFY_2: 60, VERDICT: 10 };
+/** D-451: RUNNING without the task's task_minutes at hand (the sweeper) = the largest budget the policy allows */
+export const MAX_TASK_MINUTES = 120;
+export const isWorkingState = (s: string): s is WorkingState => (WORKING_STATES as readonly string[]).includes(s);
 export const LEASE_SECONDS = 60;
 export const SWEEP_SECONDS = 30;
 

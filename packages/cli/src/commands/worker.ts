@@ -1,7 +1,7 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { NightTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, isDbConnectionError, nightShiftTick, openDb, pgKeyStore, pollCi, runBaseline, runDaemonOnce, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { researchDeps, researchLoop } from "./research.js";
@@ -124,6 +124,9 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         // E8g: overdue HELD tasks are closed before the outbox drains, so their notification goes out in the same pass
         const expired = await closeExpiredHeld(db, { now: new Date(), days: heldDays(env) });
         if (expired.length > 0) io.stderr(`[held] expired: ${expired.join(", ")}\n`);
+        // D-451: a working task nobody works on any more (the worker crashed or was stopped) → BLOCKED, never live forever
+        const swept = (await sweepOverdue(db, { now: new Date(), env, alive: isProcessing })).filter((x) => x.kind === "blocked");
+        if (swept.length > 0) io.stderr(`[sweep] blocked: ${swept.map((x) => x.task_id).join(", ")}\n`);
         await night();
         // E8g (D-356): the project's CI on Mandat's PRs (a red round → HELD ci_failed)
         const red = await pollCi({ db, gh, ghRepo: repo, localGh }).catch(() => []);

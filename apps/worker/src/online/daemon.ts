@@ -111,7 +111,7 @@ const boardPayload = (t: { id: string; seq: number; state: string; result: strin
 async function setState(tx: SqlClient, t: TaskRow, state: string, extra: Record<string, unknown> = {}): Promise<number> {
   const cols = Object.keys(extra);
   const sets = cols.map((c, k) => `${c} = $${k + 3}`).join(", ");
-  const r = await tx.query<{ seq: string }>(`update public.tasks set state = $2, state_entered_at = now(), updated_at = now(), seq = seq + 1${sets ? `, ${sets}` : ""} where id = $1 returning seq`, [t.id, state, ...cols.map((c) => extra[c])]);
+  const r = await tx.query<{ seq: string }>(`update public.tasks set state = $2, state_entered_at = now(), state_deadline_at = null, updated_at = now(), seq = seq + 1${sets ? `, ${sets}` : ""} where id = $1 returning seq`, [t.id, state, ...cols.map((c) => extra[c])]);
   return Number(r.rows[0]?.seq ?? 0);
 }
 
@@ -684,9 +684,19 @@ export function keyRejected(o: { authFailed: boolean; result: string; emptyChang
 export async function runDaemonOnce(d: DaemonDeps): Promise<string | null> {
   // E8f (D-355): the claim honours the repo's WIP limit and a wait for another task
   const id = await claimNext(d.db);
-  if (id) await processTask(d, id);
+  if (!id) return null;
+  PROCESSING.add(id);
+  try {
+    await processTask(d, id);
+  } finally {
+    PROCESSING.delete(id);
+  }
   return id;
 }
+
+// D-451: the tasks this process works on now; the sweeper extends their deadline instead of blocking them
+const PROCESSING = new Set<string>();
+export const isProcessing = (taskId: string): boolean => PROCESSING.has(taskId);
 
 /** D12 screenshot files of a verdict: `ui/route-N.png` / `ui/base-route-N.png` that exist in the run's ui directory, ≤ 5 MB. */
 export function uiShots(evidence: Verdict["evidence"], runDir: string | null | undefined): [string, string][] {

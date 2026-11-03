@@ -16,7 +16,7 @@ export { DEMO_CHANNELS, DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, DEMO_USERS, LO
 export type { DemoSecrets } from "./online/seed.js";
 export { startWebhookServer, webhookHandler } from "./online/webhook.js";
 export type { WebhookDeps } from "./online/webhook.js";
-export { broadcasterFromEnv, contractForTask, finishOutcome, processTask, realtimeBroadcaster, runDaemonOnce } from "./online/daemon.js";
+export { broadcasterFromEnv, contractForTask, finishOutcome, isProcessing, processTask, realtimeBroadcaster, runDaemonOnce } from "./online/daemon.js";
 export type { DaemonDeps } from "./online/daemon.js";
 export { deliverHarnessPr, drainHarnessOutbox, harnessHandlers, scanForProposal } from "./online/harness.js";
 export { loadChannels, providerOfAgent, ruleFor, spillAgent } from "./online/channels.js";
@@ -34,6 +34,7 @@ export type { BaselineRun } from "./baseline.js";
 export { sessionIdFor, sessionRecorder } from "./online/session-recorder.js";
 export type { RecorderOptions, SessionRecorder, SessionSink } from "./online/session-recorder.js";
 export { HELD_DAYS, closeExpiredHeld, heldDays } from "./online/held-expiry.js";
+export { sweepOverdue } from "./online/sweep.js";
 export { nightShiftTick } from "./online/night.js";
 export type { NightTick } from "./online/night.js";
 export { mcpHandlers, recordMcpBlocked, refOf, vetMcpServer } from "./online/mcp.js";
