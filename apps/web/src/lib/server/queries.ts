@@ -32,8 +32,9 @@ select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t
        l.level as ladder_level, l.s_up::float8 as ladder_s_up, l.pinned as ladder_pinned,
        (select max(g.seq)::int from public.ledger g where g.org_id = t.org_id and g.task_id = t.id) as ledger_seq
   from public.tasks t
-  left join lateral (select * from public.changesets x where x.task_id = t.id order by x.attempt desc, x.created_at desc limit 1) c on true
-  left join lateral (select * from public.verdicts x where x.task_id = t.id order by x.attempt desc, x.created_at desc limit 1) v on true
+  -- D-452: only the current attempt's change and verdict; a new attempt has none until it makes its own
+  left join lateral (select * from public.changesets x where x.task_id = t.id and x.attempt = t.attempt order by x.created_at desc limit 1) c on true
+  left join lateral (select * from public.verdicts x where x.task_id = t.id and x.attempt = t.attempt order by x.created_at desc limit 1) v on true
   left join lateral (select * from public.deliveries x where x.changeset_id = c.id order by x.created_at desc limit 1) d on true
   left join lateral (select x.data from public.evidence x where x.verdict_id = v.id and x.detector = 'D1.base_tests' order by x.id limit 1) e1 on true
   left join lateral (select x.data from public.evidence x where x.verdict_id = v.id and x.detector = 'D2.inventory' order by x.id limit 1) e2 on true
