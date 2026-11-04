@@ -8,6 +8,7 @@ import { card } from "../../components/ui";
 import { getT } from "../../i18n/server";
 import { pageName } from "../../lib/brand";
 import { parseTheme } from "../../lib/prefs";
+import { accountMenu } from "../../lib/server/account/menu";
 import { authMode } from "../../lib/server/auth";
 import { pageCtx } from "../../lib/server/page";
 
@@ -18,6 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const link = "text-sm text-accent underline-offset-4 hover:underline";
 
+// D-498: "Profile and sync" (optional sign-in) sits right under the accounts, only in `pnpm local`.
 // D-305, D-384: one settings page — the accounts that run the agents, language, theme, local access; the rest (system,
 // tools, roles) under "Advanced". E7f: the language is the cookie `lang`; without it Accept-Language, else English.
 export default async function SettingsPage() {
@@ -35,6 +37,13 @@ export default async function SettingsPage() {
           <Link href="/keys" className={link}>{t("settings.keysLink")}</Link>
         </p>
       </section>
+      {authMode() === "local" && (
+        <section aria-labelledby="s-account" className={`${card} mt-4 p-5`}>
+          <h2 id="s-account" className="font-display text-base font-semibold">{t("settings.account")}</h2>
+          <p className="mt-1 mb-3 text-sm text-mute">{t("settings.accountHint")}</p>
+          <Link href="/settings/account" className={link}>{t((await accountMenu()) === "signed_in" ? "account.menuSignedIn" : "account.signIn")}</Link>
+        </section>
+      )}
       <section aria-labelledby="s-lang" className={`${card} mt-4 p-5`}>
         <h2 id="s-lang" className="mb-4 font-display text-base font-semibold">{t("settings.lang")}</h2>
         <LangChoice value={t.lang} />

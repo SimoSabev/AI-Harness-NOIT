@@ -5,6 +5,7 @@ import { HARNESS } from "../lib/brand";
 import { NAV, navActive } from "../lib/nav";
 import type { Page } from "../lib/nav";
 import type { Health } from "../lib/overview";
+import { accountMenu } from "../lib/server/account/menu";
 import { authMode } from "../lib/server/auth";
 import { btn } from "./ui";
 
@@ -20,6 +21,7 @@ export const HEALTH: Record<Health, { mark: string; text: string; label: Key }> 
 export async function Shell({ current, waiting, wide = false, full = false, children }: { current: Page; wide?: boolean; full?: boolean; waiting: number | null; children: React.ReactNode }) {
   const t = await getT();
   const active = navActive(current);
+  const account = authMode() === "local" ? await accountMenu() : "off";
   const nav = (n: (typeof NAV)[number]) => (
     <Link key={n.id} href={n.href} aria-current={active === n.id ? "page" : undefined}
       className="flex items-center gap-2 rounded-lg px-3 py-2 font-display text-sm tracking-wide text-mute transition hover:bg-raised hover:text-ink aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent-text">
@@ -41,6 +43,12 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
                 </Link>
               </div>
               <nav aria-label={t("nav.main")} className="flex gap-1 overflow-x-auto px-2 pb-2 lg:flex-col lg:overflow-visible">{NAV.map(nav)}</nav>
+              {authMode() === "local" && (
+                // D-498: the optional sign-in; the label says whether this computer is signed in
+                <Link href="/settings/account" className={`mt-auto hidden border-t border-line px-2 py-2 lg:block`}>
+                  <span className={btn.ghost}>{t(account === "signed_in" ? "account.menuSignedIn" : "account.menu")}</span>
+                </Link>
+              )}
               {authMode() !== "local" && (
                 <form action="/api/auth/logout" method="post" className="mt-auto hidden border-t border-line px-2 py-2 lg:block">
                   <button className={btn.ghost} type="submit">{t("shell.logout")}</button>

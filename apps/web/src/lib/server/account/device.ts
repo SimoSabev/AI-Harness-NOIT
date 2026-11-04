@@ -43,7 +43,9 @@ async function call(d: DeviceDeps, link: AccountLink | null, path: string, body?
   const headers: Record<string, string> = { origin: link?.server ?? (d.server as string) };
   if (link?.token) headers.authorization = `Bearer ${link.token}`;
   if (body !== undefined) headers["content-type"] = "application/json";
-  return d.fetch(`${link?.server ?? d.server}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), redirect: "manual", cache: "no-store" });
+  const init: RequestInit = { method, headers, redirect: "manual", cache: "no-store" };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  return d.fetch(`${link?.server ?? d.server}${path}`, init);
 }
 
 const signedIn = async (d: DeviceDeps): Promise<AccountLink | null> => {
@@ -67,6 +69,8 @@ export async function startSignIn(d: DeviceDeps): Promise<AccountStatus> {
   const c = CodeReply.parse(await r.json());
   const now = (d.now ?? (() => new Date()))();
   const verificationUrl = new URL(c.verification_uri_complete ?? c.verification_uri, d.server).toString();
+  // the page the person opens is always on the sync server itself, never an address the reply chose
+  if (new URL(verificationUrl).origin !== new URL(d.server).origin) throw new MandatError("E_SYNC_OFF", "the sign-in page is not on the sync server");
   await d.links.set({ server: d.server, state: "pending", deviceCode: c.device_code, userCode: c.user_code, verificationUrl, expiresAt: new Date(now.getTime() + c.expires_in * 1000).toISOString() });
   return accountStatus(d);
 }

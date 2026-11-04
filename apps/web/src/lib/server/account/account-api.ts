@@ -1,6 +1,6 @@
 import { MandatError, SyncBody } from "@mandat/contract";
 import { z } from "zod";
-import { checkCsrf, checkOrigin, cookieValue, readJsonBody, RateLimiter } from "../guard";
+import { checkCsrf, checkOrigin, cookieValue, readJsonBody, type RateLimiter } from "../guard";
 import { prefCookie } from "../../prefs";
 import type { Sql } from "../sql";
 import { accountStatus, listDevices, pollSignIn, signOut, startSignIn, syncNow, unlockVault, wipeAccount, type DeviceDeps } from "./device";

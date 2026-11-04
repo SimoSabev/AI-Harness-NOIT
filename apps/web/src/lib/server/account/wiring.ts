@@ -64,3 +64,4 @@ export function signInMethods(): { github: boolean; google: boolean; email: bool
   const c = syncServerConfig();
   return { github: Boolean(c?.github), google: Boolean(c?.google), email: false };
 }
+
