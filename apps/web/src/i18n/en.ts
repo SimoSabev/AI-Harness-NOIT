@@ -1417,6 +1417,27 @@ export const en = {
   "tt.useInMandat": "Use in Mandat",
   "tt.inUse": "Added",
   "tt.unreadable": "Could not read the settings of: {names}",
+  // D-500: Settings → Connections (the hub)
+  "hub.title": "Connections",
+  "hub.intro": "Everything your agents can use, in one place: your subscriptions, API keys from any AI service, MCP servers, tools and skills. Add as many as you like; each one shows up in the task box by itself.",
+  "hub.subscriptions.title": "Subscriptions",
+  "hub.subscriptions.hint": "Sign in with Claude, ChatGPT, Copilot, Kimi, Cursor and more, as in their own apps.",
+  "hub.api-keys.title": "API keys",
+  "hub.api-keys.hint": "Keys for any AI service, several per service. The key stays in the proxy; agents never see it.",
+  "hub.tools.title": "MCP, tools and skills",
+  "hub.tools.hint": "Add from a GitHub repo, a package, a catalog or pasted JSON, or use what your other AI apps already have.",
+  "hub.models.title": "Models",
+  "hub.models.hint": "Which model each agent uses by default, and models on this computer.",
+  "hub.account.title": "Profile and sync",
+  "hub.account.hint": "Optional. Sign in to have all of this on every device.",
+  "hub.count.one": "{n} connected",
+  "hub.count.other": "{n} connected",
+  "hub.state.empty": "Nothing yet",
+  "hub.state.attention": "Needs you",
+  "hub.state.optional": "Optional",
+  "hub.state.ok": "Signed in",
+  "hub.state.unavailable": "Only in pnpm local",
+  "hub.open": "Open",
 } as const;
 
 export type Key = keyof typeof en;

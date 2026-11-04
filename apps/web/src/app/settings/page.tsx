@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { ConnectionsHub } from "../../components/connections/hub";
+import { connectionTiles } from "../../components/connections/hub-view";
+import { subscriptionCards } from "../../components/connections/subscriptions/subscriptions-view";
 import { LocalAccessLink } from "../../components/local-access";
 import { Shell } from "../../components/shell";
 import { LangChoice, ThemeChoice } from "../../components/theme-switch";
@@ -10,6 +13,12 @@ import { pageName } from "../../lib/brand";
 import { parseTheme } from "../../lib/prefs";
 import { accountMenu } from "../../lib/server/account/menu";
 import { authMode } from "../../lib/server/auth";
+import { agentsView } from "../../lib/server/connections";
+import { db } from "../../lib/server/db";
+import { controlKeys } from "../../lib/server/keys";
+import { mcpCatalog } from "../../lib/server/mcp";
+import { skillCatalog } from "../../lib/server/tools-import";
+import { PROVIDERS } from "@mandat/contract";
 import { pageCtx } from "../../lib/server/page";
 
 export const dynamic = "force-dynamic";
@@ -26,9 +35,15 @@ export default async function SettingsPage() {
   const c = await pageCtx();
   const t = await getT();
   const jar = await cookies();
+  // D-500: what is connected now, for the hub at the top
+  const v = await agentsView(t.lang);
+  const accounts = (await controlKeys(process.env)?.accounts()) ?? [];
+  const [servers, skills, account] = await Promise.all([mcpCatalog(db(), c.uid, c.org), skillCatalog(db(), c.uid, c.org), v.local ? accountMenu() : Promise.resolve("off" as const)]);
+  const tiles = connectionTiles({ local: v.local, subscriptions: subscriptionCards(accounts), keys: v.connections.map((k) => ({ hasKey: k.hasKey, kind: PROVIDERS[k.provider].kind })), servers, skills, models: v.agents.filter((a) => !a.id.startsWith("fake")).reduce((n, a) => n + a.models.length, 0), account });
   return (
     <Shell current="settings" waiting={c.waiting}>
       <h1 className="font-display text-2xl font-semibold tracking-tight">{t("settings.title")}</h1>
+      <ConnectionsHub t={t} tiles={tiles} />
       <section aria-labelledby="s-keys" className={`${card} mt-8 p-5`}>
         <h2 id="s-keys" className="font-display text-base font-semibold">{t("keys.title")}</h2>
         <p className="mt-1 mb-3 text-sm text-mute">{t("keys.intro")}</p>
