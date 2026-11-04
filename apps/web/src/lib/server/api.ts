@@ -405,6 +405,14 @@ export async function deleteConnection(req: Request, d: ApiDeps, id: string): Pr
   const removed = await k.keys.removeConnection(id);
   return removed === null ? unavailable() : json(200, { removed });
 }
+/** D-472: "Check the key" of a saved connection — the result (works / refused / no credit / did not answer), never the key. */
+export async function postConnectionCheck(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  if (!ConnectionId.safeParse(id).success) return json(400, { error: "bad_id" });
+  const r = await k.keys.checkConnection(id);
+  return r ? json(200, r) : json(404, { error: "unknown_connection" });
+}
 export async function getDetect(req: Request, d: ApiDeps): Promise<Response> {
   const k = await keysOwner(req, d, false);
   if (k instanceof Response) return k;

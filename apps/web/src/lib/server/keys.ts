@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
+import { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
 import type { AddConnectionBody, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
@@ -26,6 +26,8 @@ export interface KeysClient {
   addConnection(b: AddConnectionBody): Promise<AddConnectionReply | null>;
   setModels(id: string, b: ModelsBody): Promise<boolean | null>;
   removeConnection(id: string): Promise<boolean | null>;
+  /** D-472: "Check the key" — one cheap request by `mandat local`; null = unknown id or no answer */
+  checkConnection(id: string): Promise<CheckKeyReply | null>;
   detect(): Promise<DetectReply | null>;
   setPrefs(p: Preferences): Promise<boolean>;
   /** D-370: the CLI commands of `mandat local` (page System); null = the control endpoint did not answer */
@@ -125,6 +127,11 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     addConnection: (b) => parsed(send("POST", "/connections", b, 90_000), AddConnectionReply),
     setModels: async (id, b) => (await parsed(send("PATCH", `/connections/${encodeURIComponent(id)}`, b, 90_000), Done)) !== null,
     removeConnection: async (id) => (await parsed(send("DELETE", `/connections/${encodeURIComponent(id)}`, undefined, 90_000), Removed))?.removed ?? null,
+    checkConnection: async (id) => {
+      const r = await send("POST", `/connections/${encodeURIComponent(id)}/check`, undefined, 30_000).catch(() => null);
+      const j = CheckKeyReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
+      return j.success ? j.data : null;
+    },
     detect: () => parsed(send("GET", "/connections/detect"), DetectReply),
     setPrefs: async (p) => (await parsed(send("PUT", "/preferences", p), Done)) !== null,
     jobs,

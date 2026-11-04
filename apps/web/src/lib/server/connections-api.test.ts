@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AddConnectionBody } from "@mandat/contract";
-import { deleteConnection, getConnections, getDetect, patchConnection, postConnection, postLogin, putPreferences } from "./api";
+import { deleteConnection, getConnections, getDetect, patchConnection, postConnection, postConnectionCheck, postLogin, putPreferences } from "./api";
 import type { ApiDeps } from "./api";
 import { RateLimiter } from "./guard";
 import type { KeysClient } from "./keys";
@@ -21,6 +21,7 @@ const fake = {
   addConnection: async (b: AddConnectionBody) => (calls.push({ add: b.provider, keyed: b.key !== undefined }), b.key === REJECTED ? { ok: false as const, error: "bad_key" as const } : { ok: true as const, connection: conn }),
   setModels: async (id: string) => (calls.push({ models: id }), id === "deepseek"),
   removeConnection: async (id: string) => (calls.push({ remove: id }), true),
+  checkConnection: async (id: string) => (calls.push({ check: id }), id === "deepseek" ? { status: "no_credit" as const, at: "2026-11-04T10:00:00.000Z" } : null),
   detect: async () => ({ local: [{ provider: "ollama" as const, models: ["qwen3-coder"] }], envKeys: [] }),
   setPrefs: async (p: unknown) => (calls.push({ prefs: p }), true),
 } satisfies KeysClient;
@@ -63,5 +64,38 @@ describe("API /api/connections (D-393)", () => {
     who = U.owner;
     expect((await postConnection(req("POST", { provider: "ollama", models: ["m"] }, { csrf: false }), deps(fake))).status).toBe(403);
     expect((await getConnections(req("GET"), deps(null))).status).toBe(503);
+  });
+  it("D-472: Check the key — the result only; an unknown id → 404; a bad id → 400; viewers → 403", async () => {
+    who = U.owner;
+    const r = await postConnectionCheck(req("POST", {}), deps(fake), "deepseek");
+    expect([r.status, await r.json()]).toEqual([200, { status: "no_credit", at: "2026-11-04T10:00:00.000Z" }]);
+    expect((await postConnectionCheck(req("POST", {}), deps(fake), "nobody")).status).toBe(404);
+    expect((await postConnectionCheck(req("POST", {}), deps(fake), "Bad Id")).status).toBe(400);
+    expect((await postConnectionCheck(req("POST", {}, { csrf: false }), deps(fake), "deepseek")).status).toBe(403);
+    who = U.viewer;
+    expect((await postConnectionCheck(req("POST", {}), deps(fake), "deepseek")).status).toBe(403);
+    who = U.owner;
+  });
+  it("D-474: a key that goes through the web server never lands in the database or in a log line", async () => {
+    who = U.owner;
+    const printed: string[] = [];
+    const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m).mockImplementation((...a: unknown[]) => void printed.push(a.map(String).join(" "))));
+    try {
+      for (const provider of ["deepseek", "anthropic", "xai"] as const) {
+        await postConnection(req("POST", { provider, key: KEY, models: ["m1"] }), deps(fake));
+        await postConnection(req("POST", { provider, key: REJECTED, models: ["m1"] }), deps(fake));
+      }
+      await postConnection(req("POST", { provider: "deepseek", key: KEY, models: ["bad model"] }), deps(fake)); // refused by zod
+    } finally {
+      for (const s of spies) s.mockRestore();
+    }
+    expect(printed.join(" | ")).not.toContain(KEY);
+    expect(printed.join(" | ")).not.toContain(REJECTED);
+    const tables = await db.query<{ t: string }>("select quote_ident(table_schema) || '.' || quote_ident(table_name) as t from information_schema.tables where table_type = 'BASE TABLE' and table_schema not in ('pg_catalog', 'information_schema')");
+    expect(tables.rows.length).toBeGreaterThan(0);
+    for (const { t } of tables.rows) {
+      const rows = await db.query<{ j: string }>(`select row_to_json(x)::text as j from ${t} x`);
+      for (const r of rows.rows) expect([t, r.j.includes(KEY) || r.j.includes(REJECTED)]).toEqual([t, false]);
+    }
   });
 });
