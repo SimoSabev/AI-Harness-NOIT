@@ -107,8 +107,7 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     terms: { harness: "unclear", url: "https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md", note: "personal plans moved to Antigravity on 18.06.2026; Code Assist OAuth through third-party software violates the terms; the unmodified CLI in a wrapper is not addressed (Q-073)" },
     availability: "blocked", docs: "https://github.com/google-gemini/gemini-cli/blob/main/docs/get-started/authentication.md", checked: "2026-11-04",
   },
-  // planned (no adapter, not in the image): spike notes in docs/integrations/subscriptions.md (D-463). Qwen Code is not
-  // here: its free Qwen OAuth ended 15.04.2026 and the Coding Plan is an API key (Settings → Keys), not a login.
+  // D-464: Qwen Code is not here: its free Qwen OAuth ended 15.04.2026 and the Coding Plan is an API key (Settings → Keys).
   // D-464 (spike 04.11.2026): GitHub's device flow (`login --device-code`); without a keychain or a TTY the CLI keeps the
   // token only when settings.json says storeTokenPlaintext (the seed, written before the first sign-in). No status or
   // logout subcommand: status is the image's JSON-RPC probe (auth.getStatus → signed in + login only), logout = the volume.
