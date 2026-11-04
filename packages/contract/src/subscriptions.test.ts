@@ -75,6 +75,15 @@ describe("subscriptions: the registry (D-460)", () => {
     });
     expect(subscriptionOf("minimax").tunnels.map((t) => t.host)).toEqual(["account.minimax.io", "agent.minimax.io"]);
   });
+  it("D-464 GitHub Copilot: device flow, the plaintext-storage seed, the image's status probe, the plan hosts", () => {
+    expect(subscriptionOf("copilot")).toMatchObject({
+      cli: { bin: "copilot", version: "1.0.105" }, agent: "copilot", availability: "untested", configEnv: "COPILOT_HOME",
+      login: { method: "device_code", argv: ["login", "--device-code"], hosts: ["github.com"] },
+      status: { bin: "mandat-copilot-status", format: "match", match: '"isAuthenticated":true' }, logout: [],
+    });
+    expect(JSON.parse(subscriptionOf("copilot").seed!.text)).toEqual({ storeTokenPlaintext: true, banner: "never" });
+    expect(subscriptionOf("copilot").tunnels.map((t) => t.host)).toContain("api.githubcopilot.com");
+  });
   it("planned providers carry no login commands the sandbox could run by accident", () => {
     for (const p of Object.values(SUBSCRIPTIONS).filter((x) => x.availability === "planned")) {
       expect(p.agent, p.id).toBeNull();

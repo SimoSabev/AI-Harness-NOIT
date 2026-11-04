@@ -116,6 +116,43 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     ln -s /opt/kimi/node_modules/.bin/kimi /usr/local/bin/kimi; rm -rf /root/.npm; \
     HOME=/tmp kimi --version | grep -F "2.4.1"; rm -rf /tmp/.kimi-code
 
+# D-464: MiniMax Code 0.7.4 (MIT) for an M Plan sign-in, from the committed lockfile (integrity of every tarball; semver
+# pinned to 7.8.5 because 7.8.6 is younger than 3 days). No optional packages (the computer-use drivers and their MPL
+# parts are left out); the one install script that runs is better-sqlite3's (MIT), which fetches its prebuilt binary.
+COPY docker/sandbox/minimax/package.json docker/sandbox/minimax/package-lock.json /opt/mcode/
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    cd /opt/mcode && npm ci --ignore-scripts --omit=optional --no-audit --no-fund && npm rebuild better-sqlite3; \
+    HOME=/tmp node node_modules/@minimax-ai/code/verify-native-install.mjs; \
+    ln -s /opt/mcode/node_modules/.bin/mcode /usr/local/bin/mcode; rm -rf /root/.npm /root/.cache; \
+    HOME=/tmp mcode --version | grep -F "0.7.4"; rm -rf /tmp/.minimax
+
+# D-464: GitHub Copilot CLI 1.0.105 (GitHub Copilot CLI License: redistribution only unmodified, as part of a larger
+# service — this image is built locally and never published, 4.1). Only the platform package: one self-contained binary,
+# pinned by integrity; its 236 MB runtime is unpacked here once (COPILOT_PKG_CACHE_HOME), not on every run.
+# mandat-copilot-status is the JSON-RPC status probe (prints only signed in yes/no and the login, never a token).
+ARG COPILOT_VERSION=1.0.105
+ARG COPILOT_INTEGRITY_amd64=sha512-3trlyisQQAnlNy3CvYVRDVWC/WK+0CfDId7dDwNbxTFJ9IgM3aoCPyg+QbGPBUeuYNs4sjgtTqFn5l5yfyHVDg==
+ARG COPILOT_INTEGRITY_arm64=sha512-L7/4Sq1ibeUdD8aE++cubBjr2oWfAFGe0yKjuY5oe0HDZw8QHYAPrZhB2p79Nkg2lIB88REncsf+qWuVVDVPjA==
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) ARCH=x64; SUM="$COPILOT_INTEGRITY_amd64" ;; \
+      arm64) ARCH=arm64; SUM="$COPILOT_INTEGRITY_arm64" ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    mkdir /tmp/cp && cd /tmp/cp; \
+    npm pack --silent "@github/copilot-linux-${ARCH}@${COPILOT_VERSION}"; \
+    got="sha512-$(node -e 'process.stdout.write(require("crypto").createHash("sha512").update(require("fs").readFileSync(process.argv[1])).digest("base64"))' "github-copilot-linux-${ARCH}-${COPILOT_VERSION}.tgz")"; \
+    [ "$got" = "$SUM" ] || { echo "integrity mismatch for copilot: $got" >&2; exit 1; }; \
+    mkdir -p /opt/copilot && tar -xzf "github-copilot-linux-${ARCH}-${COPILOT_VERSION}.tgz" -C /opt/copilot --strip-components=1; \
+    cd / && rm -rf /tmp/cp /root/.npm; \
+    COPILOT_SEA_EXTRACT_ONLY=1 COPILOT_PKG_CACHE_HOME=/opt/copilot-cache HOME=/tmp /opt/copilot/copilot; chmod -R a+rX /opt/copilot-cache; \
+    ln -s /opt/copilot/copilot /usr/local/bin/copilot; rm -rf /tmp/.copilot /tmp/.cache
+ENV COPILOT_PKG_CACHE_HOME=/opt/copilot-cache
+COPY packages/agents/copilot/status.mjs /usr/local/lib/mandat/copilot-status.mjs
+RUN chmod 0555 /usr/local/lib/mandat/copilot-status.mjs && ln -s /usr/local/lib/mandat/copilot-status.mjs /usr/local/bin/mandat-copilot-status
+
 # D-301: pnpm and yarn v1 for repos that use them; pinned by integrity like the agents (no TOFU), no install scripts.
 # The base image's own yarn (unpinned here) is removed first, so `yarn` is exactly the checked tarball.
 ARG PNPM_VERSION=12.14.0

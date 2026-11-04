@@ -109,13 +109,20 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
   },
   // planned (no adapter, not in the image): spike notes in docs/integrations/subscriptions.md (D-463). Qwen Code is not
   // here: its free Qwen OAuth ended 15.04.2026 and the Coding Plan is an API key (Settings → Keys), not a login.
+  // D-464 (spike 04.11.2026): GitHub's device flow (`login --device-code`); without a keychain or a TTY the CLI keeps the
+  // token only when settings.json says storeTokenPlaintext (the seed, written before the first sign-in). No status or
+  // logout subcommand: status is the image's JSON-RPC probe (auth.getStatus → signed in + login only), logout = the volume.
   copilot: {
     id: "copilot", label: "GitHub Copilot", vendor: "GitHub", plans: "Copilot Free · Pro · Pro+ · Business · Enterprise",
-    cli: { bin: "copilot", npm: "@github/copilot", version: "1.0.105", license: "proprietary" }, headless: "copilot -p --allow-all-tools --output-format json",
-    login: { method: "device_code", argv: [], hosts: ["github.com"] },
-    configDir: "/home/agent/.copilot-profile", configEnv: "COPILOT_HOME", ...PLANNED,
-    terms: { harness: "allowed", url: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli", note: "GitHub documents Copilot CLI in CI and containers; every prompt uses premium requests" },
-    docs: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli", checked: "2026-11-04",
+    cli: { bin: "copilot", npm: "@github/copilot", version: "1.0.105", license: "proprietary" }, headless: "copilot -p --output-format json",
+    login: { method: "device_code", argv: ["login", "--device-code"], hosts: ["github.com"] },
+    seed: { file: "settings.json", text: '{"storeTokenPlaintext":true,"banner":"never"}' },
+    status: { bin: "mandat-copilot-status", argv: ["--json"], format: "match", match: '"isAuthenticated":true' }, logout: [],
+    configDir: "/home/agent/.copilot-profile", configEnv: "COPILOT_HOME", env: { COPILOT_AUTO_UPDATE: "false", COPILOT_OTEL_ENABLED: "false" },
+    tunnels: t443("github.com", "api.github.com", "api.githubcopilot.com", "api.individual.githubcopilot.com", "api.business.githubcopilot.com", "api.enterprise.githubcopilot.com"),
+    agent: "copilot", connectionProvider: null, defaultModel: "default",
+    terms: { harness: "allowed", url: "https://docs.github.com/en/copilot/how-tos/copilot-cli/automate-copilot-cli/automate-with-actions", note: "GitHub documents programmatic mode for scripts and automation; every run uses the plan's premium requests" },
+    availability: "untested", docs: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli", checked: "2026-11-04",
   },
   // D-464 (spike 04.11.2026, scratchpad spikes/kimi.md → docs/integrations/subscriptions.md): RFC 8628 device code; the
   // login is a file under KIMI_CODE_HOME (no keyring); no status/logout subcommand in 2.4.1, so status = its provider list

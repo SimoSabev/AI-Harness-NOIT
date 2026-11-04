@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MandatError, SUBSCRIPTIONS, SubscriptionId, canSignIn, isKeyCli } from "@mandat/contract";
 import { subscriptionAdapter } from "./index.js";
+import { COPILOT_ENV, COPILOT_SETTINGS } from "../copilot/argv.js";
 import { KIMI_ENV } from "../kimi/argv.js";
 import { MINIMAX_ENV } from "../minimax/argv.js";
 
@@ -15,5 +16,7 @@ describe("subscription adapters (D-464)", () => {
   it("the sandbox env of Kimi (the registry) is what the adapter expects", () => {
     expect(SUBSCRIPTIONS.kimi.env).toEqual(KIMI_ENV);
     expect(SUBSCRIPTIONS.minimax.env).toMatchObject(MINIMAX_ENV);
+    expect(SUBSCRIPTIONS.copilot.env).toEqual(COPILOT_ENV);
+    expect(JSON.parse(SUBSCRIPTIONS.copilot.seed!.text)).toEqual(COPILOT_SETTINGS);
   });
 });

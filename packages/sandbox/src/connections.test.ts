@@ -74,6 +74,9 @@ describe("connections in the sandbox (D-392)", () => {
     expect(script).toContain(`${SUBSCRIPTIONS.minimax.configDir}/${seed.file}`);
     expect(init.slice(init.indexOf("-c") + 1)).toHaveLength(1);
     expect(buildProfileArgs("status", { image: "img", volume: vol })).toEqual(expect.arrayContaining(["--entrypoint", "mcode", "--network", "none"]));
+    const cp = buildProfileArgs("status", { image: "img", volume: profileVolume("copilot", "a") });
+    expect(cp).toEqual(expect.arrayContaining(["--entrypoint", "mandat-copilot-status", "--network", "none"]));
+    expect(code(() => buildProfileArgs("logout", { image: "img", volume: profileVolume("copilot", "a") }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     // no seed → only the chown
     expect(buildProfileArgs("init", { image: "img", volume: profileVolume("claude", "a") }).some((a) => a.startsWith("MANDAT_SEED="))).toBe(false);
   });
