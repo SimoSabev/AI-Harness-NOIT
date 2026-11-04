@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AccountName, AddProjectBody, ConnectionId, LoginCode, LoginStart, SystemJob } from "@mandat/contract";
+import { AccountName, AddProjectBody, ConnectionId, LoginCode, LoginStart, SubscriptionId, SystemJob } from "@mandat/contract";
 import type { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
 
 // D-293: the web UI of `mandat local` hands API keys to the proxy through this control endpoint: 127.0.0.1 only,
@@ -21,8 +21,8 @@ export interface ControlDeps {
   /** D-295: the subscription accounts (from `claude auth status`; no token) */
   accounts(): Promise<{ name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }[]>;
   /** D-369: the subscription login from the web (login-session.ts) */
-  login: { state(): LoginState; start(name: string, cli: "claude" | "codex"): Promise<LoginState>; submit(code: string): LoginState | null; cancel(): LoginState };
-  logout(name: string, cli: "claude" | "codex"): Promise<boolean>;
+  login: { state(): LoginState; start(name: string, cli: SubscriptionId): Promise<LoginState>; submit(code: string): LoginState | null; cancel(): LoginState };
+  logout(name: string, cli: SubscriptionId): Promise<boolean>;
   /** D-370: the CLI commands from the web (system-jobs.ts) */
   system: { all(): JobState[]; start(job: SystemJob): JobState };
   /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
@@ -67,7 +67,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-const NameBody = z.object({ name: AccountName, cli: z.enum(["claude", "codex"]).default("claude") }).strict();
+const NameBody = z.object({ name: AccountName, cli: SubscriptionId.default("claude") }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 
 /** D-369: /accounts/login (GET state, POST start, DELETE cancel), /accounts/login/code, /accounts/logout. The code is never echoed. */
