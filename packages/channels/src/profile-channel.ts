@@ -1,5 +1,5 @@
 import { SUBSCRIPTIONS } from "@mandat/contract";
-import type { GateRoute, GateTunnel } from "@mandat/contract";
+import type { AgentCli, GateRoute, GateTunnel } from "@mandat/contract";
 import type { TaskUsage } from "@mandat/llm-proxy";
 import type { Channel } from "./channel.js";
 
@@ -23,14 +23,18 @@ export const GEMINI_TUNNELS: readonly GateTunnel[] = SUBSCRIPTIONS.gemini.tunnel
 const ZERO: TaskUsage = { usd: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, requests: 0, budgetStop: false, limit: null, authFailed: false, noTools: false };
 const HELLO: GateRoute = { id: "hello", method: "HEAD", match: { kind: "exact", path: "/api/hello" }, upstream: "local_ok" };
 
-export function profileChannel(o: { label: string; model: string; profileName: string; provider?: "anthropic" | "openai" | "gemini" }): Channel {
+/** D-464: `cli` names the subscription (its tunnels and profile volume come from the registry); without it the provider
+ * picks claude / codex / gemini as before. */
+export function profileChannel(o: { label: string; model: string; profileName: string; provider?: "anthropic" | "openai" | "gemini"; cli?: AgentCli }): Channel {
   const provider = o.provider ?? "anthropic";
+  const cli: AgentCli = o.cli ?? (provider === "openai" ? "codex" : provider === "gemini" ? "gemini" : "claude");
   return {
     label: o.label,
     kind: "cli_profile",
     provider,
     model: o.model,
     profileName: o.profileName,
+    cli,
     issueTaskCredential() {
       return Promise.reject(new Error("a profile channel has no task credential (D-295)"));
     },
@@ -40,6 +44,6 @@ export function profileChannel(o: { label: string; model: string; profileName: s
       throw new Error("a profile channel has no sandbox credential (D-295)");
     },
     gateRoutes: () => [{ ...HELLO, match: { ...HELLO.match } }],
-    gateTunnels: () => (provider === "openai" ? OPENAI_TUNNELS : provider === "gemini" ? GEMINI_TUNNELS : ANTHROPIC_TUNNELS).map((t) => ({ ...t })),
+    gateTunnels: () => SUBSCRIPTIONS[cli].tunnels.map((t) => ({ ...t })),
   };
 }

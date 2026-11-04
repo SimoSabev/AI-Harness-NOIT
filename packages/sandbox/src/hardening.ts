@@ -336,7 +336,7 @@ export function profileVolume(provider: SubscriptionId, name: string): string {
 /** 8.2: exact env sets per phase. names = secrets only (→ RunSpec.envNames); publicValues → RunSpec.publicEnv. */
 export function envForPhase(
   phase: "install" | "agent" | "test",
-  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "GEMINI_API_KEY" | "profile" | "profile-codex"; testsEnv?: Record<string, string>; model?: string } = {},
+  o: { tokenName?: "ANTHROPIC_API_KEY" | "OPENAI_API_KEY" | "GEMINI_API_KEY" | "profile" | "profile-codex"; profileCli?: SubscriptionId; testsEnv?: Record<string, string>; model?: string } = {},
 ): { names: string[]; publicValues: Record<string, string> } {
   if (phase === "install") {
     return {
@@ -380,6 +380,16 @@ export function envForPhase(
     return {
       names: ["AWS_SECRET_ACCESS_KEY"],
       publicValues: { ...BASE_PUBLIC, CODEX_HOME: CODEX_PROFILE_DIR, HTTPS_PROXY: "http://egress-gate:80", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+    };
+  }
+  if (phase === "agent" && o.tokenName === "profile" && o.profileCli !== undefined && o.profileCli !== "claude") {
+    if (o.profileCli === "codex") return envForPhase("agent", { tokenName: "profile-codex" });
+    // D-464: any other subscription CLI — its own login at the registry's configDir (the profile volume), the registry's
+    // env (no update checks, no telemetry), out only through the gate's CONNECT tunnels of that provider
+    const p = SUBSCRIPTIONS[o.profileCli];
+    return {
+      names: ["AWS_SECRET_ACCESS_KEY"],
+      publicValues: { ...BASE_PUBLIC, ...p.env, [p.configEnv]: p.configDir, HTTPS_PROXY: "http://egress-gate:80", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent" && o.tokenName === "profile") {
