@@ -14,3 +14,5 @@ export { FileKeyStore, kekId, loadKek, openKey, sealKey } from "./envelope.js";
 export type { KeyProvider, SealedKey } from "./envelope.js";
 export { ConnectionStore } from "./connections-store.js";
 export type { SavedConnection } from "./connections-store.js";
+export { checkKey, classifyCheck } from "./key-check.js";
+export type { CheckTarget } from "./key-check.js";
