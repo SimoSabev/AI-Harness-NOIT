@@ -1,5 +1,5 @@
-import { PROVIDERS, parseAgentRef } from "@mandat/contract";
-import type { Connection } from "@mandat/contract";
+import { PROVIDERS, agentFor, parseAgentRef } from "@mandat/contract";
+import type { AgentCli, Connection, ProviderId } from "@mandat/contract";
 import { translate } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 
@@ -71,7 +71,9 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   }
   for (const c of o.connections) {
     const info = PROVIDERS[c.provider];
-    if (info.kind === "subscription" || c.provider === "anthropic" || c.provider === "openai" || (info.auth !== "none" && !c.hasKey)) continue;
+    // D-471: the first Anthropic / OpenAI key is the plain `claude` / `codex` above; D-470: no agent → not a choice
+    const plain = (c.provider === "anthropic" || c.provider === "openai") && c.id === c.provider;
+    if (info.kind === "subscription" || plain || info.agent === null || (info.auth !== "none" && !c.hasKey)) continue;
     const id = `${info.agent}+${c.id}`;
     out.push({ id, label: agentLabel(id, lang, c.label), models: c.models, defaultModel: c.defaultModel, local: info.kind === "local" });
   }
@@ -79,3 +81,6 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   const i = out.findIndex((a) => a.id === o.preferred);
   return i > 0 ? [out[i] as TaskAgent, ...out.slice(0, i), ...out.slice(i + 1)] : out;
 }
+
+/** D-473: which agent can use a provider's key (Claude Code, Codex, Gemini CLI) — null: none here yet (shown honestly). */
+export const apiKeyUse = (p: ProviderId): AgentCli | null => agentFor(p);

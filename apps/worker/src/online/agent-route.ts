@@ -36,8 +36,9 @@ export function routeOf(agent: string, model: string | null, conns: readonly Con
   const c = conns.find((x) => x.id === id);
   const info = c ? PROVIDERS[c.provider] : null;
   if (!c || !info || info.kind === "subscription" || (info.auth !== "none" && !c.hasKey)) return { ok: false, reason: "no_connection" };
-  // D-427: the CLI must speak the connection's wire (Gemini CLI ↔ a Gemini connection only)
-  if ((r.cli === "gemini") !== (info.agent === "gemini")) return { ok: false, reason: "no_connection" };
+  // D-427, D-470: the CLI must speak the connection's format (Claude Code ↔ Anthropic, Codex ↔ OpenAI Responses, Gemini
+  // CLI ↔ Gemini); a format no agent here speaks (agent null) never runs
+  if (info.agent !== r.cli) return { ok: false, reason: "no_connection" };
   const local = info.kind === "local";
   return { ok: true, run: r.cli, ref: { label: connectionLabel(id), kind: local ? "local" : "api_key", model: pick(picked, c.models, c.defaultModel) }, account: null, local };
 }

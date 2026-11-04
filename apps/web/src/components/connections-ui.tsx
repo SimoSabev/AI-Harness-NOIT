@@ -19,7 +19,9 @@ const ERR: Record<string, Key> = {
   bad_key: "conn.err.bad_key", unreachable: "conn.err.unreachable", bad_address: "conn.err.bad_address", bad_connection: "conn.err.bad_address",
   proxy_start_failed: "conn.err.proxy", control_unavailable: "error.keys_unavailable", keys_unavailable: "error.keys_unavailable", not_an_owner: "error.keys_not_an_owner",
 };
-const GROUPS: { title: Key; ids: ProviderId[] }[] = [
+// the first-run cards (each has its own title and hint in the catalog); every other provider is in Settings → API keys (D-475)
+type WelcomeId = "claude-sub" | "chatgpt-sub" | "anthropic" | "openai" | "gemini" | "deepseek" | "kimi" | "zai" | "custom" | "ollama" | "lmstudio";
+const GROUPS: { title: Key; ids: WelcomeId[] }[] = [
   { title: "conn.group.subscription", ids: ["claude-sub", "chatgpt-sub"] },
   { title: "conn.group.key", ids: ["anthropic", "openai", "gemini", "deepseek", "kimi", "zai", "custom"] },
   { title: "conn.group.local", ids: ["ollama", "lmstudio"] },
@@ -155,7 +157,7 @@ function KeyConnect({ provider, available, onSaved }: { provider: ProviderId; av
   );
 }
 
-function ProviderCard({ id, on, onToggle, detected, saved }: { id: ProviderId; on: boolean; onToggle: () => void; detected: string[] | null; saved: boolean }) {
+function ProviderCard({ id, on, onToggle, detected, saved }: { id: WelcomeId; on: boolean; onToggle: () => void; detected: string[] | null; saved: boolean }) {
   const t = useT();
   const info = PROVIDERS[id];
   return (
@@ -177,13 +179,13 @@ export function ConnectWizard({ connections, detect, agents, accountName, startA
   const t = useT();
   const router = useRouter();
   const [step, setStep] = useState<"pick" | "connect" | "default">(startAt);
-  const found = (id: ProviderId) => detect?.local.find((l) => l.provider === id)?.models ?? null;
-  const preselect = new Set<ProviderId>(connections.length === 0 && agents.length === 0 ? ["claude-sub", ...(["ollama", "lmstudio"] as const).filter((p) => found(p) !== null)] : []);
-  const [picked, setPicked] = useState<Set<ProviderId>>(preselect);
+  const found = (id: WelcomeId) => detect?.local.find((l) => l.provider === id)?.models ?? null;
+  const preselect = new Set<WelcomeId>(connections.length === 0 && agents.length === 0 ? ["claude-sub", ...(["ollama", "lmstudio"] as const).filter((p) => found(p) !== null)] : []);
+  const [picked, setPicked] = useState<Set<WelcomeId>>(preselect);
   const [choice, setChoice] = useState<{ agent: string; model: string | null }>({ agent: agents[0]?.id ?? "", model: agents[0]?.defaultModel ?? null });
   const [err, setErr] = useState<string | null>(null);
-  const savedIds = new Set(connections.map((c) => c.provider));
-  const toggle = (id: ProviderId) => setPicked((s) => {
+  const savedIds = new Set<string>(connections.map((c) => c.provider));
+  const toggle = (id: WelcomeId) => setPicked((s) => {
     const n = new Set(s);
     if (n.has(id)) n.delete(id);
     else n.add(id);

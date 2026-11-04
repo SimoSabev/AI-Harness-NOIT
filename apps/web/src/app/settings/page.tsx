@@ -34,7 +34,12 @@ export default async function SettingsPage() {
         <p className="mt-1 mb-3 text-sm text-mute">{t("keys.intro")}</p>
         <p className="flex flex-wrap gap-4">
           <Link href="/settings/models" className={link}>{t("conn.title")}</Link>
-          <Link href="/keys" className={link}>{t("settings.keysLink")}</Link>
+          <Link href="/settings/api-keys" className={link}>{t("settings.keysLink")}</Link>
+        </p>
+        {/* D-475: one row for every AI service's API keys */}
+        <p className="mt-4 border-t border-line pt-4">
+          <Link href="/settings/api-keys" className={link}>{t("apikeys.title")}</Link>
+          <span className="mt-0.5 block text-sm text-mute">{t("settings.apiKeysHint")}</span>
         </p>
       </section>
       {authMode() === "local" && (

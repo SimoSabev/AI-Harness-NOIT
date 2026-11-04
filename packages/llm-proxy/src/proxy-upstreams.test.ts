@@ -98,6 +98,17 @@ describe("proxy upstreams of saved connections (D-392)", () => {
     expect(up.seen[1]?.headers["x-api-key"]).toBeUndefined();
     expect(p.logs.at(-1)).toMatchObject({ usd: 0 });
   });
+  it("D-470: Azure's api-key header; the agent's token and other key headers never reach the upstream", async () => {
+    const up = await upstream({ input_tokens: 1, output_tokens: 1 } as never);
+    const p = await booted({ upstreams: { azure: ups(`${up.url}/openai`, { wire: "openai", auth: "api-key", models: ["gpt-5"], prices: {} }) } });
+    const t = token({ u: "azure", p: "openai" });
+    const r = await call(p.inf, "/v1/responses", { headers: { authorization: `Bearer ${t}`, "api-key": t }, body: JSON.stringify({ model: "gpt-5", input: "x" }) });
+    expect(r.status).toBe(200);
+    expect(up.seen[0]?.path).toBe("/openai/v1/responses");
+    expect(up.seen[0]?.headers["api-key"]).toBe(KEY);
+    expect(up.seen[0]?.headers.authorization).toBeUndefined();
+    expect(JSON.stringify(up.seen)).not.toContain(t);
+  });
   it("a model outside the connection's list → 403; [1m] in the list also allows the bare name; a missing price is estimated", async () => {
     const up = await upstream();
     const p = await booted({ upstreams: { deepseek: ups(up.url) } });

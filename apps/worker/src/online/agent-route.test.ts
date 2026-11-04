@@ -52,3 +52,22 @@ describe("routeOf for Gemini (D-427)", () => {
     expect(routeOf("gemini+deepseek", null, [{ ...g, id: "deepseek", provider: "deepseek" }])).toEqual({ ok: false, reason: "no_connection" });
   });
 });
+
+// D-470: the CLI must speak the connection's format — Codex only on an OpenAI-Responses connection, Claude Code only on an
+// Anthropic one; a provider no agent here speaks (Cerebras: Chat Completions only) never runs
+describe("routeOf: the agent follows the format (D-470)", () => {
+  const key = { hasKey: true, baseUrl: null } as const;
+  const xai: Connection = { id: "xai", provider: "xai", label: "xAI", models: ["grok-x"], defaultModel: "grok-x", ...key };
+  const an2: Connection = { id: "anthropic-2", provider: "anthropic", label: "Work", models: ["claude-sonnet-5-5"], defaultModel: "claude-sonnet-5-5", ...key };
+  const mis: Connection = { id: "cerebras", provider: "cerebras", label: "Cerebras", models: ["m"], defaultModel: "m", ...key };
+  it("codex+xai runs Codex on conn-xai; claude+anthropic-2 runs Claude Code on conn-anthropic-2", () => {
+    expect(routeOf("codex+xai", null, [xai])).toEqual({ ok: true, run: "codex", ref: { label: "conn-xai", kind: "api_key", model: "grok-x" }, account: null, local: false });
+    expect(routeOf("claude+anthropic-2", null, [an2])).toMatchObject({ ok: true, run: "claude", ref: { label: "conn-anthropic-2" } });
+  });
+  it("a mismatched CLI or a format no agent speaks → no_connection", () => {
+    expect(routeOf("claude+xai", null, [xai])).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("codex+deepseek", null, conns)).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("claude+cerebras", null, [mis])).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("codex+cerebras", null, [mis])).toEqual({ ok: false, reason: "no_connection" });
+  });
+});
