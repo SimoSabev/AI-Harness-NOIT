@@ -46,12 +46,23 @@ export function isDeviceUrl(u: string): boolean {
   }
 }
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+function userCode(url: string | undefined): string | undefined {
+  try {
+    const c = url ? new URL(url).searchParams.get("user_code") : null;
+    return c !== null && DEVICE_CODE.test(c) ? c : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/** D-464: the one-time code a device page asks for */
+export const DEVICE_CODE = /^(?:[A-Z0-9]{4,8}-[A-Z0-9]{4,8}|[A-Z0-9]{4,12})$/;
 /** The device page and the one-time code in the output of `codex login --device-auth` (both, or null). */
 export function findDeviceLogin(text: string): { url: string; code: string } | null {
   const plain = text.replace(ANSI, "");
   const url = [...plain.matchAll(URL_RE)].map((m) => m[0]).find(isDeviceUrl);
   const after = url ? plain.slice(plain.indexOf(url) + url.length) : "";
-  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1];
+  // D-464: XXXX-XXXX (OpenAI, GitHub); else "code: XXXXXX" or the page's own user_code (Kimi) [НП: Kimi's code shape]
+  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1] ?? /\bcode:?\s+([A-Z0-9]{4,12})\b/.exec(after)?.[1] ?? userCode(url);
   return url && code ? { url, code } : null;
 }
 
@@ -66,7 +77,7 @@ export const LoginState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("idle") }).strict(),
   z.object({ state: z.literal("starting"), name: AccountName }).strict(),
   z.object({ state: z.literal("waiting_code"), name: AccountName, url: z.string().max(4096).refine(isLoginUrl) }).strict(),
-  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(/^[A-Z0-9]{4,8}-[A-Z0-9]{4,8}$/) }).strict(),
+  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(DEVICE_CODE) }).strict(),
   z.object({ state: z.literal("checking"), name: AccountName }).strict(),
   z.object({ state: z.literal("done"), name: AccountName, email: z.string().max(320).nullable(), plan: z.string().max(100).nullable() }).strict(),
   z.object({ state: z.literal("failed"), name: AccountName, reason: LoginFailure }).strict(),
