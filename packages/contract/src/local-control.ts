@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LocalPath } from "./desktop.js";
+import { LoginCliId, SUBSCRIPTIONS, canSignIn } from "./subscriptions.js";
 
 // D-369: what crosses between `mandat local` (its control endpoint, 127.0.0.1 + bearer token) and the web server.
 // The subscription login runs the unchanged `claude auth login` in a container; the web shows Anthropic's address and
@@ -34,7 +35,8 @@ export function findLoginUrl(text: string): string | null {
 
 // D-393: a ChatGPT sign-in is the unmodified `codex login --device-auth` [НП: the exact wording; spike when Codex runs
 // live]: it prints OpenAI's device page and a one-time code; the person types the code there, nothing comes back here.
-const DEVICE_HOSTS = ["auth.openai.com", "chatgpt.com"];
+// D-460: every device-code provider's own pages (the registry)
+const DEVICE_HOSTS = Object.values(SUBSCRIPTIONS).filter((p) => p.login.method === "device_code" && canSignIn(p.id)).flatMap((p) => p.login.hosts);
 export function isDeviceUrl(u: string): boolean {
   try {
     const p = new URL(u);
@@ -54,7 +56,7 @@ export function findDeviceLogin(text: string): { url: string; code: string } | n
 }
 
 /** Start a subscription sign-in: the account name and the CLI (Claude Code, or Codex for ChatGPT). */
-export const LoginStart = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), cli: z.enum(["claude", "codex"]).default("claude") }).strict();
+export const LoginStart = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), cli: LoginCliId.default("claude") }).strict();
 export type LoginStart = z.infer<typeof LoginStart>;
 
 export const LoginFailure = z.enum(["busy", "images_missing", "start_failed", "no_url", "invalid_code", "not_logged_in", "timeout", "cancelled"]);
