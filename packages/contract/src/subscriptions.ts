@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ProviderId } from "./connections.js";
 import { GateTunnelSchema } from "./gate.js";
+import { AgentCli } from "./agent-cli.js";
 
 // D-460: the subscription providers in one place. A subscription is the unmodified vendor CLI with its own login (D-295):
 // the person signs in once through the vendor's flow, the login lives in a profile volume that only the agent container
@@ -9,9 +10,9 @@ import { GateTunnelSchema } from "./gate.js";
 // One entry per provider: the sandbox (buildProfileArgs), the channels (tunnels), the CLI (accounts, login) and the web
 // (Settings → Subscriptions, the task box) all read this table. Sources and dates: docs/integrations/subscriptions.md.
 
-/** No dash: a profile volume `mandat-profile-<id>-<name>` maps back to exactly one provider. */
-export const SubscriptionId = z.enum(["claude", "codex", "gemini", "copilot", "kimi", "antigravity", "cursor", "minimax"]);
-export type SubscriptionId = z.infer<typeof SubscriptionId>;
+/** No dash: a profile volume `mandat-profile-<id>-<name>` maps back to exactly one provider. D-464: = the agent CLIs. */
+export const SubscriptionId = AgentCli;
+export type SubscriptionId = AgentCli;
 
 /** paste_code: the CLI prints the vendor's page, the person pastes a code back (Claude). device_code: the CLI prints a page
  * and a one-time code the person types there (Codex, GitHub). browser_callback: a redirect to localhost — does not work from
@@ -49,7 +50,9 @@ export const SubscriptionProvider = z.object({
   /** the CONNECT tunnels the sandbox gets for this subscription (TLS end to end; the gate allows nothing else) */
   tunnels: z.array(GateTunnelSchema).max(8),
   /** the adapter in packages/agents that runs it; null = none yet */
-  agent: z.enum(["claude", "codex", "gemini"]).nullable(),
+  agent: AgentCli.nullable(),
+  /** D-464: the model of an account without saved models; "default" = no model flag, the CLI's (and the plan's) own choice */
+  defaultModel: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/),
   /** the connections catalog entry its models come from (Settings → Models); null = none yet */
   connectionProvider: ProviderId.nullable(),
   terms: z.object({ harness: z.enum(["allowed", "unclear", "forbidden"]), url: z.string().url(), note: z.string().max(300) }).strict(),
@@ -60,7 +63,7 @@ export const SubscriptionProvider = z.object({
 export type SubscriptionProvider = z.infer<typeof SubscriptionProvider>;
 
 const t443 = (...hosts: string[]) => hosts.map((host) => ({ host, port: 443 }));
-const PLANNED = { status: { argv: [], format: "exit-code" as const }, logout: [], env: {}, tunnels: [], agent: null, connectionProvider: null, availability: "planned" as const };
+const PLANNED = { status: { argv: [], format: "exit-code" as const }, logout: [], env: {}, tunnels: [], agent: null, connectionProvider: null, defaultModel: "default", availability: "planned" as const };
 
 export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider>> = {
   // D-295, D-369: `claude auth login --claudeai` prints claude.ai's authorize page; the person pastes the code back
@@ -71,7 +74,7 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     status: { argv: ["auth", "status", "--json"], format: "claude-json" }, logout: ["auth", "logout"],
     configDir: "/home/agent/.claude-profile", configEnv: "CLAUDE_CONFIG_DIR", env: { DISABLE_AUTOUPDATER: "1" },
     tunnels: t443("api.anthropic.com", "console.anthropic.com", "platform.claude.com"),
-    agent: "claude", connectionProvider: "claude-sub",
+    agent: "claude", connectionProvider: "claude-sub", defaultModel: "claude-sonnet-5-5",
     terms: { harness: "allowed", url: "https://code.claude.com/docs/en/legal-and-compliance", note: "allows a person to sign in to the unmodified Claude Code binary, also on a platform that hosts it; no token handling, no reselling (D-295)" },
     availability: "ready", docs: "https://code.claude.com/docs/en/authentication", checked: "2026-11-04",
   },
@@ -83,7 +86,7 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     status: { argv: ["login", "status"], format: "codex-text" }, logout: ["logout"],
     configDir: "/home/agent/.codex-profile", configEnv: "CODEX_HOME", env: {},
     tunnels: t443("chatgpt.com", "auth.openai.com"),
-    agent: "codex", connectionProvider: "chatgpt-sub",
+    agent: "codex", connectionProvider: "chatgpt-sub", defaultModel: "gpt-5-codex",
     terms: { harness: "allowed", url: "https://learn.chatgpt.com/docs/auth", note: "ChatGPT plans include Codex CLI; device-code sign-in must first be turned on in ChatGPT security settings" },
     availability: "untested", docs: "https://learn.chatgpt.com/docs/auth", checked: "2026-11-04",
   },
@@ -95,7 +98,7 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     status: { argv: [], format: "exit-code" }, logout: [],
     configDir: "/home/agent/.gemini-profile", configEnv: "GEMINI_CLI_HOME", env: {},
     tunnels: t443("cloudcode-pa.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"),
-    agent: "gemini", connectionProvider: null,
+    agent: "gemini", connectionProvider: null, defaultModel: "default",
     // since 18.06.2026 personal plans (free, AI Pro, Ultra) are served by Antigravity CLI; Gemini CLI signs in only Code
     // Assist Standard/Enterprise (README and developers.googleblog.com, read 04.11.2026)
     terms: { harness: "unclear", url: "https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md", note: "personal plans moved to Antigravity on 18.06.2026; Code Assist OAuth through third-party software violates the terms; the unmodified CLI in a wrapper is not addressed (Q-073)" },

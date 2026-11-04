@@ -1,3 +1,4 @@
+import { AGENT_CLIS, KEY_CLIS } from "./agent-cli.js";
 import { describe, expect, it } from "vitest";
 import {
   AddConnectionBody, Connection, ConnectionId, ConnectionsReply, ModelId, PROVIDERS, Preferences, ProxyUpstream, agentOf, connectionLabel, formatAgentRef, parseAgentRef,
@@ -78,9 +79,8 @@ describe("Google Gemini provider (D-427)", () => {
     expect(PROVIDERS.gemini.models.find((m) => m.recommended)?.id).toBe("gemini-3.8-flash");
     expect(priceOf("gemini", "gemini-4-argon")).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite: 4 });
   });
-  it("gemini and gemini+<connection> parse; a Google login (gemini@…) does not (Q-073)", () => {
-    for (const s of ["gemini", "gemini+gemini", "gemini+rabota"]) expect(formatAgentRef(parseAgentRef(s)!)).toBe(s);
-    expect(parseAgentRef("gemini@lichno")).toBeNull();
+  it("gemini, gemini+<connection> and a Google login gemini@<account> parse (the registry decides whether it may run, D-464)", () => {
+    for (const s of ["gemini", "gemini+gemini", "gemini+rabota", "gemini@lichno"]) expect(formatAgentRef(parseAgentRef(s)!)).toBe(s);
     expect(agentOf("gemini+rabota")).toBe("gemini");
     expect(AddConnectionBody.safeParse({ provider: "gemini", key: KEY, models: ["gemini-3.8-flash"] }).success).toBe(true);
     expect(AddConnectionBody.safeParse({ provider: "gemini", models: ["gemini-3.8-flash"] }).success).toBe(false);
@@ -96,6 +96,16 @@ describe("agent refs (D-392)", () => {
       expect(formatAgentRef(r!)).toBe(s);
     }
     for (const bad of ["", "gemin", "claude@", "claude+", "claude@A", "claude+x+y", "codex@a b"]) expect(parseAgentRef(bad)).toBeNull();
+  });
+  it("D-464: every subscription CLI signs in as <cli>@<account>; only claude, codex and gemini have a key or a connection", () => {
+    for (const cli of ["copilot", "kimi", "antigravity", "cursor", "minimax"]) {
+      expect(formatAgentRef(parseAgentRef(`${cli}@lichno`)!)).toBe(`${cli}@lichno`);
+      expect(agentOf(`${cli}@lichno`)).toBe(cli);
+      expect(parseAgentRef(cli)).toBeNull();
+      expect(parseAgentRef(`${cli}+deepseek`)).toBeNull();
+    }
+    expect(AGENT_CLIS).toEqual(["claude", "codex", "gemini", "copilot", "kimi", "antigravity", "cursor", "minimax"]);
+    expect(KEY_CLIS).toEqual(["claude", "codex", "gemini"]);
   });
   it("agentOf and connectionLabel: which CLI runs and the channel label the worker resolves", () => {
     expect(agentOf("claude+deepseek")).toBe("claude");

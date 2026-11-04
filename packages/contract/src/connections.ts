@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { AgentCli, isKeyCli } from "./agent-cli.js";
+import type { KeyCli } from "./agent-cli.js";
 
 // D-392: a "connection" is one way of reaching a model: a subscription (the unmodified CLI with its own login, D-295),
 // an API key, a server on this computer, or another endpoint that speaks the Anthropic Messages API (Claude Code) or the
@@ -27,7 +29,7 @@ export interface ProviderInfo {
   label: string;
   kind: "subscription" | "api_key" | "local";
   /** the CLI that runs in the sandbox (D-427: gemini = Gemini CLI) */
-  agent: "claude" | "codex" | "gemini";
+  agent: KeyCli;
   wire: Wire;
   /** null: the person gives the address (custom) or there is none (a subscription goes through its own CONNECT tunnel) */
   baseUrl: string | null;
@@ -189,22 +191,25 @@ export type ProxyUpstream = z.infer<typeof ProxyUpstream>;
 // claude | codex (the provider's API key) · claude@<account> | codex@<account> (a subscription) · claude+<connection> |
 // codex+<connection> (a saved connection through the proxy) · fake:<scenario> | fake-codex:<scenario> (demo agents) ·
 // D-427: gemini (the saved Gemini connection "gemini") | gemini+<connection>; no gemini@<account> (Google login is off, Q-073)
+// D-464: every CLI of AGENT_CLIS as <cli>@<account>; the key and +<connection> forms only for KEY_CLIS
 export type AgentRef =
-  | { cli: "claude" | "codex" | "gemini"; via: { kind: "key" } | { kind: "account"; name: string } | { kind: "connection"; id: string } }
+  | { cli: KeyCli; via: { kind: "key" } | { kind: "account"; name: string } | { kind: "connection"; id: string } }
+  | { cli: Exclude<AgentCli, KeyCli>; via: { kind: "account"; name: string } }
   | { cli: "fake" | "fake-codex"; scenario: string };
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export function parseAgentRef(s: string): AgentRef | null {
   const fake = /^(fake|fake-codex):([a-z0-9-]{1,40})$/.exec(s);
   if (fake) return { cli: fake[1] as "fake" | "fake-codex", scenario: fake[2] as string };
-  const m = /^(claude|codex|gemini)(?:([@+])(.*))?$/.exec(s);
-  if (!m) return null;
-  const cli = m[1] as "claude" | "codex" | "gemini";
-  if (cli === "gemini" && m[2] === "@") return null;
-  if (m[2] === undefined) return { cli, via: { kind: "key" } };
+  const m = /^([a-z]+)(?:([@+])(.*))?$/.exec(s);
+  const parsed = AgentCli.safeParse(m?.[1]);
+  if (!m || !parsed.success) return null;
+  const cli = parsed.data;
   const name = m[3] ?? "";
-  if (!NAME.test(name)) return null;
-  return { cli, via: m[2] === "@" ? { kind: "account", name } : { kind: "connection", id: name } };
+  if (m[2] !== undefined && !NAME.test(name)) return null;
+  if (m[2] === "@") return { cli, via: { kind: "account", name } } as AgentRef;
+  if (!isKeyCli(cli)) return null;
+  return m[2] === undefined ? { cli, via: { kind: "key" } } : { cli, via: { kind: "connection", id: name } };
 }
 export function formatAgentRef(r: AgentRef): string {
   if (!("via" in r)) return `${r.cli}:${r.scenario}`;
@@ -213,9 +218,9 @@ export function formatAgentRef(r: AgentRef): string {
 }
 export const AgentRefString = z.string().max(64).refine((s) => parseAgentRef(s) !== null, "unknown agent");
 /** The CLI of an agent ref ("claude" for the Claude fakes too). */
-export function agentOf(s: string): "claude" | "codex" | "gemini" | null {
+export function agentOf(s: string): AgentCli | null {
   const r = parseAgentRef(s);
-  return r === null ? null : r.cli === "codex" || r.cli === "fake-codex" ? "codex" : r.cli === "gemini" ? "gemini" : "claude";
+  return r === null ? null : r.cli === "fake-codex" ? "codex" : r.cli === "fake" ? "claude" : r.cli;
 }
 /** The channel label of a saved connection (packages/channels channelFor resolves it to the proxy upstream of that id). */
 export const connectionLabel = (id: string): string => `conn-${id}`;
