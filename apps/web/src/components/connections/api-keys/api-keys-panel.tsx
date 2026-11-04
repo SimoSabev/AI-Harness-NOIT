@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PROVIDERS } from "@mandat/contract";
-import type { AgentCli, Connection, KeyCheck, ProviderGroup, ProviderId } from "@mandat/contract";
+import type { KeyCli, Connection, KeyCheck, ProviderGroup, ProviderId } from "@mandat/contract";
 import { useT } from "../../../i18n/client";
 import type { Key } from "../../../i18n/t";
 import { errorText, postJson } from "../../../lib/client/api";
@@ -24,9 +24,9 @@ const ERR: Record<string, Key> = {
 const GROUP: Record<ProviderGroup, Key> = {
   subscription: "conn.group.subscription", main: "apikeys.group.main", china: "apikeys.group.china", router: "apikeys.group.router", cloud: "apikeys.group.cloud", local: "conn.group.local", own: "apikeys.group.own",
 };
-const AGENT: Record<AgentCli, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI" };
+const AGENT: Record<KeyCli, string> = { claude: "Claude Code", codex: "Codex", gemini: "Gemini CLI" };
 
-function AgentNote({ agent }: { agent: AgentCli | null }) {
+function AgentNote({ agent }: { agent: KeyCli | null }) {
   const t = useT();
   return agent === null
     ? <span className="text-xs text-warn">{t("apikeys.noAgent")}</span>

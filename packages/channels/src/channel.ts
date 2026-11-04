@@ -1,4 +1,4 @@
-import type { ChannelRef, GateRoute, GateTunnel } from "@mandat/contract";
+import type { AgentCli, ChannelRef, GateRoute, GateTunnel } from "@mandat/contract";
 import type { TaskUsage } from "@mandat/llm-proxy";
 
 export type { TaskUsage };
@@ -22,5 +22,7 @@ export interface Channel {
   gateRoutes(): GateRoute[];
   /** D-295: a subscription profile channel — the profile's name (volume mandat-profile-claude-<name>) and its tunnels */
   readonly profileName?: string;
+  /** D-464: the subscription CLI of a profile channel (its volume is mandat-profile-<cli>-<profileName>) */
+  readonly cli?: AgentCli;
   gateTunnels?(): GateTunnel[];
 }

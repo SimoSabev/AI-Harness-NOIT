@@ -30,3 +30,5 @@ export * from "./connections.js";
 export * from "./memory.js";
 export * from "./routing.js";
 export * from "./sync.js";
+export * from "./subscriptions.js";
+export * from "./agent-cli.js";

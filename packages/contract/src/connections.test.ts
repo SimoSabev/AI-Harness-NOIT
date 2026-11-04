@@ -1,3 +1,4 @@
+import { AGENT_CLIS, KEY_CLIS } from "./agent-cli.js";
 import { describe, expect, it } from "vitest";
 import {
   AddConnectionBody, Connection, ConnectionId, ConnectionsReply, ModelId, PROVIDERS, Preferences, ProxyUpstream, agentOf, connectionLabel, formatAgentRef, parseAgentRef,
@@ -78,9 +79,8 @@ describe("Google Gemini provider (D-427)", () => {
     expect(PROVIDERS.gemini.models.find((m) => m.recommended)?.id).toBe("gemini-3.8-flash");
     expect(priceOf("gemini", "gemini-4-argon")).toEqual({ input: 4, output: 20, cacheRead: 0.2, cacheWrite: 4 });
   });
-  it("gemini and gemini+<connection> parse; a Google login (gemini@…) does not (Q-073)", () => {
-    for (const s of ["gemini", "gemini+gemini", "gemini+rabota"]) expect(formatAgentRef(parseAgentRef(s)!)).toBe(s);
-    expect(parseAgentRef("gemini@lichno")).toBeNull();
+  it("gemini, gemini+<connection> and a Google login gemini@<account> parse (the registry decides whether it may run, D-464)", () => {
+    for (const s of ["gemini", "gemini+gemini", "gemini+rabota", "gemini@lichno"]) expect(formatAgentRef(parseAgentRef(s)!)).toBe(s);
     expect(agentOf("gemini+rabota")).toBe("gemini");
     expect(AddConnectionBody.safeParse({ provider: "gemini", key: KEY, models: ["gemini-3.8-flash"] }).success).toBe(true);
     expect(AddConnectionBody.safeParse({ provider: "gemini", models: ["gemini-3.8-flash"] }).success).toBe(false);
@@ -97,10 +97,41 @@ describe("agent refs (D-392)", () => {
     }
     for (const bad of ["", "gemin", "claude@", "claude+", "claude@A", "claude+x+y", "codex@a b"]) expect(parseAgentRef(bad)).toBeNull();
   });
+  it("D-464: every subscription CLI signs in as <cli>@<account>; only claude, codex and gemini have a key or a connection", () => {
+    for (const cli of ["copilot", "kimi", "antigravity", "cursor", "minimax"]) {
+      expect(formatAgentRef(parseAgentRef(`${cli}@lichno`)!)).toBe(`${cli}@lichno`);
+      expect(agentOf(`${cli}@lichno`)).toBe(cli);
+      expect(parseAgentRef(cli)).toBeNull();
+      expect(parseAgentRef(`${cli}+deepseek`)).toBeNull();
+    }
+    expect(AGENT_CLIS).toEqual(["claude", "codex", "gemini", "copilot", "kimi", "antigravity", "cursor", "minimax"]);
+    expect(KEY_CLIS).toEqual(["claude", "codex", "gemini"]);
+  });
   it("agentOf and connectionLabel: which CLI runs and the channel label the worker resolves", () => {
     expect(agentOf("claude+deepseek")).toBe("claude");
     expect(agentOf("codex@rabota")).toBe("codex");
     expect(connectionLabel("deepseek")).toBe("conn-deepseek");
+  });
+});
+
+describe("device codes of every provider (D-464)", () => {
+  it("Kimi prints its page with the code in the address and as `code: …` on stderr", async () => {
+    const { findDeviceLogin } = await import("./local-control.js");
+    const out = "Opening browser for Kimi device login: https://www.kimi.ai/code/authorize_device?user_code=QX7K2M\nIf the browser did not open, paste the URL above and enter code: QX7K2M\nCode expires in 1800s.\n";
+    expect(findDeviceLogin(out)).toEqual({ url: "https://www.kimi.ai/code/authorize_device?user_code=QX7K2M", code: "QX7K2M" });
+    expect(findDeviceLogin("see https://evil.example/code?user_code=QX7K2M code: QX7K2M")).toBeNull();
+    const mm = "Open: https://account.minimax.io/oauth-authorize?user_code=K7P2QX&client_surface=tui\nCode: K7P2QX\nWaiting for authorization…\n";
+    expect(findDeviceLogin(mm)).toEqual({ url: "https://account.minimax.io/oauth-authorize?user_code=K7P2QX&client_surface=tui", code: "K7P2QX" });
+  });
+});
+
+describe("a sign-in that is only a link (D-464, Cursor)", () => {
+  it("the provider's page alone, no code; another host is never shown", async () => {
+    const { findLinkLogin, LoginState } = await import("./local-control.js");
+    const out = "Open the following link to sign in:\nhttps://cursor.com/loginDeepControl?challenge=abc&uuid=123&mode=login\nWaiting…";
+    expect(findLinkLogin(out)).toEqual({ url: "https://cursor.com/loginDeepControl?challenge=abc&uuid=123&mode=login", code: null });
+    expect(findLinkLogin("https://evil.example/loginDeepControl")).toBeNull();
+    expect(LoginState.safeParse({ state: "waiting_device", name: "a", url: "https://cursor.com/loginDeepControl?x=1", code: null }).success).toBe(true);
   });
 });
 

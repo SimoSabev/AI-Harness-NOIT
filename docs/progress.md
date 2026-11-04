@@ -59,6 +59,9 @@ E9г ресърч (клон phase/e9d-research-engine, 26.10.2026, D-404…D-413
 docs/reports/E9d-rest.md): поле за Exa в „Ключове“ (запечатан, само в проксито), research_* в пясъчника през вратата
 (сайдкар с вградения сървър, Docker тест), браузърното ниво с UI образа (Docker тест срещу локална страница). Чака: ключове
 за жив рън (Anthropic/OpenAI/Exa), Q-080…Q-082.
+Абонаменти за всички (D-460–D-465, клон claude/connections-subscriptions-149ef7): един регистър; Claude ready; Codex, GitHub
+Copilot, Kimi Code, MiniMax Code, Cursor свързани докрай (адаптер, образ, вход с код/линк, статус) — untested до жив вход
+(чеклист 36, Q-093, Q-094); Gemini с вход и Antigravity — blocked по условията (Q-073, Q-090).
 Връзки и първо пускане (D-393, клон phase/e9h-connections, worktree .claude/worktrees/connections): /welcome (абонаменти,
 ключове, локални модели с откриване), Настройки → Модели, агент + модел в полето за задача; проксито с връзки на трети
 доставчици (DeepSeek, Kimi, Z.ai, друг адрес) и локални модели; вход с ChatGPT за Codex. Живите части: чеклист 30–32.

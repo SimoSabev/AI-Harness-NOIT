@@ -1,3 +1,4 @@
+import { SUBSCRIPTIONS } from "@mandat/contract";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -43,6 +44,15 @@ describe("connection channels (D-392)", () => {
     expect(OPENAI_TUNNELS.every((t) => t.port === 443 && /(^|\.)(openai\.com|chatgpt\.com)$/.test(t.host))).toBe(true);
     // D-426: from the Codex source — the ChatGPT backend and the token refresh; api.openai.com is the API-key path only
     expect(OPENAI_TUNNELS.map((t) => t.host)).toEqual(["chatgpt.com", "auth.openai.com"]);
+  });
+  it("D-464: <cli>-profile-<name> for any subscription CLI — its own tunnels from the registry, no token", () => {
+    for (const cli of ["copilot", "kimi", "cursor", "minimax", "antigravity", "gemini"] as const) {
+      const ch = channelFor({ label: `${cli}-profile-rabota`, kind: "cli_profile", model: "m" }, o);
+      expect([ch.kind, ch.cli, ch.profileName]).toEqual(["cli_profile", cli, "rabota"]);
+      expect(ch.gateTunnels?.()).toEqual(SUBSCRIPTIONS[cli].tunnels.map((t) => ({ ...t })));
+    }
+    expect(channelFor({ label: "claude-profile-a", kind: "cli_profile", model: "m" }, o).cli).toBe("claude");
+    expect(() => channelFor({ label: "nope-profile-a", kind: "cli_profile", model: "m" }, o)).toThrow(MandatError);
   });
 });
 

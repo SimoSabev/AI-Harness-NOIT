@@ -9,14 +9,16 @@ import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
   MandatError, Verdict, contractForAgent, createStreamCtx, encodeProviderNotice, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, streamEvent, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
+  AgentCli,
+  isKeyCli,
 } from "@mandat/contract";
-import type { AgentEnding, Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
+import type { AgentEnding, CompileTarget, Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
 import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { seedHarness } from "./harness-seed.js";
-import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
+import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, subscriptionAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
@@ -47,7 +49,7 @@ export interface RunHooks {
 export interface RunTaskInput {
   home: string;
   contractPath: string;
-  agent: "claude" | "codex" | "gemini" | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
+  agent: AgentCli | `fake:${FakeScenario}` | `fake-codex:${FakeCodexScenario}`;
   keep: boolean;
   json: boolean;
   docker?: DockerRunner;
@@ -176,6 +178,9 @@ function adapterFor(agent: string, model: string): AgentAdapter {
   if (agent === "codex") return codexAdapter({ model, cliVersion: "0.160.1" });
   // D-428: Gemini CLI through a saved Google Gemini connection (the key only in the proxy)
   if (agent === "gemini") return geminiAdapter({ model, cliVersion: "0.65.0" });
+  // D-464: the other subscription CLIs (their own login only)
+  const sub = AgentCli.safeParse(agent);
+  if (sub.success) return subscriptionAdapter(sub.data, model);
   if (agent.startsWith("fake-codex:")) {
     const c = agent.slice(11);
     if (!isFakeCodexScenario(c)) throw new MandatError("E_USAGE", `unknown agent: ${agent}`);
@@ -256,7 +261,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
     // D-295: a subscription profile run never touches the proxy
-    if ((i.agent === "claude" || i.agent === "codex" || i.agent === "gemini") && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
+    if (isKeyCli(i.agent) && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
     const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
@@ -315,7 +320,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
-    let harness: { target: "claude" | "codex" | "gemini"; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
+    let harness: { target: CompileTarget; argv: string[]; env: Record<string, string>; hash: string; enforced: { rule: string; why: string }[]; unsupported: { rule: string; why: string }[]; files: { path: string; bytes: string }[]; granted: string[] } | null = null;
     let asks: Ask[] = [];
     let installRoutes: GateRoute[] = [];
     const mcpRoutes: GateRoute[] = [];
@@ -372,7 +377,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
         // v5 E8а (D-311): the profile's control layer → /m/in/harness (root, read-only for the agent) before the agent
         if (i.profile) {
-          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : adapter.id === "gemini" ? "gemini" : "claude";
+          // D-464: a CLI without a compiler of its own gets the harness-only layer (instructions + policy, target local)
+          const target = adapter.id === "codex" || adapter.id.startsWith("fake-codex:") ? "codex" : adapter.id === "gemini" ? "gemini" : adapter.id === "claude" || adapter.id.startsWith("fake:") ? "claude" : "local";
           const base = target;
           const granted = i.grantOnce ?? [];
           const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
@@ -554,7 +560,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         try {
           const r = await runSandbox(sctx, {
             role: "agent", volume: vol, network: g.net, tree: "agent", name: agentName, init: true,
-            ...(viaProfile && ch.profileName ? { profile: profileVolume(ch.provider === "openai" ? "codex" : "claude", ch.profileName) } : {}),
+            ...(viaProfile && ch.profileName ? { profile: profileVolume(ch.cli ?? (ch.provider === "openai" ? "codex" : "claude"), ch.profileName) } : {}),
             env: {
               phase: "agent", secrets: launch.env, ...(ch.provider === "openai" ? { tokenName: "OPENAI_API_KEY" as const } : ch.provider === "gemini" ? { tokenName: "GEMINI_API_KEY" as const } : {}), ...(launch.publicEnv ? { extraPublic: launch.publicEnv } : {}),
               // D-392: a saved connection serves its own model names — Claude Code uses the model for every tier

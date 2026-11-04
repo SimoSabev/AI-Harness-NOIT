@@ -3536,3 +3536,86 @@ Vertex иска OAuth токен за 1 час, затова е в катало�
 https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-mantle.html,
 https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/openai (прочетени 04.11.2026). [НП]: Responses на Azure и Bedrock.
 Тестове: proxy-upstreams.test.ts („Azure's api-key header“). Статус: решено от кодера.
+
+## D-460 Един регистър на абонаментите: `SUBSCRIPTIONS` в packages/contract (04.11.2026)
+Решение: `packages/contract/src/subscriptions.ts` държи по един запис на доставчик с абонаментен вход (zod
+`SubscriptionProvider`): име, CLI (npm, версия, лиценз), headless форма, начин на вход (`paste_code` / `device_code` /
+`browser_callback`) и неговите argv и хостове, командата за статус и как се чете (`claude-json` / `codex-text` /
+`exit-code`), изход, папката на входа в контейнера и променливата към нея, допълнителна среда, CONNECT тунелите, адаптера
+(`agent`), каталожния доставчик за моделите (`connectionProvider`), условията (`allowed` / `unclear` / `forbidden` +
+линк) и наличност (`ready` / `untested` / `blocked` / `planned`). Volume-ът е `mandat-profile-<id>-<име>` (id без тире,
+за да се чете еднозначно обратно). `canSignIn(id)` = ready/untested + има адаптер + условията не са против; само тези
+стигат до вход (`LoginCliId` в `LoginStart`, `mandat login --agent`).
+Четат го: `buildProfileArgs`/`profileVolume`/монтирането (packages/sandbox), тунелите на профила (packages/channels),
+`listAccounts`/`loginCliOf`/`logoutProfile`/връзките (packages/cli), уебът (accounts, Настройки → Абонаменти, полето за
+задача). Поведението за Claude и Codex е същото (снимките и тестовете на argv не са пипани).
+Защо: Симо иска „колкото и каквито абонаменти“; досега Claude/Codex бяха разпръснати по 10 места като `codex ? … : …`.
+Проучване на доставчиците: docs/integrations/subscriptions.md (04.11.2026).
+Тестове: contract subscriptions.test.ts; sandbox connections.test.ts; cli accounts.test.ts.
+Статус: решено от кодера.
+
+## D-461 Статус на абонамент: влязъл / изтекъл / няма CLI / недостъпен (04.11.2026)
+Решение: `subscriptionStatus` (contract): planned или липсващ образ → `no_cli`; не може да влезе (blocked) →
+`unavailable`; иначе статус-командата казва „влязъл“ → `signed_in`, а ако не → `expired`. Изтекъл, защото volume
+оцелява само след завършен вход (login-session.ts трие volume-а на незавършен нов вход) — значи е бил влязъл и входът
+вече не важи. Харнесът не чете токена, за да знае истинската причина; картата предлага „Влез отново“.
+Тестове: contract subscriptions.test.ts; web subscriptions-view.test.ts. Статус: решено от кодера.
+
+## D-462 Настройки → Абонаменти: самостоятелен раздел и страница `/settings/subscriptions` (04.11.2026)
+Решение: `apps/web/src/components/connections/subscriptions/` — `subscriptions-view.ts` (чисти карти и избор от
+регистъра) и `subscriptions-panel.tsx` (карти с доставчик, кой, план, статус, „Влез отново“, „Махни“; „Добави абонамент“
+→ избор на доставчик → съществуващият `AccountLogin` с `cli`). Недостъпните доставчици се виждат в избора, сиви, с
+причина („условията не са ясни“, „програмата му още не е в пясъчника“). За ChatGPT подсказка да се включи входът с код за
+устройство в ChatGPT (learn.chatgpt.com/docs/auth, 04.11.2026). Ред-линк в Настройки. Текстове bg/en (`subs.*`).
+`AccountLogout` вече праща и `cli` (преди ChatGPT акаунт се махаше с Claude Code). Влезлият абонамент влиза в полето за
+задача и в Модели през регистъра (`taskAgents`: `connectionProvider`, само при `canSignIn`) — без допълнителна стъпка.
+Координаторът ще сложи панела в общата страница „Връзки“.
+Проверено: страницата се отваря (dev сървър, фалшив control endpoint), bg и en, изборът и входът за ChatGPT.
+Тестове: web subscriptions-view.test.ts, agents.test.ts. Статус: решено от кодера.
+
+## D-463 Кои доставчици: Claude и Codex сега; Gemini спрян; Copilot, Kimi, Antigravity, Cursor, MiniMax планирани (04.11.2026)
+Решение: по проучването (docs/integrations/subscriptions.md, 04.11.2026):
+- Claude — ready; условията изрично позволяват човек да влезе в непроменения Claude Code, и когато платформа го хоства.
+- Codex (ChatGPT) — untested: свързан докрай, входът с код за устройство трябва първо да се включи в ChatGPT.
+- Gemini — blocked: от 18.06.2026 личните планове (free, AI Pro, Ultra) са в Antigravity CLI; Gemini CLI влиза само с
+  Code Assist Standard/Enterprise, а условията пак не казват дали обвивка е позволена (Q-073, Q-090).
+- Copilot CLI, Kimi Code, Antigravity, Cursor, MiniMax Code — planned: записи без команди (пясъчникът отказва
+  помощен контейнер без команда), сиви в избора; спайкове в документа. Нито един CLI не е добавен в образа в тази
+  сесия: Kimi Code е по-млад от 3 дни (правило 8); Copilot иска адаптер, собственически лиценз в allowlist и спайк за
+  входа във файл без keychain — отделна задача (Q-091).
+- Qwen Code не е абонамент вече (Qwen OAuth спрян на 15.04.2026, Coding Plan = ключ); Z.ai, DeepSeek, Kimi/MiniMax
+  ключовете са в Ключове (D-392). iFlow е спрян; Amp/OpenCode/Pi са харнеси на трети страни, не CLI на доставчика.
+Статус: решено от кодера; Симо може да обърне (Q-090, Q-091).
+
+## D-464 Всеки абонамент е агент: `<cli>@<сметка>` за всички CLI от регистъра (05.11.2026)
+Решение: Симо каза „всички давай“ (04.11.2026) — Copilot, Kimi, MiniMax, Cursor, Antigravity и Gemini с вход. Механизмът
+вече не изброява claude/codex/gemini на ръка:
+- `AGENT_CLIS` (packages/contract/agent-cli.ts) = идентификаторите на регистъра; `<cli>@<сметка>` се разпознава за всички,
+  ключ и `+<връзка>` — само за `KEY_CLIS` (claude, codex, gemini). Дали абонамент може да тръгне решава `canSignIn` на
+  регистъра (ready/untested, с адаптер, условията не са „forbidden“); иначе маршрутът е `unknown_agent` и нищо не тръгва.
+- Каналът `<cli>-profile-<име>` носи `cli`; тунелите идват от регистъра. Пясъчникът монтира тома на `configDir` на CLI-то,
+  средата е `configEnv` + `env` на записа + само тунелът на вратата (без ключ, без mdt_ токен — D-295).
+- Моделът на сметка без запазени модели е `defaultModel` на записа; `default` = без флаг за модел (изборът на плана).
+- CLI без собствен компилатор на профила получава само слоя на харнеса (цел `local`: инструкции + политика).
+- Кодът за устройство се разпознава и като `code: XXXXXX` или `user_code` в адреса (Kimi) [НП: формата на кода].
+Статус: решено от кодера; живата проба на всеки вход чака сметка (чеклист).
+
+## D-465 Кои абонаменти тръгват: Copilot, Kimi, MiniMax, Cursor — да; Antigravity и Gemini с вход — не (05.11.2026)
+Решение: по спайковете от 04–05.11.2026 (docs/integrations/subscriptions.md):
+- GitHub Copilot CLI 1.0.105 — untested. Вход с код за устройство; без keychain и без TTY CLI-ят пази токена само ако
+  `settings.json` казва `storeTokenPlaintext` — затова регистърът има „семе“: харнесът записва този файл в празния том
+  преди входа (като стойност на env, не през скрипта). Статус: JSON-RPC `auth.getStatus` през пробата
+  `mandat-copilot-status` (печата само да/не и login). Изход = изтриване на тома. Лиценз: собственически, образът е
+  локален (4.1). Тунелите на плановете (api.<план>.githubcopilot.com) [НП].
+- Kimi Code 2.4.1 — untested. Код за устройство, файл без keyring, статус = `provider list` (`managed:kimi-code`).
+- MiniMax Code 0.7.4 — untested. Код за устройство (регион global), файл; данните за обучение са включени по
+  подразбиране и само `config.yaml` ги изключва — това е семето му; `MCODE_DISABLE_EVAL_CAPTURE=1`.
+- Kimi и MiniMax: условията пазят плана за „лично, интерактивно ползване“ — `terms: unclear`, UI предупреждава преди входа
+  (по една задача, пусната от човек). Ако Симо реши „не“ — `availability: blocked` (Q-094).
+- Cursor CLI 2026.10.22-27dcf5f — untested. Нов вид вход `link`: CLI-ят показва страница на cursor.com и сам чака
+  потвърждението (без код); `LoginState.waiting_device.code` може да е null. sha256 на архивите е наш (Cursor не
+  публикува). Тунел api2.cursor.sh; хостът на агента идва от сървъра [НП].
+- Antigravity — blocked: §6 от условията брои софтуер на трети страни за достъп за нарушение; няма подкоманда за вход.
+- Gemini с Google вход — остава blocked (Q-073, Q-090): само Code Assist; трябва втори root settings файл и pty.
+Всички потоци и фикстури са възстановени от изходния код; първият жив рън на всеки CLI ги проверява (чеклист 36).
+Статус: решено от кодера; Симо може да обърне (Q-094).

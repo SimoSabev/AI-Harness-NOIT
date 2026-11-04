@@ -23,7 +23,7 @@ import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWe
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
-import { AccountName, AddConnectionBody, AddProjectBody, AgentRefString, ConnectionId, LoginCode, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
+import { AccountName, AddConnectionBody, AddProjectBody, AgentRefString, ConnectionId, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -310,7 +310,7 @@ export async function deleteResearchKey(req: Request, d: ApiDeps): Promise<Respo
 
 // D-369: the subscription login from the web (owner with keys.manage). The pasted code goes on to the control endpoint
 // and to the stdin of `claude auth login`; it is never stored, logged or sent back.
-const NameBody = z.object({ name: AccountName, cli: z.enum(["claude", "codex"]).optional() }).strict();
+const NameBody = z.object({ name: AccountName, cli: SubscriptionId.optional() }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 const LOGIN_ERRORS = new Set(["bad_name", "bad_code", "not_waiting"]);
 

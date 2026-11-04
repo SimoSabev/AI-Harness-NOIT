@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SUBSCRIPTIONS, SubscriptionId, canSignIn } from "@mandat/contract";
 import type { Connection } from "@mandat/contract";
 import { routeOf } from "./agent-route.js";
 
@@ -36,6 +37,18 @@ describe("routeOf (D-392)", () => {
     expect(routeOf("fake:honest-fix", null, conns)).toMatchObject({ run: "fake:honest-fix", ref: null });
     expect(routeOf("gemini", null, conns)).toEqual({ ok: false, reason: "no_connection" }); // D-427: known now, but not connected
     expect(routeOf("gemini@lichno", null, conns)).toEqual({ ok: false, reason: "unknown_agent" });
+  });
+});
+
+// D-464: any subscription CLI of the registry runs as <cli>@<account> once the registry lets it sign in
+describe("routeOf for every subscription (D-464)", () => {
+  it("a subscription that can sign in → its CLI on <cli>-profile-<account>, the registry's default model", () => {
+    for (const cli of SubscriptionId.options.filter(canSignIn)) {
+      expect(routeOf(`${cli}@rabota`, null, [])).toEqual({ ok: true, run: cli, ref: { label: `${cli}-profile-rabota`, kind: "cli_profile", model: SUBSCRIPTIONS[cli].defaultModel }, account: "rabota", local: false });
+    }
+  });
+  it("one that cannot (planned, blocked) → unknown_agent; nothing runs", () => {
+    for (const cli of SubscriptionId.options.filter((c) => !canSignIn(c))) expect(routeOf(`${cli}@rabota`, null, [])).toEqual({ ok: false, reason: "unknown_agent" });
   });
 });
 

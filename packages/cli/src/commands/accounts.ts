@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { z } from "zod";
 import { buildProfileArgs, dockerText, ensureUpstreamNetwork, imageTags, profileVolume } from "@mandat/sandbox";
-import { MandatError } from "@mandat/contract";
+import { LOGIN_CLIS, MandatError, SUBSCRIPTIONS, SubscriptionId, parseProfileVolume } from "@mandat/contract";
 import type { CliDeps } from "../deps.js";
 import { printJson } from "../output.js";
 import type { Io } from "../output.js";
@@ -46,9 +46,19 @@ export function parseCodexStatus(stdout: string, exitCode: number): ProfileStatu
   return exitCode === 0 && /logged in using chatgpt/i.test(stdout) ? { loggedIn: true, email: null, plan: "ChatGPT" } : { loggedIn: false, email: null, plan: null };
 }
 
-const PREFIX = { claude: "mandat-profile-claude-", codex: "mandat-profile-codex-" } as const;
+/** D-460: what the registry's status command said — the format is the provider's, the meaning is "signed in?" only. */
+function readStatus(cli: SubscriptionId, stdout: string, exitCode: number): ProfileStatus {
+  const f = SUBSCRIPTIONS[cli].status.format;
+  if (f === "claude-json") return parseClaudeStatus(stdout);
+  if (f === "codex-text") return parseCodexStatus(stdout, exitCode);
+  const m = SUBSCRIPTIONS[cli].status.match;
+  // D-464: whitespace does not count (a JSON answer may be pretty-printed)
+  if (f === "match") return { loggedIn: exitCode === 0 && m !== undefined && stdout.replace(/\s+/g, "").includes(m.replace(/\s+/g, "")), email: null, plan: null };
+  return { loggedIn: exitCode === 0, email: null, plan: null };
+}
+const OUT: ProfileStatus = { loggedIn: false, email: null, plan: null };
 
-export interface Account extends ProfileStatus { name: string; agent: string; cli: LoginCli }
+export interface Account extends ProfileStatus { name: string; agent: string; cli: SubscriptionId }
 
 /** D-445: calls made while a run is in progress wait for that run. A page render lists the accounts (one container each);
  * without this, renders on a slow machine pile containers up and starve the database. */
@@ -65,11 +75,16 @@ export async function listAccounts(deps: CliDeps): Promise<Account[]> {
   const image = (await imageTags(repoRoot)).sandbox;
   const out: Account[] = [];
   for (const vol of r.stdout.split("\n").map((x) => x.trim())) {
-    const cli = (["claude", "codex"] as const).find((c) => vol.startsWith(PREFIX[c]));
-    if (!cli) continue;
-    const name = vol.slice(PREFIX[cli].length);
+    const p = parseProfileVolume(vol);
+    if (!p) continue;
+    const { id: cli, name } = p;
+    // D-460: a provider without a status command (planned, or Gemini behind Q-073) runs nothing and is not signed in
+    if (SUBSCRIPTIONS[cli].status.argv.length === 0) {
+      out.push({ name, agent: `${cli}@${name}`, cli, ...OUT });
+      continue;
+    }
     const s = await dockerText(deps.docker, buildProfileArgs("status", { image, volume: vol }), 60_000);
-    out.push({ name, agent: `${cli}@${name}`, cli, ...(cli === "codex" ? parseCodexStatus(s.stdout, s.exitCode) : parseClaudeStatus(s.stdout)) });
+    out.push({ name, agent: `${cli}@${name}`, cli, ...readStatus(cli, s.stdout, s.exitCode) });
   }
   return out;
 }
@@ -96,8 +111,9 @@ export async function prepareProfile(deps: CliDeps, name: string, cli: LoginCli 
 
 async function profileStatus(deps: CliDeps, name: string, cli: LoginCli = "claude"): Promise<ProfileStatus> {
   const image = (await imageTags(repoRoot)).sandbox;
+  if (SUBSCRIPTIONS[cli].status.argv.length === 0) return { ...OUT };
   const r = await dockerText(deps.docker, buildProfileArgs("status", { image, volume: profileVolume(cli, name) }), 60_000);
-  return cli === "codex" ? parseCodexStatus(r.stdout, r.exitCode) : parseClaudeStatus(r.stdout);
+  return readStatus(cli, r.stdout, r.exitCode);
 }
 
 /** D-369: the real process behind a web login — `docker run -i` with pipes; nothing it prints is logged here. */
@@ -132,10 +148,12 @@ export function loginDeps(deps: CliDeps): LoginDeps {
 
 /** Interactive: needs the user's terminal (the browser flow prints a URL and asks for the code). */
 /** D-426: `--agent` of login/logout — the CLI whose own sign-in runs (claude: claude.ai; codex: ChatGPT device code). */
+/** D-460: any provider of the registry that can sign in (canSignIn). */
 export function loginCliOf(agent: string | undefined): LoginCli {
-  if (agent === undefined || agent === "claude") return "claude";
-  if (agent === "codex") return "codex";
-  throw new MandatError("E_USAGE", "--agent must be claude or codex");
+  if (agent === undefined) return "claude";
+  const id = SubscriptionId.safeParse(agent);
+  if (id.success && LOGIN_CLIS.includes(id.data)) return id.data;
+  throw new MandatError("E_USAGE", `--agent must be one of: ${LOGIN_CLIS.join(", ")}`);
 }
 
 export async function loginCommand(io: Io, deps: CliDeps, o: { name: string; cli?: LoginCli }): Promise<number> {
@@ -157,14 +175,15 @@ export async function loginCommand(io: Io, deps: CliDeps, o: { name: string; cli
 }
 
 /** Signs the account out and removes its profile volume (terminal and web). */
-export async function logoutProfile(deps: CliDeps, name: string, cli: LoginCli = "claude"): Promise<boolean> {
+export async function logoutProfile(deps: CliDeps, name: string, cli: SubscriptionId = "claude"): Promise<boolean> {
   const vol = profileVolume(cli, name);
   const image = (await imageTags(repoRoot)).sandbox;
-  await dockerText(deps.docker, buildProfileArgs("logout", { image, volume: vol }), 60_000);
+  // D-460: a provider without a logout command loses only its volume (the login goes with it)
+  if (SUBSCRIPTIONS[cli].logout.length > 0) await dockerText(deps.docker, buildProfileArgs("logout", { image, volume: vol }), 60_000);
   return (await dockerText(deps.docker, ["volume", "rm", vol], 60_000)).exitCode === 0;
 }
 
-export async function logoutCommand(io: Io, deps: CliDeps, o: { name: string; cli?: LoginCli }): Promise<number> {
+export async function logoutCommand(io: Io, deps: CliDeps, o: { name: string; cli?: SubscriptionId }): Promise<number> {
   const ok = await logoutProfile(deps, o.name, o.cli ?? "claude");
   io.stdout(ok ? `Акаунт „${o.name}“ е махнат.\n` : `Няма акаунт „${o.name}“.\n`);
   return ok ? 0 : 3;

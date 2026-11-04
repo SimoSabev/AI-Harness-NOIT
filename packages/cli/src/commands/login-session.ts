@@ -1,5 +1,5 @@
-import { AccountName, LoginCode, findDeviceLogin, findLoginUrl } from "@mandat/contract";
-import type { LoginFailure, LoginState } from "@mandat/contract";
+import { AccountName, LoginCode, SUBSCRIPTIONS, findDeviceLogin, findLinkLogin, findLoginUrl } from "@mandat/contract";
+import type { LoginFailure, LoginState, SubscriptionId } from "@mandat/contract";
 import type { ProfileStatus } from "./accounts.js";
 
 // D-369: the subscription login from the web. `mandat local` runs the unchanged `claude auth login --claudeai` in a
@@ -7,7 +7,8 @@ import type { ProfileStatus } from "./accounts.js";
 // „Paste code here if prompted >“, then reads one line). The web sees only the state below; the code goes to stdin and
 // nowhere else. One login at a time; a forgotten one is stopped after `timeoutMs`. D-393: a ChatGPT sign-in runs
 // `codex login --device-auth`: OpenAI's page and a one-time code are shown; the process ends when the person is done.
-export type LoginCli = "claude" | "codex";
+/** D-460: a provider of the subscription registry (only those with canSignIn reach a sign-in). */
+export type LoginCli = SubscriptionId;
 export interface LoginProc {
   onOutput(f: (chunk: string) => void): void;
   onExit(f: (code: number | null) => void): void;
@@ -90,8 +91,10 @@ export class LoginSessions {
     proc.onOutput((chunk) => {
       if (gen !== this.gen) return;
       out = (out + chunk).slice(-MAX_OUTPUT);
-      if (this.current.state === "starting" && cli === "codex") {
-        const dev = findDeviceLogin(out);
+      const method = SUBSCRIPTIONS[cli].login.method;
+      if (this.current.state === "starting" && (method === "device_code" || method === "link")) {
+        // D-464: a link-only sign-in (Cursor) has no code; the person confirms on the page and the CLI finishes
+        const dev = method === "link" ? findLinkLogin(out) : findDeviceLogin(out);
         if (dev) this.current = { state: "waiting_device", name, url: dev.url, code: dev.code };
       } else if (this.current.state === "starting") {
         const url = findLoginUrl(out);

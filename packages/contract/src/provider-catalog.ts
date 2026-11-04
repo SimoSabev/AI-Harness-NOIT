@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { KEY_CLIS } from "./agent-cli.js";
+import type { KeyCli } from "./agent-cli.js";
 
 // D-470: the providers as data. One record per provider: the format its API speaks, the base address, how the key goes,
 // where the person gets a key and a few suggested models. The proxy picks its wire from `wire`; the web shows which agent
@@ -12,8 +14,8 @@ export type Wire = z.infer<typeof Wire>;
 /** Every API format a provider may offer: the three wires, OpenAI Chat Completions only, or its own API only. */
 export const ApiFormat = z.enum(["anthropic", "openai", "gemini", "openai-chat", "native"]);
 export type ApiFormat = z.infer<typeof ApiFormat>;
-export const AgentCli = z.enum(["claude", "codex", "gemini"]);
-export type AgentCli = z.infer<typeof AgentCli>;
+/** The CLIs that take a key through the proxy (D-464 KEY_CLIS); the other subscription CLIs never get one. */
+const KeyCliEnum = z.enum(KEY_CLIS);
 /** api-key = Azure's header; aws / gcp = cloud credentials (not a pasted key, [НП] Q-096) */
 export const AuthStyle = z.enum(["x-api-key", "bearer", "x-goog-api-key", "api-key", "none", "aws", "gcp"]);
 export type AuthStyle = z.infer<typeof AuthStyle>;
@@ -40,7 +42,7 @@ export type Price = z.infer<typeof Price>;
 export const SuggestedModel = z.object({ id: z.string().min(1).max(128), tier: z.enum(["best", "balanced", "fast"]), recommended: z.literal(true).optional(), price: Price.optional() }).strict();
 export type SuggestedModel = z.infer<typeof SuggestedModel>;
 
-const agentOfWire = (w: ApiFormat): AgentCli | null => (w === "anthropic" ? "claude" : w === "openai" ? "codex" : w === "gemini" ? "gemini" : null);
+const agentOfWire = (w: ApiFormat): KeyCli | null => (w === "anthropic" ? "claude" : w === "openai" ? "codex" : w === "gemini" ? "gemini" : null);
 
 export const ProviderEntry = z.object({
   id: ProviderId,
@@ -49,7 +51,7 @@ export const ProviderEntry = z.object({
   kind: z.enum(["subscription", "api_key", "local"]),
   group: ProviderGroup,
   /** the CLI that runs in the sandbox; null = no agent here speaks this format yet */
-  agent: AgentCli.nullable(),
+  agent: KeyCliEnum.nullable(),
   wire: ApiFormat,
   /** null: the person gives the address (Azure, any OpenAI-compatible server) or there is none (a subscription) */
   baseUrl: z.string().regex(/^https:\/\/[a-z0-9.-]+(\/[A-Za-z0-9._~/-]*)?$|^http:\/\/127\.0\.0\.1:\d+$/).nullable(),
@@ -159,7 +161,7 @@ export const CATALOG: readonly ProviderEntry[] = Object.freeze(z.array(ProviderE
 export const PROVIDERS: Readonly<Record<ProviderId, ProviderEntry>> = Object.freeze(Object.fromEntries(CATALOG.map((x) => [x.id, x])) as Record<ProviderId, ProviderEntry>);
 export const providerInfo = (id: ProviderId): ProviderEntry => PROVIDERS[id];
 /** Which agent can use a provider's key; null = none yet (shown as such). */
-export const agentFor = (id: ProviderId): AgentCli | null => PROVIDERS[id].agent;
+export const agentFor = (id: ProviderId): KeyCli | null => PROVIDERS[id].agent;
 
 const GROUP_ORDER: readonly ProviderGroup[] = ["subscription", "main", "china", "router", "cloud", "local", "own"];
 export function providerGroups(): { group: ProviderGroup; ids: ProviderId[] }[] {

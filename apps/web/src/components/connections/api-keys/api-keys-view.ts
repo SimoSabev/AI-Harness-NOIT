@@ -1,5 +1,5 @@
 import { ApiKey, PROVIDERS, providerGroups } from "@mandat/contract";
-import type { AddConnectionBody, AgentCli, Connection, KeyCheck, ProviderGroup, ProviderId } from "@mandat/contract";
+import type { AddConnectionBody, KeyCli, Connection, KeyCheck, ProviderGroup, ProviderId } from "@mandat/contract";
 import type { Key } from "../../../i18n/t";
 
 // D-475: the pure part of the API keys section (Settings → API keys): the rows a person sees and the body of "Add a key".
@@ -13,7 +13,7 @@ export interface KeyRow {
   hint: string | null;
   status: KeyCheck | null;
   /** which CLI can use this key; null = none here yet (shown honestly) */
-  agent: AgentCli | null;
+  agent: KeyCli | null;
   models: string[];
   defaultModel: string;
   live: boolean;

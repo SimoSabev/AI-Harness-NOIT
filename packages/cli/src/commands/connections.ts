@@ -1,5 +1,5 @@
-import { AddConnectionBody, ModelId, ModelsBody, PROVIDERS, Preferences, nextConnectionId, upstreamUrl } from "@mandat/contract";
-import type { AddConnectionReply, CheckKeyReply, Connection, ConnectionsReply, DetectReply, ProviderId } from "@mandat/contract";
+import { AddConnectionBody, ModelId, ModelsBody, PROVIDERS, Preferences, SUBSCRIPTIONS, nextConnectionId, upstreamUrl } from "@mandat/contract";
+import type { AddConnectionReply, CheckKeyReply, Connection, ConnectionsReply, DetectReply, ProviderId, SubscriptionId, Wire } from "@mandat/contract";
 import { checkKey } from "@mandat/llm-proxy";
 import type { ConnectionStore } from "@mandat/llm-proxy";
 
@@ -38,7 +38,7 @@ export interface ConnectionsDeps {
   /** recreates the proxy with every saved key and connection; false = it did not come up */
   restartProxy(): Promise<boolean>;
   /** the subscription accounts (profile volumes) */
-  accounts(): Promise<{ name: string; cli: "claude" | "codex" }[]>;
+  accounts(): Promise<{ name: string; cli: SubscriptionId }[]>;
   now?: () => Date;
 }
 
@@ -49,9 +49,10 @@ export class Connections {
   async list(): Promise<ConnectionsReply> {
     const saved = this.d.store.list();
     const extra: Connection[] = (await this.d.accounts().catch(() => []))
-      .filter((a) => !saved.some((c) => c.id === a.name))
+      .filter((a) => !saved.some((c) => c.id === a.name) && SUBSCRIPTIONS[a.cli].connectionProvider !== null)
       .map((a) => {
-        const provider = a.cli === "codex" ? "chatgpt-sub" : "claude-sub";
+        // D-460: the models of a subscription come from its registry entry's catalog provider
+        const provider = SUBSCRIPTIONS[a.cli].connectionProvider ?? "claude-sub";
         const models = PROVIDERS[provider].models.map((m) => m.id);
         return { id: a.name, provider, label: a.name, baseUrl: null, models, defaultModel: recommended(provider, models), hasKey: false };
       });
@@ -112,12 +113,12 @@ export class Connections {
     const b = ModelsBody.safeParse(raw);
     if (!b.success) return false;
     if (this.d.store.setModels(id, b.data)) {
-      if (this.d.store.get(id)?.provider !== "claude-sub" && this.d.store.get(id)?.provider !== "chatgpt-sub") await this.d.restartProxy();
+      if (PROVIDERS[this.d.store.get(id)?.provider ?? "custom"].kind !== "subscription") await this.d.restartProxy();
       return true;
     }
     const acct = (await this.d.accounts().catch(() => [])).find((a) => a.name === id);
-    if (!acct) return false;
-    const provider = acct.cli === "codex" ? "chatgpt-sub" : "claude-sub";
+    const provider = acct ? SUBSCRIPTIONS[acct.cli].connectionProvider : null;
+    if (provider === null) return false;
     this.d.store.put({ id, provider, label: id, baseUrl: null, models: b.data.models, defaultModel: b.data.defaultModel });
     return true;
   }
