@@ -9,7 +9,7 @@ import { isFakeCodexScenario } from "../adapter.js";
 
 // Демо промпт т. 8.3: codex-argv (точният масив) и codex-parse (fixtures/codex-jsonl; синтетични до S-CX, D-288).
 const fx = (n: string) => readFileSync(new URL(`../../../../fixtures/codex-jsonl/${n}.jsonl`, import.meta.url), "utf8").split("\n").filter(Boolean);
-const ctx = { runId: "r1", taskId: "t1", prompt: "Fix it", model: "m", budgetUsd: 1, contractFile: "/m/in/contract.txt" as const, workdir: "/m/work" as const, notesPath: "/m/out/notes.txt" as const };
+const ctx = { runId: "r1", taskId: "t1", prompt: "Fix it", model: "m", budgetUsd: 1, contractFile: "/m/in/contract.txt" as const, contractText: "# Mandat task contract\nTask (bugfix): Fix it\n", workdir: "/m/work" as const, notesPath: "/m/out/notes.txt" as const };
 const canary = { name: "AWS_SECRET_ACCESS_KEY" as const, value: "c" };
 
 describe("codex-argv", () => {
@@ -61,7 +61,14 @@ describe("codex with a ChatGPT subscription (D-392)", () => {
     const l = codexAdapter({ model: "gpt-5-codex", cliVersion: "0.160.1" }).launch(ctx, { PROFILE: true }, canary);
     expect(l.argv.join(" ")).not.toContain("model_provider");
     expect(l.argv.slice(0, 15)).toEqual(buildCodexArgv({ model: "gpt-5-codex", prompt: "Fix it" }).slice(0, 15));
-    expect(l.argv.at(-1)).toBe("Fix it");
+    expect(l.argv.at(-1)).toBe(ctx.contractText);
     expect(l.env).toEqual({ AWS_SECRET_ACCESS_KEY: "c" });
+  });
+});
+
+describe("codex gets the contract (D-453)", () => {
+  it("the prompt positional is the whole rendered contract", () => {
+    const l = codexAdapter({ model: "m", cliVersion: "0.160.1" }).launch(ctx, { OPENAI_API_KEY: "mdt_x" }, { name: "AWS_SECRET_ACCESS_KEY", value: "c" });
+    expect(l.argv.at(-1)).toBe(ctx.contractText);
   });
 });

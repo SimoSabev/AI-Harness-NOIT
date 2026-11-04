@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CLAUDE_HARNESS_SETTINGS, buildClaudeArgv, claudeAdapter, sh2Settings } from "./index.js";
 
 const base = { prompt: "Fix the cart discount", model: "claude-sonnet-5-5", budgetUsd: 2, appendSystemPromptFile: "/m/in/contract.txt", memory: { enabled: false as const }, steering: { enabled: false as const } };
-const ctx = { runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", taskId: "t_x", prompt: "fix", model: "claude-sonnet-5-5", budgetUsd: 2, contractFile: "/m/in/contract.txt" as const, workdir: "/m/work" as const, notesPath: "/m/out/notes.txt" as const };
+const ctx = { runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", taskId: "t_x", prompt: "fix", model: "claude-sonnet-5-5", budgetUsd: 2, contractFile: "/m/in/contract.txt" as const contractText: "c", workdir: "/m/work" as const, notesPath: "/m/out/notes.txt" as const };
 const canary = { name: "AWS_SECRET_ACCESS_KEY" as const, value: "canary" };
 
 describe("Claude Code control layer variants (SH2, D-312)", () => {

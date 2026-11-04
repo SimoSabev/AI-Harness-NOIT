@@ -7,6 +7,8 @@ export interface AgentRunContext {
   model: string;
   budgetUsd: number;
   contractFile: "/m/in/contract.txt";
+  /** D-453: the same bytes as contractFile; CLIs without a system-prompt file (Codex, Gemini) get it as the prompt */
+  contractText: string;
   workdir: "/m/work";
   notesPath: "/m/out/notes.txt";
   /** v5 E8а: the compiled control layer (Materialized.argv/env) — the files are already under /m/in/harness */

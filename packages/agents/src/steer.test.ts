@@ -9,7 +9,7 @@ import { fakeAdapter } from "./fake/adapter.js";
 
 // E8g (v5 p. 4.4 (3), AC-8.5, D-353): "Steer" sends a person's text to a live Claude Code (stream-json on stdin);
 // Codex has no such input → not steerable. The text reaches the agent framed as untrusted input.
-const ctx = { runId: "r_x", taskId: "t_x", prompt: "Fix the discount", model: "claude-sonnet-5-5", budgetUsd: 1, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
+const ctx = { runId: "r_x", taskId: "t_x", prompt: "Fix the discount", model: "claude-sonnet-5-5", budgetUsd: 1, contractFile: "/m/in/contract.txt" contractText: "c", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
 const canary = { name: "AWS_SECRET_ACCESS_KEY", value: "c" } as const;
 const key = { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: "mdt_x" } as const;
 

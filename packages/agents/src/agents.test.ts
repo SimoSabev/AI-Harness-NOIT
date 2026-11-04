@@ -42,7 +42,7 @@ describe("argv", () => {
 });
 
 describe("adapters", () => {
-  const ctx = { runId: "r_x", taskId: "t_x", prompt: "do it", model: "claude-sonnet-5-5", budgetUsd: 2, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
+  const ctx = { runId: "r_x", taskId: "t_x", prompt: "do it", model: "claude-sonnet-5-5", budgetUsd: 2, contractFile: "/m/in/contract.txt" contractText: "c", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
   const ch = { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: "mdt_x.y" } as const;
   it("fake адаптер argv; env носи само тайните", () => {
     const f = fakeAdapter("honest-fix").launch(ctx, ch, { name: "AWS_SECRET_ACCESS_KEY", value: "c" });
@@ -89,7 +89,7 @@ describe("stream парсер", () => {
 describe("claude with a subscription profile (D-295)", () => {
   it("PROFILE channel → no token in env, only the canary; the argv differs only by --bare / --strict-mcp-config (D-342)", () => {
     const a = claudeAdapter({ model: "claude-sonnet-5-5", cliVersion: "2.1.302" });
-    const ctx = { runId: "r_x", taskId: "t_x", prompt: "p", model: "claude-sonnet-5-5", budgetUsd: 0.5, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
+    const ctx = { runId: "r_x", taskId: "t_x", prompt: "p", model: "claude-sonnet-5-5", budgetUsd: 0.5, contractFile: "/m/in/contract.txt" contractText: "c", workdir: "/m/work", notesPath: "/m/out/notes.txt" } as const;
     const prof = a.launch(ctx, { PROFILE: true }, { name: "AWS_SECRET_ACCESS_KEY", value: "c" });
     expect(prof.env).toEqual({ AWS_SECRET_ACCESS_KEY: "c" });
     const key = a.launch(ctx, { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: "mdt_x" }, { name: "AWS_SECRET_ACCESS_KEY", value: "c" }).argv;

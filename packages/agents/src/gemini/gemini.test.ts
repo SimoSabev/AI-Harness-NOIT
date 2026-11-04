@@ -12,7 +12,7 @@ import { channelToken } from "../adapter.js";
 // E9в (spec 5.3, D-423): Gemini CLI headless — the exact argv, the env (mdt_ token only, or a login profile), and the
 // stream-json lines (fixtures/gemini-jsonl, handwritten from the CLI's types; live SKIPPED without a key).
 const fx = (n: string) => readFileSync(new URL(`../../../../fixtures/gemini-jsonl/${n}.jsonl`, import.meta.url), "utf8").split("\n").filter(Boolean);
-const ctx = { runId: "r1", taskId: "t1", prompt: "Fix it", model: "m", budgetUsd: 1, contractFile: "/m/in/contract.txt" as const, workdir: "/m/work" as const, notesPath: "/m/out/notes.txt" as const };
+const ctx = { runId: "r1", taskId: "t1", prompt: "Fix it", model: "m", budgetUsd: 1, contractFile: "/m/in/contract.txt" as const, contractText: "# Mandat task contract\nTask (bugfix): Fix it\n", workdir: "/m/work" as const, notesPath: "/m/out/notes.txt" as const };
 const canary = { name: "AWS_SECRET_ACCESS_KEY" as const, value: "c" };
 const key = { GEMINI_API_KEY: "mdt_g", GOOGLE_GEMINI_BASE_URL: "http://egress-gate" as const };
 
@@ -54,7 +54,7 @@ describe("gemini-argv (D-423)", () => {
   });
   it("the compiled control layer goes before -p", () => {
     const l = geminiAdapter({ model: "m", cliVersion: "0.65.0" }).launch({ ...ctx, harness: { argv: ["--policy", "/m/in/harness/gemini/policies"], env: {} } }, key, canary);
-    expect(l.argv.slice(-4)).toEqual(["--policy", "/m/in/harness/gemini/policies", "-p", "Fix it"]);
+    expect(l.argv.slice(-4)).toEqual(["--policy", "/m/in/harness/gemini/policies", "-p", ctx.contractText]);
   });
 });
 
@@ -102,4 +102,12 @@ describe("gemini-to-stream (v5 2.1, D-423)", () => {
 describe("gemini live", () => {
   // D-423: no Gemini key or login in this environment; SKIPPED until Simo runs it (checklist in docs/reports/E9c.md)
   it.skip("a real `gemini -p` run through the proxy produces a parseable stream", () => undefined);
+});
+
+describe("gemini gets the contract (D-453)", () => {
+  it("-p is the whole rendered contract (the task, allowed paths, must_pass), not only the person's text", () => {
+    const l = geminiAdapter({ model: "m", cliVersion: "0.65.0" }).launch(ctx, key, canary);
+    expect(l.argv.at(-2)).toBe("-p");
+    expect(l.argv.at(-1)).toBe(ctx.contractText);
+  });
 });

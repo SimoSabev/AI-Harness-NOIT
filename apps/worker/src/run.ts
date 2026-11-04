@@ -352,6 +352,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     const pm = packageManagerOf(contract.repo_config); // D-301
     let berry = false; // E8и (D-358): yarn.lock with __metadata
     try {
+      // D-453: the rendered contract, also given to adapters that put it into the prompt (Codex, Gemini)
+      const agentContractText = renderAgentContract(contractForAgent(contract, memoryBlock));
       // ---------- PROVISION (7.4)
       phase("provision");
       await timed("provision", async () => {
@@ -364,7 +366,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
         const seed = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(baseDir), timeoutMs: 120_000 });
         if (seed.exitCode !== 0) infra("E_DOCKER", "seed failed");
-        const text = renderAgentContract(contractForAgent(contract, memoryBlock));
+        const text = agentContractText;
         await w.text("agent-contract.txt", text);
         const c = await runSandbox(sctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "cat > /m/in/contract.txt && chmod 0444 /m/in/contract.txt"], stdin: PassThrough.from([text]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000 });
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
@@ -483,7 +485,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         }
         const steerHook = adapter.supportsSteering && adapter.steerLine ? i.hooks?.steer : undefined;
         const launch = adapter.launch(
-          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}), ...(steerHook ? { steer: { sessionId: randomUUID() } } : {}) },
+          { runId, taskId: contract.task_id, prompt: contract.text, model: contract.channel.model, budgetUsd: contract.repo_config.budgets.task_usd, contractFile: "/m/in/contract.txt", contractText: agentContractText, workdir: "/m/work", notesPath: "/m/out/notes.txt", ...(harness ? { harness: { argv: harness.argv, env: harness.env } } : {}), ...(steerHook ? { steer: { sessionId: randomUUID() } } : {}) },
           viaProfile ? { PROFILE: true } : ch.provider === "openai" ? { OPENAI_API_KEY: token } : ch.provider === "gemini" ? { GEMINI_API_KEY: token, GOOGLE_GEMINI_BASE_URL: "http://egress-gate" } : { ANTHROPIC_BASE_URL: "http://egress-gate", ANTHROPIC_API_KEY: token },
           { name: "AWS_SECRET_ACCESS_KEY", value: canary },
         );

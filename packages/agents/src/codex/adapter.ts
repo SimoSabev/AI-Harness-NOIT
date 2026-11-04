@@ -13,7 +13,8 @@ export function codexAdapter(o: { model: string; cliVersion: "0.160.1" }): Agent
       // D-392: a ChatGPT subscription — Codex's own login in CODEX_HOME (the profile volume), no token
       const sub = "PROFILE" in channel;
       if (!sub && !("OPENAI_API_KEY" in channel)) throw new Error("codex needs an openai channel");
-      const argv = buildCodexArgv({ model: o.model, prompt: ctx.prompt, subscription: sub });
+      // D-453: the rendered contract (it starts with the task) is the prompt, as argv.ts always said
+      const argv = buildCodexArgv({ model: o.model, prompt: ctx.contractText, subscription: sub });
       // v5 E8а: the compiled -c flags go before the prompt (the last positional); CODEX_HOME is already public env
       if (ctx.harness) argv.splice(argv.length - 1, 0, ...ctx.harness.argv);
       if (!("OPENAI_API_KEY" in channel)) return { argv, env: { [canary.name]: canary.value }, stdin: "closed" };

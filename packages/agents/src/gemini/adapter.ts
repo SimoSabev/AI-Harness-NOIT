@@ -16,7 +16,8 @@ export function geminiAdapter(o: { model: string; cliVersion: "0.65.0" }): Agent
     supportsSteering: false,
     launch(ctx, channel, canary) {
       if (!("PROFILE" in channel) && !("GEMINI_API_KEY" in channel)) throw new Error("gemini needs a gemini channel");
-      const argv = buildGeminiArgv({ model: o.model, prompt: ctx.prompt });
+      // D-453: the rendered contract (it starts with the task) is the prompt; ctx.prompt alone lost paths and must_pass
+      const argv = buildGeminiArgv({ model: o.model, prompt: ctx.contractText });
       // the compiled control layer (policies) goes before -p <prompt>
       if (ctx.harness) argv.splice(argv.length - 2, 0, ...ctx.harness.argv);
       const publicEnv = ctx.harness && Object.keys(ctx.harness.env).length > 0 ? { publicEnv: { ...ctx.harness.env } } : {};
