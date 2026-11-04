@@ -23,43 +23,30 @@ function fakeFetch(answer: (c: Call) => number | Error | { status: number; json:
   return { f, calls };
 }
 
-// D-427: Google Gemini — the list is GET /v1beta/models with x-goog-api-key; Google answers a bad key with 400
-// (API_KEY_INVALID) as well as 401/403 [НП: the exact status in a live check]
-describe("checkKey for Google Gemini (D-427)", () => {
-  const g = { wire: "gemini" as const, base: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key" as const, key: KEY, model: "gemini-3.8-flash" };
-  it("one list call with the key in x-goog-api-key (never in the query); 400/401/403 → bad_key", async () => {
-    const ok = fakeFetch(() => 200);
-    expect(await checkKey(ok.f, g)).toBe("ok");
-    expect(ok.calls).toHaveLength(1);
-    expect(ok.calls[0]).toMatchObject({ url: "https://generativelanguage.googleapis.com/v1beta/models", method: "GET" });
-    expect(ok.calls[0]?.headers["x-goog-api-key"]).toBe(KEY);
-    expect(ok.calls[0]?.url).not.toContain(KEY);
-    for (const s of [400, 401, 403]) expect(await checkKey(fakeFetch(() => s).f, g)).toBe("bad_key");
-    expect(await checkKey(fakeFetch(() => new Error("ECONNREFUSED")).f, g)).toBe("unreachable");
-  });
-});
-
-describe("checkKey (D-393)", () => {
+// D-472: the check itself is tested in @mandat/llm-proxy (key-check.test.ts); here only what `add` does with it
+describe("checkKey as `add` uses it (D-472)", () => {
   const ds = { wire: "anthropic" as const, base: "https://api.deepseek.com/anthropic", auth: "x-api-key" as const, key: KEY, model: "deepseek-v4-pro" };
-  it("a list call with the key in its header; 401/403 → bad_key; a network error → unreachable", async () => {
+  it("one 1-token message with the key in its header; 401 → bad_key; a network error → unreachable", async () => {
     const ok = fakeFetch(() => 200);
     expect(await checkKey(ok.f, ds)).toBe("ok");
-    expect(ok.calls[0]).toMatchObject({ url: "https://api.deepseek.com/anthropic/v1/models", method: "GET" });
+    expect(ok.calls).toHaveLength(1);
+    expect(ok.calls[0]).toMatchObject({ url: "https://api.deepseek.com/anthropic/v1/messages", method: "POST" });
     expect(ok.calls[0]?.headers["x-api-key"]).toBe(KEY);
     expect(await checkKey(fakeFetch(() => 401).f, ds)).toBe("bad_key");
     expect(await checkKey(fakeFetch(() => new Error("ECONNREFUSED")).f, ds)).toBe("unreachable");
   });
-  it("no list endpoint (404) → one tiny message to the default model decides; bearer auth for Z.ai", async () => {
-    const f = fakeFetch((c) => (c.method === "GET" ? 404 : 401));
-    expect(await checkKey(f.f, { ...ds, auth: "bearer" })).toBe("bad_key");
-    expect(f.calls[1]).toMatchObject({ url: "https://api.deepseek.com/anthropic/v1/messages", method: "POST" });
-    expect(f.calls[1]?.headers.authorization).toBe(`Bearer ${KEY}`);
-    expect(JSON.parse(f.calls[1]?.body ?? "{}")).toMatchObject({ model: "deepseek-v4-pro", max_tokens: 1 });
-    expect(await checkKey(fakeFetch((c) => (c.method === "GET" ? 404 : 200)).f, ds)).toBe("ok");
+  it("Gemini: generateContent with x-goog-api-key, never ?key=; 400 API_KEY_INVALID → bad_key", async () => {
+    const g = { wire: "gemini" as const, base: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key" as const, key: KEY, model: "gemini-3.8-flash" };
+    const ok = fakeFetch(() => 200);
+    expect(await checkKey(ok.f, g)).toBe("ok");
+    expect(ok.calls[0]?.headers["x-goog-api-key"]).toBe(KEY);
+    expect(ok.calls[0]?.url).not.toContain(KEY);
+    expect(await checkKey(fakeFetch(() => ({ status: 400, json: { error: { details: [{ reason: "API_KEY_INVALID" }] } } })).f, g)).toBe("bad_key");
   });
-  it("a local server: any answer means it is there; no key header at all", async () => {
+  it("a local server: any answer means it is there; no key header, no model loaded", async () => {
     const f = fakeFetch(() => 200);
     expect(await checkKey(f.f, { wire: "anthropic", base: "http://127.0.0.1:11434", auth: "none", key: "", model: "qwen3-coder" })).toBe("ok");
+    expect(f.calls[0]?.method).toBe("GET");
     expect(Object.keys(f.calls[0]?.headers ?? {}).some((h) => /key|authorization/i.test(h))).toBe(false);
   });
 });
@@ -74,17 +61,17 @@ describe("detectLocal (D-393)", () => {
 });
 
 describe("Connections (D-393)", () => {
-  const make = (answer: (c: Call) => number | Error = () => 200, accounts: { name: string; cli: "claude" | "codex" }[] = []) => {
+  const make = (answer: (c: Call) => number | Error | { status: number; json: unknown } = () => 200, accounts: { name: string; cli: "claude" | "codex" }[] = []) => {
     const store = new ConnectionStore(mkdtempSync(path.join(tmpdir(), "c-")), randomBytes(32));
     let restarts = 0;
     const f = fakeFetch(answer);
-    const c = new Connections({ store, fetch: f.f, restartProxy: async () => (restarts++, true), accounts: async () => accounts });
+    const c = new Connections({ store, fetch: f.f, restartProxy: async () => (restarts++, true), accounts: async () => accounts, now: () => new Date("2026-11-04T10:00:00.000Z") });
     return { c, store, calls: f.calls, restarts: () => restarts };
   };
   it("add: checked, saved with the key sealed, the proxy restarted; the reply has no key", async () => {
     const m = make();
     const r = await m.c.add({ provider: "deepseek", key: KEY, models: ["deepseek-v4-pro", "deepseek-flash"] });
-    expect(r).toEqual({ ok: true, connection: { id: "deepseek", provider: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/anthropic", models: ["deepseek-v4-pro", "deepseek-flash"], defaultModel: "deepseek-v4-pro", hasKey: true } });
+    expect(r).toEqual({ ok: true, connection: { id: "deepseek", provider: "deepseek", label: "DeepSeek", baseUrl: "https://api.deepseek.com/anthropic", models: ["deepseek-v4-pro", "deepseek-flash"], defaultModel: "deepseek-v4-pro", hasKey: true, keyHint: KEY.slice(-4), check: { status: "ok", at: "2026-11-04T10:00:00.000Z" } } });
     expect(JSON.stringify(r)).not.toContain(KEY);
     expect(m.store.key("deepseek")).toBe(KEY);
     expect(m.restarts()).toBe(1);
@@ -116,5 +103,28 @@ describe("Connections (D-393)", () => {
     await m.c.remove("ollama");
     expect((await m.c.list()).connections).toEqual([]);
     expect(m.restarts()).toBe(2);
+  });
+  it("D-471: a second key of the same provider is a second connection with its own label; the first keeps its id", async () => {
+    const m = make();
+    const K2 = ["sk", "ant", "y".repeat(30)].join("-");
+    await m.c.add({ provider: "anthropic", label: "Personal", key: ["sk", "ant", "x".repeat(30)].join("-"), models: ["claude-sonnet-5-5"] });
+    const r = await m.c.add({ provider: "anthropic", label: "Work", key: K2, models: ["claude-sonnet-5-5"] });
+    expect(r.ok && [r.connection.id, r.connection.label, r.connection.keyHint]).toEqual(["anthropic-2", "Work", "yyyy"]);
+    expect(m.store.list().map((c) => c.id)).toEqual(["anthropic", "anthropic-2"]);
+    expect(m.store.key("anthropic-2")).toBe(K2);
+    expect(JSON.stringify(r)).not.toContain(K2);
+  });
+  it("D-472: a key without credit is saved with that status; check() repeats one request and keeps the result", async () => {
+    let reply: { status: number; json: unknown } = { status: 402, json: { error: { message: "Insufficient Balance" } } };
+    const m = make(() => reply);
+    const r = await m.c.add({ provider: "deepseek", key: KEY, models: ["deepseek-v4-pro"] });
+    expect(r.ok && r.connection.check?.status).toBe("no_credit");
+    reply = { status: 200, json: {} };
+    expect(await m.c.check("deepseek")).toEqual({ status: "ok", at: "2026-11-04T10:00:00.000Z" });
+    expect(m.store.get("deepseek")?.check?.status).toBe("ok");
+    reply = { status: 401, json: {} };
+    expect((await m.c.check("deepseek"))?.status).toBe("bad_key");
+    expect(await m.c.check("nobody")).toBeNull();
+    expect(m.calls.every((c) => !c.url.includes(KEY))).toBe(true);
   });
 });

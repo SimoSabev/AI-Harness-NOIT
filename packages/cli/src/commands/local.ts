@@ -348,6 +348,7 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
       add: (b) => connections.add(b),
       setModels: (id, b) => connections.setModels(id, b),
       remove: (id) => connections.remove(id),
+      check: (id) => connections.check(id),
       detect: () => connections.detect(io.env),
       setPrefs: (b) => connections.setPrefs(b),
     },

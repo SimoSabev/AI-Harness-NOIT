@@ -154,6 +154,7 @@ describe("mandat local control: connections (D-393)", () => {
         add: async (b) => (seen.push(`add:${JSON.stringify(b).length > 0}`), { ok: false, error: "bad_key" }),
         setModels: async (id) => (seen.push(`models:${id}`), true),
         remove: async (id) => (seen.push(`remove:${id}`), true),
+        check: async (id) => (seen.push(`check:${id}`), id === "deepseek" ? { status: "no_credit", at: "2026-11-04T10:00:00.000Z" } : null),
         detect: async () => (seen.push("detect"), { local: [], envKeys: [] }),
         setPrefs: () => (seen.push("prefs"), true),
       },
@@ -165,13 +166,17 @@ describe("mandat local control: connections (D-393)", () => {
       expect((await call("PATCH", "/connections/deepseek", { models: ["m"], defaultModel: "m" })).status).toBe(200);
       expect((await call("PATCH", "/connections/Bad%20Id", { models: ["m"], defaultModel: "m" })).status).toBe(404);
       expect(await (await call("DELETE", "/connections/deepseek")).json()).toEqual({ removed: true });
+      // D-472: "Check the key" — the result only; an unknown id → 404; GET is not a check
+      expect(await (await call("POST", "/connections/deepseek/check")).json()).toEqual({ status: "no_credit", at: "2026-11-04T10:00:00.000Z" });
+      expect((await call("POST", "/connections/nobody/check")).status).toBe(404);
+      expect((await call("GET", "/connections/deepseek/check")).status).toBe(405);
       expect((await call("GET", "/connections/detect")).status).toBe(200);
       expect((await call("PUT", "/preferences", { onboarded: true })).status).toBe(200);
       expect((await fetch(`${c.url}/connections`, { headers: { authorization: "Bearer nope" } })).status).toBe(401);
       expect((await call("POST", "/accounts/login", { name: "rabota", cli: "codex" })).status).toBe(200);
       expect((await call("POST", "/accounts/login", { name: "rabota", cli: "gemini" })).status).toBe(400);
       expect(starts).toEqual(["rabota:codex"]);
-      expect(seen).toEqual(["list", "add:true", "models:deepseek", "remove:deepseek", "detect", "prefs"]);
+      expect(seen).toEqual(["list", "add:true", "models:deepseek", "remove:deepseek", "check:deepseek", "check:nobody", "detect", "prefs"]);
     } finally {
       await c.close();
     }
