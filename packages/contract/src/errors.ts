@@ -26,7 +26,10 @@ export type ErrorCode =
   | "E_RESEARCH_MODEL_JSON"
   | "E_RESEARCH_FETCH"
   | "E_RESEARCH_SSRF"
-  | "E_RESEARCH_SEARCH";
+  | "E_RESEARCH_SEARCH"
+  | "E_SYNC_PLAINTEXT"
+  | "E_SYNC_VAULT"
+  | "E_SYNC_OFF";
 
 export class MandatError extends Error {
   readonly code: ErrorCode;
