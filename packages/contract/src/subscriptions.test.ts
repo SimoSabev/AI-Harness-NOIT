@@ -67,6 +67,14 @@ describe("subscriptions: the registry (D-460)", () => {
     expect(subscriptionOf("kimi").tunnels.map((t) => t.host)).toEqual(["auth.kimi.ai", "api.kimi.ai"]);
     expect(canSignIn("kimi")).toBe(true);
   });
+  it("D-464 MiniMax Code: device code in region global, the privacy seed, the eval switch, logout revokes", () => {
+    expect(subscriptionOf("minimax")).toMatchObject({
+      cli: { bin: "mcode", version: "0.7.4", license: "MIT" }, agent: "minimax", availability: "untested", configEnv: "MINIMAX_DATA_DIR",
+      login: { method: "device_code", argv: ["login", "--region", "global", "--no-browser"] }, seed: { file: "config.yaml", text: "dataContribution:\n  enabled: false\n" },
+      status: { format: "match", match: "Already signed in" }, logout: ["logout", "--region", "global"], env: { MCODE_DISABLE_EVAL_CAPTURE: "1", MAVIS_REGION: "en" },
+    });
+    expect(subscriptionOf("minimax").tunnels.map((t) => t.host)).toEqual(["account.minimax.io", "agent.minimax.io"]);
+  });
   it("planned providers carry no login commands the sandbox could run by accident", () => {
     for (const p of Object.values(SUBSCRIPTIONS).filter((x) => x.availability === "planned")) {
       expect(p.agent, p.id).toBeNull();

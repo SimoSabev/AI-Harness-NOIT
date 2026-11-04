@@ -62,7 +62,7 @@ export function findDeviceLogin(text: string): { url: string; code: string } | n
   const url = [...plain.matchAll(URL_RE)].map((m) => m[0]).find(isDeviceUrl);
   const after = url ? plain.slice(plain.indexOf(url) + url.length) : "";
   // D-464: XXXX-XXXX (OpenAI, GitHub); else "code: XXXXXX" or the page's own user_code (Kimi) [НП: Kimi's code shape]
-  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1] ?? /\bcode:?\s+([A-Z0-9]{4,12})\b/.exec(after)?.[1] ?? userCode(url);
+  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1] ?? /\b[Cc]ode:?\s+([A-Z0-9]{4,12})\b/.exec(after)?.[1] ?? userCode(url);
   return url && code ? { url, code } : null;
 }
 

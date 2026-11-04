@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SUBSCRIPTIONS } from "@mandat/contract";
+import { SUBSCRIPTIONS, SubscriptionId } from "@mandat/contract";
 import { CODEX_PROFILE_DIR, PROFILE_DIR, buildProfileArgs, buildProxyRunArgs, buildRunArgs, envForPhase, profileVolume } from "./index.js";
 
 // D-392: a saved connection runs the same sandbox; what changes is the proxy's reach (a server on this computer), the
@@ -64,6 +64,19 @@ describe("connections in the sandbox (D-392)", () => {
     expect(out.slice(out.indexOf("img"))).toEqual(["img", "logout"]);
     expect(buildProfileArgs("init", { image: "img", volume: vol }).join(" ")).toContain(`chown 1000:1000 ${CODEX_PROFILE_DIR}`);
   });
+  it("D-464: init writes the registry's seed file into the fresh volume (as data, never through the shell); a status may run its own probe", () => {
+    const vol = profileVolume("minimax", "a");
+    const init = buildProfileArgs("init", { image: "img", volume: vol });
+    const seed = SUBSCRIPTIONS.minimax.seed!;
+    expect(init).toEqual(expect.arrayContaining(["-e", `MANDAT_SEED=${seed.text}`, "--network", "none"]));
+    const script = init[init.indexOf("-c") + 1]!;
+    expect(script).not.toContain(seed.text);
+    expect(script).toContain(`${SUBSCRIPTIONS.minimax.configDir}/${seed.file}`);
+    expect(init.slice(init.indexOf("-c") + 1)).toHaveLength(1);
+    expect(buildProfileArgs("status", { image: "img", volume: vol })).toEqual(expect.arrayContaining(["--entrypoint", "mcode", "--network", "none"]));
+    // no seed → only the chown
+    expect(buildProfileArgs("init", { image: "img", volume: profileVolume("claude", "a") }).some((a) => a.startsWith("MANDAT_SEED="))).toBe(false);
+  });
   it("D-460: the place, the variable and the commands of a profile come from the subscription registry", () => {
     const ctx = { home: "/home/x", mandatHome: MH, runDir: path.join(MH, "runs", "r_x") };
     const spec = (source: string, target: string) => ({ role: "agent" as const, runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", image: "img", network: "none", user: "1000:1000" as const, envNames: [], publicEnv: {}, mounts: [{ kind: "volume" as const, source, target, readonly: false }] });
@@ -71,7 +84,8 @@ describe("connections in the sandbox (D-392)", () => {
     expect(code(() => buildRunArgs(spec(profileVolume("gemini", "a"), PROFILE_DIR), ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     expect(code(() => buildRunArgs(spec(profileVolume("claude", "a"), "/home/agent/.gemini-profile"), ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     // a provider without a login command in the registry never gets a helper container
-    expect(code(() => buildProfileArgs("login-web", { image: "img", volume: profileVolume("copilot", "a") }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    const planned = SubscriptionId.options.find((id) => SUBSCRIPTIONS[id].availability === "planned");
+    if (planned) expect(code(() => buildProfileArgs("login-web", { image: "img", volume: profileVolume(planned, "a") }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     expect(code(() => buildProfileArgs("status", { image: "img", volume: profileVolume("gemini", "a") }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     expect(code(() => buildProfileArgs("status", { image: "img", volume: "mandat-profile-nope-a" }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     const claude = buildProfileArgs("status", { image: "img", volume: profileVolume("claude", "a") });

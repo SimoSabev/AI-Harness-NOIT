@@ -40,7 +40,10 @@ export const SubscriptionProvider = z.object({
   headless: z.string().max(80),
   login: z.object({ method: LoginMethod, argv: Argv, /** the vendor pages the person may be sent to */ hosts: z.array(Host).max(6) }).strict(),
   /** `format` = how packages/cli reads the answer: only "signed in?", the email and the plan, never a token */
-  status: z.object({ argv: Argv, format: z.enum(["claude-json", "codex-text", "exit-code", "match"]), /** D-464: format "match" = exit 0 and this text in stdout */ match: z.string().regex(/^[A-Za-z0-9:._@ -]{1,60}$/).optional() }).strict(),
+  /** D-464: a file the harness writes into the fresh profile volume before the first sign-in (settings the CLI needs to
+   * keep the login in a file, or privacy settings); plain settings only, never a credential */
+  seed: z.object({ file: z.string().regex(/^[a-z][a-z0-9-]{0,30}\.(json|yaml|toml)$/), text: z.string().regex(/^[A-Za-z0-9 {}":,_.\n-]{1,400}$/) }).strict().optional(),
+  status: z.object({ /** D-464: a probe of the image instead of the CLI itself (on PATH, no slash) */ bin: z.string().regex(/^[a-z][a-z0-9-]{0,40}$/).optional(), argv: Argv, format: z.enum(["claude-json", "codex-text", "exit-code", "match"]), /** D-464: format "match" = exit 0 and this text in stdout */ match: z.string().regex(/^[A-Za-z0-9:._@" -]{1,60}$/).optional() }).strict(),
   logout: Argv,
   /** the login's home in the agent container (the profile volume is mounted here) and the variable that points the CLI at it */
   configDir: z.string().regex(/^\/home\/agent\/\.[a-z0-9-]+$/),
@@ -144,13 +147,21 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     terms: { harness: "unclear", url: "https://cursor.com/terms-of-service", note: "[НП] whether the sign-in finishes without a localhost callback, and the terms for use through another tool" },
     docs: "https://cursor.com/docs/cli/reference/authentication", checked: "2026-11-04",
   },
+  // D-464 (spike 04.11.2026): the M Plan login is a device code with PKCE (account.minimax.io, region global — the CLI's
+  // default is cn); the login is a file under MINIMAX_DATA_DIR (no keyring). No status command: `mcode login` says
+  // "Already signed in" when it is [НП: offline, read-only]. Data contribution is on by default and only config.yaml turns
+  // it off, so that file is the seed; the eval-step upload has its own switch.
   minimax: {
     id: "minimax", label: "MiniMax Code", vendor: "MiniMax", plans: "M Plan",
-    cli: { bin: "mcode", npm: "@minimax-ai/code", version: "0.7.4", license: "MIT" }, headless: "mcode exec",
-    login: { method: "browser_callback", argv: [], hosts: ["agent.minimax.io"] },
-    configDir: "/home/agent/.minimax-profile", configEnv: "HOME", ...PLANNED,
-    terms: { harness: "unclear", url: "https://platform.minimax.io/docs/coding-plan/intro", note: "[НП] the sign-in flow, where it is kept and the terms; the M Plan key works today through Keys" },
-    docs: "https://agent.minimax.io/docs/cli/quick-start.md", checked: "2026-11-04",
+    cli: { bin: "mcode", npm: "@minimax-ai/code", version: "0.7.4", license: "MIT" }, headless: "mcode exec --output-format stream-json",
+    login: { method: "device_code", argv: ["login", "--region", "global", "--no-browser"], hosts: ["account.minimax.io"] },
+    seed: { file: "config.yaml", text: "dataContribution:\n  enabled: false\n" },
+    status: { argv: ["login", "--region", "global", "--no-browser"], format: "match", match: "Already signed in" }, logout: ["logout", "--region", "global"],
+    configDir: "/home/agent/.minimax-profile", configEnv: "MINIMAX_DATA_DIR", env: { MCODE_DISABLE_EVAL_CAPTURE: "1", MAVIS_REGION: "en" },
+    tunnels: t443("account.minimax.io", "agent.minimax.io"),
+    agent: "minimax", connectionProvider: null, defaultModel: "default",
+    terms: { harness: "unclear", url: "https://platform.minimax.io/docs/m-plan/faq.md", note: "the README shows headless use in scripts and CI; the M Plan FAQ calls the plan individual, interactive developer use and points production at pay-as-you-go" },
+    availability: "untested", docs: "https://agent.minimax.io/docs/cli/quick-start.md", checked: "2026-11-04",
   },
 };
 

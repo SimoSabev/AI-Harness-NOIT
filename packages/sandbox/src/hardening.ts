@@ -243,9 +243,12 @@ export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status"
   const cmd = kind === "status" ? sub.status.argv : kind === "logout" ? sub.logout : kind === "login" || kind === "login-web" ? sub.login.argv : null;
   if (cmd !== null && cmd.length === 0) forbid("this subscription has no such command yet", { volume: o.volume });
   if (kind === "init") {
-    return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${dir}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${dir}`];
+    // D-464: the registry's seed file goes in as an env value and is written by printf — never part of the script
+    const seed = sub.seed;
+    const write = seed ? ` && { [ -e ${dir}/${seed.file} ] || printf '%s' "$MANDAT_SEED" > ${dir}/${seed.file}; } && chown 1000:1000 ${dir}/${seed.file}` : "";
+    return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", ...(seed ? ["-e", `MANDAT_SEED=${seed.text}`] : []), "-v", `${o.volume}:${dir}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${dir}${write}`];
   }
-  const run = (net: string, tty: string[], ro: boolean) => ["run", "--rm", ...tty, "--network", net, "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${dir}${ro ? ":ro" : ""}`, "--entrypoint", cli, o.image];
+  const run = (net: string, tty: string[], ro: boolean, bin = cli) => ["run", "--rm", ...tty, "--network", net, "--user", "1000:1000", ...base, ...env, "-v", `${o.volume}:${dir}${ro ? ":ro" : ""}`, "--entrypoint", bin, o.image];
   // E9г (D-410): one model call of the research engine: `claude -p` with no tools, no MCP and no session on disk; the
   // prompt on stdin; the network is the profile's own route to the provider (like login). Claude profiles only.
   if (kind === "print") {
@@ -254,7 +257,7 @@ export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status"
     if (!ok || a.some((x) => /^--(dangerously|mcp-config|add-dir|allowedTools|permission-mode|settings|plugin-dir)/.test(x))) forbid("a print call is claude -p with no tools (D-410)");
     return [...run("mandat-upstream", ["-i"], false), ...a.slice(1)];
   }
-  if (kind === "status") return [...run("none", [], true), ...(cmd ?? [])];
+  if (kind === "status") return [...run("none", [], true, sub.status.bin), ...(cmd ?? [])];
   if (kind === "logout") return [...run("mandat-upstream", ["-i"], false), ...(cmd ?? [])];
   // D-369: login-web = the same flow with pipes (the web hands the pasted code to stdin), no TTY
   return [...run("mandat-upstream", [kind === "login-web" ? "-i" : "-it"], false), ...(cmd ?? [])];

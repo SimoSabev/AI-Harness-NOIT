@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MandatError, SUBSCRIPTIONS, SubscriptionId, canSignIn, isKeyCli } from "@mandat/contract";
 import { subscriptionAdapter } from "./index.js";
 import { KIMI_ENV } from "../kimi/argv.js";
+import { MINIMAX_ENV } from "../minimax/argv.js";
 
 // D-464: every subscription that can sign in and is not claude/codex/gemini has an adapter here; its env is the registry's.
 describe("subscription adapters (D-464)", () => {
@@ -13,5 +14,6 @@ describe("subscription adapters (D-464)", () => {
   });
   it("the sandbox env of Kimi (the registry) is what the adapter expects", () => {
     expect(SUBSCRIPTIONS.kimi.env).toEqual(KIMI_ENV);
+    expect(SUBSCRIPTIONS.minimax.env).toMatchObject(MINIMAX_ENV);
   });
 });

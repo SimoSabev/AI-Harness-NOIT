@@ -120,6 +120,8 @@ describe("device codes of every provider (D-464)", () => {
     const out = "Opening browser for Kimi device login: https://www.kimi.ai/code/authorize_device?user_code=QX7K2M\nIf the browser did not open, paste the URL above and enter code: QX7K2M\nCode expires in 1800s.\n";
     expect(findDeviceLogin(out)).toEqual({ url: "https://www.kimi.ai/code/authorize_device?user_code=QX7K2M", code: "QX7K2M" });
     expect(findDeviceLogin("see https://evil.example/code?user_code=QX7K2M code: QX7K2M")).toBeNull();
+    const mm = "Open: https://account.minimax.io/oauth-authorize?user_code=K7P2QX&client_surface=tui\nCode: K7P2QX\nWaiting for authorization…\n";
+    expect(findDeviceLogin(mm)).toEqual({ url: "https://account.minimax.io/oauth-authorize?user_code=K7P2QX&client_surface=tui", code: "K7P2QX" });
   });
 });
 
