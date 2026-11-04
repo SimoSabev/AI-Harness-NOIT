@@ -1,0 +1,9 @@
+export { createVault, openVault, seal, unseal, DEFAULT_COST, MIN_PASSPHRASE } from "./vault.js";
+export type { ScryptCost } from "./vault.js";
+export { assertSafeOutbound } from "./outbound.js";
+export { mergeBodies, planFirstSignIn, APPEND_ONLY } from "./merge.js";
+export type { Conflict, RecordConflict, LocalRecord, FirstSignInPlan } from "./merge.js";
+export { createSyncServer, memorySyncStore } from "./server.js";
+export type { SyncServer, SyncStore } from "./server.js";
+export { createSyncEngine, memoryCache } from "./engine.js";
+export type { LocalCache, LocalEntry, SyncPass, SyncTransport } from "./engine.js";
