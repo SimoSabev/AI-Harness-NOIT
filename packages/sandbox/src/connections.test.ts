@@ -53,4 +53,18 @@ describe("connections in the sandbox (D-392)", () => {
     expect(out.slice(out.indexOf("img"))).toEqual(["img", "logout"]);
     expect(buildProfileArgs("init", { image: "img", volume: vol }).join(" ")).toContain(`chown 1000:1000 ${CODEX_PROFILE_DIR}`);
   });
+  it("D-460: the place, the variable and the commands of a profile come from the subscription registry", () => {
+    const ctx = { home: "/home/x", mandatHome: MH, runDir: path.join(MH, "runs", "r_x") };
+    const spec = (source: string, target: string) => ({ role: "agent" as const, runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", image: "img", network: "none", user: "1000:1000" as const, envNames: [], publicEnv: {}, mounts: [{ kind: "volume" as const, source, target, readonly: false }] });
+    expect(code(() => buildRunArgs(spec(profileVolume("gemini", "a"), "/home/agent/.gemini-profile"), ctx))).toBeUndefined();
+    expect(code(() => buildRunArgs(spec(profileVolume("gemini", "a"), PROFILE_DIR), ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    expect(code(() => buildRunArgs(spec(profileVolume("claude", "a"), "/home/agent/.gemini-profile"), ctx))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    // a provider without a login command in the registry never gets a helper container
+    expect(code(() => buildProfileArgs("login-web", { image: "img", volume: profileVolume("copilot", "a") }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    expect(code(() => buildProfileArgs("status", { image: "img", volume: profileVolume("gemini", "a") }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    expect(code(() => buildProfileArgs("status", { image: "img", volume: "mandat-profile-nope-a" }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
+    const claude = buildProfileArgs("status", { image: "img", volume: profileVolume("claude", "a") });
+    expect(claude).toEqual(expect.arrayContaining(["-e", `CLAUDE_CONFIG_DIR=${PROFILE_DIR}`, "-e", "DISABLE_AUTOUPDATER=1", "--entrypoint", "claude"]));
+    expect(claude.slice(claude.indexOf("img"))).toEqual(["img", "auth", "status", "--json"]);
+  });
 });

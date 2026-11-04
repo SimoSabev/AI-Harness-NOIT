@@ -1,5 +1,6 @@
 import path from "node:path";
-import { MandatError } from "@mandat/contract";
+import { MandatError, SUBSCRIPTIONS, parseProfileVolume, profileVolumeName } from "@mandat/contract";
+import type { SubscriptionId } from "@mandat/contract";
 
 // v5 E9б (D-364): "ui-app" runs tree B's dev server, "ui" the browser that visits it — both on the run's internal UI network
 export type RunRole = "seed" | "install" | "agent" | "export" | "test" | "gate" | "mcp" | "ui-app" | "ui";
@@ -203,8 +204,10 @@ export function buildRunArgs(spec: RunSpec, ctx: { home: string; mandatHome: str
         forbid("an MCP sidecar mounts only its own mandat-mcp-* volume under /m/mcp (D-354)", { source: m.source, target: m.target });
       }
       // D-392: a Codex (ChatGPT) profile lives at CODEX_PROFILE_DIR, a Claude one at PROFILE_DIR — never crossed
-      const isProfile = m.source.startsWith(PROFILE_PREFIX) || m.target === PROFILE_DIR || m.target === CODEX_PROFILE_DIR;
-      const want = m.source.startsWith(`${PROFILE_PREFIX}codex-`) ? CODEX_PROFILE_DIR : PROFILE_DIR;
+      // D-460: each provider's profile at its own registry place
+      const isProfile = m.source.startsWith(PROFILE_PREFIX) || PROFILE_DIRS.has(m.target);
+      const of = parseProfileVolume(m.source);
+      const want = of ? SUBSCRIPTIONS[of.id].configDir : null;
       if (isProfile && !(spec.role === "agent" && m.source.startsWith(PROFILE_PREFIX) && m.target === want)) {
         forbid("a subscription profile volume is only for the agent, at its profile dir (D-295, D-392)", { source: m.source, target: m.target });
       }
@@ -230,11 +233,15 @@ export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status"
   if (!o.volume.startsWith(PROFILE_PREFIX) || !/^[a-z0-9-]+$/.test(o.volume)) forbid("not a profile volume", { volume: o.volume });
   if (o.image.startsWith("-") || o.image.length === 0) forbid("invalid image");
   const base = ["--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=64m", "--pids-limit=256", "--memory=1g", "--label", "mandat.profile=1"];
-  // D-392: a ChatGPT sign-in is the unmodified `codex login --device-auth` (a code the person types on OpenAI's page)
-  const codex = o.volume.startsWith(`${PROFILE_PREFIX}codex-`);
-  const dir = codex ? CODEX_PROFILE_DIR : PROFILE_DIR;
-  const env = codex ? ["-e", "HOME=/tmp", "-e", `CODEX_HOME=${dir}`] : ["-e", "HOME=/tmp", "-e", `CLAUDE_CONFIG_DIR=${dir}`, "-e", "DISABLE_AUTOUPDATER=1"];
-  const cli = codex ? "codex" : "claude";
+  // D-460: the place, the variable and the commands come from the subscription registry (D-392: Codex's
+  // `codex login --device-auth`; D-295: Claude's `claude auth login --claudeai`)
+  const of = parseProfileVolume(o.volume) ?? forbid("not a profile volume", { volume: o.volume });
+  const sub = SUBSCRIPTIONS[of.id];
+  const dir = sub.configDir;
+  const env = ["-e", "HOME=/tmp", "-e", `${sub.configEnv}=${dir}`, ...Object.entries(sub.env).flatMap(([k, v]) => ["-e", `${k}=${v}`])];
+  const cli = sub.cli.bin;
+  const cmd = kind === "status" ? sub.status.argv : kind === "logout" ? sub.logout : kind === "login" || kind === "login-web" ? sub.login.argv : null;
+  if (cmd !== null && cmd.length === 0) forbid("this subscription has no such command yet", { volume: o.volume });
   if (kind === "init") {
     return ["run", "--rm", "--network", "none", "--user", "0:0", "--security-opt=no-new-privileges", "--read-only", "-v", `${o.volume}:${dir}`, "--entrypoint", "sh", o.image, "-c", `chown 1000:1000 ${dir}`];
   }
@@ -243,14 +250,14 @@ export function buildProfileArgs(kind: "init" | "login" | "login-web" | "status"
   // prompt on stdin; the network is the profile's own route to the provider (like login). Claude profiles only.
   if (kind === "print") {
     const a = o.argv ?? [];
-    const ok = !codex && a[0] === "claude" && a[1] === "-p" && a.includes("--tools") && a[a.indexOf("--tools") + 1] === "" && a.includes("--strict-mcp-config") && a.includes("--no-session-persistence");
+    const ok = of.id === "claude" && a[0] === "claude" && a[1] === "-p" && a.includes("--tools") && a[a.indexOf("--tools") + 1] === "" && a.includes("--strict-mcp-config") && a.includes("--no-session-persistence");
     if (!ok || a.some((x) => /^--(dangerously|mcp-config|add-dir|allowedTools|permission-mode|settings|plugin-dir)/.test(x))) forbid("a print call is claude -p with no tools (D-410)");
     return [...run("mandat-upstream", ["-i"], false), ...a.slice(1)];
   }
-  if (kind === "status") return [...run("none", [], true), ...(codex ? ["login", "status"] : ["auth", "status", "--json"])];
-  if (kind === "logout") return [...run("mandat-upstream", ["-i"], false), ...(codex ? ["logout"] : ["auth", "logout"])];
+  if (kind === "status") return [...run("none", [], true), ...(cmd ?? [])];
+  if (kind === "logout") return [...run("mandat-upstream", ["-i"], false), ...(cmd ?? [])];
   // D-369: login-web = the same flow with pipes (the web hands the pasted code to stdin), no TTY
-  return [...run("mandat-upstream", [kind === "login-web" ? "-i" : "-it"], false), ...(codex ? ["login", "--device-auth"] : ["auth", "login", "--claudeai"])];
+  return [...run("mandat-upstream", [kind === "login-web" ? "-i" : "-it"], false), ...(cmd ?? [])];
 }
 
 export interface ProxyRunOptions {
@@ -319,9 +326,11 @@ export const PROFILE_DIR = "/home/agent/.claude-profile";
 /** D-392: Codex's own login (ChatGPT) — CODEX_HOME on a profile volume of its own. */
 export const CODEX_PROFILE_DIR = "/home/agent/.codex-profile";
 const PROFILE_PREFIX = "mandat-profile-";
-export function profileVolume(provider: "claude" | "codex", name: string): string {
+/** D-460: every registry place a profile volume may be mounted at */
+const PROFILE_DIRS = new Set(Object.values(SUBSCRIPTIONS).map((p) => p.configDir));
+export function profileVolume(provider: SubscriptionId, name: string): string {
   if (!/^[a-z0-9][a-z0-9-]{0,31}$/.test(name)) throw new MandatError("E_USAGE", "profile name: a-z, 0-9, '-', up to 32");
-  return `${PROFILE_PREFIX}${provider}-${name}`;
+  return profileVolumeName(provider, name);
 }
 
 /** 8.2: exact env sets per phase. names = secrets only (→ RunSpec.envNames); publicValues → RunSpec.publicEnv. */
