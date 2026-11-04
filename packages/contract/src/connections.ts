@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { KeyCheckState, KeyHint, PROVIDERS, ProviderId, Wire } from "./provider-catalog.js";
+import type { Price } from "./provider-catalog.js";
+export * from "./provider-catalog.js";
 
 // D-392: a "connection" is one way of reaching a model: a subscription (the unmodified CLI with its own login, D-295),
 // an API key, a server on this computer, or another endpoint that speaks the Anthropic Messages API (Claude Code) or the
@@ -12,73 +15,7 @@ export type ConnectionId = z.infer<typeof ConnectionId>;
 export const ModelId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/@[\]-]{0,127}$/).refine((m) => !/mdt_|sk-ant-/.test(m), "secret-looking model id");
 export type ModelId = z.infer<typeof ModelId>;
 
-// D-424: gemini = the Gemini API (/v1beta/models/*, x-goog-api-key) for Gemini CLI
-export const Wire = z.enum(["anthropic", "openai", "gemini"]);
-export type Wire = z.infer<typeof Wire>;
-export const ProviderId = z.enum(["claude-sub", "chatgpt-sub", "anthropic", "openai", "gemini", "deepseek", "kimi", "zai", "ollama", "lmstudio", "custom"]);
-export type ProviderId = z.infer<typeof ProviderId>;
-
-/** USD per million tokens (cacheWrite = the 5-minute write). */
-export interface Price { input: number; output: number; cacheRead: number; cacheWrite: number }
-export interface SuggestedModel { id: string; tier: "best" | "balanced" | "fast"; recommended?: true; price?: Price }
-export interface ProviderInfo {
-  id: ProviderId;
-  /** the product name (never translated) */
-  label: string;
-  kind: "subscription" | "api_key" | "local";
-  /** the CLI that runs in the sandbox (D-427: gemini = Gemini CLI) */
-  agent: "claude" | "codex" | "gemini";
-  wire: Wire;
-  /** null: the person gives the address (custom) or there is none (a subscription goes through its own CONNECT tunnel) */
-  baseUrl: string | null;
-  auth: "x-api-key" | "bearer" | "x-goog-api-key" | "none";
-  /** where the person gets a key (null: no key) */
-  keyPage: string | null;
-  docs: string;
-  /** the date the docs were read (AGENTS.md rule 9) */
-  checked: string;
-  /** false = [НП]: the address or the model names come from the provider's docs but no live run has used them yet */
-  live: boolean;
-  models: SuggestedModel[];
-}
-
-const p = (input: number, output: number, cacheRead: number, cacheWrite: number): Price => ({ input, output, cacheRead, cacheWrite });
-// platform.claude.com/docs/en/about-claude/pricing (claude-api skill cache of 06.10.2026); the 5-minute write is 1.25 × input
-const CLAUDE: SuggestedModel[] = [
-  { id: "claude-sonnet-5-5", tier: "balanced", recommended: true, price: p(2, 10, 0.2, 2.5) },
-  { id: "claude-opus-5-5", tier: "best", price: p(4, 20, 0.2, 5) },
-  { id: "claude-haiku-5-5", tier: "fast", price: p(0.1, 0.5, 0.01, 0.125) },
-  { id: "claude-fable-5-1", tier: "best", price: p(10, 50, 0.25, 12.5) },
-];
-
-export const PROVIDERS: Readonly<Record<ProviderId, ProviderInfo>> = {
-  "claude-sub": { id: "claude-sub", label: "Claude", kind: "subscription", agent: "claude", wire: "anthropic", baseUrl: null, auth: "none", keyPage: null, docs: "https://code.claude.com/docs/en/authentication", checked: "2026-10-26", live: true, models: CLAUDE.slice(0, 3).map(({ price: _, ...m }) => m) },
-  "chatgpt-sub": { id: "chatgpt-sub", label: "ChatGPT", kind: "subscription", agent: "codex", wire: "openai", baseUrl: null, auth: "none", keyPage: null, docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
-  anthropic: { id: "anthropic", label: "Anthropic API", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.anthropic.com", auth: "x-api-key", keyPage: "https://platform.claude.com/settings/keys", docs: "https://platform.claude.com/docs/en/about-claude/models", checked: "2026-10-26", live: true, models: CLAUDE },
-  openai: { id: "openai", label: "OpenAI API", kind: "api_key", agent: "codex", wire: "openai", baseUrl: "https://api.openai.com", auth: "bearer", keyPage: "https://platform.openai.com/api-keys", docs: "https://developers.openai.com/codex/auth", checked: "2026-10-26", live: false, models: [{ id: "gpt-5-codex", tier: "balanced", recommended: true }] },
-  // D-427: ai.google.dev/gemini-api/docs/models (updated 22.10.2026) and /pricing (read 28.10.2026): the key in
-  // x-goog-api-key, Gemini CLI as the agent. Prices are the ones from 01.12.2026 (argon) / 01.01.2027 (flash) — the higher
-  // ones, so a budget stops early; there is no cache-write fee, so cacheWrite = input. [НП: a live run with these names]
-  gemini: { id: "gemini", label: "Google Gemini", kind: "api_key", agent: "gemini", wire: "gemini", baseUrl: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key", keyPage: "https://aistudio.google.com/apikey", docs: "https://ai.google.dev/gemini-api/docs/api-key", checked: "2026-10-28", live: false, models: [
-    { id: "gemini-3.8-flash", tier: "balanced", recommended: true, price: p(1.5, 7.5, 0.15, 1.5) },
-    { id: "gemini-4-argon", tier: "best", price: p(4, 20, 0.2, 4) },
-    { id: "gemini-3.5-flash-lite", tier: "fast", price: p(0.3, 2.5, 0.03, 0.3) },
-  ] },
-  // api-docs.deepseek.com/guides/anthropic_api: x-api-key; names outside the list → 400
-  deepseek: { id: "deepseek", label: "DeepSeek", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.deepseek.com/anthropic", auth: "x-api-key", keyPage: "https://platform.deepseek.com/api_keys", docs: "https://api-docs.deepseek.com/guides/anthropic_api", checked: "2026-10-26", live: false, models: [{ id: "deepseek-v4-pro", tier: "best", recommended: true }, { id: "deepseek-flash", tier: "fast" }] },
-  // kimi.com/code/docs/en/third-party-tools/claude-code.html: ANTHROPIC_API_KEY (x-api-key), the Kimi Code plan
-  kimi: { id: "kimi", label: "Kimi", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.kimi.ai/coding", auth: "x-api-key", keyPage: "https://www.kimi.com/code", docs: "https://www.kimi.com/code/docs/en/third-party-tools/claude-code.html", checked: "2026-10-26", live: false, models: [{ id: "k3.1-pro", tier: "best", recommended: true }, { id: "k3.1-pro-highspeed", tier: "fast" }] },
-  // docs.z.ai/scenario-example/develop-tools/claude: ANTHROPIC_AUTH_TOKEN (bearer), the GLM Coding Plan [НП: model names]
-  zai: { id: "zai", label: "Z.ai GLM", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: "https://api.z.ai/api/anthropic", auth: "bearer", keyPage: "https://z.ai/manage-apikey/apikey-list", docs: "https://docs.z.ai/scenario-example/develop-tools/claude", checked: "2026-10-26", live: false, models: [{ id: "glm-5.2", tier: "best", recommended: true }] },
-  // docs.ollama.com/api/anthropic-compatibility: /v1/messages since 01.2026; any token, ignored; no count_tokens
-  ollama: { id: "ollama", label: "Ollama", kind: "local", agent: "claude", wire: "anthropic", baseUrl: "http://127.0.0.1:11434", auth: "none", keyPage: null, docs: "https://docs.ollama.com/api/anthropic-compatibility", checked: "2026-10-26", live: false, models: [{ id: "qwen3-coder", tier: "balanced", recommended: true }] },
-  // [НП] LM Studio's Anthropic-compatible endpoint: listed models come from GET /v1/models of the running server
-  lmstudio: { id: "lmstudio", label: "LM Studio", kind: "local", agent: "claude", wire: "anthropic", baseUrl: "http://127.0.0.1:1234", auth: "none", keyPage: null, docs: "https://lmstudio.ai/docs/developer", checked: "2026-10-26", live: false, models: [] },
-  custom: { id: "custom", label: "Custom", kind: "api_key", agent: "claude", wire: "anthropic", baseUrl: null, auth: "x-api-key", keyPage: null, docs: "https://code.claude.com/docs/en/llm-gateway", checked: "2026-10-26", live: false, models: [] },
-};
-
-export const providerInfo = (id: ProviderId): ProviderInfo => PROVIDERS[id];
-const FREE: Price = p(0, 0, 0, 0);
+const FREE: Price = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 /** The price of a model on a provider: local → 0; known → the catalog; null = unknown (the proxy estimates, D-392). */
 export function priceOf(provider: ProviderId, model: string): Price | null {
@@ -123,6 +60,10 @@ export const Connection = z.object({
   models: Models,
   defaultModel: ModelId,
   hasKey: z.boolean(),
+  /** D-471: the last four characters of the key — all the web ever sees of it */
+  keyHint: KeyHint.optional(),
+  /** D-472: the last "Check the key" */
+  check: KeyCheckState.optional(),
 }).strict().refine((c) => c.models.includes(c.defaultModel), { message: "the default model is one of the models", path: ["defaultModel"] });
 export type Connection = z.infer<typeof Connection>;
 
@@ -137,7 +78,9 @@ export const AddConnectionBody = z.object({
   defaultModel: ModelId.optional(),
 }).strict().superRefine((b, ctx) => {
   const info = PROVIDERS[b.provider];
-  if (info.auth === "none" ? b.key !== undefined : b.key === undefined && b.provider !== "custom") ctx.addIssue({ code: "custom", message: info.auth === "none" ? "no key for this provider" : "a key is needed", path: ["key"] });
+  if (info.auth === "aws" || info.auth === "gcp") ctx.addIssue({ code: "custom", message: "cloud credentials, not a pasted key (Q-096)", path: ["provider"] });
+  const ownAddress = b.provider === "custom" || b.provider === "openai-compat";
+  if (info.auth === "none" ? b.key !== undefined : b.key === undefined && !ownAddress) ctx.addIssue({ code: "custom", message: info.auth === "none" ? "no key for this provider" : "a key is needed", path: ["key"] });
   if (info.baseUrl === null && b.baseUrl === undefined) ctx.addIssue({ code: "custom", message: "an address is needed", path: ["baseUrl"] });
   if (b.baseUrl !== undefined && !upstreamUrl(b.baseUrl).ok) ctx.addIssue({ code: "custom", message: "https, or http on this computer", path: ["baseUrl"] });
   if (b.defaultModel !== undefined && !b.models.includes(b.defaultModel)) ctx.addIssue({ code: "custom", message: "the default model is one of the models", path: ["defaultModel"] });
@@ -175,7 +118,7 @@ export type Preferences = z.infer<typeof Preferences>;
 export const ProxyUpstream = z.object({
   wire: Wire,
   url: z.string().max(300).refine((u) => /^https:\/\/[^/]+|^http:\/\/host\.docker\.internal(:\d+)?(\/|$)/.test(u), "https, or http to this computer"),
-  auth: z.enum(["x-api-key", "bearer", "x-goog-api-key", "none"]),
+  auth: z.enum(["x-api-key", "bearer", "x-goog-api-key", "api-key", "none"]),
   key: z.string().max(512),
   models: Models,
   /** per model; a missing price is estimated at the Sonnet rate (budgets stay meaningful) */
