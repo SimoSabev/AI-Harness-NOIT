@@ -7,7 +7,7 @@ import { listRegistry } from "@mandat/mcp-bridge/registry";
 import type { Result, SecondFactor } from "./actions";
 import { approveMcpServer } from "./mcp";
 import { hasCap } from "./roles";
-import { asService } from "./sql";
+import { asService, asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 
 // D-480…D-485: "Add from…" — preview (nothing is written), then add the picked rows as PENDING catalog entries. An MCP
@@ -185,4 +185,11 @@ export async function discoverForPerson(o: { mode: string; body: unknown; io: Lo
   if (!b.success) return err(400, "consent_required");
   const f = await discoverLocal(o.io);
   return { status: 200, body: { mcp: f.mcp, skills: f.skills.map(publicSkill), unreadable: f.unreadable } };
+}
+
+export interface SkillCatalogRow { id: string; name: string; description: string; source: string; approved: boolean; blocked_reason: string | null; origin: string | null }
+export async function skillCatalog(db: Db, uid: string, org: string): Promise<SkillCatalogRow[]> {
+  return asUser(db, uid, async (sql) => (await sql.query<SkillCatalogRow>(
+    "select id::text as id, name, description, source, approved, blocked_reason, origin from public.skills where org_id = $1::uuid order by source, name", [org],
+  )).rows);
 }

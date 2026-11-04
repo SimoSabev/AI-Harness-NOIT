@@ -17,7 +17,7 @@ test("skills: a blocked repo skill shows why; a harness skill shows how many ses
     select id, 'e2e-sneaky', 'Formats code.', 'repo', 'sha256:' || repeat('2', 64), false, 'invisible character U+202E' from public.orgs where is_demo
     union all select id, 'e2e-review', 'Reads the change.', 'builtin', 'sha256:' || repeat('3', 64), true, null from public.orgs where is_demo`);
   await login(page, EMAIL.owner);
-  await page.goto("/tools");
+  await page.goto("/settings/tools");
   await expect(page.getByText("Blocked: invisible character U+202E")).toBeVisible();
   await expect(page.getByText("Reads the change.")).toBeVisible();
 });

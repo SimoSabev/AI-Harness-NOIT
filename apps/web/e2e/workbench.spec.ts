@@ -17,7 +17,7 @@ test("the side bar has tasks, projects and settings", async ({ page }) => {
 
 test("agents, tools, night shift, research: real data only, no SAMPLE", async ({ page }) => {
   await login(page, EMAIL.approver);
-  for (const [url, h] of [["/agents", /Agents/], ["/tools", "Tools"], ["/night", "Night shift"], ["/research", "Research"]] as const) {
+  for (const [url, h] of [["/agents", /Agents/], ["/settings/tools", "MCP, tools and skills"], ["/night", "Night shift"], ["/research", "Research"]] as const) {
     await page.goto(url);
     await expect(page.getByRole("heading", { level: 1, name: h })).toBeVisible();
     await expect(page.getByText("SAMPLE")).toHaveCount(0);

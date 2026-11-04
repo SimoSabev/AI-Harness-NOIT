@@ -20,7 +20,7 @@ export const AddMcpBody = z.discriminatedUnion("source", [
 ]);
 export const ApproveMcpBody = z.object({ factor_id: z.string().max(100).optional(), code: z.string().regex(/^\d{6}$/).optional() }).strict();
 
-export interface McpRow { id: string; name: string; source: string; transport: string; package: string | null; url: string | null; version: string | null; vet_status: string; vet_findings: { tool: string; reason: string }[]; egress_hosts: string[]; secrets: string[]; tools: number; tools_hash: string | null }
+export interface McpRow { id: string; name: string; source: string; transport: string; package: string | null; url: string | null; version: string | null; vet_status: string; vet_findings: { tool: string; reason: string }[]; egress_hosts: string[]; secrets: string[]; tools: number; tools_hash: string | null; origin: string | null }
 
 const err = (status: number, error: string): Result => ({ status, body: { error } });
 async function ledger(sql: Sql, org: string, payload: Record<string, unknown>): Promise<void> {
@@ -33,7 +33,7 @@ export const reachesOut = (s: { transport: string; url: string | null; egress_ho
 
 export async function mcpCatalog(db: Db, uid: string, org: string): Promise<McpRow[]> {
   return asUser(db, uid, async (sql) => (await sql.query<McpRow>(
-    "select id::text as id, name, source, transport, package, url, version, vet_status, vet_findings, egress_hosts, secrets, tools, tools_hash from public.mcp_servers where org_id = $1::uuid order by name",
+    "select id::text as id, name, source, transport, package, url, version, vet_status, vet_findings, egress_hosts, secrets, tools, tools_hash, origin from public.mcp_servers where org_id = $1::uuid order by name",
     [org],
   )).rows);
 }

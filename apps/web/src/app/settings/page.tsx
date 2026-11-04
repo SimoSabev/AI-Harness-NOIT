@@ -35,6 +35,11 @@ export default async function SettingsPage() {
           <Link href="/keys" className={link}>{t("settings.keysLink")}</Link>
         </p>
       </section>
+      <section aria-labelledby="s-tools" className={`${card} mt-4 p-5`}>
+        <h2 id="s-tools" className="font-display text-base font-semibold">{t("tt.title")}</h2>
+        <p className="mt-1 mb-3 text-sm text-mute">{t("tt.settingsHint")}</p>
+        <Link href="/settings/tools" className={link}>{t("tt.open")}</Link>
+      </section>
       <section aria-labelledby="s-lang" className={`${card} mt-4 p-5`}>
         <h2 id="s-lang" className="mb-4 font-display text-base font-semibold">{t("settings.lang")}</h2>
         <LangChoice value={t.lang} />
@@ -48,7 +53,6 @@ export default async function SettingsPage() {
         <summary className="cursor-pointer font-display text-base font-semibold">{t("settings.advanced")}</summary>
         <ul className="mt-3 space-y-3">
           <li><Link href="/system" className={link}>{t("system.title")}</Link><p className="text-sm text-mute">{t("system.intro")}</p></li>
-          <li><Link href="/tools" className={link}>{t("tools.title")}</Link><p className="text-sm text-mute">{t("settings.toolsHint")}</p></li>
           {authMode() !== "local" && <li><Link href="/settings/roles" className={link}>{t("settings.roles")}</Link><p className="text-sm text-mute">{t("settings.rolesHint")}</p></li>}
         </ul>
       </details>
