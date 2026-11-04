@@ -1,5 +1,5 @@
 import { builtinSkillRef } from "@mandat/profile";
-import { sealProfile } from "@mandat/contract";
+import { RESEARCH_MCP_REF, sealProfile } from "@mandat/contract";
 import type { FieldSource, HarnessProfile, ProfileLayersInput } from "@mandat/contract";
 import { propose } from "./propose.js";
 import type { Baseline, Source } from "./propose.js";
@@ -73,9 +73,9 @@ export function proposeProfile(scan: ScanResult, o: { repoId: string; version: n
     c,
     d,
     e: {
-      mcp: [{ name: "mandat", transport: "http", package: null, url: "http://egress-gate/mcp/mandat", version: "1", digest: null, tools_hash: null, enabled_tools: ["mandat_status", "mandat_verify", "mandat_explain"], egress_hosts: [], secrets: [] }],
-      // E8e (D-354): the harness's test-first skill and the repo's own skills that passed the scan (pinned by hash)
-      skills: [builtinSkillRef("test-first"), ...scan.skills.filter((k) => k.blocked === null).map((k) => ({ name: k.name, source: "repo" as const, content_hash: k.content_hash, description: k.description }))],
+      mcp: [{ name: "mandat", transport: "http", package: null, url: "http://egress-gate/mcp/mandat", version: "1", digest: null, tools_hash: null, enabled_tools: ["mandat_status", "mandat_verify", "mandat_explain"], egress_hosts: [], secrets: [] }, RESEARCH_MCP_REF],
+      // E8e (D-354), D-486: the built-in set (research server + the harness's skills) and the repo's own skills that passed the scan
+      skills: [builtinSkillRef("test-first"), builtinSkillRef("review"), builtinSkillRef("research"), ...scan.skills.filter((k) => k.blocked === null).map((k) => ({ name: k.name, source: "repo" as const, content_hash: k.content_hash, description: k.description }))],
       plugins: [],
     },
     f: { roles: [{ role: "reviewer", model: "claude-haiku-5-5", tools: ["path:read:**"], max_turns: 20, description: "Reads the change and reports problems; never writes." }] },
