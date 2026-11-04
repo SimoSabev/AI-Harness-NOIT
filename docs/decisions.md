@@ -3345,3 +3345,53 @@ E9в уебът беше построен в друг worktree със същит
 Не е проверено на живо: истински Gemini или Codex с договора (чака ключ). Docker тестът с истинския Gemini CLI (D-430)
 не е пускан след промяната.
 Тестове: gemini.test.ts и codex.test.ts („gets the contract (D-453)“). Статус: решено от кодера; Симо може да го обърне.
+
+## D-460 Един регистър на абонаментите: `SUBSCRIPTIONS` в packages/contract (04.11.2026)
+Решение: `packages/contract/src/subscriptions.ts` държи по един запис на доставчик с абонаментен вход (zod
+`SubscriptionProvider`): име, CLI (npm, версия, лиценз), headless форма, начин на вход (`paste_code` / `device_code` /
+`browser_callback`) и неговите argv и хостове, командата за статус и как се чете (`claude-json` / `codex-text` /
+`exit-code`), изход, папката на входа в контейнера и променливата към нея, допълнителна среда, CONNECT тунелите, адаптера
+(`agent`), каталожния доставчик за моделите (`connectionProvider`), условията (`allowed` / `unclear` / `forbidden` +
+линк) и наличност (`ready` / `untested` / `blocked` / `planned`). Volume-ът е `mandat-profile-<id>-<име>` (id без тире,
+за да се чете еднозначно обратно). `canSignIn(id)` = ready/untested + има адаптер + условията не са против; само тези
+стигат до вход (`LoginCliId` в `LoginStart`, `mandat login --agent`).
+Четат го: `buildProfileArgs`/`profileVolume`/монтирането (packages/sandbox), тунелите на профила (packages/channels),
+`listAccounts`/`loginCliOf`/`logoutProfile`/връзките (packages/cli), уебът (accounts, Настройки → Абонаменти, полето за
+задача). Поведението за Claude и Codex е същото (снимките и тестовете на argv не са пипани).
+Защо: Симо иска „колкото и каквито абонаменти“; досега Claude/Codex бяха разпръснати по 10 места като `codex ? … : …`.
+Проучване на доставчиците: docs/integrations/subscriptions.md (04.11.2026).
+Тестове: contract subscriptions.test.ts; sandbox connections.test.ts; cli accounts.test.ts.
+Статус: решено от кодера.
+
+## D-461 Статус на абонамент: влязъл / изтекъл / няма CLI / недостъпен (04.11.2026)
+Решение: `subscriptionStatus` (contract): planned или липсващ образ → `no_cli`; не може да влезе (blocked) →
+`unavailable`; иначе статус-командата казва „влязъл“ → `signed_in`, а ако не → `expired`. Изтекъл, защото volume
+оцелява само след завършен вход (login-session.ts трие volume-а на незавършен нов вход) — значи е бил влязъл и входът
+вече не важи. Харнесът не чете токена, за да знае истинската причина; картата предлага „Влез отново“.
+Тестове: contract subscriptions.test.ts; web subscriptions-view.test.ts. Статус: решено от кодера.
+
+## D-462 Настройки → Абонаменти: самостоятелен раздел и страница `/settings/subscriptions` (04.11.2026)
+Решение: `apps/web/src/components/connections/subscriptions/` — `subscriptions-view.ts` (чисти карти и избор от
+регистъра) и `subscriptions-panel.tsx` (карти с доставчик, кой, план, статус, „Влез отново“, „Махни“; „Добави абонамент“
+→ избор на доставчик → съществуващият `AccountLogin` с `cli`). Недостъпните доставчици се виждат в избора, сиви, с
+причина („условията не са ясни“, „програмата му още не е в пясъчника“). За ChatGPT подсказка да се включи входът с код за
+устройство в ChatGPT (learn.chatgpt.com/docs/auth, 04.11.2026). Ред-линк в Настройки. Текстове bg/en (`subs.*`).
+`AccountLogout` вече праща и `cli` (преди ChatGPT акаунт се махаше с Claude Code). Влезлият абонамент влиза в полето за
+задача и в Модели през регистъра (`taskAgents`: `connectionProvider`, само при `canSignIn`) — без допълнителна стъпка.
+Координаторът ще сложи панела в общата страница „Връзки“.
+Проверено: страницата се отваря (dev сървър, фалшив control endpoint), bg и en, изборът и входът за ChatGPT.
+Тестове: web subscriptions-view.test.ts, agents.test.ts. Статус: решено от кодера.
+
+## D-463 Кои доставчици: Claude и Codex сега; Gemini спрян; Copilot, Kimi, Antigravity, Cursor, MiniMax планирани (04.11.2026)
+Решение: по проучването (docs/integrations/subscriptions.md, 04.11.2026):
+- Claude — ready; условията изрично позволяват човек да влезе в непроменения Claude Code, и когато платформа го хоства.
+- Codex (ChatGPT) — untested: свързан докрай, входът с код за устройство трябва първо да се включи в ChatGPT.
+- Gemini — blocked: от 18.06.2026 личните планове (free, AI Pro, Ultra) са в Antigravity CLI; Gemini CLI влиза само с
+  Code Assist Standard/Enterprise, а условията пак не казват дали обвивка е позволена (Q-073, Q-090).
+- Copilot CLI, Kimi Code, Antigravity, Cursor, MiniMax Code — planned: записи без команди (пясъчникът отказва
+  помощен контейнер без команда), сиви в избора; спайкове в документа. Нито един CLI не е добавен в образа в тази
+  сесия: Kimi Code е по-млад от 3 дни (правило 8); Copilot иска адаптер, собственически лиценз в allowlist и спайк за
+  входа във файл без keychain — отделна задача (Q-091).
+- Qwen Code не е абонамент вече (Qwen OAuth спрян на 15.04.2026, Coding Plan = ключ); Z.ai, DeepSeek, Kimi/MiniMax
+  ключовете са в Ключове (D-392). iFlow е спрян; Amp/OpenCode/Pi са харнеси на трети страни, не CLI на доставчика.
+Статус: решено от кодера; Симо може да обърне (Q-090, Q-091).
