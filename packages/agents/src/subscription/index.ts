@@ -2,6 +2,7 @@ import { MandatError } from "@mandat/contract";
 import type { AgentCli } from "@mandat/contract";
 import type { AgentAdapter } from "../adapter.js";
 import { copilotAdapter } from "../copilot/adapter.js";
+import { cursorAdapter } from "../cursor/adapter.js";
 import { kimiAdapter } from "../kimi/adapter.js";
 import { minimaxAdapter } from "../minimax/adapter.js";
 
@@ -9,6 +10,7 @@ import { minimaxAdapter } from "../minimax/adapter.js";
 // and gemini have their own adapters (packages/agents/src/<cli>).
 const ADAPTERS: Partial<Record<AgentCli, (model: string) => AgentAdapter>> = {
   copilot: (model) => copilotAdapter({ model, cliVersion: "1.0.105" }),
+  cursor: (model) => cursorAdapter({ model, cliVersion: "2026.10.22-27dcf5f" }),
   kimi: (model) => kimiAdapter({ model, cliVersion: "2.4.1" }),
   minimax: (model) => minimaxAdapter({ model, cliVersion: "0.7.4" }),
 };

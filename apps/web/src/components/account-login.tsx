@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LoginState } from "@mandat/contract";
+import { LoginState, SUBSCRIPTIONS } from "@mandat/contract";
 import type { SubscriptionId } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
@@ -97,17 +97,24 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
       )}
       {v.show === "device" && s.state === "waiting_device" && (
         <div className="space-y-3">
-          <p className="text-sm">{t("keys.login.device1")}</p>
-          <a className={btn.secondary} href={s.url} target="_blank" rel="noopener noreferrer">{t("keys.login.openChatgpt")}</a>
-          <p className="text-sm">{t("keys.login.device2")}</p>
-          <p className="select-all rounded-lg bg-raised px-3 py-2 text-center font-mono text-lg tracking-widest" aria-label={t("keys.login.code")}>{s.code}</p>
-          <p className="text-xs text-mute" role="status">{t("keys.login.deviceWait")}</p>
+          {/* D-464: the same steps for every device-code or link sign-in; the page and the name are the provider's */}
+          <p className="text-sm">{cli === "codex" ? t("keys.login.device1") : t("keys.login.deviceAny1", { provider: SUBSCRIPTIONS[cli].label })}</p>
+          <a className={btn.secondary} href={s.url} target="_blank" rel="noopener noreferrer">{cli === "codex" ? t("keys.login.openChatgpt") : t("keys.login.openAny", { provider: SUBSCRIPTIONS[cli].label })}</a>
+          {s.code !== null ? (
+            <>
+              <p className="text-sm">{t("keys.login.device2")}</p>
+              <p className="select-all rounded-lg bg-raised px-3 py-2 text-center font-mono text-lg tracking-widest" aria-label={t("keys.login.code")}>{s.code}</p>
+            </>
+          ) : (
+            <p className="text-sm">{t("keys.login.link2")}</p>
+          )}
+          <p className="text-xs text-mute" role="status">{cli === "codex" ? t("keys.login.deviceWait") : t("keys.login.deviceAnyWait", { provider: SUBSCRIPTIONS[cli].label })}</p>
           <button className={btn.ghost} type="button" onClick={() => void cancel()}>{t("keys.login.cancel")}</button>
         </div>
       )}
       {v.show === "form" && note && <p className={`text-sm ${s.state === "failed" ? "text-bad" : "text-ok"}`} role={s.state === "failed" ? "alert" : "status"}>{note}</p>}
       {err && <p className="text-sm text-bad" role="alert">{err}</p>}
-      <p className="text-xs text-mute">{t(cli === "codex" ? "keys.login.privacyChatgpt" : "keys.login.privacy")}</p>
+      <p className="text-xs text-mute">{cli === "codex" ? t("keys.login.privacyChatgpt") : cli === "claude" ? t("keys.login.privacy") : t("keys.login.privacyAny", { provider: SUBSCRIPTIONS[cli].label })}</p>
     </div>
   );
 }

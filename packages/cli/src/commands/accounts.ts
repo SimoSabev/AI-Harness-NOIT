@@ -52,7 +52,8 @@ function readStatus(cli: SubscriptionId, stdout: string, exitCode: number): Prof
   if (f === "claude-json") return parseClaudeStatus(stdout);
   if (f === "codex-text") return parseCodexStatus(stdout, exitCode);
   const m = SUBSCRIPTIONS[cli].status.match;
-  if (f === "match") return { loggedIn: exitCode === 0 && m !== undefined && stdout.includes(m), email: null, plan: null };
+  // D-464: whitespace does not count (a JSON answer may be pretty-printed)
+  if (f === "match") return { loggedIn: exitCode === 0 && m !== undefined && stdout.replace(/\s+/g, "").includes(m.replace(/\s+/g, "")), email: null, plan: null };
   return { loggedIn: exitCode === 0, email: null, plan: null };
 }
 const OUT: ProfileStatus = { loggedIn: false, email: null, plan: null };

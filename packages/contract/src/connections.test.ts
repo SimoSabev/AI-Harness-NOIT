@@ -125,6 +125,16 @@ describe("device codes of every provider (D-464)", () => {
   });
 });
 
+describe("a sign-in that is only a link (D-464, Cursor)", () => {
+  it("the provider's page alone, no code; another host is never shown", async () => {
+    const { findLinkLogin, LoginState } = await import("./local-control.js");
+    const out = "Open the following link to sign in:\nhttps://cursor.com/loginDeepControl?challenge=abc&uuid=123&mode=login\nWaiting…";
+    expect(findLinkLogin(out)).toEqual({ url: "https://cursor.com/loginDeepControl?challenge=abc&uuid=123&mode=login", code: null });
+    expect(findLinkLogin("https://evil.example/loginDeepControl")).toBeNull();
+    expect(LoginState.safeParse({ state: "waiting_device", name: "a", url: "https://cursor.com/loginDeepControl?x=1", code: null }).success).toBe(true);
+  });
+});
+
 describe("ChatGPT sign-in and the connections reply (D-393)", () => {
   it("the device page must be OpenAI's own (https, no user, no port); the code is the short one-time code", async () => {
     const { isDeviceUrl, findDeviceLogin } = await import("./local-control.js");

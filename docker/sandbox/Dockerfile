@@ -150,6 +150,26 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     COPILOT_SEA_EXTRACT_ONLY=1 COPILOT_PKG_CACHE_HOME=/opt/copilot-cache HOME=/tmp /opt/copilot/copilot; chmod -R a+rX /opt/copilot-cache; \
     ln -s /opt/copilot/copilot /usr/local/bin/copilot; rm -rf /tmp/.copilot /tmp/.cache
 ENV COPILOT_PKG_CACHE_HOME=/opt/copilot-cache
+
+# D-464: Cursor CLI 2026.10.22-27dcf5f (proprietary, Anysphere; local image only, never published). Cursor publishes no
+# checksum, so the sha256 of each archive is pinned here (spike 05.11.2026). The two SEA binaries (≈280 MB) are not
+# needed: the package's own node runs index.js. The install dir is read-only, so the CLI cannot update itself either.
+ARG CURSOR_VERSION=2026.10.22-27dcf5f
+ARG CURSOR_SHA256_amd64=85296944e4600a83c4b764f578d1502bf9c416db200d33a593e8f3ecabfdc294
+ARG CURSOR_SHA256_arm64=22a36df9720830668ccd4d707e5190204ab9c8a0efb2f068cc914895f804d3ec
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) ARCH=x64; SUM="$CURSOR_SHA256_amd64" ;; \
+      arm64) ARCH=arm64; SUM="$CURSOR_SHA256_arm64" ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    node -e 'fetch(process.argv[1]).then(async (r) => { if (!r.ok) throw new Error(String(r.status)); require("fs").writeFileSync("/tmp/cursor.tgz", Buffer.from(await r.arrayBuffer())); })' \
+      "https://downloads.cursor.com/lab/${CURSOR_VERSION}/linux/${ARCH}/agent-cli-package.tar.gz"; \
+    echo "${SUM}  /tmp/cursor.tgz" | sha256sum -c -; \
+    mkdir -p /opt/cursor-agent && tar -xzf /tmp/cursor.tgz --strip-components=1 --exclude='*-sea' -C /opt/cursor-agent; rm /tmp/cursor.tgz; \
+    ln -s /opt/cursor-agent/cursor-agent /usr/local/bin/agent; \
+    HOME=/tmp agent --version | grep -F "${CURSOR_VERSION}"; rm -rf /tmp/.cursor /tmp/.config
 COPY packages/agents/copilot/status.mjs /usr/local/lib/mandat/copilot-status.mjs
 RUN chmod 0555 /usr/local/lib/mandat/copilot-status.mjs && ln -s /usr/local/lib/mandat/copilot-status.mjs /usr/local/bin/mandat-copilot-status
 

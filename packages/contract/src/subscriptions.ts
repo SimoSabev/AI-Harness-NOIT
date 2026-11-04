@@ -16,8 +16,8 @@ export type SubscriptionId = AgentCli;
 
 /** paste_code: the CLI prints the vendor's page, the person pastes a code back (Claude). device_code: the CLI prints a page
  * and a one-time code the person types there (Codex, GitHub). browser_callback: a redirect to localhost — does not work from
- * a container without more plumbing. */
-export const LoginMethod = z.enum(["paste_code", "device_code", "browser_callback"]);
+ * a container without more plumbing. link (D-464, Cursor): the CLI prints its page and polls; nothing to type or paste. */
+export const LoginMethod = z.enum(["paste_code", "device_code", "link", "browser_callback"]);
 export type LoginMethod = z.infer<typeof LoginMethod>;
 
 /** ready: run live; untested: wired end to end, [НП] a live run; blocked: wired, the terms say no or are unclear;
@@ -138,21 +138,29 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     terms: { harness: "unclear", url: "https://www.kimi.com/code/docs/kimi-code/community-guidelines.html", note: "the guidelines limit the membership to personal interactive use and call batch scripts beyond normal use; run one task at a time that a person started" },
     availability: "untested", docs: "https://moonshotai.github.io/kimi-code/en/reference/kimi-command", checked: "2026-11-04",
   },
+  // D-464 (spike 04.11.2026): blocked — the Antigravity terms (§6) count third-party software that accesses the service as a
+  // breach, the CLI has no login/status subcommand (a paste code under a pty) and keeps tokens in the OS keyring when one exists.
   antigravity: {
     id: "antigravity", label: "Antigravity", vendor: "Google", plans: "Google AI Pro · Ultra · free",
-    cli: { bin: "agy", npm: "(install script)", version: null, license: "proprietary" }, headless: "agy -p --output-format stream-json",
+    cli: { bin: "agy", npm: "(storage.googleapis.com)", version: "1.5.0", license: "proprietary" }, headless: "agy -p --output-format stream-json",
     login: { method: "paste_code", argv: [], hosts: ["accounts.google.com"] },
-    configDir: "/home/agent/.antigravity-profile", configEnv: "HOME", ...PLANNED,
-    terms: { harness: "unclear", url: "https://discuss.ai.google.dev/t/is-external-orchestration-of-antigravity-cli-headless-mode-supported-with-account-based-usage/183051", note: "the successor of Gemini CLI for personal plans since 18.06.2026; Google's answers on wrapping it on consumer plans conflict; tokens in the OS keyring" },
+    configDir: "/home/agent/.antigravity-profile", configEnv: "HOME", ...PLANNED, availability: "blocked",
+    terms: { harness: "forbidden", url: "https://antigravity.google/terms", note: "§6: using third-party software, tools or services to access the service breaches the agreement; Gemini's personal plans moved here on 18.06.2026" },
     docs: "https://antigravity.google/docs/cli/reference", checked: "2026-11-04",
   },
+  // D-464 (spike 04.11.2026): `agent login` prints cursor.com's page and polls api2.cursor.sh (no callback, nothing to paste);
+  // the login is $XDG_CONFIG_HOME/cursor/auth.json (no keyring on Linux); `agent status --format json` says isAuthenticated
+  // and exits 0 either way. The agent backend host comes from Cursor's server config [НП: a live run shows the rest].
   cursor: {
-    id: "cursor", label: "Cursor", vendor: "Anysphere", plans: "Cursor Pro · Ultra · Teams",
-    cli: { bin: "agent", npm: "(install script)", version: null, license: "proprietary" }, headless: "agent -p --output-format stream-json",
-    login: { method: "browser_callback", argv: [], hosts: ["cursor.com"] },
-    configDir: "/home/agent/.cursor-profile", configEnv: "XDG_CONFIG_HOME", ...PLANNED,
-    terms: { harness: "unclear", url: "https://cursor.com/terms-of-service", note: "[НП] whether the sign-in finishes without a localhost callback, and the terms for use through another tool" },
-    docs: "https://cursor.com/docs/cli/reference/authentication", checked: "2026-11-04",
+    id: "cursor", label: "Cursor", vendor: "Anysphere", plans: "Cursor Pro · Pro+ · Ultra · Teams",
+    cli: { bin: "agent", npm: "(downloads.cursor.com)", version: "2026.10.22-27dcf5f", license: "proprietary" }, headless: "agent -p --output-format stream-json",
+    login: { method: "link", argv: ["login"], hosts: ["cursor.com"] },
+    status: { argv: ["status", "--format", "json"], format: "match", match: '"isAuthenticated":true' }, logout: ["logout"],
+    configDir: "/home/agent/.cursor-profile", configEnv: "XDG_CONFIG_HOME", env: { NO_OPEN_BROWSER: "1" },
+    tunnels: t443("api2.cursor.sh"),
+    agent: "cursor", connectionProvider: null, defaultModel: "default",
+    terms: { harness: "allowed", url: "https://cursor.com/docs/cli/headless", note: "Cursor documents the CLI for non-interactive scripting and automation; runs count against the plan's usage" },
+    availability: "untested", docs: "https://cursor.com/docs/cli/reference/authentication", checked: "2026-11-04",
   },
   // D-464 (spike 04.11.2026): the M Plan login is a device code with PKCE (account.minimax.io, region global — the CLI's
   // default is cn); the login is a file under MINIMAX_DATA_DIR (no keyring). No status command: `mcode login` says

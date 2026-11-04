@@ -1,4 +1,4 @@
-import { AccountName, LoginCode, SUBSCRIPTIONS, findDeviceLogin, findLoginUrl } from "@mandat/contract";
+import { AccountName, LoginCode, SUBSCRIPTIONS, findDeviceLogin, findLinkLogin, findLoginUrl } from "@mandat/contract";
 import type { LoginFailure, LoginState, SubscriptionId } from "@mandat/contract";
 import type { ProfileStatus } from "./accounts.js";
 
@@ -91,8 +91,10 @@ export class LoginSessions {
     proc.onOutput((chunk) => {
       if (gen !== this.gen) return;
       out = (out + chunk).slice(-MAX_OUTPUT);
-      if (this.current.state === "starting" && SUBSCRIPTIONS[cli].login.method === "device_code") {
-        const dev = findDeviceLogin(out);
+      const method = SUBSCRIPTIONS[cli].login.method;
+      if (this.current.state === "starting" && (method === "device_code" || method === "link")) {
+        // D-464: a link-only sign-in (Cursor) has no code; the person confirms on the page and the CLI finishes
+        const dev = method === "link" ? findLinkLogin(out) : findDeviceLogin(out);
         if (dev) this.current = { state: "waiting_device", name, url: dev.url, code: dev.code };
       } else if (this.current.state === "starting") {
         const url = findLoginUrl(out);

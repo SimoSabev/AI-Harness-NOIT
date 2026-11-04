@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { SubscriptionId, SubscriptionStatus } from "@mandat/contract";
+import { SUBSCRIPTIONS } from "@mandat/contract";
 import { useT } from "../../../i18n/client";
 import type { Key } from "../../../i18n/t";
 import { AccountLogin, AccountLogout } from "../../account-login";
@@ -96,6 +97,8 @@ export function SubscriptionsPanel({ cards, canManage }: Props) {
           ) : (
             <>
               {picked === "codex" && <p className="text-sm text-mute">{t("subs.codexDevice")}</p>}
+              {/* D-464: Kimi Code, MiniMax — the plan is for personal, interactive use; say so before the sign-in */}
+              {SUBSCRIPTIONS[picked].terms.harness === "unclear" && <p className="text-sm text-warn" role="note">{t("subs.termsUnclear", { product: SUBSCRIPTIONS[picked].label })}</p>}
               <AccountLogin suggested={suggestAccountName(picked, taken)} cli={picked} onDone={close} />
             </>
           )}

@@ -19,7 +19,10 @@ describe("subscriptions view (D-462)", () => {
     expect(list.find((p) => p.id === "claude")).toMatchObject({ canSignIn: true, why: "ready", method: "paste_code" });
     expect(list.find((p) => p.id === "codex")).toMatchObject({ canSignIn: true, why: "untested", method: "device_code" });
     expect(list.find((p) => p.id === "gemini")).toMatchObject({ canSignIn: false, why: "terms" });
-    expect(list.find((p) => p.id === "copilot")).toMatchObject({ canSignIn: false, why: "planned" });
+    // D-464: the CLIs of the image sign in now; Antigravity's terms forbid it
+    for (const id of ["copilot", "kimi", "minimax"] as const) expect(list.find((p) => p.id === id)).toMatchObject({ canSignIn: true, why: "untested", method: "device_code" });
+    expect(list.find((p) => p.id === "cursor")).toMatchObject({ canSignIn: true, why: "untested", method: "link" });
+    expect(list.find((p) => p.id === "antigravity")).toMatchObject({ canSignIn: false, why: "terms" });
     // the ones you can use now come first
     const firstOff = list.findIndex((p) => !p.canSignIn);
     expect(list.slice(firstOff).every((p) => !p.canSignIn)).toBe(true);

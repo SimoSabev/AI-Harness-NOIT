@@ -36,7 +36,7 @@ export function findLoginUrl(text: string): string | null {
 // D-393: a ChatGPT sign-in is the unmodified `codex login --device-auth` [НП: the exact wording; spike when Codex runs
 // live]: it prints OpenAI's device page and a one-time code; the person types the code there, nothing comes back here.
 // D-460: every device-code provider's own pages (the registry)
-const DEVICE_HOSTS = Object.values(SUBSCRIPTIONS).filter((p) => p.login.method === "device_code" && canSignIn(p.id)).flatMap((p) => p.login.hosts);
+const DEVICE_HOSTS = Object.values(SUBSCRIPTIONS).filter((p) => (p.login.method === "device_code" || p.login.method === "link") && canSignIn(p.id)).flatMap((p) => p.login.hosts);
 export function isDeviceUrl(u: string): boolean {
   try {
     const p = new URL(u);
@@ -53,6 +53,11 @@ function userCode(url: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+/** D-464: a sign-in that is only the provider's page (Cursor): the first of its pages in the output, no code */
+export function findLinkLogin(text: string): { url: string; code: null } | null {
+  const url = [...text.replace(ANSI, "").matchAll(URL_RE)].map((m) => m[0]).find(isDeviceUrl);
+  return url ? { url, code: null } : null;
 }
 /** D-464: the one-time code a device page asks for */
 export const DEVICE_CODE = /^(?:[A-Z0-9]{4,8}-[A-Z0-9]{4,8}|[A-Z0-9]{4,12})$/;
@@ -77,7 +82,7 @@ export const LoginState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("idle") }).strict(),
   z.object({ state: z.literal("starting"), name: AccountName }).strict(),
   z.object({ state: z.literal("waiting_code"), name: AccountName, url: z.string().max(4096).refine(isLoginUrl) }).strict(),
-  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(DEVICE_CODE) }).strict(),
+  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(DEVICE_CODE).nullable() }).strict(),
   z.object({ state: z.literal("checking"), name: AccountName }).strict(),
   z.object({ state: z.literal("done"), name: AccountName, email: z.string().max(320).nullable(), plan: z.string().max(100).nullable() }).strict(),
   z.object({ state: z.literal("failed"), name: AccountName, reason: LoginFailure }).strict(),
