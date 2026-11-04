@@ -52,9 +52,20 @@ describe("subscriptions: the registry (D-460)", () => {
     for (const id of SubscriptionId.options) {
       const p = subscriptionOf(id);
       expect(canSignIn(id)).toBe((p.availability === "ready" || p.availability === "untested") && p.agent !== null && p.terms.harness !== "forbidden");
-      if (canSignIn(id)) expect(p.connectionProvider && PROVIDERS[p.connectionProvider].kind).toBe("subscription");
+      if (canSignIn(id) && p.connectionProvider !== null) expect(PROVIDERS[p.connectionProvider].kind).toBe("subscription");
+      // D-464: whatever can sign in has a sign-in and a status command the helper containers run
+      if (canSignIn(id)) expect([p.login.argv.length > 0, p.status.argv.length > 0], id).toEqual([true, true]);
     }
     expect([...LOGIN_CLIS]).toEqual(SubscriptionId.options.filter(canSignIn));
+  });
+  it("D-464 Kimi Code: device code into KIMI_CODE_HOME, status from its provider list, no telemetry or self-update", () => {
+    expect(subscriptionOf("kimi")).toMatchObject({
+      cli: { bin: "kimi", npm: "@moonshot-ai/kimi-code", version: "2.4.1", license: "MIT" }, agent: "kimi", availability: "untested",
+      login: { method: "device_code", argv: ["login", "--region", "global"] }, status: { argv: ["provider", "list", "--json"], format: "match", match: "managed:kimi-code" },
+      logout: [], configDir: "/home/agent/.kimi-profile", configEnv: "KIMI_CODE_HOME", env: { KIMI_DISABLE_TELEMETRY: "1", KIMI_CODE_NO_AUTO_UPDATE: "1" },
+    });
+    expect(subscriptionOf("kimi").tunnels.map((t) => t.host)).toEqual(["auth.kimi.ai", "api.kimi.ai"]);
+    expect(canSignIn("kimi")).toBe(true);
   });
   it("planned providers carry no login commands the sandbox could run by accident", () => {
     for (const p of Object.values(SUBSCRIPTIONS).filter((x) => x.availability === "planned")) {

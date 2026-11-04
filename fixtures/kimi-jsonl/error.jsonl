@@ -1,0 +1,2 @@
+{"role":"meta","type":"system.version","version":"2.4.1"}
+{"type":"error","code":"session_occupied","message":"Session is in use by another process","details":{"pid":4242}}

@@ -114,6 +114,15 @@ describe("agent refs (D-392)", () => {
   });
 });
 
+describe("device codes of every provider (D-464)", () => {
+  it("Kimi prints its page with the code in the address and as `code: …` on stderr", async () => {
+    const { findDeviceLogin } = await import("./local-control.js");
+    const out = "Opening browser for Kimi device login: https://www.kimi.ai/code/authorize_device?user_code=QX7K2M\nIf the browser did not open, paste the URL above and enter code: QX7K2M\nCode expires in 1800s.\n";
+    expect(findDeviceLogin(out)).toEqual({ url: "https://www.kimi.ai/code/authorize_device?user_code=QX7K2M", code: "QX7K2M" });
+    expect(findDeviceLogin("see https://evil.example/code?user_code=QX7K2M code: QX7K2M")).toBeNull();
+  });
+});
+
 describe("ChatGPT sign-in and the connections reply (D-393)", () => {
   it("the device page must be OpenAI's own (https, no user, no port); the code is the short one-time code", async () => {
     const { isDeviceUrl, findDeviceLogin } = await import("./local-control.js");

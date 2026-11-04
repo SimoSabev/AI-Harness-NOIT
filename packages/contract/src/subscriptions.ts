@@ -40,7 +40,7 @@ export const SubscriptionProvider = z.object({
   headless: z.string().max(80),
   login: z.object({ method: LoginMethod, argv: Argv, /** the vendor pages the person may be sent to */ hosts: z.array(Host).max(6) }).strict(),
   /** `format` = how packages/cli reads the answer: only "signed in?", the email and the plan, never a token */
-  status: z.object({ argv: Argv, format: z.enum(["claude-json", "codex-text", "exit-code"]) }).strict(),
+  status: z.object({ argv: Argv, format: z.enum(["claude-json", "codex-text", "exit-code", "match"]), /** D-464: format "match" = exit 0 and this text in stdout */ match: z.string().regex(/^[A-Za-z0-9:._@ -]{1,60}$/).optional() }).strict(),
   logout: Argv,
   /** the login's home in the agent container (the profile volume is mounted here) and the variable that points the CLI at it */
   configDir: z.string().regex(/^\/home\/agent\/\.[a-z0-9-]+$/),
@@ -114,13 +114,19 @@ export const SUBSCRIPTIONS: Readonly<Record<SubscriptionId, SubscriptionProvider
     terms: { harness: "allowed", url: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli", note: "GitHub documents Copilot CLI in CI and containers; every prompt uses premium requests" },
     docs: "https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli", checked: "2026-11-04",
   },
+  // D-464 (spike 04.11.2026, scratchpad spikes/kimi.md → docs/integrations/subscriptions.md): RFC 8628 device code; the
+  // login is a file under KIMI_CODE_HOME (no keyring); no status/logout subcommand in 2.4.1, so status = its provider list
+  // naming managed:kimi-code (config only, not the token) and logout = removing the volume. 2.5.0 is younger than 3 days.
   kimi: {
     id: "kimi", label: "Kimi Code", vendor: "Moonshot AI", plans: "Kimi Code membership",
-    cli: { bin: "kimi", npm: "@moonshot-ai/kimi-code", version: "2.5.0", license: "MIT" }, headless: "kimi -p --output-format stream-json",
-    login: { method: "device_code", argv: [], hosts: ["www.kimi.com"] },
-    configDir: "/home/agent/.kimi-profile", configEnv: "KIMI_CODE_HOME", ...PLANNED,
-    terms: { harness: "unclear", url: "https://moonshotai.github.io/kimi-code/en/guides/getting-started", note: "[НП] no statement found on use through another tool" },
-    docs: "https://moonshotai.github.io/kimi-code/en/reference/kimi-command", checked: "2026-11-04",
+    cli: { bin: "kimi", npm: "@moonshot-ai/kimi-code", version: "2.4.1", license: "MIT" }, headless: "kimi -p --output-format stream-json",
+    login: { method: "device_code", argv: ["login", "--region", "global"], hosts: ["www.kimi.ai", "www.kimi.com"] },
+    status: { argv: ["provider", "list", "--json"], format: "match", match: "managed:kimi-code" }, logout: [],
+    configDir: "/home/agent/.kimi-profile", configEnv: "KIMI_CODE_HOME", env: { KIMI_DISABLE_TELEMETRY: "1", KIMI_CODE_NO_AUTO_UPDATE: "1" },
+    tunnels: t443("auth.kimi.ai", "api.kimi.ai"),
+    agent: "kimi", connectionProvider: null, defaultModel: "default",
+    terms: { harness: "unclear", url: "https://www.kimi.com/code/docs/kimi-code/community-guidelines.html", note: "the guidelines limit the membership to personal interactive use and call batch scripts beyond normal use; run one task at a time that a person started" },
+    availability: "untested", docs: "https://moonshotai.github.io/kimi-code/en/reference/kimi-command", checked: "2026-11-04",
   },
   antigravity: {
     id: "antigravity", label: "Antigravity", vendor: "Google", plans: "Google AI Pro · Ultra · free",

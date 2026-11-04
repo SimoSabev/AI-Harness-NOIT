@@ -51,6 +51,8 @@ function readStatus(cli: SubscriptionId, stdout: string, exitCode: number): Prof
   const f = SUBSCRIPTIONS[cli].status.format;
   if (f === "claude-json") return parseClaudeStatus(stdout);
   if (f === "codex-text") return parseCodexStatus(stdout, exitCode);
+  const m = SUBSCRIPTIONS[cli].status.match;
+  if (f === "match") return { loggedIn: exitCode === 0 && m !== undefined && stdout.includes(m), email: null, plan: null };
   return { loggedIn: exitCode === 0, email: null, plan: null };
 }
 const OUT: ProfileStatus = { loggedIn: false, email: null, plan: null };
