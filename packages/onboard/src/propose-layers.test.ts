@@ -34,7 +34,9 @@ describe("proposeProfile: all 8 layers without AI (E8б, AC-2.1)", () => {
     const l = proposeProfile(scan, { repoId: "local", version: 1 }).profile.layers;
     expect(l.c.map((r) => [r.tool, r.decision])).toEqual(expect.arrayContaining([["bash:git push *", "deny"], ["bash:curl *", "deny"], ["bash:wget *", "deny"], ["path:write:infra/**", "deny"]]));
     expect(l.d.map((h) => h.script)).toEqual(["deny-by-policy", "require-tests-ran"]);
-    expect(l.e.mcp.map((m) => m.name)).toEqual(["mandat"]);
+    // D-486: the built-in set is on without setup — research (search, pages, docs) and the harness's skills
+    expect(l.e.mcp.map((m) => m.name)).toEqual(["mandat", "research"]);
+    expect(l.e.skills.filter((k) => k.source === "builtin").map((k) => k.name)).toEqual(["test-first", "review", "research"]);
     expect(l.f.roles.map((r) => r.role)).toEqual(["reviewer"]);
     expect(l.g.required_detectors).toEqual(["D1", "D2", "D3", "D4", "D10"]);
     expect(l.h.budgets).toEqual(l.a.budgets);

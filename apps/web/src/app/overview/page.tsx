@@ -90,7 +90,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <ul aria-label={t("home.now")} className="mt-4 flex flex-wrap gap-2 text-sm">
             {ex.conflicts.map((k) => <li key={k.path}><Link href="/agents?by=problems" className="inline-flex h-8 items-center gap-2 rounded-lg border border-warn/40 bg-warn-soft px-3 text-warn no-underline">{t("home.conflict", { n: k.sessions, path: `${k.repo}/${k.path}` })}</Link></li>)}
             <li className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute">{t("home.costToday")} <span className="font-mono text-ink">{t.usd(ex.costToday)}</span></li>
-            <li><Link href="/tools" className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute no-underline">MCP <span className="font-mono text-ink">{t("home.mcpRate", { n: t.num(ex.mcpPerMin) })}</span> · {t("home.denied", { n: ex.denied24h })}</Link></li>
+            <li><Link href="/settings/tools" className="inline-flex h-8 items-center gap-2 rounded-lg border border-line bg-panel px-3 text-mute no-underline">MCP <span className="font-mono text-ink">{t("home.mcpRate", { n: t.num(ex.mcpPerMin) })}</span> · {t("home.denied", { n: ex.denied24h })}</Link></li>
           </ul>
           {view === "map" && (
             <>

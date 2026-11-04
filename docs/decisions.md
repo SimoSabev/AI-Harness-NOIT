@@ -3619,3 +3619,76 @@ https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/openai (про�
 - Gemini с Google вход — остава blocked (Q-073, Q-090): само Code Assist; трябва втори root settings файл и pty.
 Всички потоци и фикстури са възстановени от изходния код; първият жив рън на всеки CLI ги проверява (чеклист 36).
 Статус: решено от кодера; Симо може да обърне (Q-094).
+
+## D-480 Един кандидат за всеки източник на MCP сървър (04.11.2026)
+Решение: всеки внос (поставен JSON, конфиг на клиент, GitHub, npm, официален регистър, Smithery, адрес) завършва в
+`ImportCandidate` (`@mandat/mcp-bridge/import`): име, транспорт, пакет@точна версия или URL, хостове, **имена** на тайните,
+`origin`, `problem`, `notes`, `findings`. От него `candidateRef` прави `McpServerRef`; кандидат с `problem` не се добавя.
+Защо: един път към каталога значи един път към vetting-а (D-354) — никой източник не го заобикаля. Сравнение с Multica,
+Paperclip, T3 Code, Smithery, Glama, PulseMCP, Claude Code, Codex, Gemini CLI, Cursor, OpenCode, Goose:
+docs/integrations/tools-import.md (линкове, 04.11.2026).
+Тестове: packages/mcp-bridge/src/import/import.test.ts.
+
+## D-481 Поставен JSON и конфигът на Codex (04.11.2026)
+Решение: приемаме `mcpServers` (Claude Code, Cursor, Gemini CLI), `servers` (VS Code), `mcp` (OpenCode), registry
+`server.json` и единичен запис. stdio се приема само за `npx <пакет>`; `uvx`/`pipx`/`docker`/локален път → `not_npm`
+(показва се, не се ползва — пясъчникът инсталира само npm, D-354). Допълнителни аргументи → `args_dropped`. Codex
+`config.toml`: само таблиците `[mcp_servers.<име>]`, с малък четец на редове (без нова зависимост, правило 8).
+Формати: https://code.claude.com/docs/en/mcp, https://learn.chatgpt.com/docs/extend/mcp?surface=cli,
+https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md, https://opencode.ai/docs/mcp-servers/
+(всички прочетени 04.11.2026).
+
+## D-482 Стойностите на тайните от чужд конфиг никога не излизат от парсера (04.11.2026)
+Решение: от `env`, `environment`, `headers`, `http_headers` се вземат само **ключовете** (имена на променливи); стойностите
+не се копират в кандидата (TOML: заменят се с празно още при четене). Header на отдалечен сървър → бележка `needs_key`;
+човекът въвежда ключа като запечатан `mcp:<име>` (както днес). Червен тест: стойността на тайна не се среща в нито един изход
+(парсер, преглед, ред в базата).
+
+## D-483 Мрежови източници: GitHub (заковано commit), npm (точна версия), Smithery (публичен запис за един сървър) (04.11.2026)
+Решение: GitHub — `GET api.github.com/repos/<o>/<r>/commits/<ref|HEAD>` → SHA, после дървото и raw файловете на този SHA;
+`server.json` → `package.json` (име+версия, ако е MCP пакет) → всеки `SKILL.md` под пътя (≤ 30). npm — `registry.npmjs.org`;
+без версия → `dist-tags.latest`, сведено до число при вноса и показано; диапазон → отказ. Smithery —
+`GET registry.smithery.ai/servers/<име>` (публичен, curl 04.11.2026); търсенето иска ключ (500 без него). Описанията на
+туловете от Smithery се сканират още при вноса (`poisoned`). Отдалечен сървър без версия се записва като `0.0.0`; хешът на
+туловете го заковава при vetting-а. Всичко се чете от уеб сървъра, никога от пясъчника; при добавяне сървърът чете отново
+(прегледът на клиента не се приема на доверие).
+Защо Smithery, а не Glama/PulseMCP: двата искат API ключ (Glama — и атрибуция), curl 04.11.2026.
+
+## D-484 Внесено умение: сканира се, пази се текстът, влиза в профила само след одобрение (04.11.2026)
+Решение: `SKILL.md` се сканира с правилата на `scanToolDefs` (невидими знаци, инструкции към модела, четене на `~/.ssh`);
+находка → `blocked_reason`, и такова умение не може да се одобри (409). Пази се в `skills` (`source = 'user'`,
+`content`, `content_hash`, `origin`, миграция 20261104000480). Одобрение (`tools.manage`) → `SkillRef` в слой E на всеки
+одобрен профил на организацията (`profile_layer_version`). Работникът подава текстовете на одобрените (`catalogSkills`);
+`skillTexts` пише само текст с одобрения хеш.
+Тестове: import.test.ts (отровено умение), apps/web/src/lib/server/tools-import.test.ts.
+
+## D-485 „Вече вързани“: само локално, само след съгласие, само списъците със сървъри (04.11.2026)
+Решение: `discoverLocal` чете `~/.claude.json` (`mcpServers` и `projects[*].mcpServers`), `~/.cursor/mcp.json`,
+`~/.gemini/settings.json`, `~/.codex/config.toml`, `~/.claude/skills/*/SKILL.md`, `~/.codex/skills/*/SKILL.md` — нищо друго
+(никога `auth.json`, `.credentials`, `.env`). API-то отговаря само в локален режим (`MANDAT_LOCAL_OWNER`) и само с
+`{consent: true}`. „Ползвай в Мандат“ = внос + одобрение в един клик (кликът е одобрението); MCP сървърът пак минава
+vetting преди профила. Счупен конфиг → `unreadable`, не грешка.
+Защо само локално: на хостван сървър „домът“ е на сървъра, не на човека.
+Червен тест: тайна от чужд конфиг и имейлът от `~/.claude.json` не се връщат; auth файлове не се четат.
+
+## D-486 Вграденият набор е включен без настройване (04.11.2026)
+Решение: `proposeProfile` слага в слой E сървъра `mandat`, `RESEARCH_MCP_REF` (търсене, страници, документация) и уменията
+`test-first`, `review`, `research`. Паметта идва с договора на задачата (D-400). Страницата ги показва като „Вградени —
+включени“. Това отговаря на Q-080: Симо поиска вграден набор „напр. research, памет, fetch/docs“.
+Цена: всяко пускане стартира sidecar-а на research; заявките за търсене напускат пясъчника (Q-081 остава).
+Тестове: propose-layers.test.ts (снимките са обновени).
+
+## D-487 Настройки → „MCP, инструменти и умения“ (04.11.2026)
+Решение: самостоятелен компонент `apps/web/src/components/connections/tools/` и страница `/settings/tools`; `/tools`
+пренасочва натам; ред-линк в Настройки. Едно поле „Добави от…“ разпознава какво е поставено (`detectSource`), човекът може
+да смени източника; „Провери“ не записва нищо; „Добави и ползвай“ / „Добави, одобри по-късно“. Под тях: старите таблици
+(живи сървъри, плъгини, разрешения, последни повиквания). bg и en.
+
+## D-488 Gemini CLI засега не получава внесените MCP сървъри и умения (04.11.2026)
+Решение: компилаторът за Gemini продължава да ги отчита като `unsupported`. Настройките на Gemini са в образа
+(`/etc/gemini-cli/settings.json`, D-431), а файл с настройки под `/m` (собственост на агента) CLI-ят прескача. Claude Code и
+Codex ги получават както досега (mcp.json / `[mcp_servers]`). Q-101.
+
+## D-489 Каквото не взимаме сега (04.11.2026)
+Решение: deeplink-ове (Cursor `cursor://…/mcp/install`, Goose `goose://extension`), плъгини/маркетплейси на Claude Code,
+PyPI/OCI пакети, търсене в Smithery с ключ, Glama/PulseMCP. Записани в Q-102…Q-104.

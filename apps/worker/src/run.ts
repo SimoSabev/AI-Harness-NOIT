@@ -69,6 +69,8 @@ export interface RunTaskInput {
   grantOnce?: string[];
   /** E8e (D-354): the values of each MCP server's declared secrets (from the key store); only its sidecar gets them */
   mcpSecrets?: Record<string, Record<string, string>>;
+  /** D-484: approved skills imported into the catalog (name → SKILL.md text); materialized only with the profile's hash */
+  catalogSkills?: Record<string, string>;
   /** E8f (D-355): a rebase attempt — these files (null = deleted) are written into the work tree instead of running an agent */
   applyFiles?: { path: string; data: Buffer | null }[];
   /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
@@ -383,7 +385,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           const granted = i.grantOnce ?? [];
           const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
           // E8e (D-354): skills are materialized only when their text has the hash the profile was approved with
-          const sk = skillTexts(prof.layers.e.skills, Object.fromEntries(scanSkills(baseDir).filter((k) => k.blocked === null).map((k) => [k.name, k.text])));
+          const sk = skillTexts(prof.layers.e.skills, { ...(i.catalogSkills ?? {}), ...Object.fromEntries(scanSkills(baseDir).filter((k) => k.blocked === null).map((k) => [k.name, k.text])) });
           const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])], skills: sk.texts });
           harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: [...m.unsupported, ...sk.dropped], files: m.files, granted };
           if (target === "codex") {

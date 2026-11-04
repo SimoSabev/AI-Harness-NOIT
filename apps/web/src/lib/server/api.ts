@@ -18,6 +18,9 @@ import { answerQuestion, closeQuestion, planNight } from "./night";
 import { uploadHidden } from "./hidden";
 import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
+import { approveSkill, discoverForPerson, importTools, previewImport } from "./tools-import";
+import { localIo } from "./local-io";
+import { localOwner } from "./local-auth";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import type { Db } from "./sql";
@@ -541,6 +544,33 @@ export async function postMcpApprove(req: Request, d: ApiDeps, id: string): Prom
   const b = ApproveMcpBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await approveMcpServer(d.db, { uid: p.uid, id, body: b.data, secondFactor: d.secondFactor }), d);
+}
+// D-480…D-485: "Add from…" (preview → add as pending → approve), the person's own clients on this machine, skill approval
+const netFetch = (u: string) => fetch(u, { signal: AbortSignal.timeout(10_000), headers: { "user-agent": "mandat-tools-import" } });
+const isLocal = () => localOwner() !== null;
+const localOrNull = () => (isLocal() ? localIo() : null);
+export async function postToolsPreview(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "tools.manage"))) return json(403, { error: "not_allowed" });
+  return done(await previewImport({ fetch: netFetch, body: p.body, local: localOrNull() }), d);
+}
+export async function postToolsImport(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await importTools(d.db, { uid: p.uid, org: p.org, fetch: netFetch, body: p.body, secondFactor: d.secondFactor, local: localOrNull() }), d);
+}
+export async function postToolsLocal(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "tools.manage"))) return json(403, { error: "not_allowed" });
+  return done(await discoverForPerson({ mode: isLocal() ? "local" : "hosted", body: p.body, io: localIo() }), d);
+}
+export async function postSkillApprove(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!UUID.test(id)) return json(404, { error: "unknown_skill" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await approveSkill(d.db, { uid: p.uid, id }), d);
 }
 export async function postFixCi(req: Request, d: ApiDeps, id: string): Promise<Response> {
   if (!/^t_[a-z0-9_]{1,40}$/.test(id)) return json(404, { error: "unknown_task" });
