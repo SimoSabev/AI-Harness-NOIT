@@ -1,0 +1,6 @@
+{
+  "name": "mandat-sandbox-kimi",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "dependencies": { "@moonshot-ai/kimi-code": "2.4.1" }
+}

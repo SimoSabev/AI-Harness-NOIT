@@ -30,7 +30,7 @@ FROM node:24.22.0-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a986
 ARG SANDBOX_APT=1
 RUN if [ "$SANDBOX_APT" = "1" ]; then \
       apt-get update \
-      && apt-get install -y --no-install-recommends curl bind9-dnsutils ca-certificates \
+      && apt-get install -y --no-install-recommends curl bind9-dnsutils ca-certificates ripgrep \
       && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -105,6 +105,16 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     HOME=/tmp gemini --version | grep -F "${GEMINI_CLI_VERSION}"; rm -rf /tmp/.gemini
 COPY packages/agents/gemini/settings.json /etc/gemini-cli/settings.json
 RUN chmod 0444 /etc/gemini-cli/settings.json
+
+# D-464: Kimi Code 2.4.1 (MIT; 2.5.0 is younger than 3 days) for a Kimi Code membership sign-in. Its dependencies (all
+# MIT/ISC) come from the committed lockfile, so every tarball is checked by integrity; no install scripts (the postinstall
+# only renames a legacy shim), no optional clipboard helper. ripgrep comes from apt above (else the CLI downloads it).
+COPY docker/sandbox/kimi/package.json docker/sandbox/kimi/package-lock.json /opt/kimi/
+RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
+    if [ -s /run/secrets/extra_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/extra_ca; fi; \
+    cd /opt/kimi && npm ci --ignore-scripts --omit=optional --no-audit --no-fund; \
+    ln -s /opt/kimi/node_modules/.bin/kimi /usr/local/bin/kimi; rm -rf /root/.npm; \
+    HOME=/tmp kimi --version | grep -F "2.4.1"; rm -rf /tmp/.kimi-code
 
 # D-301: pnpm and yarn v1 for repos that use them; pinned by integrity like the agents (no TOFU), no install scripts.
 # The base image's own yarn (unpinned here) is removed first, so `yarn` is exactly the checked tarball.
