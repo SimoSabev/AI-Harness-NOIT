@@ -7,3 +7,4 @@ export { createSyncServer, memorySyncStore } from "./server.js";
 export type { SyncServer, SyncStore } from "./server.js";
 export { createSyncEngine, memoryCache } from "./engine.js";
 export type { LocalCache, LocalEntry, SyncPass, SyncTransport } from "./engine.js";
+export { sameJson } from "./same.js";

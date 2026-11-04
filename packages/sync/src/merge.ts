@@ -1,4 +1,5 @@
 import type { SyncBody, SyncChange, SyncKind, SyncRecord } from "@mandat/contract";
+import { sameJson as same } from "./same.js";
 
 // D-492: the server is the source of truth. Bodies are merged field by field against the last copy both sides shared
 // (three-way); a field changed on both sides keeps the server's value and the device is told what it lost. With no
@@ -7,8 +8,6 @@ import type { SyncBody, SyncChange, SyncKind, SyncRecord } from "@mandat/contrac
 export interface Conflict { field: string; local: unknown; server: unknown }
 export interface RecordConflict extends Conflict { kind: SyncKind; id: string }
 export interface LocalRecord { kind: SyncKind; id: string; body: SyncBody; deleted: boolean }
-
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 export function mergeBodies(base: SyncBody | null, local: SyncBody, server: SyncBody): { body: SyncBody; conflicts: Conflict[] } {
   const b = base ?? {};

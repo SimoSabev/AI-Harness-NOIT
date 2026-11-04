@@ -1,6 +1,7 @@
 import type { SyncBody, SyncChange, SyncKind, SyncPullResult, SyncPushRequest, SyncPushResult, SyncRecord } from "@mandat/contract";
 import { APPEND_ONLY, mergeBodies, type LocalRecord, type RecordConflict } from "./merge.js";
 import { assertSafeOutbound } from "./outbound.js";
+import { sameJson as same } from "./same.js";
 
 // D-492: the device side. The local cache is what the app reads; the server is the truth. One pass = pull everything
 // newer than the cursor (merging into local edits), then push local edits with the revision they were based on. A
@@ -29,7 +30,6 @@ export interface SyncTransport {
 
 export type SyncPass = { state: "off" } | { state: "ok"; pulled: number; pushed: number; conflicts: RecordConflict[] };
 
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 const keyOf = (r: { kind: string; id: string }): string => `${r.kind}/${r.id}`;
 const MAX_ROUNDS = 3;
 
