@@ -9,7 +9,7 @@ import { assertSafeOutbound } from "./outbound.js";
 export interface SyncStore {
   since(uid: string, rev: number): Promise<SyncRecord[]>;
   get(uid: string, kind: string, id: string): Promise<SyncRecord | null>;
-  /** store if the current revision is `expected` (0 = absent); returns the new revision or null when it moved on */
+  /** store if the current revision is `expected` (an absent record is stored as new); the new revision, or null when it moved on */
   putIf(uid: string, change: SyncChange, expected: number): Promise<number | null>;
   wipe(uid: string): Promise<void>;
   getVault(uid: string): Promise<WrappedVaultKey | null>;
@@ -66,7 +66,9 @@ export function memorySyncStore(now: () => string = () => new Date().toISOString
     putIf: (uid, c, expected) => {
       const m = of(uid);
       const k = `${c.kind}/${c.id}`;
-      if ((m.get(k)?.rev ?? 0) !== expected) return Promise.resolve(null);
+      const cur = m.get(k);
+      if (cur && cur.rev !== expected) return Promise.resolve(null); // absent (wiped) = stored as new
+
       const rev = (seq.get(uid) ?? 0) + 1;
       seq.set(uid, rev);
       m.set(k, { kind: c.kind, id: c.id, rev, updatedAt: now(), deleted: c.deleted, body: c.deleted ? {} : c.body });
