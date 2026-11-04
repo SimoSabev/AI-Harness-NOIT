@@ -58,7 +58,7 @@ export default async function KeysPage() {
                 </span>
                 <span className="flex items-center gap-2">
                   <StatusBadge tone={a.loggedIn ? "green" : "gray"} label={a.loggedIn ? t("keys.ready") : t("keys.notSignedInBadge")} />
-                  {c.role === "owner" && s.proxy !== "unavailable" && <AccountLogout name={a.name} />}
+                  {c.role === "owner" && s.proxy !== "unavailable" && <AccountLogout name={a.name} cli={a.cli} />}
                 </span>
               </li>
             ))}

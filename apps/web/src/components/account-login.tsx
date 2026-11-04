@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LoginState } from "@mandat/contract";
+import type { SubscriptionId } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { csrfToken, errorText, postJson } from "../lib/client/api";
@@ -13,7 +14,7 @@ const ERR: Record<string, Key> = { keys_unavailable: "error.keys_unavailable", n
 // D-369, D-387: `mandat login` from the web, one button. The unchanged Claude Code runs in a container of `pnpm local`; this form shows
 // Anthropic's sign-in address and passes the pasted code on. The code field clears itself; nothing is kept here.
 // D-393: `cli` = "codex" signs in to ChatGPT (`codex login --device-auth`): OpenAI's page and a one-time code to type there.
-export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested: string; cli?: "claude" | "codex"; onDone?: (name: string) => void }) {
+export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested: string; cli?: SubscriptionId; onDone?: (name: string) => void }) {
   const router = useRouter();
   const t = useT();
   const [s, setS] = useState<LoginState>({ state: "idle" });
@@ -50,7 +51,7 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
 
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
-    apply(await postJson("/api/accounts/login", { name: name.trim(), ...(cli === "codex" ? { cli } : {}) }));
+    apply(await postJson("/api/accounts/login", { name: name.trim(), ...(cli !== "claude" ? { cli } : {}) }));
   };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,14 +112,15 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
   );
 }
 
-export function AccountLogout({ name }: { name: string }) {
+// D-460: the provider goes with the name, so a ChatGPT account signs out with Codex, not with Claude Code
+export function AccountLogout({ name, cli = "claude" }: { name: string; cli?: SubscriptionId }) {
   const router = useRouter();
   const t = useT();
   const [busy, setBusy] = useState(false);
   const remove = async () => {
     if (!window.confirm(t("keys.logoutConfirm", { name }))) return;
     setBusy(true);
-    await postJson("/api/accounts/logout", { name });
+    await postJson("/api/accounts/logout", { name, ...(cli !== "claude" ? { cli } : {}) });
     setBusy(false);
     router.refresh();
   };

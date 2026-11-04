@@ -1,4 +1,4 @@
-import { PROVIDERS, parseAgentRef } from "@mandat/contract";
+import { PROVIDERS, SUBSCRIPTIONS, canSignIn, parseAgentRef } from "@mandat/contract";
 import type { Connection } from "@mandat/contract";
 import { translate } from "../i18n/t";
 import type { Lang } from "../i18n/t";
@@ -61,7 +61,9 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   for (const a of o.accounts.filter((x) => x.loggedIn)) {
     const r = parseAgentRef(a.agent);
     if (!r || !("via" in r) || r.via.kind !== "account") continue;
-    const p = r.cli === "codex" ? "chatgpt-sub" : "claude-sub";
+    // D-460: a signed-in subscription of any provider that can run; its models come from the registry's catalog entry
+    const p = canSignIn(r.cli) ? SUBSCRIPTIONS[r.cli].connectionProvider : null;
+    if (p === null) continue;
     const c = saved(r.via.name);
     out.push({ id: a.agent, label: agentLabel(a.agent, lang), models: c ? c.models : catalog(p), defaultModel: c ? c.defaultModel : rec(p), local: false });
   }

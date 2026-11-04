@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
+import { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply, JobState, LoginState, SubscriptionId } from "@mandat/contract";
 import type { AddConnectionBody, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
@@ -13,14 +13,14 @@ export const KeysBody = z.object({
 export const ResearchKeyBody = z.object({ exa: z.string().trim().regex(/^[\x21-\x7e]{20,512}$/) }).strict();
 
 export interface KeysStatus { proxy: "running" | "stopped" | "unavailable"; providers: string[] }
-export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null; /** D-393: Claude Code or Codex (ChatGPT) */ cli: "claude" | "codex" }
+export interface Account { name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null; /** D-460: the provider of the subscription registry (D-393: Claude Code or Codex) */ cli: SubscriptionId }
 /** D-369: the subscription login of `mandat local` (the code goes to the control endpoint and on to stdin, nowhere else). */
-export type LoginOp = { kind: "state" } | { kind: "start"; name: string; cli?: "claude" | "codex" } | { kind: "code"; code: string } | { kind: "cancel" };
+export type LoginOp = { kind: "state" } | { kind: "start"; name: string; cli?: SubscriptionId } | { kind: "code"; code: string } | { kind: "cancel" };
 export type LoginReply = { ok: true; state: LoginState } | { ok: false; error: string };
 
 export interface KeysClient {
   login(op: LoginOp): Promise<LoginReply>;
-  logout(name: string, cli?: "claude" | "codex"): Promise<boolean | null>;
+  logout(name: string, cli?: SubscriptionId): Promise<boolean | null>;
   /** D-393: the saved connections and the task box defaults; null = the control endpoint did not answer */
   connections(): Promise<ConnectionsReply | null>;
   addConnection(b: AddConnectionBody): Promise<AddConnectionReply | null>;
@@ -44,7 +44,7 @@ export interface KeysClient {
 }
 
 const Accounts = z.object({
-  accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable(), cli: z.enum(["claude", "codex"]).default("claude") })).max(50),
+  accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable(), cli: SubscriptionId.default("claude") })).max(50),
 });
 const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai", "exa"])) });
 
@@ -97,7 +97,7 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const e = Err.safeParse(j);
     return { ok: false, error: r && r.status === 400 && e.success ? e.data.error : "control_unavailable" };
   };
-  const logout = async (name: string, cli?: "claude" | "codex"): Promise<boolean | null> => {
+  const logout = async (name: string, cli?: SubscriptionId): Promise<boolean | null> => {
     const r = await send("POST", "/accounts/logout", { name, ...(cli ? { cli } : {}) }).catch(() => null);
     const j = z.object({ removed: z.boolean() }).safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data.removed : null;
