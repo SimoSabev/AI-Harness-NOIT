@@ -9,7 +9,7 @@ import type { Key } from "../../../i18n/t";
 import { errorText, postJson } from "../../../lib/client/api";
 import { ModelPicker, initialModels } from "../../connections-ui";
 import { StatusBadge, btn, card, input } from "../../ui";
-import { addKeyBody, keyProviderGroups, keyRows, statusOf } from "./api-keys-view";
+import { addKeyBody, keyLooksRight, keyProviderGroups, keyRows, statusOf } from "./api-keys-view";
 import type { KeyRow } from "./api-keys-view";
 
 // D-475: Settings → API keys — every saved key (its name, the service, the last four characters, the last check, which
@@ -99,6 +99,8 @@ function AddKey({ onSaved }: { onSaved: () => void }) {
   const ownAddress = provider === "custom" || provider === "openai-compat";
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    // a short, broken or missing key is named as such (the server would only answer "bad body")
+    if ((key.trim() !== "" || (info.auth !== "none" && !ownAddress)) && !keyLooksRight(key)) return setMsg({ text: t("error.bad_keys"), bad: true });
     const body = addKeyBody({ provider, label, key, baseUrl, models: m.models, defaultModel: m.defaultModel });
     if (body === null) return setMsg({ text: t("conn.modelsNone"), bad: true });
     setBusy(true);

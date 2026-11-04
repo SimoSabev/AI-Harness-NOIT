@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CATALOG } from "@mandat/contract";
 import type { Connection } from "@mandat/contract";
-import { addKeyBody, keyProviderGroups, keyRows, statusOf } from "./api-keys-view";
+import { addKeyBody, keyLooksRight, keyProviderGroups, keyRows, statusOf } from "./api-keys-view";
 
 // D-475: the API keys section — what a person sees of each saved key (label, provider, the last four characters, the last
 // check, which agent can use it) and the body of "Add a key". Nothing here ever holds a full key except the add form.
@@ -44,5 +44,12 @@ describe("the add form (D-475)", () => {
     expect(addKeyBody({ provider: "anthropic", label: "Work", key: k, baseUrl: "" })).toMatchObject({ label: "Work", models: ["claude-sonnet-5-5"] });
     expect(addKeyBody({ provider: "azure", label: "", key: k, baseUrl: "https://acme.openai.azure.com/openai", models: ["gpt-5"] })).toEqual({ provider: "azure", key: k, baseUrl: "https://acme.openai.azure.com/openai", models: ["gpt-5"], defaultModel: "gpt-5" });
     expect(addKeyBody({ provider: "azure", label: "", key: k, baseUrl: "https://acme.openai.azure.com/openai" })).toBeNull(); // no model to suggest
+  });
+  it("keyLooksRight: the shape the contract accepts, so a short or broken key is not reported as a bad address", () => {
+    expect(keyLooksRight("sk-" + "a".repeat(17))).toBe(true);
+    expect(keyLooksRight(` sk-${"a".repeat(30)} `)).toBe(true);
+    expect(keyLooksRight("sk-uitest-good-D33P")).toBe(false); // 19 characters
+    expect(keyLooksRight(`sk-${"a".repeat(10)} ${"b".repeat(10)}`)).toBe(false);
+    expect(keyLooksRight("")).toBe(false);
   });
 });

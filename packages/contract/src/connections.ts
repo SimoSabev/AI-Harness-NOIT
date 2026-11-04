@@ -47,7 +47,9 @@ export function upstreamUrl(raw: string): { ok: true; url: string; local: boolea
   return { ok: true, url: `${u.protocol}//${host}${u.pathname.replace(/\/+$/, "")}`, local };
 }
 
-const Key = z.string().trim().regex(/^[\x21-\x7e]{20,512}$/);
+/** A pasted API key: 20-512 visible ASCII characters, no spaces (trimmed). */
+export const ApiKey = z.string().trim().regex(/^[\x21-\x7e]{20,512}$/);
+const Key = ApiKey;
 const Models = z.array(ModelId).min(1).max(20);
 
 /** A saved connection as the web sees it: no key, only whether one is stored. */

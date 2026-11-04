@@ -1,4 +1,4 @@
-import { PROVIDERS, providerGroups } from "@mandat/contract";
+import { ApiKey, PROVIDERS, providerGroups } from "@mandat/contract";
 import type { AddConnectionBody, AgentCli, Connection, KeyCheck, ProviderGroup, ProviderId } from "@mandat/contract";
 import type { Key } from "../../../i18n/t";
 
@@ -47,6 +47,12 @@ export function keyProviderGroups(): { group: ProviderGroup; ids: ProviderId[] }
 export interface AddKeyForm { provider: ProviderId; label: string; key: string; baseUrl: string; models?: string[]; defaultModel?: string }
 
 /** The POST /api/connections body; null = nothing to send yet (no model for a provider without suggestions). */
+/** The key's shape as the contract takes it (20–512 visible characters, no spaces) — checked before sending, so a short or
+ * broken key is named as such instead of coming back as a refused body. */
+export function keyLooksRight(key: string): boolean {
+  return ApiKey.safeParse(key).success;
+}
+
 export function addKeyBody(f: AddKeyForm): AddConnectionBody | null {
   const info = PROVIDERS[f.provider];
   const rec = info.models.filter((m) => m.recommended).map((m) => m.id);
