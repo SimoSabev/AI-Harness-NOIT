@@ -64,6 +64,8 @@ describe("doctor", () => {
     expect(wslDrvFs("Linux version 5.15 microsoft-standard-WSL2", ["/mnt/c/x/.mandat"])).toBe(true);
     expect(wslDrvFs("Linux version 5.15 microsoft-standard-WSL2", ["/home/u/m/.mandat"])).toBe(false);
     expect(wslDrvFs("Linux version 6", ["/mnt/c/x"])).toBe(false);
+    // D-454: a /mnt/c home exists only inside WSL; on Windows itself path.resolve makes it C:\mnt\c\…
+    if (process.platform === "win32") return;
     const r = await cli(["--home", "/mnt/c/x/.mandat", "doctor"], deps({ proxyRunning: false }, 200, "Linux microsoft"));
     expect(r.code).toBe(3);
     expect(r.stdout).toContain("E_UNSUPPORTED_FS");

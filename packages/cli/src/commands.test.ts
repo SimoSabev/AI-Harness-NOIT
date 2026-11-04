@@ -65,7 +65,7 @@ describe("images build", () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^mandat-sandbox-ui:pw1\.63\.0-[0-9a-f]+ built$/m);
     const b = ui.find((c) => c.args[0] === "build" && c.args.some((x) => x.startsWith("mandat-sandbox-ui:")));
-    expect(b?.args.join(" ")).toContain("docker/sandbox-ui/Dockerfile");
+    expect(b?.args.join(" ").split(path.sep).join("/")).toContain("docker/sandbox-ui/Dockerfile");
     expect(b?.args).not.toContain("SANDBOX_APT=0");
   });
 });
@@ -78,7 +78,8 @@ describe("proxy start", () => {
     const notRunning = docker([(a) => (a[0] === "inspect" ? { exit: 1 } : undefined), (a) => (a[0] === "info" && a.includes("{{json .SecurityOptions}}") ? { out: "[]" } : undefined)], calls);
     const s = await cli(["--home", h, "proxy", "start"], deps(notRunning), { ANTHROPIC_API_KEY: key });
     expect([s.code, s.stdout]).toEqual([0, "started, healthz ok (127.0.0.1:8788)\n"]);
-    expect(statSync(path.join(h, "proxy", "secret")).mode & 0o777).toBe(0o600);
+    // D-454: Windows has no POSIX file modes (always 0o666); the secret is protected by the user profile ACL there
+    if (process.platform !== "win32") expect(statSync(path.join(h, "proxy", "secret")).mode & 0o777).toBe(0o600);
     const run = calls.find((c) => c.args[0] === "run");
     expect(run?.args.join(" ")).not.toContain(key);
     expect(run?.args).not.toContain("ANTHROPIC_API_KEY");

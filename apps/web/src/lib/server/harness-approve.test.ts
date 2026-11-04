@@ -13,7 +13,7 @@ import { TEST_TOTP, U, webDb } from "./web-db.test-helper";
 
 // Демо промпт т. 8.2: harness-approve (без TOTP → 403; viewer → 403; owner + TOTP → approved + ledger) and the whole
 // Поток 1 on PGlite + fakeGitHub: connect → scan → proposal with sources → approve → draft PR with AGENTS.md + footer.
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../../..");
+const repoRoot = path.resolve(import.meta.dirname, "../../../../..");
 let db: Awaited<ReturnType<typeof webDb>>;
 const gh = fakeGitHub({ repos: { "mandat-demo/shop": {} } });
 let proposal = "";

@@ -7,7 +7,7 @@ import { HIDDEN, SCENARIOS } from "./scenarios.js";
 
 // v5 E9b (bench 40/40): the scenarios are B1–B40 in order, each fake exists in the image, the free contract is sealed
 // and really "free" (tests may change), and the hidden tests are not in the shop.
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const root = path.resolve(import.meta.dirname, "..");
 describe("bench scenarios", () => {
   it("B1–B40, every fake is a known scenario with its script", () => {
     expect(SCENARIOS.map((s) => s.id)).toEqual(Array.from({ length: 40 }, (_, k) => `B${k + 1}`));

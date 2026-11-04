@@ -31,7 +31,7 @@ describe("GET /api/tasks/:id/stream (SSE)", () => {
     expect((await streamTask(get("/api/tasks/t_seed_docs/stream?after=x"), deps, "t_seed_docs")).status).toBe(400);
   });
   it("първо събитие с всичко, после само новото; id = сесия:последен seq", async () => {
-    const r = await streamTask(get("/api/tasks/t_seed_docs/stream"), deps, "t_seed_docs", { intervalMs: 20, maxMs: 300 });
+    const r = await streamTask(get("/api/tasks/t_seed_docs/stream"), deps, "t_seed_docs", { intervalMs: 20, maxMs: 1500 }); // D-454: 300 ms ran out under a loaded full run
     expect(r.headers.get("content-type")).toBe("text/event-stream; charset=utf-8");
     expect(r.headers.get("cache-control")).toContain("no-store");
     const reading = r.text();

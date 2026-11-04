@@ -19,7 +19,7 @@ function files(dir: string): string[] {
   }
   return out;
 }
-const src = [...files(path.join(repo, "packages")), ...files(path.join(repo, "apps"))].map((f) => path.relative(repo, f));
+const src = [...files(path.join(repo, "packages")), ...files(path.join(repo, "apps"))].map((f) => path.relative(repo, f).split(path.sep).join("/")); // D-454: POSIX names on Windows too
 const read = (f: string) => readFileSync(path.join(repo, f), "utf8");
 
 describe("service-role-scope", () => {

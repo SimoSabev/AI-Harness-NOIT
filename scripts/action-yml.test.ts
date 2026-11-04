@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 // The GitHub Action (action.yml at the root): every input reaches the verify step as INPUT_* (what action.ts reads), every
 // output comes from that step, third-party actions are pinned by commit SHA.
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const root = path.resolve(import.meta.dirname, "..");
 const { parse } = createRequire(path.join(root, "packages/contract/package.json"))("yaml") as { parse: (s: string) => unknown };
 
 describe("action.yml", () => {

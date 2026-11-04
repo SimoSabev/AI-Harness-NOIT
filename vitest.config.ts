@@ -9,8 +9,9 @@ export const config = defineConfig({
   test: {
     include: ["packages/*/src/**/*.test.ts", "apps/*/src/**/*.test.ts", "bench/**/*.test.ts", "scripts/**/*.test.ts"],
     exclude: [...EXCLUDE, "**/*.docker.test.ts", "**/*.live.test.ts"],
-    testTimeout: 20_000,
-    hookTimeout: 30_000, // PGlite + all migrations per suite (apps/web, apps/worker)
+    // D-454: git and process spawns are several times slower on Windows; the full suite in parallel exceeded 20 s there
+    testTimeout: process.platform === "win32" ? 60_000 : 20_000,
+    hookTimeout: process.platform === "win32" ? 90_000 : 30_000, // PGlite + all migrations per suite (apps/web, apps/worker)
     passWithNoTests: false,
     reporters: ["default", "json"],
     includeTaskLocation: true,

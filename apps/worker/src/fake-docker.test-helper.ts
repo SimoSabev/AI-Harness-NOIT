@@ -98,7 +98,7 @@ export class FakeDocker implements DockerRunner {
   }
 }
 
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
+const repoRoot = path.resolve(import.meta.dirname, "../../..");
 /** A copy of fixtures/shop to mutate as the agent's head tree. */
 export function shopCopy(mutate?: (dir: string) => void): string {
   const d = path.join(mkdtempSync(path.join(os.tmpdir(), "mandat-head-")), "shop");

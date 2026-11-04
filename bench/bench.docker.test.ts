@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildShopFixture } from "@mandat/worker";
 
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+const repoRoot = path.resolve(import.meta.dirname, "..");
 const main = path.join(repoRoot, "packages/cli/dist/main.js");
 const home = mkdtempSync(path.join(os.tmpdir(), "mandat-bd-"));
 buildShopFixture({ repoRoot, mandatHome: home, force: false });

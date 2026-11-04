@@ -26,7 +26,7 @@ describe("verify-log", () => {
   it("verify-log exit кодове (D-128)", async () => {
     const ok = await cli(["verify-log", "--ledger", fx("ledger/ok.jsonl")]);
     expect(ok.code).toBe(0);
-    expect(ok.stdout).toContain("ledger fixtures/ledger/ok.jsonl · org o_local · 5 lines");
+    expect(ok.stdout).toContain(`ledger ${path.join("fixtures", "ledger", "ok.jsonl")} · org o_local · 5 lines`);
     expect(ok.stdout).toMatch(/OK: chain intact \(seq 1\.\.5, last sha256:[0-9a-f]{12}…\)/);
 
     const bad = await cli(["verify-log", "--ledger", fx("ledger/tampered.jsonl")]);
@@ -128,6 +128,7 @@ describe("истински процес", () => {
     const out = execFileSync("pnpm", ["--silent", "mandat", "verify-log", "--ledger", "fixtures/ledger/ok.jsonl", "--json"], {
       cwd: repo,
       encoding: "utf8",
+      shell: process.platform === "win32", // D-454: pnpm is pnpm.cmd on Windows
     });
     const lines = out.split("\n").filter((l) => l.trim().length > 0);
     expect(lines).toHaveLength(1);

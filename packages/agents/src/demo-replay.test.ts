@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 // Демо промпт т. 9 demo-replay.test: `fake:replay-claude` и `fake-codex:replay` излъчват записа байт по байт и прилагат patch-а.
-const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
+const repo = path.resolve(import.meta.dirname, "../../..");
 const fakes = path.join(repo, "packages/agents/fakes");
 const rec = path.join(repo, "demo/recordings");
 

@@ -12,7 +12,7 @@ import type { HttpResult } from "./http.js";
 // E9г (D-442): the browser tier of the fetch ladder against a local page — the real UI image (Playwright + Chromium),
 // the SANDBOX_HARDENING flags, no network at all (fixture mode). HTTP gets only the JS shell, so the ladder goes to the
 // browser, which runs the page's script (it fetches /data.json from its own origin) and reads the rendered text.
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../../..");
+const repoRoot = path.resolve(import.meta.dirname, "../../../..");
 const docker = realDockerRunner();
 const image = uiImageTag(repoRoot);
 const fx = mkdtempSync(path.join(os.tmpdir(), "mandat-render-fx-"));

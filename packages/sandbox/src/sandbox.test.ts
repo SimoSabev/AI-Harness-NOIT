@@ -31,6 +31,8 @@ const MH = "/home/simo/mandat/.mandat";
 const RUN = "r_01JB8Z3K4M5N6P7Q8R9S0T1V2W";
 const RUN_DIR = `${MH}/runs/${RUN}`;
 const ctx = { home: HOME, mandatHome: MH, runDir: RUN_DIR };
+/** The fixture paths are POSIX; on Windows path.resolve/join make them "C:\home\…". Back to POSIX for the snapshots (no-op elsewhere). */
+const posix = (args: readonly string[]): string[] => args.map((a) => a.replace(/[A-Za-z]:\\[^:]*/g, (p) => p.slice(2).split("\\").join("/")));
 
 const code = (fn: () => unknown): string | undefined => {
   try {
@@ -80,7 +82,7 @@ export function fakeRunner(answer: (args: string[]) => { exitCode?: number; stdo
 
 describe("buildRunArgs", () => {
   it("hardening (8.2) + snapshot; тайните само по име (D-043, D-105); tmpfs с exec (D-104)", () => {
-    const args = buildRunArgs(agentSpec, ctx);
+    const args = posix(buildRunArgs(agentSpec, ctx));
     for (const f of sandboxHardening(RUN, "agent")) expect(args).toContain(f);
     expect(args.join(" ")).toContain("--tmpfs /tmp:rw,exec,nosuid,nodev,size=512m");
     expect(args.join(" ")).toContain("--tmpfs /home/agent:rw,exec,nosuid,nodev,size=1g,uid=1000,gid=1000,mode=0700");
@@ -194,7 +196,7 @@ describe("buildProxyRunArgs (D-083)", () => {
     publishAdminPort: 8788, envNames: ["ANTHROPIC_API_KEY"], publicEnv: { MANDAT_PROXY_SECRET_FILE: "/var/lib/mandat-proxy/secret" },
   };
   it("snapshot и варианти", () => {
-    const a = buildProxyRunArgs(base);
+    const a = posix(buildProxyRunArgs(base));
     expect(a.join(" ")).toContain("-p 127.0.0.1:8788:8788");
     expect(a.join(" ")).toContain("--restart unless-stopped");
     expect(a.join(" ")).toContain("-e ANTHROPIC_API_KEY");
@@ -210,7 +212,7 @@ describe("buildProxyRunArgs (D-083)", () => {
     expect(code(() => buildProxyRunArgs({ ...base, publishAdminPort: 0 }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     expect(code(() => buildProxyRunArgs({ ...base, name: "evil" as "mandat-llm-proxy" }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
     expect(code(() => buildProxyRunArgs({ ...base, command: ["-v", "/var/run/docker.sock:/s"] }))).toBe("E_FORBIDDEN_DOCKER_FLAG");
-    expect(buildProxyRunArgs({ ...base, caFile: "/ca.pem" }).join(" ")).toContain("/ca.pem:/etc/mandat-ca.pem:ro");
+    expect(posix(buildProxyRunArgs({ ...base, caFile: "/ca.pem" })).join(" ")).toContain("/ca.pem:/etc/mandat-ca.pem:ro");
   });
 });
 
@@ -427,7 +429,7 @@ describe("the proxy's inference port for research (D-410)", () => {
 describe("SearXNG for research (D-407)", () => {
   it("pinned by digest, loopback only, no capabilities, settings read-only, the secret by name", async () => {
     const { buildSearxngArgs, SEARXNG_IMAGE } = await import("./index.js");
-    const a = buildSearxngArgs({ settings: "/repo/docker/searxng/settings.yml", port: 8888 });
+    const a = posix(buildSearxngArgs({ settings: "/repo/docker/searxng/settings.yml", port: 8888 }));
     expect(a).toEqual(expect.arrayContaining(["-p", "127.0.0.1:8888:8080", "--cap-drop=ALL", "--security-opt=no-new-privileges", "-e", "SEARXNG_SECRET", "-v", "/repo/docker/searxng/settings.yml:/etc/searxng/settings.yml:ro"]));
     expect(a.at(-1)).toBe(SEARXNG_IMAGE);
     expect(SEARXNG_IMAGE).toMatch(/@sha256:[0-9a-f]{64}$/);
