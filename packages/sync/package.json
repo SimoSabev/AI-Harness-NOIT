@@ -1,0 +1,25 @@
+{
+  "name": "@mandat/sync",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The optional account's sync: the vault (keys sealed on the device), merge, first sign-in, the engine and the server's rules (D-490)",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --root ../.. packages/sync/"
+  },
+  "dependencies": {
+    "@mandat/contract": "workspace:*",
+    "@mandat/redaction": "workspace:*"
+  }
+}
