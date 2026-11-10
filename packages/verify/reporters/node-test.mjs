@@ -28,7 +28,9 @@ export default async function* nodeTestReporter(source) {
     const status = d.todo !== undefined && d.todo !== false ? "todo" : d.skip !== undefined && d.skip !== false ? "skipped" : ev.type === "test:pass" ? "passed" : "failed";
     f.results.push({ ancestorTitles: f.stack.slice(0, d.nesting), title: d.name, status });
   }
-  const testResults = [...files.entries()].map(([name, f]) => ({ name, status: f.results.some((r) => r.status === "failed") ? "failed" : "passed", assertionResults: f.results }));
+  // node gives C:\…\x.test.mjs on Windows; vitest writes C:/…/x.test.mjs there, so the same parser reads both (D-510)
+  const slash = (n) => (process.platform === "win32" ? n.replaceAll("\\", "/") : n);
+  const testResults = [...files.entries()].map(([name, f]) => ({ name: slash(name), status: f.results.some((r) => r.status === "failed") ? "failed" : "passed", assertionResults: f.results }));
   const all = testResults.flatMap((t) => t.assertionResults);
   yield `${JSON.stringify({ numTotalTests: all.length, success: !all.some((r) => r.status === "failed"), testResults })}\n`;
 }

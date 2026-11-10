@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseVitestReport } from "@mandat/contract";
 
@@ -27,11 +27,11 @@ describe("node --test reporter (E8и)", () => {
     writeFileSync(path.join(root, "tests", "money.test.mjs"), 'import { test } from "node:test";\ntest("adds", () => {});\n');
     const out = path.join(root, "report.json");
     try {
-      execFileSync(process.execPath, ["--test", `--test-reporter=${reporter}`, `--test-reporter-destination=${out}`], { cwd: root, stdio: "ignore" });
+      execFileSync(process.execPath, ["--test", `--test-reporter=${pathToFileURL(reporter).href}`, `--test-reporter-destination=${out}`], { cwd: root, stdio: "ignore" });
     } catch {
       /* a failing test exits 1 */
     }
-    const r = parseVitestReport(readFileSync(out, "utf8"), root);
+    const r = parseVitestReport(readFileSync(out, "utf8"), root.split(path.sep).join("/")); // vitest-style "/" on Windows (D-510)
     expect(r.valid).toBe(true);
     if (!r.valid) return;
     expect(r.success).toBe(false);
