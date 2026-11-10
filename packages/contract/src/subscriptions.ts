@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProviderId } from "./connections.js";
+import { AgentRefString, ProviderId, parseAgentRef } from "./connections.js";
 import { GateTunnelSchema } from "./gate.js";
 import { AgentCli } from "./agent-cli.js";
 
@@ -186,6 +186,12 @@ export function canSignIn(id: SubscriptionId): boolean {
   const p = SUBSCRIPTIONS[id];
   return (p.availability === "ready" || p.availability === "untested") && p.agent !== null && p.terms.harness !== "forbidden";
 }
+/** D-465: an agent ref that can run — a subscription (<cli>@<account>) only where the registry lets it sign in, so a
+ * saved default or a task never names a login the sandbox must refuse (Gemini's Google login, Antigravity). */
+export const RunnableAgentRef = AgentRefString.refine((s) => {
+  const r = parseAgentRef(s);
+  return r !== null && (!("via" in r) || r.via.kind !== "account" || canSignIn(r.cli));
+}, "this subscription cannot run");
 export const LOGIN_CLIS: readonly SubscriptionId[] = SubscriptionId.options.filter(canSignIn);
 /** The CLIs a sign-in can start (`mandat login --agent`, POST /accounts/login). */
 export const LoginCliId = SubscriptionId.refine(canSignIn, "this subscription cannot be signed in yet");

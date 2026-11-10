@@ -23,7 +23,7 @@ import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWe
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
-import { AccountName, AddConnectionBody, AddProjectBody, AgentRefString, ConnectionId, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
+import { AccountName, AddConnectionBody, AddProjectBody, RunnableAgentRef, ConnectionId, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -415,7 +415,7 @@ export async function putPreferences(req: Request, d: ApiDeps): Promise<Response
   const k = await keysOwner(req, d, true);
   if (k instanceof Response) return k;
   const p = Preferences.safeParse(k.body);
-  if (!p.success || (p.data.defaultAgent !== null && !AgentRefString.safeParse(p.data.defaultAgent).success)) return json(400, { error: "bad_preferences" });
+  if (!p.success || (p.data.defaultAgent !== null && !RunnableAgentRef.safeParse(p.data.defaultAgent).success)) return json(400, { error: "bad_preferences" });
   return (await k.keys.setPrefs(p.data)) ? json(200, { ok: true }) : unavailable();
 }
 
