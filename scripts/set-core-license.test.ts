@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { plan, readmeWith } from "./set-core-license.mjs";
 
@@ -6,7 +7,7 @@ const pj = (license: string) => JSON.stringify({ name: "@mandat/core", license }
 describe("set-core-license (т. 4.2)", () => {
   it("dual: license + ред в README; apache: обратно", () => {
     const dual = plan("dual", [{ dir: "packages/core", packageJson: pj("Apache-2.0"), readme: null }]);
-    expect(dual.map((c) => c.file)).toEqual(["packages/core/package.json", "packages/core/README.md"]);
+    expect(dual.map((c) => c.file)).toEqual([path.join("packages/core", "package.json"), path.join("packages/core", "README.md")]); // the file it writes: OS separators (D-510)
     expect(JSON.parse(dual[0]?.after ?? "{}")).toMatchObject({ license: "Apache-2.0 OR GPL-3.0-or-later" });
     expect(dual[1]?.after).toContain("Apache-2.0 OR GPL-3.0-or-later");
     const back = plan("apache", [{ dir: "packages/core", packageJson: dual[0]?.after ?? "", readme: dual[1]?.after ?? "" }]);

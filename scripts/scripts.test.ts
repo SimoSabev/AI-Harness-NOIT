@@ -110,10 +110,10 @@ describe("репо", () => {
   });
 
   it("pnpm check не вижда fixtures (D-051)", () => {
-    const ls = execFileSync("pnpm", ["-r", "ls", "--depth", "-1", "--json"], { cwd: repo, encoding: "utf8" });
+    const ls = execFileSync("pnpm", ["-r", "ls", "--depth", "-1", "--json"], { cwd: repo, encoding: "utf8", shell: process.platform === "win32" }); // pnpm.cmd on Windows (D-454)
     const dirs = (JSON.parse(ls) as { path: string }[]).map((p) => path.relative(repo, p.path));
     expect(dirs.some((d) => d.startsWith("fixtures"))).toBe(false);
-    expect(dirs).toContain("packages/contract");
+    expect(dirs).toContain(path.join("packages", "contract"));
     expect(vitestConfig.test?.exclude).toContain("fixtures/**");
   });
 });
