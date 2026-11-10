@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createConnection } from "node:net";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
@@ -7,6 +8,16 @@ import { resolveRepo } from "./args.js";
 import type { JobRunner } from "./jobs.js";
 import { VerifydRequest } from "./protocol.js";
 import type { JobStatus, VerifydResponse } from "./protocol.js";
+
+/**
+ * D-512: where verifyd listens and the client connects. POSIX: the socket path itself. Windows: Node listens only on a
+ * named pipe, so the same socket path always maps to the same pipe (case-insensitive, like Windows paths).
+ */
+export function ipcPath(socket: string, platform: NodeJS.Platform = process.platform): string {
+  if (platform !== "win32") return socket;
+  const id = createHash("sha256").update(path.win32.resolve(socket).toLowerCase()).digest("hex").slice(0, 16);
+  return `\\\\.\\pipe\\mandat-verifyd-${id}`;
+}
 
 // What the MCP tools talk to: verifyd over its Unix socket (isolated user), or an in-process runner (--same-uid, D-234).
 export interface JobBackend {
@@ -60,7 +71,7 @@ export function inProcessBackend(runner: JobRunner, allowed: Allowed[]): JobBack
 
 function call(socket: string, req: unknown, timeoutMs = 10_000): Promise<VerifydResponse> {
   return new Promise((resolve) => {
-    const c = createConnection(socket);
+    const c = createConnection(ipcPath(socket));
     let buf = "";
     const done = (v: VerifydResponse) => {
       c.destroy();

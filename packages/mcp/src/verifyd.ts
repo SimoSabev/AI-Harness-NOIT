@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import type { Server } from "node:net";
 import path from "node:path";
 import type { Allowed } from "./args.js";
-import { handleRequest } from "./backend.js";
+import { handleRequest, ipcPath } from "./backend.js";
 import type { JobRunner } from "./jobs.js";
 
 // Демо промпт т. 7.3: mandat-verifyd — a separate OS user, a Unix socket (0660, group mandat-clients), one JSON line
@@ -32,10 +32,13 @@ export function startVerifyd(o: { socket: string; runner: JobRunner; allowed: Al
     });
     c.on("error", () => undefined);
   });
-  return new Promise((resolve) =>
-    srv.listen(o.socket, () => {
-      chmodSync(o.socket, o.mode ?? 0o660);
+  // D-512: a failed listen rejects (it used to hang); on Windows the socket path maps to a named pipe with no file mode
+  return new Promise((resolve, reject) => {
+    srv.once("error", reject);
+    srv.listen(ipcPath(o.socket), () => {
+      srv.off("error", reject);
+      if (process.platform !== "win32") chmodSync(o.socket, o.mode ?? 0o660);
       resolve(srv);
-    }),
-  );
+    });
+  });
 }
