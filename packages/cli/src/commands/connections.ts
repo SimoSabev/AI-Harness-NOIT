@@ -1,5 +1,5 @@
 import { AddConnectionBody, ModelId, ModelsBody, PROVIDERS, Preferences, SUBSCRIPTIONS, nextConnectionId, upstreamUrl } from "@mandat/contract";
-import type { AddConnectionReply, CheckKeyReply, Connection, ConnectionsReply, DetectReply, ProviderId, SubscriptionId, Wire } from "@mandat/contract";
+import type { AddConnectionReply, CheckKeyReply, Connection, ConnectionsReply, DetectReply, ProviderId, SubscriptionId } from "@mandat/contract";
 import { checkKey } from "@mandat/llm-proxy";
 import type { ConnectionStore } from "@mandat/llm-proxy";
 
