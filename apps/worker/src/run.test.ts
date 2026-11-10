@@ -244,7 +244,10 @@ describe("runTask (fake docker)", () => {
     const draw = () => Array.from(randomBytes(40), (b) => "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"[b % 62]).join("");
     let seg = draw();
     while (createRedactor({ exactSecrets: [] }).redactText(`src/${seg}`).text !== "src/[REDACTED:entropy]") seg = draw();
-    const head = () => shopCopy((d) => symlinkSync("/etc/passwd", path.join(d, "src", seg)));
+    // Windows: a symlink needs admin or Developer Mode; a directory junction does not and is packed as a link the same way (D-512)
+    const win = process.platform === "win32";
+    const target = win ? path.join(process.env.SystemRoot ?? "C:/Windows", "System32", "drivers", "etc") : "/etc/passwd";
+    const head = () => shopCopy((d) => symlinkSync(target, path.join(d, "src", seg), win ? "junction" : undefined));
     const { r, h } = await go({ docker: new FakeDocker({ head }) });
     const dir = r.runDir ?? "";
     const v = Verdict.parse(JSON.parse(readFileSync(path.join(dir, "verdict.json"), "utf8")));
@@ -261,6 +264,16 @@ describe("runTask (fake docker)", () => {
       expect(t).not.toContain(seg);
       expect(t).toContain("src/[REDACTED:entropy]");
     }
+  });
+
+  // D-514: the export container failing (docker gone, a throw in the runner) used to leave the tar stream open forever
+  it("export: a failing docker run ends the run instead of hanging", async () => {
+    const head = (): string => {
+      throw new Error("docker died during export");
+    };
+    const settled = go({ docker: new FakeDocker({ head }) }).then(() => "settled", () => "settled");
+    const hung = new Promise<string>((r) => setTimeout(() => r("hung"), 15_000).unref());
+    expect(await Promise.race([settled, hung])).toBe("settled");
   });
 
   it("CANARY пази diff.patch (D-031); честен диф е байт-по-байт", async () => {

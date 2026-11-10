@@ -673,10 +673,17 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
             role: "export", volume: vol, volumeReadonly: true, network: "none", env: { phase: "none" },
             cmd: ["tar", "-C", "/m/work", "--numeric-owner", "--exclude=./node_modules", "-cf", "-", "."], timeoutMs: 600_000,
             onStdout: (c) => stream.write(c), onStderr: (c) => (stderr += c.toString("utf8")),
-          }).then((r) => {
-            stream.end();
-            return { code: r.timedOut ? 124 : r.exitCode, stderr };
-          });
+          }).then(
+            (r) => {
+              stream.end();
+              return { code: r.timedOut ? 124 : r.exitCode, stderr };
+            },
+            (e: unknown) => {
+              stream.destroy(e instanceof Error ? e : new Error(String(e))); // D-514: never leave exportChangeset waiting
+              throw e;
+            },
+          );
+          void exitP.catch(() => undefined); // observed here; the awaits below still get the rejection
           const res = await exportChangeset({ runId, mirrorPath, baseSha: contract.base_commit, tar: stream, tarExit: exitP, limits: contract.security, tmpRoot });
           await exitP;
           notes = (await safeReadVolume(sctx, { volume: vol, file: "/m/out/notes.txt", limit: 1048576, role: "export" }))?.toString("utf8") ?? "";
