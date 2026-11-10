@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { MandatError, sha256Tag } from "@mandat/contract";
+import { AgentCli, MandatError, sha256Tag } from "@mandat/contract";
 import type { ChannelRef, GateRoute } from "@mandat/contract";
 import { ALLOWED_MODELS, adminBearer, mintTaskToken } from "@mandat/llm-proxy";
 import type { TaskUsage } from "@mandat/llm-proxy";
@@ -81,8 +81,10 @@ export function channelFor(ref: ChannelRef, opts: { proxyAdminUrl: string; secre
   const { provider, ...o } = opts;
   // D-295: claude-profile-<name> → the subscription login in the profile volume of that name; D-392: codex-profile-<name>
   // D-425: gemini-profile-<name> → a Google login (oauth-personal) in the profile volume of that name
-  const prof = ref.kind === "cli_profile" ? /^(claude|codex|gemini)-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
-  if (prof?.[2]) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[2], provider: prof[1] === "codex" ? "openai" : prof[1] === "gemini" ? "gemini" : "anthropic" });
+  // D-464: <cli>-profile-<name> for every CLI of the subscription registry
+  const prof = ref.kind === "cli_profile" ? /^([a-z]+)-profile-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
+  const cli = AgentCli.safeParse(prof?.[1]);
+  if (prof?.[2] && cli.success) return profileChannel({ label: ref.label, model: ref.model, profileName: prof[2], cli: cli.data, provider: cli.data === "codex" ? "openai" : cli.data === "gemini" ? "gemini" : "anthropic" });
   // D-392: a saved connection — its tokens name the proxy upstream; the wire is the agent's (Claude Code / Codex)
   const conn = ref.kind !== "cli_profile" ? /^conn-([a-z0-9][a-z0-9-]{0,31})$/.exec(ref.label) : null;
   if (conn?.[1]) return apiKeyChannel({ label: ref.label, model: ref.model, kind: ref.kind === "local" ? "local" : "api_key", provider: provider ?? "anthropic", upstream: conn[1], ...o });

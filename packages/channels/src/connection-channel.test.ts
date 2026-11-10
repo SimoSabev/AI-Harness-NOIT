@@ -1,10 +1,11 @@
+import { SUBSCRIPTIONS } from "@mandat/contract";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MandatError } from "@mandat/contract";
-import { verifyTaskToken } from "@mandat/llm-proxy";
+import { ConnectionStore, verifyTaskToken } from "@mandat/llm-proxy";
 import { GEMINI_TUNNELS, OPENAI_TUNNELS, channelFor } from "./index.js";
 
 // D-392: the channel of a saved connection (conn-<id>) is an API-key channel whose tokens name that proxy upstream;
@@ -44,6 +45,15 @@ describe("connection channels (D-392)", () => {
     // D-426: from the Codex source — the ChatGPT backend and the token refresh; api.openai.com is the API-key path only
     expect(OPENAI_TUNNELS.map((t) => t.host)).toEqual(["chatgpt.com", "auth.openai.com"]);
   });
+  it("D-464: <cli>-profile-<name> for any subscription CLI — its own tunnels from the registry, no token", () => {
+    for (const cli of ["copilot", "kimi", "cursor", "minimax", "antigravity", "gemini"] as const) {
+      const ch = channelFor({ label: `${cli}-profile-rabota`, kind: "cli_profile", model: "m" }, o);
+      expect([ch.kind, ch.cli, ch.profileName]).toEqual(["cli_profile", cli, "rabota"]);
+      expect(ch.gateTunnels?.()).toEqual(SUBSCRIPTIONS[cli].tunnels.map((t) => ({ ...t })));
+    }
+    expect(channelFor({ label: "claude-profile-a", kind: "cli_profile", model: "m" }, o).cli).toBe("claude");
+    expect(() => channelFor({ label: "nope-profile-a", kind: "cli_profile", model: "m" }, o)).toThrow(MandatError);
+  });
 });
 
 // D-422 (spec 5.3): a local channel named in the proxy's env (MANDAT_UPSTREAM_LOCAL_<label>) is model_channels row
@@ -76,5 +86,22 @@ describe("gemini channels (D-424, D-425)", () => {
     expect([ch.kind, ch.provider, ch.profileName]).toEqual(["cli_profile", "gemini", "lichno"]);
     expect(ch.gateTunnels?.()).toEqual(GEMINI_TUNNELS);
     expect(GEMINI_TUNNELS.map((t) => t.host)).toEqual(["cloudcode-pa.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"]);
+  });
+});
+
+// D-474: a saved key never reaches the sandbox — the second Anthropic key of a person is sealed in the store, the channel of
+// its connection hands the agent an mdt_ token for that upstream, and nothing of the key is in the sandbox env or routes.
+describe("a saved key never reaches the sandbox (D-474)", () => {
+  it("conn-anthropic-2: the env and the gate routes hold the token only", async () => {
+    const key = ["sk", "ant", randomBytes(24).toString("base64url")].join("-");
+    const store = new ConnectionStore(mkdtempSync(path.join(tmpdir(), "mandat-keys-")), randomBytes(32));
+    store.put({ id: "anthropic-2", provider: "anthropic", label: "Work", baseUrl: "https://api.anthropic.com", models: ["claude-opus-5-5"], defaultModel: "claude-opus-5-5" }, key);
+    expect(store.upstreams()["anthropic-2"]?.key).toBe(key); // only the proxy boot payload has it
+    const ch = channelFor({ label: "conn-anthropic-2", kind: "api_key", model: "claude-opus-5-5" }, o);
+    const c = await ch.issueTaskCredential({ taskId: "t_x", runId: "r_k", attempt: 1, budgetUsd: 1, ttlMin: 5 });
+    const env = ch.sandboxEnv(c);
+    expect(c.token.startsWith("mdt_")).toBe(true);
+    expect(JSON.stringify([env, ch.gateRoutes(), c])).not.toContain(key);
+    expect(Object.values(env).some((v) => v.includes(key.slice(-12)))).toBe(false);
   });
 });

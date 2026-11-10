@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LocalPath } from "./desktop.js";
+import { LoginCliId, SUBSCRIPTIONS, canSignIn } from "./subscriptions.js";
 
 // D-369: what crosses between `mandat local` (its control endpoint, 127.0.0.1 + bearer token) and the web server.
 // The subscription login runs the unchanged `claude auth login` in a container; the web shows Anthropic's address and
@@ -34,7 +35,8 @@ export function findLoginUrl(text: string): string | null {
 
 // D-393: a ChatGPT sign-in is the unmodified `codex login --device-auth` [НП: the exact wording; spike when Codex runs
 // live]: it prints OpenAI's device page and a one-time code; the person types the code there, nothing comes back here.
-const DEVICE_HOSTS = ["auth.openai.com", "chatgpt.com"];
+// D-460: every device-code provider's own pages (the registry)
+const DEVICE_HOSTS = Object.values(SUBSCRIPTIONS).filter((p) => (p.login.method === "device_code" || p.login.method === "link") && canSignIn(p.id)).flatMap((p) => p.login.hosts);
 export function isDeviceUrl(u: string): boolean {
   try {
     const p = new URL(u);
@@ -44,17 +46,33 @@ export function isDeviceUrl(u: string): boolean {
   }
 }
 const ANSI = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*[A-Za-z]`, "g");
+function userCode(url: string | undefined): string | undefined {
+  try {
+    const c = url ? new URL(url).searchParams.get("user_code") : null;
+    return c !== null && DEVICE_CODE.test(c) ? c : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/** D-464: a sign-in that is only the provider's page (Cursor): the first of its pages in the output, no code */
+export function findLinkLogin(text: string): { url: string; code: null } | null {
+  const url = [...text.replace(ANSI, "").matchAll(URL_RE)].map((m) => m[0]).find(isDeviceUrl);
+  return url ? { url, code: null } : null;
+}
+/** D-464: the one-time code a device page asks for */
+export const DEVICE_CODE = /^(?:[A-Z0-9]{4,8}-[A-Z0-9]{4,8}|[A-Z0-9]{4,12})$/;
 /** The device page and the one-time code in the output of `codex login --device-auth` (both, or null). */
 export function findDeviceLogin(text: string): { url: string; code: string } | null {
   const plain = text.replace(ANSI, "");
   const url = [...plain.matchAll(URL_RE)].map((m) => m[0]).find(isDeviceUrl);
   const after = url ? plain.slice(plain.indexOf(url) + url.length) : "";
-  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1];
+  // D-464: XXXX-XXXX (OpenAI, GitHub); else "code: XXXXXX" or the page's own user_code (Kimi) [НП: Kimi's code shape]
+  const code = /\b([A-Z0-9]{4,8}-[A-Z0-9]{4,8})\b/.exec(after)?.[1] ?? /\b[Cc]ode:?\s+([A-Z0-9]{4,12})\b/.exec(after)?.[1] ?? userCode(url);
   return url && code ? { url, code } : null;
 }
 
 /** Start a subscription sign-in: the account name and the CLI (Claude Code, or Codex for ChatGPT). */
-export const LoginStart = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), cli: z.enum(["claude", "codex"]).default("claude") }).strict();
+export const LoginStart = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), cli: LoginCliId.default("claude") }).strict();
 export type LoginStart = z.infer<typeof LoginStart>;
 
 export const LoginFailure = z.enum(["busy", "images_missing", "start_failed", "no_url", "invalid_code", "not_logged_in", "timeout", "cancelled"]);
@@ -64,7 +82,7 @@ export const LoginState = z.discriminatedUnion("state", [
   z.object({ state: z.literal("idle") }).strict(),
   z.object({ state: z.literal("starting"), name: AccountName }).strict(),
   z.object({ state: z.literal("waiting_code"), name: AccountName, url: z.string().max(4096).refine(isLoginUrl) }).strict(),
-  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(/^[A-Z0-9]{4,8}-[A-Z0-9]{4,8}$/) }).strict(),
+  z.object({ state: z.literal("waiting_device"), name: AccountName, url: z.string().max(4096).refine(isDeviceUrl), code: z.string().regex(DEVICE_CODE).nullable() }).strict(),
   z.object({ state: z.literal("checking"), name: AccountName }).strict(),
   z.object({ state: z.literal("done"), name: AccountName, email: z.string().max(320).nullable(), plan: z.string().max(100).nullable() }).strict(),
   z.object({ state: z.literal("failed"), name: AccountName, reason: LoginFailure }).strict(),

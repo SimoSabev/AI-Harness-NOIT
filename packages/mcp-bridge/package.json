@@ -2,7 +2,7 @@
   "name": "@mandat/mcp-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "MCP servers for the agent: vetting (definitions hash, poisoned descriptions), the registry client, the stdio \u2192 streamable HTTP bridge of the sidecar",
+  "description": "MCP servers for the agent: vetting (definitions hash, poisoned descriptions), the registry client, the stdio 2192 streamable HTTP bridge of the sidecar",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "files": [
@@ -19,6 +19,10 @@
     "./registry": {
       "types": "./dist/registry.d.ts",
       "default": "./dist/registry.js"
+    },
+    "./import": {
+      "types": "./dist/import/index.d.ts",
+      "default": "./dist/import/index.js"
     }
   },
   "scripts": {

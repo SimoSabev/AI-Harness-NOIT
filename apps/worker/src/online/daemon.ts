@@ -310,6 +310,11 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     // E8e (D-354): each stdio MCP server of the profile gets only its declared secrets and its call budget
     const mcpRefs = hp ? hp.layers.e.mcp.filter((m) => m.transport === "stdio") : [];
     const mcpSecrets: Record<string, Record<string, string>> = {};
+    // D-484: the texts of approved imported skills named in the profile (skillTexts checks each hash before writing it)
+    const userSkills = hp ? hp.layers.e.skills.filter((k) => k.source === "user").map((k) => k.name) : [];
+    const catalogSkills: Record<string, string> = userSkills.length === 0 ? {} : Object.fromEntries((await d.db.query<{ name: string; content: string }>(
+      "select name, content from public.skills where org_id = $1::uuid and source = 'user' and approved and content is not null and name = any($2::text[])", [t.org_id, userSkills],
+    )).rows.map((r) => [r.name, r.content]));
     const mcpBudgets: Record<string, number> = {};
     if (mcpRefs.length > 0) {
       for (const b of (await d.db.query<{ name: string; budget_calls_min: number }>("select name, budget_calls_min from public.mcp_servers where org_id = $1::uuid and name = any($2::text[])", [t.org_id, mcpRefs.map((m) => m.name)])).rows) mcpBudgets[b.name] = b.budget_calls_min;
@@ -341,6 +346,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
+        ...(Object.keys(catalogSkills).length > 0 ? { catalogSkills } : {}),
         ...(Object.keys(mcpBudgets).length > 0 ? { mcpBudgets } : {}),
         ...(mem ? { memoryBlock: mem.text } : {}),
       });

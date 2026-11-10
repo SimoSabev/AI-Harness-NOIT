@@ -18,12 +18,15 @@ import { answerQuestion, closeQuestion, planNight } from "./night";
 import { uploadHidden } from "./hidden";
 import { ApproveMcpBody, addMcpServer, approveMcpServer } from "./mcp";
 import { listRegistry } from "@mandat/mcp-bridge/registry";
+import { approveSkill, discoverForPerson, importTools, previewImport } from "./tools-import";
+import { localIo } from "./local-io";
+import { localOwner } from "./local-auth";
 import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./permissions";
 import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
-import { AccountName, AddConnectionBody, AddProjectBody, AgentRefString, ConnectionId, LoginCode, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
+import { AccountName, AddConnectionBody, AddProjectBody, AgentRefString, ConnectionId, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -310,7 +313,7 @@ export async function deleteResearchKey(req: Request, d: ApiDeps): Promise<Respo
 
 // D-369: the subscription login from the web (owner with keys.manage). The pasted code goes on to the control endpoint
 // and to the stdin of `claude auth login`; it is never stored, logged or sent back.
-const NameBody = z.object({ name: AccountName, cli: z.enum(["claude", "codex"]).optional() }).strict();
+const NameBody = z.object({ name: AccountName, cli: SubscriptionId.optional() }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 const LOGIN_ERRORS = new Set(["bad_name", "bad_code", "not_waiting"]);
 
@@ -404,6 +407,14 @@ export async function deleteConnection(req: Request, d: ApiDeps, id: string): Pr
   if (!ConnectionId.safeParse(id).success) return json(400, { error: "bad_id" });
   const removed = await k.keys.removeConnection(id);
   return removed === null ? unavailable() : json(200, { removed });
+}
+/** D-472: "Check the key" of a saved connection — the result (works / refused / no credit / did not answer), never the key. */
+export async function postConnectionCheck(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  const k = await keysOwner(req, d, true);
+  if (k instanceof Response) return k;
+  if (!ConnectionId.safeParse(id).success) return json(400, { error: "bad_id" });
+  const r = await k.keys.checkConnection(id);
+  return r ? json(200, r) : json(404, { error: "unknown_connection" });
 }
 export async function getDetect(req: Request, d: ApiDeps): Promise<Response> {
   const k = await keysOwner(req, d, false);
@@ -533,6 +544,33 @@ export async function postMcpApprove(req: Request, d: ApiDeps, id: string): Prom
   const b = ApproveMcpBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await approveMcpServer(d.db, { uid: p.uid, id, body: b.data, secondFactor: d.secondFactor }), d);
+}
+// D-480…D-485: "Add from…" (preview → add as pending → approve), the person's own clients on this machine, skill approval
+const netFetch = (u: string) => fetch(u, { signal: AbortSignal.timeout(10_000), headers: { "user-agent": "mandat-tools-import" } });
+const isLocal = () => localOwner() !== null;
+const localOrNull = () => (isLocal() ? localIo() : null);
+export async function postToolsPreview(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "tools.manage"))) return json(403, { error: "not_allowed" });
+  return done(await previewImport({ fetch: netFetch, body: p.body, local: localOrNull() }), d);
+}
+export async function postToolsImport(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await importTools(d.db, { uid: p.uid, org: p.org, fetch: netFetch, body: p.body, secondFactor: d.secondFactor, local: localOrNull() }), d);
+}
+export async function postToolsLocal(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "tools.manage"))) return json(403, { error: "not_allowed" });
+  return done(await discoverForPerson({ mode: isLocal() ? "local" : "hosted", body: p.body, io: localIo() }), d);
+}
+export async function postSkillApprove(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!UUID.test(id)) return json(404, { error: "unknown_skill" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await approveSkill(d.db, { uid: p.uid, id }), d);
 }
 export async function postFixCi(req: Request, d: ApiDeps, id: string): Promise<Response> {
   if (!/^t_[a-z0-9_]{1,40}$/.test(id)) return json(404, { error: "unknown_task" });

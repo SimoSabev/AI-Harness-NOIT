@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { Connection, ModelsBody, PROVIDERS, Preferences, priceOf, upstreamUrl } from "@mandat/contract";
+import { Connection, KeyCheckState, ModelsBody, PROVIDERS, Preferences, Wire, keyHint, priceOf, upstreamUrl } from "@mandat/contract";
 import type { ProxyUpstream } from "@mandat/contract";
 import { FileKeyStore } from "./envelope.js";
 import type { KeyProvider } from "./envelope.js";
@@ -11,7 +11,8 @@ import type { KeyProvider } from "./envelope.js";
 export type SavedConnection = Omit<Connection, "hasKey">;
 interface FileShape { version: 1; connections: SavedConnection[]; preferences: Preferences }
 
-const keyName = (c: { id: string; provider: string }): KeyProvider => (c.provider === "anthropic" || c.provider === "openai" ? c.provider : `conn:${c.id}`);
+// D-471: only the first key of Anthropic / OpenAI (id = the provider) keeps the old name; a second one is conn:<id>
+const keyName = (c: { id: string; provider: string }): KeyProvider => ((c.provider === "anthropic" || c.provider === "openai") && c.id === c.provider ? c.provider : `conn:${c.id}`);
 
 export class ConnectionStore {
   private readonly file: string;
@@ -65,9 +66,13 @@ export class ConnectionStore {
   }
   /** Add or replace; the key (if any) is sealed first, so a failed write never leaves metadata without its key. */
   put(c: SavedConnection, key?: string): Connection {
-    const valid = Connection.parse({ ...c, hasKey: key !== undefined });
-    if (key !== undefined) this.keys().put(keyName(valid), key);
     const f = this.read();
+    const before = f.connections.find((x) => x.id === c.id);
+    // D-471: a new key → its last four characters, and the old check no longer says anything; without one, both stay
+    const { keyHint: _h, check: _c, ...meta } = c;
+    const extra = key !== undefined ? { keyHint: keyHint(key) } : { ...(before?.keyHint ? { keyHint: before.keyHint } : {}), ...(before?.check ? { check: before.check } : {}) };
+    const valid = Connection.parse({ ...meta, ...extra, hasKey: key !== undefined });
+    if (key !== undefined) this.keys().put(keyName(valid), key);
     const { hasKey: _, ...saved } = valid;
     this.write({ ...f, connections: [...f.connections.filter((x) => x.id !== valid.id), saved] });
     return this.get(valid.id) as Connection;
@@ -77,6 +82,14 @@ export class ConnectionStore {
     const f = this.read();
     if (!f.connections.some((c) => c.id === id)) return false;
     this.write({ ...f, connections: f.connections.map((c) => (c.id === id ? { ...c, models: b.models, defaultModel: b.defaultModel } : c)) });
+    return true;
+  }
+  /** D-472: the last "Check the key" of a saved connection. */
+  setCheck(id: string, state: KeyCheckState): boolean {
+    const st = KeyCheckState.parse(state);
+    const f = this.read();
+    if (!f.connections.some((c) => c.id === id)) return false;
+    this.write({ ...f, connections: f.connections.map((c) => (c.id === id ? { ...c, check: st } : c)) });
     return true;
   }
   remove(id: string): void {
@@ -102,7 +115,10 @@ export class ConnectionStore {
     const out: Record<string, ProxyUpstream> = {};
     for (const c of this.read().connections) {
       const info = PROVIDERS[c.provider];
-      if (info.kind === "subscription" || c.provider === "anthropic" || c.provider === "openai") continue;
+      // D-471: the first Anthropic / OpenAI key is the plain provider key; D-470: a format no agent speaks is not a wire
+      if (info.kind === "subscription" || ((c.provider === "anthropic" || c.provider === "openai") && c.id === c.provider)) continue;
+      const wire = Wire.safeParse(info.wire);
+      if (!wire.success || info.auth === "aws" || info.auth === "gcp") continue;
       const u = upstreamUrl(c.baseUrl ?? info.baseUrl ?? "");
       const key = info.auth === "none" ? "" : this.keys().get(keyName(c));
       if (!u.ok || key === null) continue;
@@ -111,7 +127,7 @@ export class ConnectionStore {
         const p = priceOf(c.provider, m);
         if (p) prices[m] = p;
       }
-      out[c.id] = { wire: info.wire, url: u.url, auth: info.auth, key, models: [...c.models], prices, ...(info.kind === "local" ? { local: true } : {}) };
+      out[c.id] = { wire: wire.data, url: u.url, auth: info.auth, key, models: [...c.models], prices, ...(info.kind === "local" ? { local: true } : {}) };
     }
     return out;
   }

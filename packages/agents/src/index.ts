@@ -18,3 +18,4 @@ export type { GeminiArgvOptions } from "./gemini/argv.js";
 export { geminiClaimedDone, parseGeminiLine } from "./gemini/stream.js";
 export { geminiToStream } from "./gemini/to-stream.js";
 export { geminiAdapter } from "./gemini/adapter.js";
+export { subscriptionAdapter } from "./subscription/index.js";

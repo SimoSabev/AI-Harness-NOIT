@@ -1,5 +1,5 @@
-import { PROVIDERS, parseAgentRef } from "@mandat/contract";
-import type { Connection } from "@mandat/contract";
+import { PROVIDERS, SUBSCRIPTIONS, agentFor, canSignIn, parseAgentRef } from "@mandat/contract";
+import type { AgentCli, Connection, KeyCli, ProviderId } from "@mandat/contract";
 import { translate } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 
@@ -61,7 +61,9 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   for (const a of o.accounts.filter((x) => x.loggedIn)) {
     const r = parseAgentRef(a.agent);
     if (!r || !("via" in r) || r.via.kind !== "account") continue;
-    const p = r.cli === "codex" ? "chatgpt-sub" : "claude-sub";
+    // D-460: a signed-in subscription of any provider that can run; its models come from the registry's catalog entry
+    const p = canSignIn(r.cli) ? SUBSCRIPTIONS[r.cli].connectionProvider : null;
+    if (p === null) continue;
     const c = saved(r.via.name);
     out.push({ id: a.agent, label: agentLabel(a.agent, lang), models: c ? c.models : catalog(p), defaultModel: c ? c.defaultModel : rec(p), local: false });
   }
@@ -71,7 +73,9 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   }
   for (const c of o.connections) {
     const info = PROVIDERS[c.provider];
-    if (info.kind === "subscription" || c.provider === "anthropic" || c.provider === "openai" || (info.auth !== "none" && !c.hasKey)) continue;
+    // D-471: the first Anthropic / OpenAI key is the plain `claude` / `codex` above; D-470: no agent → not a choice
+    const plain = (c.provider === "anthropic" || c.provider === "openai") && c.id === c.provider;
+    if (info.kind === "subscription" || plain || info.agent === null || (info.auth !== "none" && !c.hasKey)) continue;
     const id = `${info.agent}+${c.id}`;
     out.push({ id, label: agentLabel(id, lang, c.label), models: c.models, defaultModel: c.defaultModel, local: info.kind === "local" });
   }
@@ -79,3 +83,6 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   const i = out.findIndex((a) => a.id === o.preferred);
   return i > 0 ? [out[i] as TaskAgent, ...out.slice(0, i), ...out.slice(i + 1)] : out;
 }
+
+/** D-473: which agent can use a provider's key (Claude Code, Codex, Gemini CLI) — null: none here yet (shown honestly). */
+export const apiKeyUse = (p: ProviderId): KeyCli | null => agentFor(p);

@@ -45,7 +45,7 @@ export function limitOf(h: http.IncomingHttpHeaders, nowMs: number): { retry_aft
   return { retry_after_s: retry, resets_at: resets };
 }
 const MAX_BODY = 32 * 1024 * 1024;
-const DROP_REQ = new Set(["host", "connection", "keep-alive", "proxy-authorization", "authorization", "x-api-key", "x-goog-api-key", "content-length", "transfer-encoding", "te", "upgrade"]);
+const DROP_REQ = new Set(["host", "connection", "keep-alive", "proxy-authorization", "authorization", "x-api-key", "x-goog-api-key", "api-key", "content-length", "transfer-encoding", "te", "upgrade"]);
 const DROP_RES = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade"]);
 
 type ErrType = "authentication_error" | "permission_error" | "api_error" | "invalid_request_error";
@@ -104,7 +104,7 @@ export interface ProxyServerOptions {
 
 const KEY = /^[\x21-\x7e]{20,512}$/;
 /** D-392: a saved connection as the proxy holds it (memory only). */
-interface Upstream { wire: "anthropic" | "openai" | "gemini"; url: URL; auth: "x-api-key" | "bearer" | "x-goog-api-key" | "none"; key: string; models: string[]; prices: Record<string, FlatRate>; /** D-422: a model on this computer — $0, watched for replies without a tool */ local: boolean }
+interface Upstream { wire: "anthropic" | "openai" | "gemini"; url: URL; auth: "x-api-key" | "bearer" | "x-goog-api-key" | "api-key" | "none"; key: string; models: string[]; prices: Record<string, FlatRate>; /** D-422: a model on this computer — $0, watched for replies without a tool */ local: boolean }
 type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream>; search: Partial<Record<SearchProviderId, string>> };
 /** `allowEmpty`: the environment already names local upstreams (D-422), so a payload with nothing else is fine. */
 function parseBootKeys(body: Buffer | null, allowHttp: boolean, allowEmpty = false): BootKeys | null {
@@ -268,6 +268,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         if (conn.auth === "bearer") headers.authorization = `Bearer ${conn.key}`;
         else if (conn.auth === "x-api-key") headers["x-api-key"] = conn.key;
         else if (conn.auth === "x-goog-api-key") headers["x-goog-api-key"] = conn.key;
+        else if (conn.auth === "api-key") headers["api-key"] = conn.key; // D-470: Azure OpenAI
       } else if (provider === "openai") headers.authorization = `Bearer ${keys.openai}`;
       else headers["x-api-key"] = keys.anthropic;
       headers["content-length"] = body.length;

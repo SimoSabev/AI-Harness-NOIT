@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AccountName, AddProjectBody, ConnectionId, LoginCode, LoginStart, SystemJob } from "@mandat/contract";
-import type { AddConnectionReply, AddProjectReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
+import { AccountName, AddProjectBody, ConnectionId, LoginCode, LoginStart, SubscriptionId, SystemJob } from "@mandat/contract";
+import type { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
 
 // D-293: the web UI of `mandat local` hands API keys to the proxy through this control endpoint: 127.0.0.1 only,
 // a random bearer token known to the web server alone, the key only in memory on its way to `docker run` env.
@@ -21,8 +21,8 @@ export interface ControlDeps {
   /** D-295: the subscription accounts (from `claude auth status`; no token) */
   accounts(): Promise<{ name: string; agent: string; loggedIn: boolean; email: string | null; plan: string | null }[]>;
   /** D-369: the subscription login from the web (login-session.ts) */
-  login: { state(): LoginState; start(name: string, cli: "claude" | "codex"): Promise<LoginState>; submit(code: string): LoginState | null; cancel(): LoginState };
-  logout(name: string, cli: "claude" | "codex"): Promise<boolean>;
+  login: { state(): LoginState; start(name: string, cli: SubscriptionId): Promise<LoginState>; submit(code: string): LoginState | null; cancel(): LoginState };
+  logout(name: string, cli: SubscriptionId): Promise<boolean>;
   /** D-370: the CLI commands from the web (system-jobs.ts) */
   system: { all(): JobState[]; start(job: SystemJob): JobState };
   /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
@@ -35,6 +35,8 @@ export interface ControlDeps {
     add(body: unknown): Promise<AddConnectionReply>;
     setModels(id: string, body: unknown): Promise<boolean>;
     remove(id: string): Promise<boolean>;
+    /** D-472: "Check the key" of a saved connection; null = unknown id */
+    check(id: string): Promise<CheckKeyReply | null>;
     detect(): Promise<DetectReply>;
     setPrefs(body: unknown): boolean;
   };
@@ -67,7 +69,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-const NameBody = z.object({ name: AccountName, cli: z.enum(["claude", "codex"]).default("claude") }).strict();
+const NameBody = z.object({ name: AccountName, cli: SubscriptionId.default("claude") }).strict();
 const CodeBody = z.object({ code: LoginCode }).strict();
 
 /** D-369: /accounts/login (GET state, POST start, DELETE cancel), /accounts/login/code, /accounts/logout. The code is never echoed. */
@@ -92,7 +94,7 @@ async function accountsRoute(url: string, method: string, body: () => Promise<un
   return [404, { error: "not_found" }];
 }
 
-/** D-393: /connections (GET list, POST add), /connections/detect, /connections/<id> (PATCH models, DELETE), /preferences (PUT). */
+/** D-393: /connections (GET list, POST add), /connections/detect, /connections/<id> (PATCH models, DELETE), D-472: /connections/<id>/check (POST), /preferences (PUT). */
 async function connectionsRoute(url: string, method: string, body: () => Promise<unknown>, c: NonNullable<ControlDeps["connections"]>): Promise<[number, unknown]> {
   if (url === "/preferences") return method === "PUT" ? (c.setPrefs(await body()) ? [200, { ok: true }] : [400, { error: "bad_preferences" }]) : [405, { error: "method" }];
   if (url === "/connections") {
@@ -102,6 +104,14 @@ async function connectionsRoute(url: string, method: string, body: () => Promise
     return [r.ok || r.error !== "bad_address" ? 200 : 400, r];
   }
   if (url === "/connections/detect") return method === "GET" ? [200, await c.detect()] : [405, { error: "method" }];
+  const chk = /^\/connections\/([^/]+)\/check$/.exec(url);
+  if (chk) {
+    const cid = ConnectionId.safeParse(chk[1]);
+    if (!cid.success) return [404, { error: "not_found" }];
+    if (method !== "POST") return [405, { error: "method" }];
+    const r = await c.check(cid.data);
+    return r === null ? [404, { error: "unknown_connection" }] : [200, r];
+  }
   const id = ConnectionId.safeParse(url.slice("/connections/".length));
   if (!id.success) return [404, { error: "not_found" }];
   if (method === "PATCH") return (await c.setModels(id.data, await body())) ? [200, { ok: true }] : [400, { error: "bad_models" }];

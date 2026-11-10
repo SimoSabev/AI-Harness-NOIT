@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LoginState } from "@mandat/contract";
+import { LoginState, SUBSCRIPTIONS } from "@mandat/contract";
+import type { SubscriptionId } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { csrfToken, errorText, postJson } from "../lib/client/api";
@@ -13,7 +14,7 @@ const ERR: Record<string, Key> = { keys_unavailable: "error.keys_unavailable", n
 // D-369, D-387: `mandat login` from the web, one button. The unchanged Claude Code runs in a container of `pnpm local`; this form shows
 // Anthropic's sign-in address and passes the pasted code on. The code field clears itself; nothing is kept here.
 // D-393: `cli` = "codex" signs in to ChatGPT (`codex login --device-auth`): OpenAI's page and a one-time code to type there.
-export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested: string; cli?: "claude" | "codex"; onDone?: (name: string) => void }) {
+export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested: string; cli?: SubscriptionId; onDone?: (name: string) => void }) {
   const router = useRouter();
   const t = useT();
   const [s, setS] = useState<LoginState>({ state: "idle" });
@@ -50,7 +51,7 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
 
   const start = async (e: React.FormEvent) => {
     e.preventDefault();
-    apply(await postJson("/api/accounts/login", { name: name.trim(), ...(cli === "codex" ? { cli } : {}) }));
+    apply(await postJson("/api/accounts/login", { name: name.trim(), ...(cli !== "claude" ? { cli } : {}) }));
   };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,29 +97,37 @@ export function AccountLogin({ suggested, cli = "claude", onDone }: { suggested:
       )}
       {v.show === "device" && s.state === "waiting_device" && (
         <div className="space-y-3">
-          <p className="text-sm">{t("keys.login.device1")}</p>
-          <a className={btn.secondary} href={s.url} target="_blank" rel="noopener noreferrer">{t("keys.login.openChatgpt")}</a>
-          <p className="text-sm">{t("keys.login.device2")}</p>
-          <p className="select-all rounded-lg bg-raised px-3 py-2 text-center font-mono text-lg tracking-widest" aria-label={t("keys.login.code")}>{s.code}</p>
-          <p className="text-xs text-mute" role="status">{t("keys.login.deviceWait")}</p>
+          {/* D-464: the same steps for every device-code or link sign-in; the page and the name are the provider's */}
+          <p className="text-sm">{cli === "codex" ? t("keys.login.device1") : t("keys.login.deviceAny1", { provider: SUBSCRIPTIONS[cli].label })}</p>
+          <a className={btn.secondary} href={s.url} target="_blank" rel="noopener noreferrer">{cli === "codex" ? t("keys.login.openChatgpt") : t("keys.login.openAny", { provider: SUBSCRIPTIONS[cli].label })}</a>
+          {s.code !== null ? (
+            <>
+              <p className="text-sm">{t("keys.login.device2")}</p>
+              <p className="select-all rounded-lg bg-raised px-3 py-2 text-center font-mono text-lg tracking-widest" aria-label={t("keys.login.code")}>{s.code}</p>
+            </>
+          ) : (
+            <p className="text-sm">{t("keys.login.link2")}</p>
+          )}
+          <p className="text-xs text-mute" role="status">{cli === "codex" ? t("keys.login.deviceWait") : t("keys.login.deviceAnyWait", { provider: SUBSCRIPTIONS[cli].label })}</p>
           <button className={btn.ghost} type="button" onClick={() => void cancel()}>{t("keys.login.cancel")}</button>
         </div>
       )}
       {v.show === "form" && note && <p className={`text-sm ${s.state === "failed" ? "text-bad" : "text-ok"}`} role={s.state === "failed" ? "alert" : "status"}>{note}</p>}
       {err && <p className="text-sm text-bad" role="alert">{err}</p>}
-      <p className="text-xs text-mute">{t(cli === "codex" ? "keys.login.privacyChatgpt" : "keys.login.privacy")}</p>
+      <p className="text-xs text-mute">{cli === "codex" ? t("keys.login.privacyChatgpt") : cli === "claude" ? t("keys.login.privacy") : t("keys.login.privacyAny", { provider: SUBSCRIPTIONS[cli].label })}</p>
     </div>
   );
 }
 
-export function AccountLogout({ name }: { name: string }) {
+// D-460: the provider goes with the name, so a ChatGPT account signs out with Codex, not with Claude Code
+export function AccountLogout({ name, cli = "claude" }: { name: string; cli?: SubscriptionId }) {
   const router = useRouter();
   const t = useT();
   const [busy, setBusy] = useState(false);
   const remove = async () => {
     if (!window.confirm(t("keys.logoutConfirm", { name }))) return;
     setBusy(true);
-    await postJson("/api/accounts/logout", { name });
+    await postJson("/api/accounts/logout", { name, ...(cli !== "claude" ? { cli } : {}) });
     setBusy(false);
     router.refresh();
   };

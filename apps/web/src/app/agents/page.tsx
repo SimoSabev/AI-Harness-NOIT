@@ -96,7 +96,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                   <li key={a.a} className="text-sm"><span className="flex justify-between"><span>{a.a}</span><span className="font-mono text-xs text-mute">{a.n} · {t.usd(a.usd)}</span></span><Meter value={a.usd} max={Math.max(total, 0.01)} label={t("agents.share", { a: a.a })} /></li>
                 ))}
               </ul>
-              <p className="border-t border-line px-4 py-2 text-xs text-mute">{rich(t("agents.limits"), { link: <Link href="/keys" className="underline">{t("nav.keys")}</Link> })}</p>
+              <p className="border-t border-line px-4 py-2 text-xs text-mute">{rich(t("agents.limits"), { link: <Link href="/settings/api-keys" className="underline">{t("nav.keys")}</Link> })}</p>
             </Panel>
           </aside>
         </div>

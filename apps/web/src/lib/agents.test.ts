@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AGENTS, AGENT_IDS, agentChoices, agentHint, agentLabel, taskAgents } from "./agents";
+import { AGENTS, AGENT_IDS, agentChoices, agentHint, agentLabel, apiKeyUse, taskAgents } from "./agents";
 import type { Connection } from "@mandat/contract";
 import { CreateTaskBody } from "./server/actions";
 
@@ -86,5 +86,31 @@ describe("taskAgents (D-393)", () => {
     expect(CreateTaskBody.safeParse({ type: "free", agent: "claude+deepseek", model: "deepseek-flash", text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "free", agent: "codex@rabota", text: "x" }).success).toBe(true);
     expect(CreateTaskBody.safeParse({ type: "free", agent: "claude", model: "a b", text: "x" }).success).toBe(false);
+  });
+});
+
+// D-471, D-473: every saved key becomes a choice in the task box with its models — a second Anthropic key, an OpenAI-
+// compatible provider for Codex; a provider no agent here can use is listed apart (apiKeyUse), never offered to run.
+describe("taskAgents: keys become models (D-471, D-473)", () => {
+  const key = { hasKey: true } as const;
+  const conns: Connection[] = [
+    { id: "anthropic", provider: "anthropic", label: "Personal", baseUrl: "https://api.anthropic.com", models: ["claude-sonnet-5-5"], defaultModel: "claude-sonnet-5-5", ...key },
+    { id: "anthropic-2", provider: "anthropic", label: "Work", baseUrl: "https://api.anthropic.com", models: ["claude-opus-5-5", "claude-sonnet-5-5"], defaultModel: "claude-opus-5-5", ...key },
+    { id: "xai", provider: "xai", label: "xAI Grok", baseUrl: null, models: ["grok-x"], defaultModel: "grok-x", ...key },
+    { id: "cerebras", provider: "cerebras", label: "Cerebras", baseUrl: null, models: ["m1"], defaultModel: "m1", ...key },
+  ];
+  it("a second Anthropic key is its own Claude Code choice; xAI runs on Codex; Cerebras (Chat Completions only) is not offered", () => {
+    const r = taskAgents({ accounts: [], keys: ["anthropic"], connections: conns, demo: false, preferred: null }, "en");
+    expect(r.map((a) => [a.id, a.label, a.defaultModel])).toEqual([
+      ["claude", "Claude Code", "claude-sonnet-5-5"],
+      ["claude+anthropic-2", "Claude Code · Work", "claude-opus-5-5"],
+      ["codex+xai", "Codex · xAI Grok", "grok-x"],
+    ]);
+  });
+  it("apiKeyUse says honestly which agent can use a provider's key", () => {
+    expect(apiKeyUse("anthropic")).toBe("claude");
+    expect(apiKeyUse("xai")).toBe("codex");
+    expect(apiKeyUse("gemini")).toBe("gemini");
+    expect(apiKeyUse("cerebras")).toBeNull();
   });
 });

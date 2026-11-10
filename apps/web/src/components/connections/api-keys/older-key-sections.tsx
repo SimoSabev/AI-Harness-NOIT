@@ -1,0 +1,124 @@
+import { rich } from "../../../i18n/rich";
+import { getT } from "../../../i18n/server";
+import type { Key } from "../../../i18n/t";
+import { AccountLogin, AccountLogout } from "../../account-login";
+import { KeysForm } from "../../keys-form";
+import { ResearchKeyForm } from "../../research-key-form";
+import { StatusBadge, card } from "../../ui";
+import { listChannels } from "../../../lib/server/channels";
+import { db } from "../../../lib/server/db";
+import { controlKeys } from "../../../lib/server/keys";
+import { pageCtx } from "../../../lib/server/page";
+
+// D-293: where the API keys of the real agents go — the proxy only. The agent gets a one-task token, never the key.
+const HEALTH: Record<string, { label: Key; tone: "green" | "amber" | "red" | "gray" }> = {
+  ok: { label: "keys.health.ok", tone: "green" },
+  degraded: { label: "keys.health.degraded", tone: "amber" },
+  limited: { label: "keys.health.limited", tone: "red" },
+  down: { label: "keys.health.down", tone: "red" },
+};
+const hhmm = (iso: string, locale: string) => new Date(iso).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Sofia" });
+
+/** D-475: what /keys showed before — subscriptions, the older single-key form, the research key, channels — kept in full. */
+export async function OlderKeySections() {
+  const c = await pageCtx();
+  const t = await getT();
+  const ctl = controlKeys(process.env);
+  const s = (await ctl?.status()) ?? { proxy: "unavailable" as const, providers: [] };
+  const accounts = (await ctl?.accounts()) ?? [];
+  const channels = await listChannels(db(), c.uid, c.org);
+  const row = (label: string, on: boolean) => (
+    <li className="flex items-center justify-between px-4 py-3">
+      <span className="text-sm font-medium">{label}</span>
+      <StatusBadge tone={on ? "green" : "gray"} label={on ? t("keys.ready") : t("keys.noKey")} />
+    </li>
+  );
+  return (
+    <>
+      {/* the subscriptions stay here until the Connections page gives them their own tab */}
+      <section aria-labelledby="acc-h" className="mt-10">
+        <h2 id="acc-h" className="mb-1 font-display text-sm font-medium tracking-wide text-mute">{t("keys.subscriptions")}</h2>
+        <p className="mb-3 max-w-2xl text-sm text-mute">{t("keys.intro")}</p>
+        {accounts.length > 0 && (
+          <ul className={`${card} divide-y divide-line`}>
+            {accounts.map((a) => (
+              <li key={a.name} className="flex items-center justify-between gap-4 px-4 py-3">
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{a.name}</span>
+                  <span className="block truncate text-xs text-mute">{a.loggedIn ? `${a.email ?? "?"} · ${a.plan ?? t("agent.subscription")}` : t("keys.notSignedIn")}</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <StatusBadge tone={a.loggedIn ? "green" : "gray"} label={a.loggedIn ? t("keys.ready") : t("keys.notSignedInBadge")} />
+                  {c.role === "owner" && s.proxy !== "unavailable" && <AccountLogout name={a.name} />}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className={`${card} ${accounts.length > 0 ? "mt-3" : ""} p-5 text-sm`}>
+          <p className="font-medium">{accounts.length > 0 ? t("keys.addAnother") : t("keys.add")}</p>
+          {s.proxy !== "unavailable" && c.role === "owner" ? (
+            // D-369: from the web in `pnpm local`; the terminal command stays for everything else
+            <AccountLogin suggested={accounts.some((a) => a.name === t("keys.exampleName")) ? t("keys.exampleName2") : t("keys.exampleName")} />
+          ) : (
+            <>
+              <p className="mt-1 text-mute">{t("keys.addHint")}</p>
+              <pre className="mt-3 overflow-x-auto rounded-lg bg-raised px-3 py-2 font-mono text-xs">pnpm mandat login --name {t("keys.exampleName")}</pre>
+              <p className="mt-2 text-xs text-mute">{rich(t("keys.nameHint"), { a: <code className="font-mono">{t("keys.exampleName")}</code>, b: <code className="font-mono">{t("keys.exampleName2")}</code>, cmd: <code className="font-mono">pnpm mandat logout --name …</code> })}</p>
+            </>
+          )}
+        </div>
+      </section>
+      {/* D-387: an API key is the less common way; it waits folded under the subscription sign-in */}
+      <details className="mt-10">
+      <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">{t("apikeys.older")}</summary>
+      <h2 className="mt-4 mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.api")}</h2>
+      <p className="max-w-2xl text-sm text-mute">
+        {t("keys.apiHint")}
+      </p>
+      <ul className={`${card} mt-3 divide-y divide-line`}>
+        {row("Claude Code (Anthropic)", s.providers.includes("anthropic"))}
+        {row("Codex (OpenAI)", s.providers.includes("openai"))}
+      </ul>
+      {s.proxy === "unavailable" ? (
+        <p className={`${card} mt-6 p-5 text-sm`}>{rich(t("keys.onlyLocal"), { cmd: <code className="font-mono">pnpm local</code> })}</p>
+      ) : (
+        <KeysForm providers={s.providers.filter((p) => p !== "exa")} canSet={c.role === "owner"} />
+      )}
+      {/* D-440: the research search key (Exa) — sealed, only in the proxy, like the model keys */}
+      <section aria-labelledby="research-key-h" className="mt-10">
+        <h2 id="research-key-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.research")}</h2>
+        <p className="max-w-2xl text-sm text-mute">{t("keys.researchHint")}</p>
+        <ul className={`${card} mt-3 divide-y divide-line`}>{row("Exa", s.providers.includes("exa"))}</ul>
+        {s.proxy !== "unavailable" && <ResearchKeyForm isSet={s.providers.includes("exa")} canSet={c.role === "owner"} />}
+      </section>
+      {channels.length > 0 && (
+        <section aria-labelledby="ch-h" className="mt-10">
+          <h2 id="ch-h" className="mb-2 font-display text-sm font-medium tracking-wide text-mute">{t("keys.channels")}</h2>
+          <p className="max-w-2xl text-sm text-mute">
+            {t("keys.channelsHint")}
+          </p>
+          <ul className={`${card} mt-3 divide-y divide-line`}>
+            {channels.map((ch) => {
+              const known = HEALTH[ch.health];
+              const h = known ? { label: t(known.label), tone: known.tone } : { label: ch.health, tone: "gray" as const };
+              return (
+                <li key={ch.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{ch.label}{ch.enabled ? "" : t("keys.off")}</span>
+                    <span className="block text-xs text-mute">
+                      {ch.provider} · <span className="font-mono">{ch.model}</span> · {t("keys.today", { spent: t.usd(ch.spent_today_usd) })}{ch.budget_usd_day !== null ? t("keys.ofBudget", { budget: t.usd(ch.budget_usd_day) }) : ""}
+                      {ch.limit_resets_at ? t("keys.resets", { time: hhmm(ch.limit_resets_at, t.locale) }) : ch.cooldown_until ? t("keys.paused", { time: hhmm(ch.cooldown_until, t.locale) }) : ""}
+                    </span>
+                  </span>
+                  <StatusBadge tone={h.tone} label={h.label} />
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+      </details>
+    </>
+  );
+}

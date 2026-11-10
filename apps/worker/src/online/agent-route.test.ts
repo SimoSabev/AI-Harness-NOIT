@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SUBSCRIPTIONS, SubscriptionId, canSignIn } from "@mandat/contract";
 import type { Connection } from "@mandat/contract";
 import { routeOf } from "./agent-route.js";
 
@@ -39,6 +40,18 @@ describe("routeOf (D-392)", () => {
   });
 });
 
+// D-464: any subscription CLI of the registry runs as <cli>@<account> once the registry lets it sign in
+describe("routeOf for every subscription (D-464)", () => {
+  it("a subscription that can sign in → its CLI on <cli>-profile-<account>, the registry's default model", () => {
+    for (const cli of SubscriptionId.options.filter(canSignIn)) {
+      expect(routeOf(`${cli}@rabota`, null, [])).toEqual({ ok: true, run: cli, ref: { label: `${cli}-profile-rabota`, kind: "cli_profile", model: SUBSCRIPTIONS[cli].defaultModel }, account: "rabota", local: false });
+    }
+  });
+  it("one that cannot (planned, blocked) → unknown_agent; nothing runs", () => {
+    for (const cli of SubscriptionId.options.filter((c) => !canSignIn(c))) expect(routeOf(`${cli}@rabota`, null, [])).toEqual({ ok: false, reason: "unknown_agent" });
+  });
+});
+
 // D-427: Gemini CLI through a saved Google Gemini connection; `gemini` alone is the connection named "gemini"
 describe("routeOf for Gemini (D-427)", () => {
   const g: Connection = { id: "gemini", provider: "gemini", label: "Google Gemini", baseUrl: null, models: ["gemini-3.8-flash", "gemini-4-argon"], defaultModel: "gemini-3.8-flash", hasKey: true };
@@ -50,5 +63,24 @@ describe("routeOf for Gemini (D-427)", () => {
     expect(routeOf("gemini", null, [])).toEqual({ ok: false, reason: "no_connection" });
     expect(routeOf("gemini", null, [{ ...g, hasKey: false }])).toEqual({ ok: false, reason: "no_connection" });
     expect(routeOf("gemini+deepseek", null, [{ ...g, id: "deepseek", provider: "deepseek" }])).toEqual({ ok: false, reason: "no_connection" });
+  });
+});
+
+// D-470: the CLI must speak the connection's format — Codex only on an OpenAI-Responses connection, Claude Code only on an
+// Anthropic one; a provider no agent here speaks (Cerebras: Chat Completions only) never runs
+describe("routeOf: the agent follows the format (D-470)", () => {
+  const key = { hasKey: true, baseUrl: null } as const;
+  const xai: Connection = { id: "xai", provider: "xai", label: "xAI", models: ["grok-x"], defaultModel: "grok-x", ...key };
+  const an2: Connection = { id: "anthropic-2", provider: "anthropic", label: "Work", models: ["claude-sonnet-5-5"], defaultModel: "claude-sonnet-5-5", ...key };
+  const mis: Connection = { id: "cerebras", provider: "cerebras", label: "Cerebras", models: ["m"], defaultModel: "m", ...key };
+  it("codex+xai runs Codex on conn-xai; claude+anthropic-2 runs Claude Code on conn-anthropic-2", () => {
+    expect(routeOf("codex+xai", null, [xai])).toEqual({ ok: true, run: "codex", ref: { label: "conn-xai", kind: "api_key", model: "grok-x" }, account: null, local: false });
+    expect(routeOf("claude+anthropic-2", null, [an2])).toMatchObject({ ok: true, run: "claude", ref: { label: "conn-anthropic-2" } });
+  });
+  it("a mismatched CLI or a format no agent speaks → no_connection", () => {
+    expect(routeOf("claude+xai", null, [xai])).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("codex+deepseek", null, conns)).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("claude+cerebras", null, [mis])).toEqual({ ok: false, reason: "no_connection" });
+    expect(routeOf("codex+cerebras", null, [mis])).toEqual({ ok: false, reason: "no_connection" });
   });
 });

@@ -20,7 +20,7 @@ export default async function WelcomePage({ searchParams }: { searchParams: Prom
   const t = await getT();
   const sp = await searchParams;
   const [v, detect] = await Promise.all([agentsView(t.lang), detectLocal()]);
-  if (!v.local) redirect("/keys");
+  if (!v.local) redirect("/settings/api-keys");
   return (
     <Shell current="settings" waiting={c.waiting}>
       <div className="mx-auto max-w-3xl">

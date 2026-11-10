@@ -1,4 +1,5 @@
-import { CODEX_PROFILE_DIR, PROFILE_DIR, buildRunArgs, envForPhase } from "@mandat/sandbox";
+import { MandatError, SUBSCRIPTIONS, parseProfileVolume } from "@mandat/contract";
+import { buildRunArgs, envForPhase } from "@mandat/sandbox";
 import type { DockerRunResult, DockerRunner, MountSpec, RunRole, Tree } from "@mandat/sandbox";
 import { gatePaths } from "./gate.js";
 
@@ -43,11 +44,13 @@ export function runSandbox(ctx: SandboxCtx, o: SandboxRun): Promise<DockerRunRes
     mounts.push({ kind: "bind", source: p.resolv, target: "/etc/resolv.conf", readonly: true });
     mounts.push({ kind: "bind", source: p.hosts, target: "/etc/hosts", readonly: true });
   }
-  // D-392: a Codex (ChatGPT) profile volume goes to CODEX_PROFILE_DIR
-  const codexProfile = o.profile?.startsWith("mandat-profile-codex-") === true;
-  if (o.profile !== undefined) mounts.push({ kind: "volume", source: o.profile, target: codexProfile ? CODEX_PROFILE_DIR : PROFILE_DIR, readonly: false });
-  const tokenName = o.profile !== undefined && o.env.phase === "agent" ? (codexProfile ? ("profile-codex" as const) : ("profile" as const)) : o.env.tokenName;
-  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(tokenName ? { tokenName } : {}), ...(o.env.model !== undefined ? { model: o.env.model } : {}) });
+  // D-392 / D-464: a profile volume mandat-profile-<cli>-<name> goes to that CLI's registry configDir
+  const prof = o.profile !== undefined ? parseProfileVolume(o.profile) : null;
+  if (o.profile !== undefined && prof === null) throw new MandatError("E_USAGE", "not a profile volume");
+  if (o.profile !== undefined && prof !== null) mounts.push({ kind: "volume", source: o.profile, target: SUBSCRIPTIONS[prof.id].configDir, readonly: false });
+  const tokenName = prof !== null && o.env.phase === "agent" ? ("profile" as const) : o.env.tokenName;
+  const profileCli = prof !== null && o.env.phase === "agent" ? { profileCli: prof.id } : {};
+  const env = o.env.phase === "none" ? { names: [], publicValues: {} } : envForPhase(o.env.phase, { ...(o.env.testsEnv ? { testsEnv: o.env.testsEnv } : {}), ...(tokenName ? { tokenName } : {}), ...profileCli, ...(o.env.model !== undefined ? { model: o.env.model } : {}) });
   const secrets = o.env.secrets ?? {};
   const args = buildRunArgs(
     {
