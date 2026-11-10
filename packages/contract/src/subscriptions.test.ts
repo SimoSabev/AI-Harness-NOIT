@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { GateTunnelSchema } from "./gate.js";
 import { PROVIDERS } from "./connections.js";
 import {
-  LOGIN_CLIS, SUBSCRIPTIONS, SubscriptionId, SubscriptionProvider, canSignIn, isSubscriptionLoginHost, parseProfileVolume, profileVolumeName,
+  LOGIN_CLIS, RunnableAgentRef, SUBSCRIPTIONS, SubscriptionId, SubscriptionProvider, canSignIn, isSubscriptionLoginHost, parseProfileVolume, profileVolumeName,
   subscriptionOf, subscriptionStatus,
 } from "./subscriptions.js";
 
@@ -83,6 +83,10 @@ describe("subscriptions: the registry (D-460)", () => {
     });
     expect(JSON.parse(subscriptionOf("copilot").seed!.text)).toEqual({ storeTokenPlaintext: true, banner: "never" });
     expect(subscriptionOf("copilot").tunnels.map((t) => t.host)).toContain("api.githubcopilot.com");
+  });
+  it("D-465: an agent ref that can run — a subscription only where the registry lets it sign in (gemini@ and antigravity@ are refused)", () => {
+    for (const ok of ["claude", "codex@a", "copilot@a", "kimi@a", "minimax@a", "cursor@a", "gemini", "gemini+g", "fake:honest-fix"]) expect(RunnableAgentRef.safeParse(ok).success, ok).toBe(true);
+    for (const bad of ["gemini@lichno", "antigravity@a", "nope", "copilot"]) expect(RunnableAgentRef.safeParse(bad).success, bad).toBe(false);
   });
   it("planned providers carry no login commands the sandbox could run by accident", () => {
     for (const p of Object.values(SUBSCRIPTIONS).filter((x) => x.availability === "planned")) {

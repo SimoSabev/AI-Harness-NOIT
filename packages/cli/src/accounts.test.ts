@@ -64,13 +64,13 @@ describe("accounts commands with a fake docker (D-295)", () => {
     const { listAccounts } = await import("./commands/accounts.js");
     const calls: string[][] = [];
     const d = fake([
-      (a) => (a[0] === "volume" && a[1] === "ls" ? { out: "mandat-profile-codex-rabota\nmandat-profile-gemini-g\nmandat-profile-copilot-c\n" } : undefined),
+      (a) => (a[0] === "volume" && a[1] === "ls" ? { out: "mandat-profile-codex-rabota\nmandat-profile-gemini-g\nmandat-profile-antigravity-c\n" } : undefined),
       (a) => (a.includes("status") ? { out: "Logged in using ChatGPT\n" } : undefined),
     ], calls);
     expect(await listAccounts(d as never)).toEqual([
       { name: "rabota", agent: "codex@rabota", cli: "codex", loggedIn: true, email: null, plan: "ChatGPT" },
       { name: "g", agent: "gemini@g", cli: "gemini", loggedIn: false, email: null, plan: null },
-      { name: "c", agent: "copilot@c", cli: "copilot", loggedIn: false, email: null, plan: null },
+      { name: "c", agent: "antigravity@c", cli: "antigravity", loggedIn: false, email: null, plan: null },
     ]);
     expect(calls.filter((c) => c[0] === "run")).toHaveLength(1);
   });
@@ -117,12 +117,13 @@ describe("login/logout --agent codex (D-426)", () => {
     expect(await loginCommand(c.io, fake([(x) => (x[0] === "image" ? { exit: 1 } : undefined)]) as never, { name: "rabota", cli: "codex" })).toBe(3);
     expect(c.o.err).toContain("E_IMAGES_MISSING");
   });
-  it("the CLI accepts --agent claude|codex only", async () => {
+  it("the CLI accepts --agent for the subscriptions that can sign in (D-465), never Gemini's or Antigravity's login", async () => {
     const { loginCliOf } = await import("./commands/accounts.js");
     expect(loginCliOf("codex")).toBe("codex");
     expect(loginCliOf(undefined)).toBe("claude");
     expect(() => loginCliOf("gemini")).toThrow(); // Q-073
-    expect(() => loginCliOf("copilot")).toThrow(); // D-460: planned, no CLI in the sandbox yet
+    for (const c of ["copilot", "kimi", "minimax", "cursor"]) expect(loginCliOf(c)).toBe(c); // D-465
+    expect(() => loginCliOf("antigravity")).toThrow(); // D-465: its terms forbid it
     expect(() => loginCliOf("nope")).toThrow();
   });
 });
