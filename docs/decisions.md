@@ -3714,6 +3714,8 @@ Windows хост даваше `C:\fx\…`. Пазачът срещу излиз�
 `pnpm` с `shell` на Windows (D-454) и подават репортера на node като `file://` URL (node не приема `C:\…` за модул).
 (4) demo-replay: git в теста е с `GIT_CONFIG_NOSYSTEM=1` като всички други тестове; Git for Windows има
 `core.autocrlf=true` в системния си gitconfig и `git apply` пишеше CRLF.
+(5) `scripts/check-licenses.mjs` пуска `pnpm licenses list` с `shell` на Windows (там е `pnpm.cmd`, D-454); аргументите са
+фиксирани низове, затова предупреждението DEP0190 на node тук не е риск.
 Защо: това са грешки в тестовете или в кода, не разлика в поведението; на Linux нищо не се променя. Статус: решено от кодера.
 
 ## D-511 Права 0600/0700 на Windows: ACL на профила вместо POSIX режим (10.11.2026)
