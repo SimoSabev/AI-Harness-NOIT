@@ -49,7 +49,7 @@ describe("the KEK in the OS keychain (AC-12.9, D-374)", () => {
     if (r.source !== "keychain") return;
     expect(r.kek.length).toBe(32);
     const file = path.join(home, KEYCHAIN_KEK_FILE);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600); // no POSIX modes on Windows: the profile ACL guards the file (D-454, D-511)
     expect(readFileSync(file).includes(r.kek)).toBe(false);
     expect(readFileSync(file, "utf8")).not.toContain(r.kek.toString("base64"));
     expect(existsSync(path.join(home, "kek"))).toBe(false);
@@ -135,7 +135,7 @@ describe("the KEK in the OS keychain (AC-12.9, D-374)", () => {
     if (a.source !== "keychain" || b.source !== "keychain") throw new Error("expected keychain");
     expect(b.kek.equals(a.kek)).toBe(true);
     expect(kc.calls.enc).toBe(1);
-    expect(statSync(path.join(home, KEYCHAIN_KEK_FILE)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(path.join(home, KEYCHAIN_KEK_FILE)).mode & 0o777).toBe(0o600); // no POSIX modes on Windows: the profile ACL guards the file (D-454, D-511)
   });
 
   it("harnessEnv: the keychain KEK wins over an inherited MANDAT_KEK; without one the inherited value stays; API keys never pass", () => {
