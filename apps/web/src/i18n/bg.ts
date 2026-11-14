@@ -1033,6 +1033,7 @@ export const bg: Record<Key, string> = {
   "why.sensitive.hooks": "Променя git куки",
   "why.sensitive.migrations": "Променя миграции на базата",
   "ws.applied": "Добавена автоматично в main: {range}",
+  "ws.self": "Мандат сам пусна нов опит: предишният чакаше нещо, което минава от само себе си, или падна с поправима причина.",
   "ws.model": "Модел",
   "keys.login.privacyChatgpt": "Влизаш на страницата на OpenAI. Codex пази входа си на този компютър; приложението нито го вижда, нито го пази.",
   "conn.useModel": "Ползвай {model}",

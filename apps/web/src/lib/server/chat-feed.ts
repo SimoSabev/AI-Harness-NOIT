@@ -21,7 +21,7 @@ export async function taskFeed(db: Db, uid: string, org: string, id: string, aft
       [org, id],
     )).rows[0];
     const steers = (await sql.query<SteerLine>(`select text, ${TS("created_at")} as at from public.task_activities where task_id = $1 and kind in ('steer', 'review') order by id limit 200`, [id])).rows;
-    const notes = (await sql.query<TaskFeed["notes"][number]>("select kind, text from public.task_activities where task_id = $1 and kind in ('needs_you', 'auto_applied', 'applied') order by id limit 20", [id])).rows;
+    const notes = (await sql.query<TaskFeed["notes"][number]>("select kind, text from public.task_activities where task_id = $1 and kind in ('needs_you', 'auto_applied', 'applied', 'self') order by id limit 20", [id])).rows;
     if (!lead) return { task, session: null, lines: [], touching: [], context_pct: null, steers, notes };
     const lines = (await sql.query<StreamLine>(
       `select seq, kind, text, ${TS("at")} as at from public.session_lines where session_id = $1 and seq > $2 order by seq limit ${MAX_LINES}`,

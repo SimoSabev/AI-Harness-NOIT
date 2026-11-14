@@ -150,6 +150,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
   const notes = feed?.notes ?? [];
   const ask = [...notes].reverse().find((n) => n.kind === "needs_you");
   const appliedNote = [...notes].reverse().find((n) => n.kind === "auto_applied" || n.kind === "applied");
+  const selfNote = [...notes].reverse().find((n) => n.kind === "self");
   const waitingYou = s.key === "review" || s.key === "unknown";
   const failed = view.evidence.filter((e) => e.status === "fail" || e.status === "unknown");
   const cause = causeLine(task.wait_reason, task.agent, t.lang);
@@ -182,6 +183,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
               <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
               {s.key === "checking" ? t("ws.checking") : s.key === "running" ? (live.phase ? phaseLine(live.phase, t.lang) : t("ws.typing")) : t("ws.waiting")}
             </p>
+            {selfNote && <p role="status" className="text-sm text-mute">{t("ws.self")}</p>}
             {s.key === "running" && live.notice && <p role="status" className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{noticeLine(live.notice, task.agent, t.lang)}</p>}
             <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} />
           </>

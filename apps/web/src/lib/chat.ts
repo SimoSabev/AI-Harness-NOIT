@@ -21,8 +21,8 @@ export interface Feed {
   touching: string[];
   context_pct: number | null;
   steers: SteerLine[];
-  /** D-367: why a person is asked ("needs_you") or that it went in by itself ("auto_applied", "applied") */
-  notes: { kind: "needs_you" | "auto_applied" | "applied"; text: string }[];
+  /** D-367: why a person is asked ("needs_you") or that it went in by itself ("auto_applied", "applied"); D-521: an attempt Mandat started alone ("self") */
+  notes: { kind: "needs_you" | "auto_applied" | "applied" | "self"; text: string }[];
 }
 export interface FeedCheck { detector: string; status: string; summary: string; signature: string | null }
 
