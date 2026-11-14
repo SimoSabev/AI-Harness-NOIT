@@ -3807,3 +3807,19 @@ Windows задава autocrlf=true в системния си config, който
 180 с другаде; прогоните не намаляват. На Windows стартът на процес е бавен и под пълния `pnpm check` тестът минаваше
 180 с, а сам минава.
 Защо: `pnpm check` на Windows, 14.11.2026. Статус: решено от кодера.
+
+## D-521 „Сам довършва“: Мандат сам довършва чакания, които са таймер или повторен опит (14.11.2026)
+Решение: чистата `nextMove` (packages/core/src/next-move.ts) казва за HELD/BLOCKED задача: wait до час, retry или ask.
+Сам: channel_limit (до resets_at, без него — backoff), no_channel и agent_failed:rate_limited/overloaded/timed_out (backoff
+10 мин · 2^n от влизането в HELD), base_moved (нов опит върху новия main), ci_failed („Поправи CI“ до ci_rounds от слой G),
+FAILED без нерешим клас (POLICY/INFRA/HELD/E_*) — нов опит с бележка от Мандат (whatStopped + proposalFor, както нощем).
+Таван: 2 опита сам на задача (по всички причини) и attempts_max. Никога сам: одобрения, ключове, tool_approval, UNKNOWN,
+empty_change, head_moved, ревю коментари, спряна от човек (stopped), задачи от нощната смяна (те са на нощния тик).
+`selfFinishTick` (apps/worker/src/online/self-finish.ts) върви до нощния тик на всеки 30 с (`MANDAT_SELF_FINISH=0` го
+спира): нов опит = CREATED, retry_reason auto/ci, бележка task_activities kind 'self' (daemon-ът я слага в договора като
+„Note from Mandat“), ledger task_retry {by: "mandat", why}. Ъпдейтът е пазен със state и attempt — човек, който е действал
+междувременно, печели. Без нова схема и без миграция (retry_reason 'auto' и task_retry вече съществуват).
+Защо: кръг 1, функция 1 (plan-round-1.md); одитът намери ~10 такива чакания от 28. Тест: next-move.test.ts,
+self-finish.test.ts, self-ticker.test.ts. Отворено: бележката 'self' още не се показва на картата в уеба; head_moved и
+apply_failed (approval) остават за човека, докато няма повторна проверка без агент.
+Статус: решено от кодера.
