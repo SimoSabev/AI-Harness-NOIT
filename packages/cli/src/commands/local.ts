@@ -149,11 +149,18 @@ export function retryWithoutApt(env: Record<string, string | undefined>): boolea
   return env.MANDAT_SANDBOX_APT !== "0";
 }
 
-function portFree(port: number): Promise<boolean> {
+/** D-516: free on every host form; Windows lets 127.0.0.1:p bind while another app holds 0.0.0.0:p or [::]:p. A host
+ * this machine does not have (no IPv6) does not count as taken. */
+export async function portFree(port: number): Promise<boolean> {
+  for (const host of ["127.0.0.1", "0.0.0.0", "::"]) if (!(await hostPortFree(port, host))) return false;
+  return true;
+}
+
+function hostPortFree(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const s = createServer();
-    s.once("error", () => resolve(false));
-    s.listen(port, "127.0.0.1", () => s.close(() => resolve(true)));
+    s.once("error", (e: NodeJS.ErrnoException) => resolve(e.code === "EADDRNOTAVAIL" || e.code === "EAFNOSUPPORT"));
+    s.listen({ port, host, ipv6Only: host === "::" }, () => s.close(() => resolve(true)));
   });
 }
 

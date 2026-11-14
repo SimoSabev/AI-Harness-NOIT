@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEMO_OWNER_ID } from "@mandat/worker";
-import { LOCAL_DB, dbRunArgs, imageEvent, imagesStep, localBanner, waitForDocker, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, retryWithoutApt, webPort } from "./commands/local.js";
+import { LOCAL_DB, dbRunArgs, imageEvent, imagesStep, localBanner, waitForDocker, localDbUrl, localPreflight, localJobEnv, localWebArgs, localWebBin, localWebEnv, pendingMigrations, portFree, retryWithoutApt, webPort } from "./commands/local.js";
 
 describe("the web port (D-393)", () => {
   it("3000 by default; MANDAT_WEB_PORT moves it when 3000 is taken by another project", () => {
@@ -126,6 +127,20 @@ describe("image build progress (D-387)", () => {
   it("one [3/4] line: image k of n, the step, the minutes and the usual time", () => {
     expect(imagesStep({ done: 0, total: 3, step: null, secs: 5 }, "bg")).toBe("[3/4] Образи на пясъчника: 1 от 3 · 0 мин (обикновено 5–15 мин)");
     expect(imagesStep({ done: 1, total: 3, step: { n: 4, of: 9 }, secs: 190 }, "en")).toBe("[3/4] Sandbox images: 2 of 3 · step 4/9 · 3 min (usually 5–15 min)");
+  });
+});
+
+// D-516: on Windows binding 127.0.0.1:p succeeds while another app holds 0.0.0.0:p, so the check said "port 3000 is free"
+// and http://localhost:3000 opened the other app. A port is free only when no host form of it is taken.
+describe("portFree sees a port taken on all interfaces (D-516)", () => {
+  it("another server on 0.0.0.0 makes the port busy; a closed one frees it", async () => {
+    const s = createServer();
+    await new Promise<void>((r) => s.listen(0, "0.0.0.0", () => r()));
+    const addr = s.address();
+    const port = typeof addr === "object" && addr ? addr.port : 0;
+    expect(await portFree(port)).toBe(false);
+    await new Promise<void>((r) => s.close(() => r()));
+    expect(await portFree(port)).toBe(true);
   });
 });
 

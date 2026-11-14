@@ -3770,3 +3770,10 @@ instead of hanging“). Статус: решено от кодера.
 Решение: `toolInvocation(cmd, platform)` в packages/cli/src/deps.ts; на win32 pnpm се пуска през shell (там е `pnpm.cmd`),
 git — винаги без shell; аргументите са фиксирани, не идват от вход. Преди `mandat doctor` пишеше „pnpm missing“ на Windows.
 Защо: намерено при живия тест на 14.11.2026. Тест: deps.test.ts. Статус: решено от кодера.
+
+## D-516 `pnpm local` вижда порт, зает на всички интерфейси (14.11.2026)
+Решение: `portFree` в packages/cli/src/commands/local.ts пробва 127.0.0.1, 0.0.0.0 и :: (IPv6 само); хост, който машината
+няма (EADDRNOTAVAIL/EAFNOSUPPORT), не се брои за зает. Преди на Windows проверката казваше „port 3000 is free“, докато друг
+проект държеше 0.0.0.0:3000, и http://localhost:3000 отваряше другия проект (Мандат слушаше само на 127.0.0.1).
+Защо: намерено при живия тест на 14.11.2026. Тест: local.test.ts („portFree sees a port taken on all interfaces“).
+Статус: решено от кодера.
