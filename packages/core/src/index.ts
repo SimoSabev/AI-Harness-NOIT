@@ -35,3 +35,5 @@ export type { MutantRun, MutationSite, SpecialCase, TestEnvCheck } from "./d11.j
 export { citationInSource, goldenHit, normalizeForCitation, substringShare } from "./citations.js";
 export { AUTO_APPLY_LIMITS, autoApply, diffStat } from "./auto-apply.js";
 export type { AutoApplyInput, AutoApplyWhy } from "./auto-apply.js";
+export { SELF_FINISH, nextMove } from "./next-move.js";
+export type { SelfFinishInput, SelfMove } from "./next-move.js";
