@@ -13,19 +13,36 @@ import { r20 } from "./r20.js";
 export type { RedteamCtx, SubResult };
 export const ATTACKS = { R5: r5, R6: r6, R8: r8, R14: r14, R15: r15, R16: r16, R17: r17, R18: r18, R19: r19, R20: r20 } as const;
 
+type Attack = (ctx: RedteamCtx) => Promise<SubResult[]>;
+
+/** D-517: a scenario that throws is one failed row, not the end of the run (the report must still print). */
+async function attempt(id: string, fn: Attack, ctx: RedteamCtx): Promise<SubResult[]> {
+  try {
+    return await fn(ctx);
+  } catch (e) {
+    return [{ id, sub: "run", ok: false, detail: `crashed: ${e instanceof Error ? e.message : String(e)}` }];
+  }
+}
+
 /** D-090: pass/total count ATTACKS; rows are per sub-test. */
-export async function runRedteam(ctx: RedteamCtx, only?: string[], onRow?: (r: SubResult) => void): Promise<{ rows: SubResult[]; pass: number; total: number; infraError: string | null }> {
+export async function runRedteam(
+  ctx: RedteamCtx,
+  only?: string[],
+  onRow?: (r: SubResult) => void,
+  attacks: Readonly<Record<string, Attack>> = ATTACKS,
+): Promise<{ rows: SubResult[]; pass: number; total: number; infraError: string | null }> {
   const rows: SubResult[] = [];
   let pass = 0;
   let total = 0;
-  for (const [id, fn] of Object.entries(ATTACKS)) {
+  for (const [id, fn] of Object.entries(attacks)) {
     if (only && !only.includes(id)) continue;
     total++;
-    const sub = await fn(ctx);
+    const sub = await attempt(id, fn, ctx);
     for (const s of sub) onRow?.(s);
     rows.push(...sub);
     if (sub.every((s) => s.ok)) pass++;
   }
-  const infraError = rows.find((r) => /verdict E_[A-Z_]+/.test(r.detail))?.detail ?? null;
+  const infra = rows.find((r) => /verdict E_[A-Z_]+/.test(r.detail) || r.detail.startsWith("crashed: "));
+  const infraError = infra ? `${infra.id}: ${infra.detail}` : null;
   return { rows, pass, total, infraError };
 }

@@ -9,7 +9,7 @@ import type { RedteamCtx, SubResult } from "./common.js";
 
 const pack = (dir: string): Buffer => {
   const out = mkdtempSync(path.join(os.tmpdir(), "mandat-r16-"));
-  execFileSync("npm", ["pack", "--silent", "--pack-destination", out, dir], { encoding: "utf8" });
+  execFileSync("npm", ["pack", "--silent", "--pack-destination", out, dir], { encoding: "utf8", shell: process.platform === "win32" }); // npm is npm.cmd on Windows (D-517)
   return readFileSync(path.join(out, readdirSync(out).find((f) => f.endsWith(".tgz")) ?? ""));
 };
 const row = (name: string, pkg: string) => ({ id: "x", org_id: "x", name, transport: "stdio" as const, package: pkg, url: null, version: "1.0.0", secrets: [], egress_hosts: [], enabled_tools: null, repo_ids: null, approved_by: null, tools_hash: null });

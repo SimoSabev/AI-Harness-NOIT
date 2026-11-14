@@ -18,7 +18,7 @@ beforeAll(async () => {
   await dockerEnv();
   buildShopFixture({ repoRoot, mandatHome: home, force: false });
   const out = mkdtempSync(path.join(os.tmpdir(), "mandat-mcp-pkg-"));
-  execFileSync("npm", ["pack", "--silent", "--pack-destination", out, path.join(repoRoot, "fixtures/mcp-fake-pkg")], { encoding: "utf8" });
+  execFileSync("npm", ["pack", "--silent", "--pack-destination", out, path.join(repoRoot, "fixtures/mcp-fake-pkg")], { encoding: "utf8", shell: process.platform === "win32" }); // npm is npm.cmd on Windows (D-517)
   tarball = readFileSync(path.join(out, readdirSync(out).find((f) => f.endsWith(".tgz")) ?? ""));
 });
 
