@@ -146,6 +146,10 @@ A small shop: cart, discounts, checkout.
 - lint: \`npx eslint {files}\`
 - typecheck: \`npx tsc --noEmit\`
 
+## Running the checks
+- Run \`npx vitest run\` before you finish and make it pass.
+- Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
+
 ## Boundaries
 - Do not change tests for a bugfix.
 - Prices are integer cents.
@@ -275,6 +279,10 @@ A small shop: cart, discounts, checkout.
 - lint: \`npx eslint {files}\`
 - typecheck: \`npx tsc --noEmit\`
 
+## Running the checks
+- Run \`npx vitest run\` before you finish and make it pass.
+- Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
+
 ## Boundaries
 - Do not change tests for a bugfix.
 - Prices are integer cents.
@@ -362,6 +370,10 @@ A small shop: cart, discounts, checkout.
 - test_one: \`npx vitest run {file}\`
 - lint: \`npx eslint {files}\`
 - typecheck: \`npx tsc --noEmit\`
+
+## Running the checks
+- Run \`npx vitest run\` before you finish and make it pass.
+- Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
 
 ## Boundaries
 - Do not change tests for a bugfix.

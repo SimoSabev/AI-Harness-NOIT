@@ -3823,3 +3823,10 @@ empty_change, head_moved, ревю коментари, спряна от чов�
 self-finish.test.ts, self-ticker.test.ts. Отворено: бележката 'self' още не се показва на картата в уеба; head_moved и
 apply_failed (approval) остават за човека, докато няма повторна проверка без агент.
 Статус: решено от кодера.
+
+## D-522 инструкциите казват как се пускат проверките (14.11.2026)
+Решение: instructions.md от профила (всички агенти) има раздел „Running the checks“: „Run `<test>` before you finish and
+make it pass“ и „Run each check on its own, not chained with `&&`, `;` or `|`“. Headless Claude има право само на
+командите от слой B точно както са записани; при живия тест на 14.11.2026 агентът пусна `sed … && npx vitest run`, беше
+отказан и не пусна тестовете изобщо.
+Защо: живият тест. Тест: compile.test.ts (D-522) и обновените снимки. Статус: решено от кодера.

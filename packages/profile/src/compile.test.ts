@@ -64,6 +64,12 @@ describe("compile for Claude Code (E8а)", () => {
     expect(file(m, "instructions.md")?.bytes).toContain("Prices are integer cents.");
     for (const f of m.files) expect(f.mode).toBe("0444");
   });
+  it("D-522: the instructions say how to run the checks: each command alone, the test command before finishing", () => {
+    const md = file(m, "instructions.md")?.bytes ?? "";
+    expect(md).toContain("## Running the checks");
+    expect(md).toContain("Run `npx vitest run` before you finish");
+    expect(md).toContain("on its own, not chained with `&&`, `;` or `|`");
+  });
   it("argv and env: settings + strict MCP; subagent limits from layer G", () => {
     expect(m.argv).toEqual(["--settings", "/m/in/harness/claude/settings.json", "--mcp-config", "/m/in/harness/claude/mcp.json", "--strict-mcp-config"]);
     expect(m.env).toEqual({ CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2", CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "1", CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: "3" });

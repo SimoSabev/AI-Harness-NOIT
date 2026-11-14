@@ -29,6 +29,13 @@ export function instructions(p: HarnessProfile): string {
   if (b.summary) out.push(b.summary, "");
   const cmds = Object.entries(b.commands);
   if (cmds.length) out.push("## Commands", ...cmds.map(([k, v]) => `- ${k}: \`${v}\``), "");
+  // D-522: headless, only these commands are allowed as written; in the live test a chained one was refused and the
+  // agent never ran the tests
+  const test = b.commands.test && !b.commands.test.includes("{") ? b.commands.test : null;
+  if (cmds.length) {
+    out.push("## Running the checks", ...(test ? [`- Run \`${test}\` before you finish and make it pass.`] : []));
+    out.push("- Run each check on its own, not chained with `&&`, `;` or `|`: the sandbox allows these commands only as written.", "");
+  }
   for (const [title, xs] of [["Boundaries", b.boundaries], ["Style", b.style], ["Conventions", b.conventions]] as const) if (xs.length) out.push(`## ${title}`, ...xs.map((x) => `- ${x}`), "");
   const dod = Object.entries(p.layers.g.definition_of_done);
   if (dod.length) out.push("## Definition of done", ...dod.flatMap(([t, xs]) => (xs ?? []).map((x) => `- ${t}: ${x}`)), "");
