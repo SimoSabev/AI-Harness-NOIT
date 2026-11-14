@@ -21,6 +21,11 @@ export interface CliDeps {
   tsaFetcher?: Fetcher;
 }
 
+/** D-515: pnpm is pnpm.cmd on Windows and execFile finds it only through the shell; the arguments are fixed, never input. */
+export function toolInvocation(cmd: "git" | "pnpm", platform: NodeJS.Platform): { file: string; args: string[]; shell: boolean } {
+  return { file: cmd, args: cmd === "git" ? ["--version"] : ["-v"], shell: cmd === "pnpm" && platform === "win32" };
+}
+
 export function realDeps(): CliDeps {
   return {
     docker: realDockerRunner(),
@@ -48,8 +53,9 @@ export function realDeps(): CliDeps {
       }
     },
     toolVersion(cmd) {
+      const t = toolInvocation(cmd, process.platform);
       return new Promise((resolve) => {
-        execFile(cmd, cmd === "git" ? ["--version"] : ["-v"], { timeout: 10_000 }, (err, stdout) => {
+        execFile(t.file, t.args, { timeout: 10_000, shell: t.shell }, (err, stdout) => {
           if (err) return resolve(null);
           const m = /(\d+\.\d+\.\d+)/.exec(stdout);
           resolve(m ? (m[1] ?? null) : null);

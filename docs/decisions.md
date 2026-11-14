@@ -3765,3 +3765,8 @@ fast-check свиваше примера дълго и тестът изтича
 Защо: така тестът „ExportRejection формат…“ изтичаше на Windows (symlink в фалшивия контейнер даваше EPERM). Истински
 Docker, който умре по време на износа, би довел до същото. Тест: run.test.ts („export: a failing docker run ends the run
 instead of hanging“). Статус: решено от кодера.
+
+## D-515 doctor намира pnpm на Windows (14.11.2026)
+Решение: `toolInvocation(cmd, platform)` в packages/cli/src/deps.ts; на win32 pnpm се пуска през shell (там е `pnpm.cmd`),
+git — винаги без shell; аргументите са фиксирани, не идват от вход. Преди `mandat doctor` пишеше „pnpm missing“ на Windows.
+Защо: намерено при живия тест на 14.11.2026. Тест: deps.test.ts. Статус: решено от кодера.
