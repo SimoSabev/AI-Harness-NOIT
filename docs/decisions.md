@@ -3820,8 +3820,10 @@ empty_change, head_moved, ревю коментари, спряна от чов�
 „Note from Mandat“), ledger task_retry {by: "mandat", why}. Ъпдейтът е пазен със state и attempt — човек, който е действал
 междувременно, печели. Без нова схема и без миграция (retry_reason 'auto' и task_retry вече съществуват).
 Защо: кръг 1, функция 1 (plan-round-1.md); одитът намери ~10 такива чакания от 28. Тест: next-move.test.ts,
-self-finish.test.ts, self-ticker.test.ts. Отворено: бележката 'self' още не се показва на картата в уеба; head_moved и
-apply_failed (approval) остават за човека, докато няма повторна проверка без агент.
+self-finish.test.ts, self-ticker.test.ts, chat-feed.test.ts. Картата казва „Мандат сам пусна нов опит“ докато върви и „Мандат вече
+пусна сам N опит(а)“ накрая. Жив тест 15.11.2026 (pnpm local, fake:delete-test, bugfix): опит 1 FAILED → опит 2 и 3 от
+Мандат с бележка в договора → спря на тавана. Отворено: head_moved и apply_failed (approval) остават за човека, докато
+няма повторна проверка без агент.
 Статус: решено от кодера.
 
 ## D-522 инструкциите казват как се пускат проверките (14.11.2026)
