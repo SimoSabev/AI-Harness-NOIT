@@ -43,7 +43,12 @@ const walk = (dir, depth) => {
       continue;
     }
     if (st.isSymbolicLink()) continue;
-    if (st.isDirectory()) walk(p, depth + 1);
+    // D-519: the agent CLIs' own packages under /opt are image code, not a place a key can reach (one Kimi bundle
+    // carries an sk-…-looking string in an editor grammar); the project's node_modules is skipped the same way.
+    if (st.isDirectory()) {
+      if (n === "node_modules" && dir.startsWith("/opt/")) continue;
+      walk(p, depth + 1);
+    }
     else if (st.isFile() && st.size <= 1024 * 1024) {
       try {
         check(readFileSync(p, "utf8"), p);
