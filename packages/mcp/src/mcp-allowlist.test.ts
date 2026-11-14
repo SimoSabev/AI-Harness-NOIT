@@ -4,6 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseMcpArgs, resolveRepo, secretsInEnv } from "./args.js";
 
+// Windows: a symlink needs admin or Developer Mode; a directory junction does not, and lstat/realpath treat it as a link (D-512)
+const win = process.platform === "win32";
+const winEtc = path.join(process.env.SystemRoot ?? "C:/Windows", "System32", "drivers", "etc");
 const tmp = () => mkdtempSync(path.join(os.tmpdir(), "mandat-allow-"));
 
 describe("mcp-allowlist (D-214, F16)", () => {
@@ -11,7 +14,7 @@ describe("mcp-allowlist (D-214, F16)", () => {
     const t = tmp();
     mkdirSync(path.join(t, "shop/sub"), { recursive: true });
     mkdirSync(path.join(t, "other"));
-    symlinkSync("/etc", path.join(t, "shop/etc-link"));
+    symlinkSync(win ? winEtc : "/etc", path.join(t, "shop/etc-link"), win ? "junction" : undefined);
     const p = parseMcpArgs(["--allow", path.join(t, "shop"), "--remote", "file:///r.git"], {});
     if (!p.ok) throw new Error(p.error);
     const al = p.args.allowed;

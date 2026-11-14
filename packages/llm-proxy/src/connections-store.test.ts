@@ -21,7 +21,7 @@ describe("ConnectionStore (D-392)", () => {
     const file = readFileSync(path.join(h, "connections.json"), "utf8");
     expect(file).not.toContain(KEY);
     expect(readFileSync(path.join(h, "keys.sealed.json"), "utf8")).not.toContain(KEY);
-    expect(statSync(path.join(h, "connections.json")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(path.join(h, "connections.json")).mode & 0o777).toBe(0o600); // no POSIX modes on Windows: the profile ACL guards the file (D-454, D-511)
     expect(s.key("deepseek")).toBe(KEY);
     expect(new ConnectionStore(h).list()).toEqual([{ ...ds, hasKey: true, keyHint: KEY.slice(-4) }]); // metadata without the KEK (the worker)
     expect(() => new ConnectionStore(h).key("deepseek")).toThrow();

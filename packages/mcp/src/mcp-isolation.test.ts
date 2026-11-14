@@ -15,10 +15,13 @@ describe("mcp-isolation", () => {
     const home = mkdtempSync(path.join(os.tmpdir(), "mandat-iso-"));
     chmodSync(home, 0o700);
     const runner = new JobRunner({ home, sameUid: false, spawnVerify: () => Promise.resolve({ code: 0, stdout: "", stderr: "" }) });
-    expect(statSync(path.join(home, "jobs")).mode & 0o777).toBe(0o700);
+    // no POSIX modes on Windows: the profile ACL guards MANDAT_HOME (D-511) and verifyd is a named pipe, not a file (D-512)
+    const posix = process.platform !== "win32";
+    if (posix) expect(statSync(path.join(home, "jobs")).mode & 0o777).toBe(0o700);
     const sock = path.join(home, "s.sock");
     const srv = await startVerifyd({ socket: sock, runner, allowed: [] });
-    expect(statSync(sock).mode & 0o777).toBe(0o660);
+    if (posix) expect(statSync(sock).mode & 0o777).toBe(0o660);
+    expect(srv.listening).toBe(true);
     await new Promise<void>((r) => srv.close(() => r()));
     expect(existsSync(path.join(home, "jobs"))).toBe(true);
   });

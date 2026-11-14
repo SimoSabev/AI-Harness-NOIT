@@ -206,7 +206,10 @@ describe("exportChangeset", () => {
   });
 
   it("property: същият tree_sha навсякъде", async () => {
-    const name = fc.stringMatching(/^[a-z0-9 ._-]{1,8}$|^[а-я]{1,6}$/).filter((n) => !/^\.+$/.test(n) && n.trim() === n && n !== ".git" && !n.startsWith(".git"));
+    // D-513: Windows drops a trailing dot or space from a file name and reserves con/nul/aux/prn/com1…/lpt1…, so such a
+    // name cannot exist there; Linux and macOS keep the whole domain
+    const winBad = (n: string) => process.platform === "win32" && (/[. ]$/.test(n) || /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/.test(n));
+    const name = fc.stringMatching(/^[a-z0-9 ._-]{1,8}$|^[а-я]{1,6}$/).filter((n) => !/^\.+$/.test(n) && n.trim() === n && n !== ".git" && !n.startsWith(".git") && !winBad(n));
     const content = fc.oneof(fc.string({ maxLength: 2048 }), fc.uint8Array({ maxLength: 1000 }).map((a) => Buffer.from([0, ...a])));
     const tree = fc.dictionary(name, content, { minKeys: 1, maxKeys: 8 });
     await fc.assert(

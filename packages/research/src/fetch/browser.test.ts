@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it } from "vitest";
 import { buildRenderArgs } from "@mandat/sandbox";
@@ -55,7 +56,7 @@ describe("the browser tier (D-405)", () => {
     const a = buildRenderArgs({ image: "mandat-sandbox-ui:pw1", script: RENDER_SCRIPT, runId: "q_abc", fixtures: "/srv/fx" });
     expect(a.slice(a.indexOf("--network"), a.indexOf("--network") + 2)).toEqual(["--network", "none"]);
     expect(a).not.toContain("mandat-upstream");
-    expect(a).toEqual(expect.arrayContaining(["--cap-drop=ALL", "--read-only", "/srv/fx:/opt/mandat/ui/fixtures:ro", "MANDAT_RENDER_FIXTURES=/opt/mandat/ui/fixtures"]));
+    expect(a).toEqual(expect.arrayContaining(["--cap-drop=ALL", "--read-only", `${path.resolve("/srv/fx")}:/opt/mandat/ui/fixtures:ro`, "MANDAT_RENDER_FIXTURES=/opt/mandat/ui/fixtures"])); // on Windows the host path has a drive letter (D-510)
     expect(() => buildRenderArgs({ image: "img", script: RENDER_SCRIPT, runId: "q", fixtures: "rel/dir" })).toThrow();
     const mod = (await import(RENDER_SCRIPT)) as { fixtureFile: (dir: string, url: string) => string | null };
     expect(mod.fixtureFile("/fx", "https://app.example.org/guide/")).toBe("/fx/app.example.org/guide/index.html");

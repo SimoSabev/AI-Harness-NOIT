@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { socketBackend } from "./backend.js";
+import { ipcPath, socketBackend } from "./backend.js";
 import { JobRunner } from "./jobs.js";
 import { startVerifyd } from "./verifyd.js";
 
@@ -30,16 +30,30 @@ describe("verifyd (сокет)", () => {
     const raw = async (line: string) => {
       const net = await import("node:net");
       return new Promise<string>((res) => {
-        const c = net.createConnection(socket, () => c.write(line));
+        const c = net.createConnection(ipcPath(socket), () => c.write(line));
         let b = "";
         c.on("data", (x: Buffer) => (b += x.toString("utf8")));
         c.on("end", () => res(b.trim()));
       });
     };
     expect(JSON.parse(await raw('{"op":"set_level","level":3}\n'))).toEqual({ ok: false, error: "bad request" });
-    expect(JSON.parse(await raw(`{"op":"verify","repo":"${path.join(d, "r")}","task_type":null,"remote":"file:///evil.git"}\n`))).toEqual({ ok: false, error: "bad request" });
+    expect(JSON.parse(await raw(`${JSON.stringify({ op: "verify", repo: path.join(d, "r"), task_type: null, remote: "file:///evil.git" })}\n`))).toEqual({ ok: false, error: "bad request" });
     expect(JSON.parse(await raw("not json\n"))).toEqual({ ok: false, error: "bad json" });
     expect(await socketBackend(path.join(d, "none.sock")).status("j_01JABCDEFGHJKMNPQRSTVWXYZ0")).toEqual({ error: "verifyd not reachable" });
     expect(await socketBackend(socket).verify({ repo_path: "/etc", task_type: null })).toEqual({ ok: false, error: "repo not allowed" });
+  });
+  // D-512: Node on Windows listens only on a named pipe, never on a file path; the same path always gives the same pipe
+  it("ipcPath: the socket path on POSIX, a named pipe from it on Windows", () => {
+    expect(ipcPath("/run/mandat/verifyd.sock", "linux")).toBe("/run/mandat/verifyd.sock");
+    expect(ipcPath("/run/mandat/verifyd.sock", "darwin")).toBe("/run/mandat/verifyd.sock");
+    const w = ipcPath("C:/ProgramData/mandat/verifyd.sock", "win32");
+    expect(w).toMatch(/^\\\\\.\\pipe\\mandat-verifyd-[0-9a-f]{16}$/);
+    expect(ipcPath("C:/ProgramData/mandat/verifyd.sock", "win32")).toBe(w);
+    expect(ipcPath("C:/ProgramData/mandat/other.sock", "win32")).not.toBe(w);
+  });
+  it("listen fails → the start rejects instead of hanging", async () => {
+    // POSIX: a name longer than sun_path (108 bytes); Windows: the pipe of `socket` is already taken by srv
+    const bad = process.platform === "win32" ? socket : path.join(d, `${"x".repeat(120)}.sock`);
+    await expect(startVerifyd({ socket: bad, runner, allowed: [] })).rejects.toThrow();
   });
 });

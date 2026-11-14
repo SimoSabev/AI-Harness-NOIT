@@ -3718,3 +3718,50 @@ PyPI/OCI пакети, търсене в Smithery с ключ, Glama/PulseMCP. �
 Защо: Симо, интервю 10.11.2026: отделните задачи моделът ги може и сам; стойността е средата, персонализацията и
 гаранцията за сигурни и проверени резултати след сесиите. Замества списъка с кандидат-задачи (docs/tasks/real-tasks.md,
 махнат). Подробности: docs/prd/experience.md. Статус: решено от Симо.
+
+## D-510 Пътища на Windows: хостът има буква на устройство, пясъчникът е POSIX (10.11.2026)
+Решение: (1) `render.mjs` (`fixtureFile`) ползва `path.posix`: скриптът живее само в Linux контейнера, а `path` на
+Windows хост даваше `C:\fx\…`. Пазачът срещу излизане от папката е същият на всеки хост. (2) Репортерът за `node --test`
+пише имената на файловете с `/` на Windows, както vitest там (`C:/…/x.test.mjs`); в пясъчника не прави нищо.
+(3) Тестовете очакват пътищата на хоста през `path.resolve`/`path.join` (browser, set-core-license, scripts), пускат
+`pnpm` с `shell` на Windows (D-454) и подават репортера на node като `file://` URL (node не приема `C:\…` за модул).
+(4) demo-replay: git в теста е с `GIT_CONFIG_NOSYSTEM=1` като всички други тестове; Git for Windows има
+`core.autocrlf=true` в системния си gitconfig и `git apply` пишеше CRLF.
+(5) `scripts/check-licenses.mjs` пуска `pnpm licenses list` с `shell` на Windows (там е `pnpm.cmd`, D-454); аргументите са
+фиксирани низове, затова предупреждението DEP0190 на node тук не е риск.
+Защо: това са грешки в тестовете или в кода, не разлика в поведението; на Linux нищо не се променя. Статус: решено от кодера.
+
+## D-511 Права 0600/0700 на Windows: ACL на профила вместо POSIX режим (10.11.2026)
+Решение: проверките `mode & 0o777` (connections-store, envelope, kek-keychain, mcp-isolation) остават на Linux/macOS,
+а на Windows се пропуска само това твърдение (`if (process.platform !== "win32")`); останалото в теста върви.
+Защо: на Windows няма POSIX права (`mode` е 0o666). Проверено с `icacls` на 10.11.2026: файл в `%USERPROFILE%` наследява
+само SYSTEM, Administrators и самия потребител, а `MANDAT_HOME` по подразбиране е под профила. [НП]: ако някой сложи
+`MANDAT_HOME` извън профила (напр. `C:\mandat`), ACL наследява правата на тази папка; явна ACL (`icacls /inheritance:r`)
+не е направена — бъдеща задача. Статус: решено от кодера.
+
+## D-512 Symlink-и в тестовете на Windows: junction; verifyd на Windows е named pipe (10.11.2026)
+Решение: (1) mcp-allowlist, onboard scan и worker run правят връзката като directory junction към
+`%SystemRoot%\System32\drivers\etc` (аналогът на `/etc`). За junction не трябват админ права или Developer Mode, а
+`lstat`/`realpath`/node-tar го виждат като symlink, така че „не следва връзката“ и „export:symlink“ се проверяват реално и на
+Windows. На Linux остават `/etc` и `/etc/passwd`. (2) Node на Windows слуша само на named pipe, не на път към файл, затова
+`ipcPath(socket)` (mcp/backend.ts) дава `\.\pipe\mandat-verifyd-<16 hex от sha256 на пътя>`. На POSIX дава самия път.
+verifyd и клиентът ползват една и съща функция, а `chmod 0660` е само на POSIX. (3) Неуспешен `listen` вече отхвърля
+`startVerifyd`; преди висеше вечно (и тестовете висяха по 60 s).
+Защо: без това verifyd.test.ts и mcp-isolation.test.ts висяха на Windows. Тестове: verifyd.test.ts („ipcPath…“,
+„listen fails → the start rejects…“). [НП]: named pipe-ът е с подразбиращата се DACL на Windows (Everyone: само четене).
+verifyd като отделен потребител е Linux услуга (systemd, docs/setup/verifyd.md); на Windows MCP върви в процеса (`--same-uid`).
+Статус: решено от кодера.
+
+## D-513 Property тестът на export: имената, които Windows не може да има (10.11.2026)
+Решение: в „property: същият tree_sha навсякъде“ генераторът на имена изключва на Windows имената с точка или интервал
+накрая и запазените имена (con, prn, aux, nul, com1…, lpt1…). На Linux/macOS домейнът е същият като преди.
+Защо: истинската причина не беше бавен git, а името `_.`. Windows маха крайната точка и `git add` казва „unable to stat“.
+fast-check свиваше примера дълго и тестът изтичаше. Сам тестът минава за ~40 s от своите 180 s. [НП]: агент, чието дърво
+има такова име, ще получи грешка в износа на Windows хост; това не е проверено отделно. Статус: решено от кодера.
+
+## D-514 Износът не виси, ако контейнерът за износ падне (10.11.2026)
+Решение: в `run.ts` грешка от `runSandbox` на ролята `export` унищожава tar потока (`stream.destroy(e)`), така че
+`exportChangeset` спира, а грешката стига до чакащите. Преди потокът оставаше отворен и `mandat run` висеше вечно.
+Защо: така тестът „ExportRejection формат…“ изтичаше на Windows (symlink в фалшивия контейнер даваше EPERM). Истински
+Docker, който умре по време на износа, би довел до същото. Тест: run.test.ts („export: a failing docker run ends the run
+instead of hanging“). Статус: решено от кодера.

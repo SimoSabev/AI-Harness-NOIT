@@ -34,7 +34,7 @@ describe("key envelope (E7в, D-313)", () => {
     const k1 = loadKek({ env: {}, mandatHome: home });
     const k2 = loadKek({ env: {}, mandatHome: home });
     expect(k1.equals(k2)).toBe(true);
-    expect(statSync(path.join(home, "kek")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(path.join(home, "kek")).mode & 0o777).toBe(0o600); // no POSIX modes on Windows: the profile ACL guards the file (D-454, D-511)
   });
   it("file store: keys survive a new store object (a restart); the file holds no key text; 0600", () => {
     const home = mkdtempSync(path.join(tmpdir(), "ks-"));
@@ -45,7 +45,7 @@ describe("key envelope (E7в, D-313)", () => {
     expect(again.providers()).toEqual(["anthropic"]);
     const file = path.join(home, "keys.sealed.json");
     expect(readFileSync(file, "utf8")).not.toContain(KEY);
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(file).mode & 0o777).toBe(0o600); // no POSIX modes on Windows: the profile ACL guards the file (D-454, D-511)
     again.delete("anthropic");
     expect(new FileKeyStore(home, kek).get("anthropic")).toBeNull();
   });

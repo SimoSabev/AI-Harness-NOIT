@@ -91,7 +91,7 @@ export function workspacePackages() {
 }
 
 function pnpmList(cwd, prod) {
-  return JSON.parse(execFileSync("pnpm", ["licenses", "list", "--json", ...(prod ? ["--prod"] : ["--recursive"])], { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }));
+  return JSON.parse(execFileSync("pnpm", ["licenses", "list", "--json", ...(prod ? ["--prod"] : ["--recursive"])], { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, shell: process.platform === "win32" }));
 }
 
 export function collect() {
@@ -125,5 +125,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
 
 /** @param {boolean} prod */
 export function pnpmLicenses(prod) {
-  return JSON.parse(execFileSync("pnpm", ["licenses", "list", "--json", "--recursive", ...(prod ? ["--prod"] : [])], { cwd: repo, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }));
+  return JSON.parse(execFileSync("pnpm", ["licenses", "list", "--json", "--recursive", ...(prod ? ["--prod"] : [])], { cwd: repo, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, shell: process.platform === "win32" }));
 }

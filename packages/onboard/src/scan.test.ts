@@ -7,6 +7,10 @@ import { FIXTURES, ciYaml, memView } from "./fixtures.test-helper.js";
 import { annotate, propose } from "./propose.js";
 import { dirView, scanRepo } from "./scan.js";
 
+// Windows: a symlink needs admin or Developer Mode; a directory junction does not, and lstat/realpath treat it as a link (D-512)
+const win = process.platform === "win32";
+const winEtc = path.join(process.env.SystemRoot ?? "C:/Windows", "System32", "drivers", "etc");
+
 describe("скенер без AI: 6 fixtures (т. 8.2)", () => {
   for (const [name, files] of Object.entries(FIXTURES)) {
     it(`${name} → .mandat.yml + field_sources (snapshot)`, () => {
@@ -78,7 +82,7 @@ describe("скенер: сигнали", () => {
     writeFileSync(path.join(d, "node_modules", "x", "i.js"), "x");
     writeFileSync(path.join(d, "src", "a.ts"), "x");
     writeFileSync(path.join(d, "deploy.pem"), "K=1");
-    symlinkSync("/etc/passwd", path.join(d, "link"));
+    symlinkSync(win ? winEtc : "/etc/passwd", path.join(d, "link"), win ? "junction" : undefined);
     const v = dirView(d);
     expect(v.files.sort()).toEqual(["deploy.pem", "link", "src/a.ts"]);
     expect(v.read("deploy.pem")).toBeNull();

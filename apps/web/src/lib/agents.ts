@@ -1,5 +1,5 @@
 import { PROVIDERS, SUBSCRIPTIONS, agentFor, canSignIn, parseAgentRef } from "@mandat/contract";
-import type { AgentCli, Connection, KeyCli, ProviderId } from "@mandat/contract";
+import type { Connection, KeyCli, ProviderId } from "@mandat/contract";
 import { translate } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 

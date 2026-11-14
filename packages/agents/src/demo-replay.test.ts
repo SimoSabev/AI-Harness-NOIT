@@ -26,7 +26,7 @@ describe("demo-replay", () => {
       expect(Buffer.compare(r.stdout, readFileSync(path.join(rec, `${name}.jsonl`)))).toBe(0);
       const g = mkdtempSync(path.join(os.tmpdir(), "replay-git-"));
       cpSync(path.join(repo, "fixtures/demo-shop"), g, { recursive: true });
-      execFileSync("git", ["apply", path.join(rec, `${name}.patch`)], { cwd: g, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null" } });
+      execFileSync("git", ["apply", path.join(rec, `${name}.patch`)], { cwd: g, env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } }); // Git for Windows: core.autocrlf=true in the system config
       expect(readFileSync(path.join(d, "src/cart.ts"), "utf8")).toBe(readFileSync(path.join(g, "src/cart.ts"), "utf8"));
     });
   }

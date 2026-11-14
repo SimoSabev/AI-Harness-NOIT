@@ -96,8 +96,9 @@ export function fixtureFile(dir, raw) {
   } catch {
     return null;
   }
-  const file = path.resolve(dir, u.hostname, `.${p.endsWith("/") ? `${p}index.html` : p}`);
-  return file.startsWith(path.resolve(dir, u.hostname) + path.sep) ? file : null;
+  // the runner lives in the Linux container: always POSIX paths, whatever the host (D-510)
+  const file = path.posix.resolve(dir, u.hostname, `.${p.endsWith("/") ? `${p}index.html` : p}`);
+  return file.startsWith(path.posix.resolve(dir, u.hostname) + "/") ? file : null;
 }
 const TYPES = { ".html": "text/html; charset=utf-8", ".json": "application/json", ".js": "text/javascript", ".css": "text/css", ".txt": "text/plain" };
 
