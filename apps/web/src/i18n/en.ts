@@ -1058,6 +1058,7 @@ export const en = {
   "why.sensitive.migrations": "It changes database migrations",
   "ws.applied": "Added to main automatically: {range}",
   "ws.self": "Mandat started a new attempt by itself: the previous one waited on something that passes, or failed for a fixable reason.",
+  "ws.self_tried": "Mandat already started {n} new attempt(s) by itself with a note on what was wrong; from here it is your call.",
   "ws.model": "Model",
   "keys.login.privacyChatgpt": "You sign in on OpenAI's page. Codex keeps its login on this computer; the app neither sees nor keeps it.",
   "conn.useModel": "Use {model}",

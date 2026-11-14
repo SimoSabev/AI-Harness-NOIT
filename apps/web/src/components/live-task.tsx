@@ -151,6 +151,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
   const ask = [...notes].reverse().find((n) => n.kind === "needs_you");
   const appliedNote = [...notes].reverse().find((n) => n.kind === "auto_applied" || n.kind === "applied");
   const selfNote = [...notes].reverse().find((n) => n.kind === "self");
+  const selfCount = notes.filter((n) => n.kind === "self").length;
   const waitingYou = s.key === "review" || s.key === "unknown";
   const failed = view.evidence.filter((e) => e.status === "fail" || e.status === "unknown");
   const cause = causeLine(task.wait_reason, task.agent, t.lang);
@@ -194,6 +195,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
               <p className="font-medium">{s.headline}</p>
               {cause && <p className="mt-1">{cause}</p>}
               {appliedNote && <p className="mt-1 font-mono text-xs">{t("ws.applied", { range: appliedNote.text })}</p>}
+              {selfCount > 0 && <p className="mt-1">{t("ws.self_tried", { n: selfCount })}</p>}
               {waitingYou && ask && (
                 <ul className="mt-2 list-disc space-y-0.5 pl-5">
                   {whyOf(ask.text).map((w, k) => (
