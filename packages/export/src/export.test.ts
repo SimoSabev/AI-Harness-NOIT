@@ -231,5 +231,5 @@ describe("exportChangeset", () => {
       }),
       { numRuns: 25 },
     );
-  }, 180_000);
+  }, process.platform === "win32" ? 600_000 : 180_000); // D-520: ~10 git processes a run, slow to start on Windows under the full suite
 });
