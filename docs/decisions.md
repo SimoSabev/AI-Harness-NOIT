@@ -3777,3 +3777,33 @@ git — винаги без shell; аргументите са фиксиран�
 проект държеше 0.0.0.0:3000, и http://localhost:3000 отваряше другия проект (Мандат слушаше само на 127.0.0.1).
 Защо: намерено при живия тест на 14.11.2026. Тест: local.test.ts („portFree sees a port taken on all interfaces“).
 Статус: решено от кодера.
+
+## D-517 redteam: npm на Windows и сценарий, който хвърля грешка (14.11.2026)
+Решение: R16 и mcp-sidecar.docker.test пускат `npm pack` през shell само на win32 (npm е npm.cmd; аргументите са
+фиксирани пътища, не вход). `runRedteam` хваща грешка на сценарий: един неуспешен ред „crashed: …“ и infraError (exit 3),
+останалите сценарии вървят и отчетът се печата. Преди ENOENT в R16 спираше целия `mandat redteam --json` без изход.
+Защо: Docker тестовете на Windows, 14.11.2026. Тест: bench/redteam/index.test.ts.
+Статус: решено от кодера.
+
+## D-518 работно дърво от Windows checkout с CRLF (14.11.2026)
+Решение: `mandat verify` (и MCP mandat_verify) взема проследен файл, записан с LF и изваден с CRLF (`git ls-files --eol`:
+i/lf w/crlf, без -text/binary/eol=), с LF — както `git add` при core.autocrlf=true; всичко друго байт по байт. Git for
+Windows задава autocrlf=true в системния си config, който чистият git на Мандат нарочно не чете, затова всеки файл
+изглеждаше променен и недокоснатият .github/workflows/ci.yml даваше UNKNOWN D3:protected_path. CRLF→LF само маха \r
+пред \n, не може да скрие код. Тестът mcp-verify.docker приема и CRLF в регулярния израз.
+Защо: Docker тестовете на Windows, 14.11.2026. Тест: packages/verify/src/worktree.test.ts.
+Статус: решено от кодера.
+
+## D-519 R8 keyscan прескача node_modules на агентските CLI в /opt (14.11.2026)
+Решение: r8-keyscan не обхожда `node_modules` под /opt (кодът на вградените CLI в образа). Пакетът на Kimi CLI носи
+граматика за редактора (emacs-lisp-*.js) с низ, който съвпада с правилото за OpenAI ключ — фалшиво попадение, не ключ.
+Ключ не може да стигне до /opt: той е код от образа, а тайните идват само през env и монтажи, които сканирането пак
+обхожда (env, /m, /home/agent, /tmp, /etc, /opt без node_modules). node_modules на проекта се прескачат по същия начин.
+Защо: redteam на Windows, 14.11.2026, R8 keyscan hits 1 (kind openai, /opt/kimi/node_modules/…). Тест: redteam R8.
+Статус: решено от кодера.
+
+## D-520 property тестът на export има 600 с на Windows (14.11.2026)
+Решение: „property: същият tree_sha навсякъде“ (25 прогона, ~10 git процеса всеки) получава 600 с на win32 и остава
+180 с другаде; прогоните не намаляват. На Windows стартът на процес е бавен и под пълния `pnpm check` тестът минаваше
+180 с, а сам минава.
+Защо: `pnpm check` на Windows, 14.11.2026. Статус: решено от кодера.
