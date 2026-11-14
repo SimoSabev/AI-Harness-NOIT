@@ -43,7 +43,7 @@ describe("mcp mandat_verify (docker)", () => {
     const repo = path.join(root, "repo");
     git(repo, "checkout", "-q", "-b", "fix/discount");
     const f = path.join(repo, "tests/cart.spec.ts");
-    writeFileSync(f, readFileSync(f, "utf8").replace(/ {2}it\("applies 10% over 50"[\s\S]*?\n {2}\}\);\n/, ""));
+    writeFileSync(f, readFileSync(f, "utf8").replace(/ {2}it\("applies 10% over 50"[\s\S]*?\r?\n {2}\}\);\r?\n/, "")); // D-518: a Windows checkout has CRLF
     const r = await run(repo, path.join(root, "remote.git"), path.join(root, "home"), {});
     expect(r.status).toMatchObject({ status: "done", result: "FAILED" });
     expect(r.status.reasons).toContain(`D2:missing_test:${M}`);

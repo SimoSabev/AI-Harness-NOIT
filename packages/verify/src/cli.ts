@@ -16,7 +16,7 @@ import { readAtBase, resolveTrustedBase } from "./trusted-base.js";
 import { verifyChange } from "./verify-change.js";
 import type { PolicyInput, VerifyDeps } from "./verify-change.js";
 import type { HiddenTests } from "./verify-trees.js";
-import { tarOf, workingTreeFiles } from "./worktree.js";
+import { crlfCheckouts, stageWithLf, tarOf, workingTreeFiles } from "./worktree.js";
 
 // Демо промпт т. 5.7: `mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--json] [--home <dir>]`.
 // Exit: 0 VERIFIED, 10 UNKNOWN, 20 FAILED, 2 usage, 3 environment. Never writes to the user's .git and never reads SUPABASE_* (S35).
@@ -206,7 +206,8 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     }
     // 3) the agent's tree → clean export against the trusted base
     const files = await workingTreeFiles({ repo: a.repo, tmpHome: tmpRoot });
-    const t = tarOf(a.repo, files);
+    const lf = await crlfCheckouts({ repo: a.repo, tmpHome: tmpRoot }); // D-518: a Windows checkout has CRLF
+    const t = tarOf(lf.size === 0 ? a.repo : stageWithLf(a.repo, files, lf, path.join(tmpRoot, "stage")), files);
     const limits = policy.ok ? policy.policy.security : { max_file_mb: 5, max_diff_mb: 20, max_files: 500 };
     const exp = await exportChangeset({ runId, mirrorPath: tb.mirror, baseSha: tb.baseSha, tar: t.stream, tarExit: t.exit, limits, tmpRoot });
     const base = { sha: tb.baseSha, remote: a.remote, branch: tb.branch };
