@@ -247,13 +247,15 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const hidden = hiddenRow ? { dir: hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__", files: hiddenRow.files.map((f) => ({ path: f.path, data: Buffer.from(f.data, "base64") })) } : null;
   // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
   const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
+  // D-521: an attempt Mandat started alone by day gets its note the same way (kind self, written by self-finish)
+  const selfNote = t.retry_reason === "auto" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'self' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
   const steerable = t.agent === "fake:steer-echo" || (route.run === "claude" && d.steer === true);
   // D-400: the person's memory for this task (frozen core + the slice for its text); memory never stops a task
   const mem = await memoryForTask(d.db, { org: t.org_id, user: t.created_by, repo: t.repo_id, taskId: t.id, attempt: t.attempt, text: t.text }).catch((e: unknown) => {
     log(`[daemon] ${t.id}: memory skipped: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
     return null;
   });
-  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog, nightNote ? `Note from Mandat (night shift): ${nightNote}` : null].filter(Boolean).join("\n\n") || null, mem?.hash ?? null);
+  let contract = contractForTask(t, parsed.policy, baseSha, profileRef ?? (current ? refOf(current) : undefined), [steerNote, ciLog, nightNote ? `Note from Mandat (night shift): ${nightNote}` : null, selfNote ? `Note from Mandat: ${selfNote}` : null].filter(Boolean).join("\n\n") || null, mem?.hash ?? null);
   let cfile = writeContract(contract);
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
