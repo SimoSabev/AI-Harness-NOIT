@@ -1,7 +1,7 @@
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
-import type { NightTick, SelfFinishTick } from "@mandat/worker";
+import type { NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { researchDeps, researchLoop } from "./research.js";
@@ -32,6 +32,21 @@ export function selfTicker(o: { env: NodeJS.ProcessEnv; now: () => number; log: 
     last = o.now();
     const n = await o.tick();
     if (n.retried.length > 0) o.log(`[self] new attempt by Mandat: ${n.retried.join(", ")}`);
+  };
+}
+
+/** D-523: the owner's twin, at most every `everyMs` (30 s); logs its own approvals and each class offer once; MANDAT_TWIN=0 turns it off */
+export function twinTicker(o: { env: NodeJS.ProcessEnv; now: () => number; log: (line: string) => void; tick: () => Promise<TwinTick>; everyMs?: number }): () => Promise<void> {
+  let last = Number.NEGATIVE_INFINITY;
+  const offered = new Set<string>();
+  return async () => {
+    if (o.env.MANDAT_TWIN === "0" || o.now() - last < (o.everyMs ?? 30_000)) return;
+    last = o.now();
+    const n = await o.tick();
+    if (n.decided.length > 0) o.log(`[twin] approved alone: ${n.decided.join(", ")}`);
+    const fresh = n.offers.filter((k) => !offered.has(k));
+    for (const k of fresh) offered.add(k);
+    if (fresh.length > 0) o.log(`[twin] ready to offer: ${fresh.join(", ")}`);
   };
 }
 
@@ -118,6 +133,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   // E9а (v5 5.1): the night shift ticks every 30 s; its tasks are normal tasks the slots claim
   const night = nightTicker({ now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => nightShiftTick(db, { now: new Date(), slots: slotsFrom(env.MANDAT_NIGHT_SLOTS, Math.max(1, slots)), agent: env.MANDAT_NIGHT_AGENT ?? "claude" }) });
   const self = selfTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => selfFinishTick(db, { now: new Date() }) });
+  const twin = twinTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => twinTick(db, { now: new Date() }) });
   // E9г (D-409): research runs beside the task slots (≤ 2 here, ≤ 2 per org); MANDAT_RESEARCH=0 turns it off
   const host = hostConfig(env);
   const research = env.MANDAT_RESEARCH === "0" ? Promise.resolve() : researchLoop(researchDeps({ db, io, home: o.home, docker: realDockerRunner(), inferencePort: host.proxyInferencePort, adminPort: host.proxyAdminPort }), { once: o.once, pollMs: o.pollMs ?? 2000, ...(o.signal ? { signal: o.signal } : {}) });
@@ -141,6 +157,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         if (swept.length > 0) io.stderr(`[sweep] blocked: ${swept.map((x) => x.task_id).join(", ")}\n`);
         await night();
         await self();
+        await twin();
         // E8g (D-356): the project's CI on Mandat's PRs (a red round → HELD ci_failed)
         const red = await pollCi({ db, gh, ghRepo: repo, localGh }).catch(() => []);
         if (red.length > 0) io.stderr(`[ci] failed: ${red.join(", ")}\n`);
