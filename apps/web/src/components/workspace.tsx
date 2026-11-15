@@ -96,7 +96,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
             </label>
           )}
           {current && current.models.length === 1 && <span className="font-mono text-xs text-mute">{current.models[0]}</span>}
-          <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy || agents.length === 0}>{busy ? t("ws.sending") : t("ws.send")}</button>
+          <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy || agents.length === 0 || projects.length === 0}>{busy ? t("ws.sending") : t("ws.send")}</button>
         </div>
       </div>
       {projects.length > 1 ? (
@@ -106,7 +106,9 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
         </label>
       ) : projects[0] ? (
         <p className="text-center text-xs text-mute">{t("newTask.repo")} <span className="font-mono">{projects[0].full_name}</span></p>
-      ) : null}
+      ) : (
+        <p className="text-center text-sm text-mute">{t("ws.noProject")} <Link href="/projects/add" className="text-accent underline-offset-4 hover:underline">{t("add.title")}</Link></p>
+      )}
       {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
   );

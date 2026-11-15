@@ -976,6 +976,7 @@ export const en = {
   "ws.ask": "What should the agent do?",
   "ws.askHint": "Write it like to a colleague. The agent works in a locked sandbox; the result is checked before anything reaches your code.",
   "ws.placeholder": "Describe the change: what should work differently and how you will know it is done.",
+  "ws.noProject": "No project yet: the agent works on a copy of one of yours.",
   "ws.signIn": "Sign in to an account to run an agent",
   "ws.agent": "Agent",
   "ws.send": "Start",

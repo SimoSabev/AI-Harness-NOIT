@@ -35,6 +35,19 @@ describe("mandat demo seed (т. 8 „Общо за E3“)", () => {
 });
 
 describe("seedLocal (D-292: pnpm local)", () => {
+  it("D-525: without the demo switch there is no demo project — the owner, the org and the channels only", async () => {
+    const db = await pgliteDb();
+    try {
+      expect(await seedLocal(db, {})).toEqual({ org: DEMO_ORG_ID, email: LOCAL_EMAIL, created: true, totpSecret: null });
+      expect((await db.query<{ n: number }>("select count(*)::int as n from public.repos")).rows[0]?.n).toBe(0);
+      expect((await db.query<{ n: number }>("select count(*)::int as n from public.task_types")).rows[0]?.n).toBe(0);
+      expect((await db.query<{ role: string }>("select role from public.members where org_id = $1", [DEMO_ORG_ID])).rows).toEqual([{ role: "owner" }]);
+      expect((await db.query<{ provider: string }>("select provider from public.model_channels order by provider")).rows.map((r) => r.provider)).toEqual(["anthropic", "openai"]);
+      expect((await seedLocal(db, {})).created).toBe(false);
+    } finally {
+      await db.end();
+    }
+  });
   it("D-368: без парола и без TOTP — няма парола за вход, няма тайна", async () => {
     const db = await pgliteDb();
     try {

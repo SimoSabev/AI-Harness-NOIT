@@ -287,8 +287,11 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   }
   try {
     await migrate(io, db);
-    const fx = buildFixture({ repoRoot, mandatHome: o.home, force: false, name: "demo-shop" });
-    await seedLocal(db, { remoteUrl: `file://${path.resolve(fx.mirror)}` });
+    // D-525: the demo project only with the demo switch; a real install starts with no project and adds its own
+    if (io.env.MANDAT_DEMO_AGENTS === "1") {
+      const fx = buildFixture({ repoRoot, mandatHome: o.home, force: false, name: "demo-shop" });
+      await seedLocal(db, { remoteUrl: `file://${path.resolve(fx.mirror)}` });
+    } else await seedLocal(db, {});
   } finally {
     await db.end();
   }

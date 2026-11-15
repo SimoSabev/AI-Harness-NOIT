@@ -8,15 +8,18 @@ export const DEMO_ORG_ID = "d0000000-0000-4000-8000-000000000001";
 export const DEMO_OWNER_ID = "d0000000-0000-4000-8000-0000000000a1";
 export const DEMO_REPO_ID = "d0000000-0000-4000-8000-0000000000b1";
 
-export async function seedMinimal(db: SqlClient, o: { remoteUrl: string; ownerEmail?: string }): Promise<{ org: string; owner: string; repo: string; created: boolean }> {
+/** D-525: no remoteUrl → no demo project (a real install starts empty and adds its own); repo is then null. */
+export async function seedMinimal(db: SqlClient, o: { remoteUrl?: string; ownerEmail?: string }): Promise<{ org: string; owner: string; repo: string | null; created: boolean }> {
   const exists = await db.query<{ n: number }>("select count(*)::int as n from public.orgs where id = $1", [DEMO_ORG_ID]);
-  if ((exists.rows[0]?.n ?? 0) > 0) return { org: DEMO_ORG_ID, owner: DEMO_OWNER_ID, repo: DEMO_REPO_ID, created: false };
+  const repo = o.remoteUrl === undefined ? null : DEMO_REPO_ID;
+  if ((exists.rows[0]?.n ?? 0) > 0) return { org: DEMO_ORG_ID, owner: DEMO_OWNER_ID, repo, created: false };
   await db.query("insert into auth.users (id, email) values ($1, $2) on conflict (id) do nothing", [DEMO_OWNER_ID, o.ownerEmail ?? "owner@demo.mandat.invalid"]);
   await db.query("insert into public.orgs (id, name, is_demo) values ($1, 'Mandat demo', true)", [DEMO_ORG_ID]);
   await db.query("insert into public.members (org_id, user_id, role) values ($1, $2, 'owner')", [DEMO_ORG_ID, DEMO_OWNER_ID]);
+  if (o.remoteUrl === undefined) return { org: DEMO_ORG_ID, owner: DEMO_OWNER_ID, repo, created: true };
   await db.query("insert into public.repos (id, org_id, provider, full_name, remote_url, default_branch) values ($1, $2, 'local', 'mandat-demo/shop', $3, 'main')", [DEMO_REPO_ID, DEMO_ORG_ID, o.remoteUrl]);
   await appendLedgerOnline(db, { org_id: DEMO_ORG_ID, kind: "demo_reset", task_id: null, payload: { seed: "minimal", repo: "mandat-demo/shop" } });
-  return { org: DEMO_ORG_ID, owner: DEMO_OWNER_ID, repo: DEMO_REPO_ID, created: true };
+  return { org: DEMO_ORG_ID, owner: DEMO_OWNER_ID, repo, created: true };
 }
 
 export const LOCAL_EMAIL = "ti@mandat.local";
@@ -25,14 +28,17 @@ export const LOCAL_EMAIL = "ti@mandat.local";
  * D-292 (`pnpm local`): one owner with a password, the 4 task types, the 2 channels, no cards, no TOTP, ladder level 0.
  * Called on every start: a fresh password each time (printed once to the terminal, stored only as a bcrypt hash).
  */
-export async function seedLocal(db: SqlClient, o: { remoteUrl: string; password?: string; totpSecret?: () => string }): Promise<{ org: string; email: string; created: boolean; totpSecret: string | null }> {
-  const m = await seedMinimal(db, { remoteUrl: o.remoteUrl, ownerEmail: LOCAL_EMAIL });
+export async function seedLocal(db: SqlClient, o: { remoteUrl?: string; password?: string; totpSecret?: () => string }): Promise<{ org: string; email: string; created: boolean; totpSecret: string | null }> {
+  const m = await seedMinimal(db, { ...(o.remoteUrl === undefined ? {} : { remoteUrl: o.remoteUrl }), ownerEmail: LOCAL_EMAIL });
   // D-368: `pnpm local` has no login — no password (an old one from an earlier run is cleared); the demo login keeps one
   if (o.password === undefined) await db.query("update auth.users set encrypted_password = null where id = $1", [DEMO_OWNER_ID]);
   else await db.query("update auth.users set encrypted_password = extensions.crypt($2, extensions.gen_salt('bf')), email_confirmed_at = coalesce(email_confirmed_at, now()) where id = $1", [DEMO_OWNER_ID, o.password]);
-  await db.query("update public.repos set remote_url = $2 where id = $1", [DEMO_REPO_ID, o.remoteUrl]);
-  for (const [name, risk] of [["bugfix", "low"], ["feature", "medium"], ["css", "low"], ["docs", "low"]] as const) {
-    await db.query("insert into public.task_types (org_id, repo_id, name, risk_class) values ($1, $2, $3, $4) on conflict do nothing", [DEMO_ORG_ID, DEMO_REPO_ID, name, risk]);
+  // D-525: the demo project only with the demo switch (local.ts passes remoteUrl then)
+  if (o.remoteUrl !== undefined) {
+    await db.query("update public.repos set remote_url = $2 where id = $1", [DEMO_REPO_ID, o.remoteUrl]);
+    for (const [name, risk] of [["bugfix", "low"], ["feature", "medium"], ["css", "low"], ["docs", "low"]] as const) {
+      await db.query("insert into public.task_types (org_id, repo_id, name, risk_class) values ($1, $2, $3, $4) on conflict do nothing", [DEMO_ORG_ID, DEMO_REPO_ID, name, risk]);
+    }
   }
   await seedChannels(db); // D-293: claude → the Anthropic key, codex → the OpenAI key of the proxy
   // D-297: the harness approval needs a fresh TOTP code; the secret is made once and returned once (the CLI prints it)
@@ -186,7 +192,8 @@ export async function seedChannels(db: SqlClient, o: { openaiModel?: string } = 
     [DEMO_CHANNELS.anthropic, DEMO_CHANNELS.openai, DEMO_ORG_ID, o.openaiModel ?? "gpt-5-codex"],
   );
   await db.query(
-    "insert into public.routing_rules (org_id, priority, match, channel_id, repo_id, mode, fallback_channel_ids) select $1, 1, '{}', $2, $3, 'auto', array[$4::uuid] where not exists (select 1 from public.routing_rules where org_id = $1 and repo_id = $3)",
+    // D-525: on the demo project when it exists, else for the whole org (repo_id null), e.g. `pnpm local` without the demo
+    "insert into public.routing_rules (org_id, priority, match, channel_id, repo_id, mode, fallback_channel_ids) select $1, 1, '{}', $2, r.id, 'auto', array[$4::uuid] from (select (select id from public.repos where id = $3::uuid) as id) r where not exists (select 1 from public.routing_rules where org_id = $1 and repo_id is not distinct from r.id)",
     [DEMO_ORG_ID, DEMO_CHANNELS.anthropic, DEMO_REPO_ID, DEMO_CHANNELS.openai],
   );
 }
