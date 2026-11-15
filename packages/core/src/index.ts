@@ -37,3 +37,5 @@ export { AUTO_APPLY_LIMITS, autoApply, diffStat } from "./auto-apply.js";
 export type { AutoApplyInput, AutoApplyWhy } from "./auto-apply.js";
 export { SELF_FINISH, nextMove } from "./next-move.js";
 export type { SelfFinishInput, SelfMove } from "./next-move.js";
+export { twinMayDecide, twinModel, twinOffer, twinPredict, twinScore, wilsonLower } from "./twin.js";
+export type { TwinAct, TwinActInput, TwinClassStats, TwinDecision, TwinGuess, TwinModel, TwinScore, TwinScored } from "./twin.js";
