@@ -26,7 +26,7 @@ import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWe
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
-import { AccountName, AddConnectionBody, AddProjectBody, RunnableAgentRef, ConnectionId, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
+import { AccountName, AddConnectionBody, AddProjectBody, RunnableAgentRef, ConnectionId, LocalPath, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
@@ -448,6 +448,24 @@ export async function postProject(req: Request, d: ApiDeps): Promise<Response> {
   if (!b.success) return json(400, { error: "bad_path" });
   const r = await k.keys.addProject(b.data.path);
   return r === null ? json(502, { error: "control_unavailable" }) : json(200, r);
+}
+
+// D-388 (folder picker): "Add project" in a browser — `mandat local` lists the folders of this computer (names, paths)
+export async function getFolders(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, false, "projects.manage");
+  if (k instanceof Response) return k;
+  const raw = new URL(req.url).searchParams.get("path");
+  const p = raw === null || raw === "" ? undefined : LocalPath.safeParse(raw);
+  if (p !== undefined && !p.success) return json(400, { error: "bad_path" });
+  const r = await k.keys.folders(p?.data);
+  if (r === null) return json(502, { error: "control_unavailable" });
+  return typeof r === "string" ? json(r === "bad_path" ? 400 : 404, { error: r }) : json(200, r);
+}
+export async function getFoundProjects(req: Request, d: ApiDeps): Promise<Response> {
+  const k = await keysOwner(req, d, false, "projects.manage");
+  if (k instanceof Response) return k;
+  const r = await k.keys.foundProjects();
+  return r ? json(200, r) : json(502, { error: "control_unavailable" });
 }
 
 // E8c (v5 p. 4.3): roles and member roles; every check is a capability (roles.manage / members.manage)

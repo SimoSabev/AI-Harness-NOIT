@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AccountName, AddProjectBody, ConnectionId, LoginCode, LoginStart, SubscriptionId, SystemJob } from "@mandat/contract";
-import type { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, JobState, LoginState } from "@mandat/contract";
+import { AccountName, AddProjectBody, ConnectionId, LocalPath, LoginCode, LoginStart, SubscriptionId, SystemJob } from "@mandat/contract";
+import type { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, FolderListing, FoundProjects, JobState, LoginState } from "@mandat/contract";
 
 // D-293: the web UI of `mandat local` hands API keys to the proxy through this control endpoint: 127.0.0.1 only,
 // a random bearer token known to the web server alone, the key only in memory on its way to `docker run` env.
@@ -27,6 +27,8 @@ export interface ControlDeps {
   system: { all(): JobState[]; start(job: SystemJob): JobState };
   /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
   addProject(path: string): Promise<AddProjectReply>;
+  /** D-388 (folder picker): the folders of this computer for "Add project" (folders.ts); list → null when not a folder */
+  folders?: { list(path: string | undefined): Promise<FolderListing | null>; found(): Promise<FoundProjects> };
   /** D-440: the research search key — sealed by `mandat local` and the proxy restarted with it */
   research?: { set(k: z.infer<typeof ResearchKeyBody>): Promise<boolean>; clear(): Promise<boolean> };
   /** D-393: saved connections, local model discovery, the task box defaults (connections.ts) */
@@ -119,6 +121,17 @@ async function connectionsRoute(url: string, method: string, body: () => Promise
   return [405, { error: "method" }];
 }
 
+/** D-388 (folder picker): GET /folders?path=… (no path → the home folder), GET /folders/found. Names and paths only. */
+async function foldersRoute(pathname: string, query: URLSearchParams, method: string, f: NonNullable<ControlDeps["folders"]>): Promise<[number, unknown]> {
+  if (method !== "GET") return [405, { error: "method" }];
+  if (pathname === "/folders/found") return [200, await f.found()];
+  const raw = query.get("path");
+  const p = raw === null || raw === "" ? undefined : LocalPath.safeParse(raw);
+  if (p !== undefined && !p.success) return [400, { error: "bad_path" }];
+  const l = await f.list(p?.data);
+  return l ? [200, l] : [404, { error: "not_a_folder" }];
+}
+
 export async function startControl(d: ControlDeps): Promise<{ url: string; token: string; close(): Promise<void> }> {
   const token = randomBytes(32).toString("hex");
   const want = Buffer.from(`Bearer ${token}`);
@@ -142,6 +155,12 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
       if (req.url === "/system") return req.method === "GET" ? send(200, { jobs: d.system.all() }) : send(405, { error: "method" });
       if (!job.success) return send(404, { error: "not_found" });
       return req.method === "POST" ? send(200, d.system.start(job.data)) : send(405, { error: "method" });
+    }
+    const at = new URL(req.url ?? "/", "http://127.0.0.1");
+    if (at.pathname === "/folders" || at.pathname === "/folders/found") {
+      if (!d.folders) return send(404, { error: "not_found" });
+      void foldersRoute(at.pathname, at.searchParams, req.method ?? "GET", d.folders).then(([code, body]) => send(code, body), () => send(500, { error: "internal" }));
+      return;
     }
     if (req.url === "/projects") {
       if (req.method !== "POST") return send(405, { error: "method" });

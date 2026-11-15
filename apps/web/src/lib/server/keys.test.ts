@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { deleteKeys, deleteLogin, deleteResearchKey, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postProject, postResearchKey, postRetry, postSystemJob } from "./api";
+import { deleteKeys, deleteLogin, deleteResearchKey, getFolders, getFoundProjects, getKeys, getLogin, getSystem, postKeys, postLogin, postLoginCode, postLogout, postProject, postResearchKey, postRetry, postSystemJob } from "./api";
 import type { ApiDeps } from "./api";
 import { RateLimiter } from "./guard";
 import { controlKeys } from "./keys";
@@ -29,8 +29,11 @@ const fake: KeysClient = {
   jobs: async () => [job("doctor")],
   runJob: async (j) => (calls.push({ kind: "job", j }), { ...job(j), state: "running" }),
   addProject: async (path) => (calls.push({ kind: "project", path }), { ok: true, repo_id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/shop", created: true }),
+  folders: async (path) => (calls.push({ kind: "folders", path }), path === "/Users/simo/readme.txt" ? "not_a_folder" : listing),
+  foundProjects: async () => ({ found: [{ name: "shop", path: "/Users/simo/shop" }] }),
   connections: async () => null, addConnection: async () => null, setModels: async () => null, removeConnection: async () => null, checkConnection: async () => null, detect: async () => null, setPrefs: async () => false,
 };
+const listing = { path: "/Users/simo", parent: "/Users", entries: [{ name: "shop", path: "/Users/simo/shop", git: true }], roots: ["/"], truncated: false };
 const job = (j: "doctor" | "images" | "images-ui" | "fixtures" | "fixtures-force" | "stats" | "verify-log") => ({ job: j, state: "idle" as const, started_at: null, finished_at: null, exit: null, lines: [], result: null });
 const calls: unknown[] = [];
 const deps = (keys: KeysClient | null): ApiDeps => ({ db, user: () => Promise.resolve(who), secondFactor: () => Promise.resolve(null), createLimiter: new RateLimiter(10, 60_000), ...(keys ? { keys } : {}) });
@@ -216,5 +219,55 @@ describe("API POST /api/repos (D-388)", () => {
     who = U.approver;
     expect((await postProject(req("POST", { path: "/x" }), deps(fake))).status).toBe(403);
     who = U.owner;
+  });
+});
+
+// D-388 (folder picker): the folders of this computer for "Add project" — projects.manage only, the path checked here too.
+describe("API GET /api/folders, /api/folders/found (D-388, folder picker)", () => {
+  const get = (q = "") => new Request(`http://localhost:3000/api/folders${q}`, { headers: { host: "localhost:3000" } });
+  it("owner → the listing; a bad path → 400; not a folder → 404; approver → 403; no `mandat local` → 503", async () => {
+    who = U.owner;
+    const r = await getFolders(get(), deps(fake));
+    expect([r.status, await r.json()]).toEqual([200, listing]);
+    expect(calls).toContainEqual({ kind: "folders", path: undefined });
+    expect((await getFolders(get(`?path=${encodeURIComponent("/Users/simo/code")}`), deps(fake))).status).toBe(200);
+    expect(calls).toContainEqual({ kind: "folders", path: "/Users/simo/code" });
+    expect((await getFolders(get("?path=code"), deps(fake))).status).toBe(400);
+    expect((await getFolders(get(`?path=${encodeURIComponent("/Users/simo/readme.txt")}`), deps(fake))).status).toBe(404);
+    expect((await getFolders(get(), deps({ ...fake, folders: async () => null }))).status).toBe(502);
+    expect((await getFolders(get(), deps(null))).status).toBe(503);
+    const f = await getFoundProjects(get("/found"), deps(fake));
+    expect([f.status, await f.json()]).toEqual([200, { found: [{ name: "shop", path: "/Users/simo/shop" }] }]);
+    expect((await getFoundProjects(get("/found"), deps({ ...fake, foundProjects: async () => null }))).status).toBe(502);
+    who = U.approver;
+    expect((await getFolders(get(), deps(fake))).status).toBe(403);
+    expect((await getFoundProjects(get("/found"), deps(fake))).status).toBe(403);
+    who = U.owner;
+  });
+  it("controlKeys: GET /folders with the path in the query, the found list; replies parsed with zod", async () => {
+    const paths: string[] = [];
+    const srv = createServer((q, s) => {
+      paths.push(`${q.method} ${q.url}`);
+      const u = new URL(q.url ?? "/", "http://x");
+      const p = u.searchParams.get("path");
+      const [code, body] = u.pathname === "/folders/found" ? [200, { found: [{ name: "shop", path: "/Users/simo/shop" }] }]
+        : p === "rel" ? [400, { error: "bad_path" }] : p === "/f" ? [404, { error: "not_a_folder" }] : p === "/bad" ? [200, { path: "x" }] : [200, listing];
+      s.writeHead(code, { "content-type": "application/json" });
+      s.end(JSON.stringify(body));
+    });
+    await new Promise<void>((r) => srv.listen(0, "127.0.0.1", r));
+    const port = (srv.address() as { port: number }).port;
+    try {
+      const c = controlKeys({ MANDAT_LOCAL_CONTROL_URL: `http://127.0.0.1:${port}`, MANDAT_LOCAL_CONTROL_TOKEN: "t".repeat(64) });
+      expect(await c?.folders()).toEqual(listing);
+      expect(await c?.folders("/Users/simo/my code")).toEqual(listing);
+      expect(await c?.folders("rel")).toBe("bad_path");
+      expect(await c?.folders("/f")).toBe("not_a_folder");
+      expect(await c?.folders("/bad")).toBeNull();
+      expect(await c?.foundProjects()).toEqual({ found: [{ name: "shop", path: "/Users/simo/shop" }] });
+      expect(paths.slice(0, 2)).toEqual(["GET /folders", `GET /folders?path=${encodeURIComponent("/Users/simo/my code")}`]);
+    } finally {
+      await new Promise((r) => srv.close(r));
+    }
   });
 });

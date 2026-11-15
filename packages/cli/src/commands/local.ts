@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statfsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { MandatError } from "@mandat/contract";
 import { ConnectionStore, loadKek } from "@mandat/llm-proxy";
@@ -18,6 +19,7 @@ import { proxyProviders, proxyStart, proxyStop, setSearchKey } from "./proxy.js"
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
 import { listAccounts, loginDeps, logoutProfile, sharedWhileRunning } from "./accounts.js";
 import { Connections } from "./connections.js";
+import { findProjects, listFolder } from "./folders.js";
 import { LoginSessions } from "./login-session.js";
 import { SystemJobs } from "./system-jobs.js";
 import type { JobRun } from "./system-jobs.js";
@@ -365,6 +367,11 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     system: new SystemJobs({ run: cliRun(localJobEnv(clean, url)), org: DEMO_ORG_ID }),
     // D-388: "Add project" from the web — a mirror under MANDAT_HOME/projects, a repos row, the rules scan queued
     addProject: (p) => addLocalProject({ db: projectsDb, home: o.home, org: DEMO_ORG_ID, path: p }),
+    // D-388 (folder picker): the person's folders for the page; MANDAT_HOME is never offered (addLocalProject refuses it)
+    folders: {
+      list: (p) => listFolder({ home: os.homedir(), refuse: [o.home] }, p),
+      found: () => findProjects({ home: os.homedir(), refuse: [o.home] }),
+    },
   });
   const env = localWebEnv(clean, { dbUrl: url, control });
   // `pnpm local` builds first (pnpm build); the production server is faster than `next dev` and has no dev overlay.

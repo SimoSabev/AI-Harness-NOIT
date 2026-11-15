@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, JobState, LoginState, SubscriptionId } from "@mandat/contract";
+import { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, FolderListing, FoundProjects, JobState, LoginState, SubscriptionId } from "@mandat/contract";
 import type { AddConnectionBody, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
@@ -18,6 +18,9 @@ export interface Account { name: string; agent: string; loggedIn: boolean; email
 export type LoginOp = { kind: "state" } | { kind: "start"; name: string; cli?: SubscriptionId } | { kind: "code"; code: string } | { kind: "cancel" };
 export type LoginReply = { ok: true; state: LoginState } | { ok: false; error: string };
 
+/** D-388 (folder picker): a listing, why not, or null when the control endpoint did not answer */
+export type FoldersReply = FolderListing | "bad_path" | "not_a_folder" | null;
+
 export interface KeysClient {
   login(op: LoginOp): Promise<LoginReply>;
   logout(name: string, cli?: SubscriptionId): Promise<boolean | null>;
@@ -35,6 +38,10 @@ export interface KeysClient {
   runJob(job: SystemJob): Promise<JobState | null>;
   /** D-388: "Add project" — a git folder of this computer becomes a project; null = the control endpoint did not answer */
   addProject(path: string): Promise<AddProjectReply | null>;
+  /** D-388 (folder picker): the sub-folders of a folder of this computer (no path → the home folder); names and paths only */
+  folders(path?: string): Promise<FoldersReply>;
+  /** D-388 (folder picker): git projects found in the usual places; null = the control endpoint did not answer */
+  foundProjects(): Promise<FoundProjects | null>;
   /** D-295: the subscription accounts of `mandat local` */
   accounts(): Promise<Account[]>;
   status(): Promise<KeysStatus>;
@@ -119,9 +126,19 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const j = AddProjectReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data : null;
   };
+  const folders = async (p?: string): Promise<FoldersReply> => {
+    const r = await send("GET", p === undefined ? "/folders" : `/folders?path=${encodeURIComponent(p)}`).catch(() => null);
+    const j: unknown = await r?.json().catch(() => null);
+    const e = Err.safeParse(j);
+    if (r && (r.status === 400 || r.status === 404) && e.success && (e.data.error === "bad_path" || e.data.error === "not_a_folder")) return e.data.error;
+    const l = FolderListing.safeParse(r?.ok ? j : null);
+    return l.success ? l.data : null;
+  };
   return {
     login,
     logout,
+    folders,
+    foundProjects: () => parsed(send("GET", "/folders/found"), FoundProjects),
     connections: () => parsed(send("GET", "/connections"), ConnectionsReply),
     // the key check talks to the provider: up to ~20 s, plus the proxy restart
     addConnection: (b) => parsed(send("POST", "/connections", b, 90_000), AddConnectionReply),

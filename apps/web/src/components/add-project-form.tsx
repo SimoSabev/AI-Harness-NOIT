@@ -6,7 +6,8 @@ import { AddProjectReply } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { postJson } from "../lib/client/api";
-import { btn, card, input } from "./ui";
+import { FolderPicker } from "./folder-picker";
+import { btn, card, input, label } from "./ui";
 
 const ERR: Record<string, Key> = {
   not_a_folder: "add.err.not_a_folder",
@@ -19,8 +20,9 @@ const ERR: Record<string, Key> = {
   bad_path: "add.err.bad_path",
 };
 
-// D-388: "Add project" in a browser — the full path of a git folder on this computer; `mandat local` makes Mandat's own
-// mirror of it, adds the project and starts the rules scan. With `path` (the desktop app, after the folder was granted)
+// D-388: "Add project" in a browser — a git folder on this computer, picked from the found projects or the folder
+// navigator (folder-picker.tsx), or its full path typed; `mandat local` makes its own mirror of it, adds the project and
+// starts the rules scan. With `path` (the desktop app, after the folder was granted)
 // it registers that folder at once.
 export function AddProjectForm({ path: given }: { path?: string }) {
   const t = useT();
@@ -54,8 +56,10 @@ export function AddProjectForm({ path: given }: { path?: string }) {
   return (
     <section aria-labelledby="reg-h" className={`${card} mt-6 p-5`}>
       <h2 id="reg-h" className="sr-only">{t("add.title")}</h2>
+      {!given && <FolderPicker busy={busy} onAdd={(p) => void add(p)} />}
       {!given && (
-        <form className="flex flex-wrap items-end gap-3" onSubmit={(e) => (e.preventDefault(), void add(path))}>
+        <form className="mt-6 flex flex-wrap items-end gap-3 border-t border-line pt-5" onSubmit={(e) => (e.preventDefault(), void add(path))} aria-labelledby="type-h">
+          <h3 id="type-h" className={`${label} w-full`}>{t("add.orType")}</h3>
           <label className="min-w-0 flex-1">
             <span className="text-sm font-medium">{t("add.pathLabel")}</span>
             <input className={`${input} mt-1 font-mono`} value={path} onChange={(e) => setPath(e.target.value)} placeholder={t("add.pathPlaceholder")} spellCheck={false} autoComplete="off" required />

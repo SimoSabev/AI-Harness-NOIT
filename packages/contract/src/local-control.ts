@@ -145,3 +145,23 @@ export const AddProjectReply = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), error: z.enum(["not_a_folder", "not_git", "no_commits", "inside_home", "failed"]) }).strict(),
 ]);
 export type AddProjectReply = z.infer<typeof AddProjectReply>;
+
+// D-388 (folder picker): a browser cannot hand over an absolute folder path, so `mandat local` lists the folders of this
+// computer for the "Add project" page — names and paths of sub-folders only, never a file or its contents.
+export const FOLDER_ENTRIES = 300;
+export const FOUND_PROJECTS = 50;
+const FolderName = z.string().min(1).max(255);
+export const FolderEntry = z.object({ name: FolderName, path: LocalPath, git: z.boolean() }).strict();
+export type FolderEntry = z.infer<typeof FolderEntry>;
+/** One folder: its parent (null at a root), its sub-folders (git ones first), the drive roots; `truncated` past the cap. */
+export const FolderListing = z.object({
+  path: LocalPath,
+  parent: LocalPath.nullable(),
+  entries: z.array(FolderEntry).max(FOLDER_ENTRIES),
+  roots: z.array(LocalPath).min(1).max(26),
+  truncated: z.boolean(),
+}).strict();
+export type FolderListing = z.infer<typeof FolderListing>;
+/** Git projects found in the usual places (the home folder, Desktop, Documents, code, …). */
+export const FoundProjects = z.object({ found: z.array(z.object({ name: FolderName, path: LocalPath }).strict()).max(FOUND_PROJECTS) }).strict();
+export type FoundProjects = z.infer<typeof FoundProjects>;

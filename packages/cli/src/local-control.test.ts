@@ -140,6 +140,41 @@ describe("POST /projects (D-388)", () => {
   });
 });
 
+// D-388 (folder picker): the folders of this computer for "Add project" — names and paths only, behind the same token.
+describe("GET /folders, /folders/found (D-388, folder picker)", () => {
+  it("a listing (no path → home), 400 on a bad path, 404 when not a folder, found projects; 405 / 401 / 404 without the service", async () => {
+    const seen: (string | undefined)[] = [];
+    const listing = { path: "/Users/simo", parent: "/Users", entries: [{ name: "shop", path: "/Users/simo/shop", git: true }], roots: ["/"], truncated: false };
+    const c = await startControl({
+      start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base(),
+      folders: {
+        list: async (p) => (seen.push(p), p === "/Users/simo/readme.txt" ? null : listing),
+        found: async () => ({ found: [{ name: "shop", path: "/Users/simo/shop" }] }),
+      },
+    });
+    const bare = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base() });
+    try {
+      const get = (u: string, token = c.token, at = c.url) => fetch(`${at}${u}`, { headers: { authorization: `Bearer ${token}` } });
+      const r = await get("/folders");
+      expect([r.status, await r.json()]).toEqual([200, listing]);
+      expect((await get(`/folders?path=${encodeURIComponent("/Users/simo/code")}`)).status).toBe(200);
+      expect((await get("/folders?path=code")).status).toBe(400);
+      expect((await get(`/folders?path=${encodeURIComponent(`/a${String.fromCharCode(0)}b`)}`)).status).toBe(400);
+      expect((await get(`/folders?path=${encodeURIComponent("/Users/simo/readme.txt")}`)).status).toBe(404);
+      const f = await get("/folders/found");
+      expect([f.status, await f.json()]).toEqual([200, { found: [{ name: "shop", path: "/Users/simo/shop" }] }]);
+      expect((await fetch(`${c.url}/folders`, { method: "POST", headers: { authorization: `Bearer ${c.token}` } })).status).toBe(405);
+      expect((await get("/folders", "y".repeat(64))).status).toBe(401);
+      expect((await get("/folders/found", "y".repeat(64))).status).toBe(401);
+      expect((await get("/folders", bare.token, bare.url)).status).toBe(404);
+      expect(seen).toEqual([undefined, "/Users/simo/code", "/Users/simo/readme.txt"]);
+    } finally {
+      await c.close();
+      await bare.close();
+    }
+  });
+});
+
 // D-393: the connections of `mandat local` behind the same token; bad ids and bodies are refused before the service.
 describe("mandat local control: connections (D-393)", () => {
   it("list, add, models, remove, detect, preferences; a ChatGPT sign-in starts with cli codex", async () => {

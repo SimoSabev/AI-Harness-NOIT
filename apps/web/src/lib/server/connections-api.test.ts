@@ -16,7 +16,7 @@ const conn = { id: "deepseek", provider: "deepseek" as const, label: "DeepSeek",
 const fake = {
   status: async () => ({ proxy: "running" as const, providers: [] }), set: async () => null, clear: async () => ({ proxy: "stopped" as const, providers: [] }), setResearch: async () => null, clearResearch: async () => null, accounts: async () => [],
   login: async (op: unknown) => (calls.push(op), { ok: true as const, state: { state: "starting" as const, name: "rabota" } }),
-  logout: async () => true, jobs: async () => [], runJob: async () => null, addProject: async () => null,
+  logout: async () => true, jobs: async () => [], runJob: async () => null, addProject: async () => null, folders: async () => null, foundProjects: async () => null,
   connections: async () => ({ connections: [conn], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }),
   addConnection: async (b: AddConnectionBody) => (calls.push({ add: b.provider, keyed: b.key !== undefined }), b.key === REJECTED ? { ok: false as const, error: "bad_key" as const } : { ok: true as const, connection: conn }),
   setModels: async (id: string) => (calls.push({ models: id }), id === "deepseek"),

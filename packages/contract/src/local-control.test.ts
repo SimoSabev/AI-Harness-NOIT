@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AccountName, AddProjectBody, AddProjectReply, DoctorReport, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
+import { AccountName, AddProjectBody, AddProjectReply, DoctorReport, FOLDER_ENTRIES, FOUND_PROJECTS, FolderListing, FoundProjects, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
 
 // D-369: the subscription login from the web — what crosses between `mandat local` and the web server.
 const URL_LINE =
@@ -69,5 +69,29 @@ describe("AddProject (D-388)", () => {
     expect(AddProjectReply.safeParse({ ok: true, repo_id: "d0000000-0000-4000-8000-0000000000b1", full_name: "local/shop", created: true }).success).toBe(true);
     for (const error of ["not_a_folder", "not_git", "no_commits", "inside_home", "failed"]) expect(AddProjectReply.safeParse({ ok: false, error }).success, error).toBe(true);
     expect(AddProjectReply.safeParse({ ok: false, error: "boom" }).success).toBe(false);
+  });
+});
+
+// D-388 (folder picker): "Add project" in a browser — `mandat local` lists folders (names and paths only) so the person picks one.
+describe("folder listing and found projects (D-388, folder picker)", () => {
+  const entry = { name: "shop", path: "/Users/simo/code/shop", git: true };
+  it("a listing: the folder, its parent, sub-folders, the roots; absolute paths only", () => {
+    expect(FolderListing.safeParse({ path: "/Users/simo/code", parent: "/Users/simo", entries: [entry], roots: ["/"], truncated: false }).success).toBe(true);
+    expect(FolderListing.safeParse({ path: "C:\\Users\\simo", parent: "C:\\Users", entries: [{ name: "app", path: "C:\\Users\\simo\\app", git: false }], roots: ["C:\\", "D:\\"], truncated: false }).success).toBe(true);
+    expect(FolderListing.safeParse({ path: "/", parent: null, entries: [], roots: ["/"], truncated: false }).success).toBe(true);
+    for (const bad of [
+      { path: "code", parent: null, entries: [], roots: ["/"], truncated: false },
+      { path: "/x", parent: null, entries: [{ ...entry, path: "shop" }], roots: ["/"], truncated: false },
+      { path: "/x", parent: null, entries: [{ ...entry, name: "" }], roots: ["/"], truncated: false },
+      { path: "/x", parent: null, entries: [{ ...entry, size: 1 }], roots: ["/"], truncated: false },
+      { path: "/x", parent: null, entries: [], roots: ["/"], truncated: false, content: "x" },
+      { path: "/x", parent: null, entries: Array.from({ length: FOLDER_ENTRIES + 1 }, () => entry), roots: ["/"], truncated: true },
+    ]) expect(FolderListing.safeParse(bad).success, JSON.stringify(bad).slice(0, 80)).toBe(false);
+  });
+  it("found projects: name and path, at most FOUND_PROJECTS", () => {
+    expect(FoundProjects.safeParse({ found: [{ name: "shop", path: "/Users/simo/code/shop" }] }).success).toBe(true);
+    expect(FoundProjects.safeParse({ found: [{ name: "shop", path: "code/shop" }] }).success).toBe(false);
+    expect(FoundProjects.safeParse({ found: [{ name: "shop", path: "/a", git: true }] }).success).toBe(false);
+    expect(FoundProjects.safeParse({ found: Array.from({ length: FOUND_PROJECTS + 1 }, (_, i) => ({ name: `p${i}`, path: `/p${i}` })) }).success).toBe(false);
   });
 });
