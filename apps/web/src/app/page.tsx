@@ -15,6 +15,7 @@ import { db } from "../lib/server/db";
 import { agentsView } from "../lib/server/connections";
 import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
+import { twinView } from "../lib/server/twin";
 import { sessionOf } from "../lib/server/workbench";
 
 export const dynamic = "force-dynamic";
@@ -34,12 +35,13 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   // E9a: "Make a task" from a night question prefills the text (it used to open /tasks/new, D-384)
   const prefill = typeof sp.text === "string" ? sp.text.slice(0, 4000) : "";
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
-  const [b, projects, initial, d, sess] = await Promise.all([
+  const [b, projects, initial, d, sess, twin] = await Promise.all([
     board(db(), c.uid, c.org),
     repos(db(), c.uid, c.org),
     selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
     selected ? taskDetail(db(), c.uid, c.org, c.role, selected) : null,
     selected ? sessionOf(db(), c.uid, c.org, selected) : null,
+    selected ? twinView(db(), c.uid, c.org, selected) : null,
   ]);
   const now = new Date();
   const tasks = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1)).slice(0, 100).map((x) => {
@@ -64,7 +66,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
         <div className="flex min-h-0 flex-col">
           {initial && d && sess ? (
             <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)}
-              view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id }}
+              view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
             <NewTask agents={agents} preferredModel={preferredModel} projects={projects} canAct={canAct(c.role)} initialText={prefill} />
