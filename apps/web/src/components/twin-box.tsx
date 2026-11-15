@@ -31,7 +31,7 @@ export function TwinBox({ twin, canAct, waiting }: { twin: TwinView; canAct: boo
   const guess = twin.predicted === "approved" ? t("twin.would_approve", { pct, n: twin.n }) : twin.predicted === "rejected" ? t("twin.would_reject", { pct, n: twin.n }) : t("twin.abstain", { n: twin.n });
 
   return (
-    <section aria-label={t("twin.active")} className="space-y-2 rounded-xl border border-line px-4 py-3 text-sm">
+    <section aria-label={t("twin.title")} className="space-y-2 rounded-xl border border-line px-4 py-3 text-sm">
       <p>{twin.by_twin ? t("twin.by_twin") : guess}</p>
       {twin.scored > 0 && <p className="text-mute">{t("twin.score", { correct: twin.correct, scored: twin.scored })}</p>}
       {twin.rule === "active" && !twin.by_twin && <p className="text-mute">{t("twin.active")}</p>}
