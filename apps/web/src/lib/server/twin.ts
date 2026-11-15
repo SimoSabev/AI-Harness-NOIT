@@ -5,16 +5,15 @@ import { z } from "zod";
 import { factorAt } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { hasCap } from "./roles";
+import type { TwinView } from "../twin-view";
+
+export type { TwinView } from "../twin-view";
 import { asService, asUser } from "./sql";
 
-// D-523 „Двойникът на собственика“ in the web. twinView: what the twin would decide on this attempt and how often it
+// D-523 (the owner's twin) in the web. twinView: what the twin would decide on this attempt and how often it
 // was right in the class (members read it by RLS). decideTwinRule: the owner's ONE answer to the offer. Accepting
 // widens what Mandat may do alone, so it needs approve.rules, a second factor, a ready class and an approved policy;
 // declining (or turning an active rule off) only narrows, so any approver may do it at once.
-export interface TwinView {
-  class_key: string; predicted: "approved" | "rejected" | "abstain"; p: number; n: number;
-  scored: number; correct: number; offer: boolean; rule: "active" | "off" | null; by_twin: boolean;
-}
 
 export const TwinRuleBody = z.object({ class_key: z.string().max(300), accept: z.boolean(), code: z.string().regex(/^\d{6}$/).optional(), factor_id: z.string().max(100).optional() }).strict();
 export type TwinRuleBody = z.infer<typeof TwinRuleBody>;

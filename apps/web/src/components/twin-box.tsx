@@ -3,11 +3,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
-import type { TwinView } from "../lib/server/twin";
+import type { TwinView } from "../lib/twin-view";
 import { useNeedsCode } from "./second-factor";
 import { btn, input } from "./ui";
 
-// D-523 „Двойникът на собственика“ on the task card: what the twin would decide and how often it was right; the ONE
+// D-523 (the owner's twin) on the task card: what the twin would decide and how often it was right; the ONE
 // offer to let it decide this kind of task (a second factor where the app asks for one); turning an active rule off.
 export function TwinBox({ twin, canAct, waiting }: { twin: TwinView; canAct: boolean; waiting: boolean }) {
   const t = useT();

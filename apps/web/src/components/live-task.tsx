@@ -17,7 +17,7 @@ import { LocalActions } from "./local-access";
 import { Markdown } from "./markdown";
 import { TaskActions } from "./task-actions";
 import { TwinBox } from "./twin-box";
-import type { TwinView } from "../lib/server/twin";
+import type { TwinView } from "../lib/twin-view";
 import { StatusBadge, btn } from "./ui";
 
 // The one view of a task (D-386). While the agent works: what you asked and every step of the agent as it happens
