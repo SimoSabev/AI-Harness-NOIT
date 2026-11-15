@@ -15,6 +15,7 @@ export async function postJson(url: string, body: unknown, method: "POST" | "PAT
 /** The API error codes a person may see → catalog keys (E7f); unknown codes fall back to "Error (status)". */
 export const ERROR_TEXT: Record<string, Key> = {
   head_sha_moved: "error.head_sha_moved",
+  no_policy: "twin.offer_no_policy",
   already_approved: "error.already_approved",
   second_factor_required: "error.second_factor_required",
   second_factor_invalid: "error.second_factor_invalid",

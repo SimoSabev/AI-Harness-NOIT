@@ -31,7 +31,9 @@ export async function twinView(db: Parameters<typeof asUser>[0], uid: string, or
     const rows = (await sql.query<TwinScored>("select class_key, predicted, actual from public.twin_predictions where org_id = $1::uuid and class_key = $2 and not by_twin", [org, p.class_key])).rows;
     const score = twinScore(rows)[p.class_key];
     const rule = (await sql.query<{ revoked: boolean }>("select revoked_at is not null as revoked from public.twin_rules where org_id = $1::uuid and class_key = $2", [org, p.class_key])).rows[0];
+    const policy = (await sql.query<{ ok: boolean }>("select exists (select 1 from public.repos r join public.harness_profiles h on h.id = r.profile_id and h.status = 'approved' where r.id = $1::uuid) as ok", [p.class_key.split("|")[0]])).rows[0]?.ok === true;
     return {
+      policy,
       class_key: p.class_key, predicted: p.predicted, p: p.p, n: p.n, scored: score?.scored ?? 0, correct: score?.correct ?? 0,
       offer: twinOffer(score, rule !== undefined), rule: rule === undefined ? null : rule.revoked ? "off" : "active", by_twin: p.by_twin,
     };

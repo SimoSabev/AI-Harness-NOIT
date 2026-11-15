@@ -36,10 +36,13 @@ describe("twinView (D-523)", () => {
   it("the prediction, the class score, and the offer once the class is accurate enough", async () => {
     await current();
     await history(5, 1);
-    expect(await twinView(db, U.owner, DEMO_ORG_ID, "t_seed_bugfix")).toEqual({ class_key: K, predicted: "approved", p: 0.92, n: 12, scored: 6, correct: 5, offer: false, rule: null, by_twin: false });
+    expect(await twinView(db, U.owner, DEMO_ORG_ID, "t_seed_bugfix")).toEqual({ class_key: K, predicted: "approved", p: 0.92, n: 12, scored: 6, correct: 5, offer: false, rule: null, by_twin: false, policy: false });
     await history(14);
     const v = await twinView(db, U.viewer, DEMO_ORG_ID, "t_seed_bugfix");
-    expect(v).toMatchObject({ scored: 20, correct: 19, offer: true }); // 19 of 20: a lower bound just over 0.8
+    expect(v).toMatchObject({ scored: 20, correct: 19, offer: true, policy: false }); // 19 of 20: a lower bound just over 0.8
+    // the live test (15.11.2026): without approved project rules the card says so before the owner presses "yes"
+    await policy();
+    expect((await twinView(db, U.owner, DEMO_ORG_ID, "t_seed_bugfix"))?.policy).toBe(true);
   });
 });
 

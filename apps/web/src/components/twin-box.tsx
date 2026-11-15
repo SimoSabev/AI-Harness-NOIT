@@ -36,7 +36,8 @@ export function TwinBox({ twin, canAct, waiting }: { twin: TwinView; canAct: boo
       {twin.scored > 0 && <p className="text-mute">{t("twin.score", { correct: twin.correct, scored: twin.scored })}</p>}
       {twin.rule === "active" && !twin.by_twin && <p className="text-mute">{t("twin.active")}</p>}
       {twin.rule === "off" && <p className="text-mute">{t("twin.off")}</p>}
-      {canAct && twin.offer && (
+      {canAct && twin.offer && !twin.policy && <p className="rounded-lg bg-raised p-3">{t("twin.offer_no_policy")}</p>}
+      {canAct && twin.offer && twin.policy && (
         <form className="space-y-2 rounded-lg bg-raised p-3" onSubmit={(e) => (e.preventDefault(), void send(true))}>
           <p className="font-medium">{t("twin.offer")}</p>
           {needsCode && (

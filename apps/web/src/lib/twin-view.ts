@@ -2,4 +2,6 @@
 export interface TwinView {
   class_key: string; predicted: "approved" | "rejected" | "abstain"; p: number; n: number;
   scored: number; correct: number; offer: boolean; rule: "active" | "off" | null; by_twin: boolean;
+  /** the project has approved rules (a twin rule binds to their hash; without them it cannot be accepted) */
+  policy: boolean;
 }

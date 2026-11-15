@@ -1064,6 +1064,7 @@ export const en = {
   "twin.abstain": "Your twin does not know yet how you decide tasks like this ({n} decisions).",
   "twin.score": "So far it guessed {correct} of your {scored} decisions in this kind of task.",
   "twin.offer": "Your twin knows how you decide this kind of task. May it approve such changes by itself? At most 5 a week, only checked changes without a second factor. When the project rules change, the rule stops.",
+  "twin.offer_no_policy": "Your twin knows how you decide this kind of task. To let it decide alone, first approve the project rules (Harness): the twin rule is bound to them.",
   "twin.yes": "Yes, let it decide",
   "twin.no": "No, ask me",
   "twin.active": "Your twin approves tasks like this by itself, under a rule you gave it.",
