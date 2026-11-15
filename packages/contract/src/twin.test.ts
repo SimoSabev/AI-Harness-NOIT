@@ -11,6 +11,9 @@ describe("twin contract (D-523)", () => {
     const k = twinClassKey({ repo_id: REPO, type: "bugfix", agent: "claude", reason: "approval" });
     expect(k).toBe(`${REPO}|bugfix|claude|approval`);
     expect(TwinClassKey.parse(k)).toBe(k);
+    // the live test (15.11.2026): tasks from the web run on an account or a connection agent
+    for (const agent of ["claude@personal", "codex+work-1", "fake:b10-ci-change"]) expect(twinClassKey({ repo_id: REPO, type: "free", agent, reason: "approval" })).toContain(agent);
+    expect(() => TwinClassKey.parse(`${REPO}|bugfix|Claude Max|approval`)).toThrow();
     expect(() => TwinClassKey.parse("a|b")).toThrow();
     expect(() => TwinClassKey.parse(`${REPO}|bugfix|claude|approval|x`)).toThrow();
   });

@@ -24,7 +24,8 @@ export const TWIN_LIMITS = Object.freeze({
 
 const Uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
 const Instant = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/);
-const Part = z.string().regex(/^[a-z0-9_:.-]{1,80}$/);
+// an agent id may be an account (claude@personal) or a connection (codex+work); never a space or a "|"
+const Part = z.string().regex(/^[a-z0-9_:.@+-]{1,80}$/);
 
 export interface TwinClass { repo_id: string; type: TaskType; agent: string; reason: string }
 /** "<repo_id>|<type>|<agent>|<reason>": what the owner decides alike */
