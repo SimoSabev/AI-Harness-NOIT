@@ -62,7 +62,8 @@ test("new task: a demo agent → the task “Queued”", async ({ page }) => {
   await login(page, EMAIL.approver);
   await page.getByRole("link", { name: "+ New task" }).click();
   await page.getByLabel("What should the agent do").fill("Fix the discount threshold");
-  await page.getByRole("combobox").selectOption({ label: "Demo: deletes a test" });
+  await page.getByRole("button", { name: /^Agent/ }).click(); // the dropdown in our design (components/select.tsx)
+  await page.getByRole("option", { name: "Demo: deletes a test" }).click();
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForURL(/\/\?task=t_/);
   await expect(page.getByText("Fix the discount threshold").first()).toBeVisible();

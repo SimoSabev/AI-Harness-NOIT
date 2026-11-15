@@ -50,7 +50,8 @@ test("roles: owner creates a docs reviewer role; an approver has no access", asy
   await page.getByLabel("Name").fill("docs reviewer");
   for (const c of ["approve.level1", "approve.level2", "diff.view"]) await page.getByRole("checkbox", { name: c, exact: true }).check();
   await page.getByRole("checkbox", { name: "docs", exact: true }).check();
-  await page.getByLabel("Highest level it may approve").selectOption("2");
+  await page.getByLabel("Highest level it may approve").click();
+  await page.getByRole("option", { name: "2", exact: true }).click();
   await page.getByRole("button", { name: "Create role" }).click();
   await expect(page.getByRole("status")).toHaveText("Role created.");
   await expect(page.getByRole("list", { name: "Roles" }).getByText("task types: docs · up to level 2")).toBeVisible();

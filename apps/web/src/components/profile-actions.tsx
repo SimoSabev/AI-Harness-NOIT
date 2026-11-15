@@ -6,6 +6,7 @@ import type { Key } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
 import { useNeedsCode } from "./second-factor";
 import { btn, input } from "./ui";
+import { Select } from "./select";
 
 const ERR: Record<string, Key> = {
   second_factor_required: "error.second_factor_required",
@@ -49,11 +50,7 @@ export function ProfileActions({ repoId, proposedId, versions }: { repoId: strin
           <span className="flex items-end gap-2">
             <label className="text-sm">
               <span className="sr-only">{t("profile.rollback")}</span>
-              <select className={`${input} w-24`} value={to} onChange={(e) => setTo(e.target.value)}>
-                {versions.map((v) => (
-                  <option key={v} value={String(v)}>{v}</option>
-                ))}
-              </select>
+              <Select className="w-24" value={to} onChange={setTo} options={versions.map((v) => ({ value: String(v), label: String(v) }))} />
             </label>
             <button type="button" className={btn.secondary} disabled={(needsCode && code.length !== 6) || to === ""} onClick={() => void call(`/api/repos/${repoId}/profile/rollback`, { version: Number(to) }, (v) => t("profile.rolledBack", { v }))}>
               {t("profile.rollback")}

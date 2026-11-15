@@ -10,6 +10,7 @@ import type { TaskAgent } from "../lib/agents";
 import { csrfToken, errorText, postJson } from "../lib/client/api";
 import { AccountLogin } from "./account-login";
 import { StatusBadge, btn, card, input } from "./ui";
+import { Select } from "./select";
 
 // D-393: the first-run page (/welcome) and Settings → Models. One flow, like the onboarding of coding harnesses: pick what
 // you have (a subscription, an API key, a model on this computer), connect each in place, choose the default. Keys go to
@@ -254,10 +255,9 @@ export function ConnectWizard({ connections, detect, agents, accountName, startA
                     {a.local && <span className="text-xs text-mute">{t("conn.localNote")}</span>}
                   </label>
                   {a.models.length > 1 && (
-                    <select className="rounded-lg border border-line bg-canvas px-2 py-1 font-mono text-sm" aria-label={t("ws.model")} disabled={choice.agent !== a.id}
-                      value={choice.agent === a.id ? (choice.model ?? "") : (a.defaultModel ?? "")} onChange={(e) => setChoice({ agent: a.id, model: e.target.value })}>
-                      {a.models.map((m) => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                    <Select size="sm" mono aria-label={t("ws.model")} disabled={choice.agent !== a.id}
+                      value={choice.agent === a.id ? (choice.model ?? "") : (a.defaultModel ?? "")} onChange={(v) => setChoice({ agent: a.id, model: v })}
+                      options={a.models.map((m) => ({ value: m, label: m }))} />
                   )}
                   {a.models.length === 1 && <span className="font-mono text-xs text-mute">{a.models[0]}</span>}
                 </li>
@@ -307,13 +307,10 @@ export function ConnectionsManager({ connections, agents, preferred }: { connect
         <h2 id="m-default" className="font-display text-base font-semibold">{t("conn.defaultTitle")}</h2>
         <p className="mt-1 mb-3 text-sm text-mute">{t("conn.defaultHint")}</p>
         <div className="flex flex-wrap items-center gap-3">
-          <select className="rounded-lg border border-line bg-canvas px-2 py-1.5 text-sm" aria-label={t("ws.agent")} value={def.agent} onChange={(e) => setDef({ agent: e.target.value, model: agents.find((a) => a.id === e.target.value)?.defaultModel ?? null })}>
-            {agents.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-          </select>
+          <Select size="sm" aria-label={t("ws.agent")} value={def.agent} onChange={(v) => setDef({ agent: v, model: agents.find((a) => a.id === v)?.defaultModel ?? null })}
+            options={agents.map((a) => ({ value: a.id, label: a.label }))} />
           {sel && sel.models.length > 1 && (
-            <select className="rounded-lg border border-line bg-canvas px-2 py-1.5 font-mono text-sm" aria-label={t("ws.model")} value={def.model ?? ""} onChange={(e) => setDef({ ...def, model: e.target.value })}>
-              {sel.models.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
+            <Select size="sm" mono aria-label={t("ws.model")} value={def.model ?? ""} onChange={(v) => setDef({ ...def, model: v })} options={sel.models.map((m) => ({ value: m, label: m }))} />
           )}
           <button type="button" className={btn.secondary} onClick={() => void saveDefault()} disabled={agents.length === 0}>{t("conn.saveDefault")}</button>
         </div>

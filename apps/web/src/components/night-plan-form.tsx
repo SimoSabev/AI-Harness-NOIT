@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
 import { btn, input } from "./ui";
+import { Select } from "./select";
 
 // v5 E9a (5.1 (2)): the plan of a night — when, the budget, the rules and the queue. The worker starts it at the start
 // time; a "now" start is a shift that starts at once.
@@ -58,10 +59,8 @@ export function NightPlanForm({ repos }: { repos: { id: string; name: string }[]
       <h2 id="night-plan-h" className="font-medium">{t("night.form.title")}</h2>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block">{t("night.form.start")}
-          <select className={`${input} mt-1`} value={start} onChange={(e) => setStart(e.target.value as "now" | "tonight")}>
-            <option value="tonight">{t("night.form.tonight")}</option>
-            <option value="now">{t("night.form.now")}</option>
-          </select>
+          <Select className="mt-1" value={start} onChange={(v) => setStart(v as "now" | "tonight")}
+            options={[{ value: "tonight", label: t("night.form.tonight") }, { value: "now", label: t("night.form.now") }]} />
         </label>
         <label className="block">{t("night.form.hours")}<input className={`${input} mt-1`} type="number" min={1} max={14} value={hours} onChange={(e) => setHours(Number(e.target.value))} /></label>
         <label className="block">{t("night.form.budget")}<input className={`${input} mt-1`} type="number" min={0.5} step={0.5} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /></label>
@@ -74,10 +73,10 @@ export function NightPlanForm({ repos }: { repos: { id: string; name: string }[]
         <legend className="font-medium">{t("night.form.queue")}</legend>
         {rows.map((r, i) => (
           <div key={i} className="grid gap-2 sm:grid-cols-[140px_minmax(0,1fr)_130px_110px_auto]">
-            <select aria-label={t("night.form.repo")} className={input} value={r.repo_id} onChange={(e) => set(i, { repo_id: e.target.value })}>{repos.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            <Select aria-label={t("night.form.repo")} value={r.repo_id} onChange={(v) => set(i, { repo_id: v })} options={repos.map((p) => ({ value: p.id, label: p.name }))} />
             <input aria-label={t("night.form.task")} className={input} value={r.text} maxLength={4000} placeholder={t("night.form.taskPlaceholder")} onChange={(e) => set(i, { text: e.target.value })} />
-            <select aria-label={t("newTask.type")} className={input} value={r.type} onChange={(e) => set(i, { type: e.target.value as Row["type"] })}>{TYPES.map((x) => <option key={x} value={x}>{t(`newTask.type.${x}`)}</option>)}</select>
-            <select aria-label={t("night.form.risk")} className={input} value={r.risk} onChange={(e) => set(i, { risk: e.target.value as Row["risk"] })}>{RISKS.map((x) => <option key={x} value={x}>{t(`night.risk.${x}`)}</option>)}</select>
+            <Select aria-label={t("newTask.type")} value={r.type} onChange={(v) => set(i, { type: v as Row["type"] })} options={TYPES.map((x) => ({ value: x, label: t(`newTask.type.${x}`) }))} />
+            <Select aria-label={t("night.form.risk")} value={r.risk} onChange={(v) => set(i, { risk: v as Row["risk"] })} options={RISKS.map((x) => ({ value: x, label: t(`night.risk.${x}`) }))} />
             <button type="button" className={btn.ghost} onClick={() => setRows(rows.filter((_, j) => j !== i))} disabled={rows.length === 1}>{t("night.form.remove")}</button>
           </div>
         ))}

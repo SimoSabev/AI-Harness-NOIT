@@ -7,6 +7,7 @@ import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
 import type { ResearchChannel } from "../lib/research-types";
 import { btn, card, input, label } from "./ui";
+import { Select } from "./select";
 
 // E9d (D-409): a new research question — what, how deep, how to spend on models; the rest folded under "More options".
 const DEPTHS: readonly ResearchDepth[] = ["quick", "standard", "deep"];
@@ -85,10 +86,8 @@ export function ResearchForm({ channels }: { channels: ResearchChannel[] }) {
               {RESEARCH_ROLES.map((role) => (
                 <label key={role} className="block text-sm">
                   <span className="text-xs text-mute">{t(`research.role.${role}`)}</span>
-                  <select value={routing[role] ?? ""} onChange={(e) => setRouting((r) => { const n = { ...r }; if (e.target.value) n[role] = e.target.value; else delete n[role]; return n; })} className={`${input} mt-1`}>
-                    <option value="">{t("research.form.auto")}</option>
-                    {usable.map((c) => <option key={c.id} value={c.id}>{c.label} · {c.model}</option>)}
-                  </select>
+                  <Select className="mt-1" value={routing[role] ?? ""} onChange={(v) => setRouting((r) => { const n = { ...r }; if (v) n[role] = v; else delete n[role]; return n; })}
+                    options={[{ value: "", label: t("research.form.auto") }, ...usable.map((c) => ({ value: c.id, label: `${c.label} · ${c.model}` }))]} />
                 </label>
               ))}
             </div>
@@ -106,9 +105,7 @@ export function ResearchForm({ channels }: { channels: ResearchChannel[] }) {
           </fieldset>
           <label className="block">
             <span className={label}>{t("research.form.recency")}</span>
-            <select value={recency} onChange={(e) => setRecency(e.target.value as typeof recency)} className={`${input} mt-2`}>
-              {(["any", "year", "month", "week"] as const).map((r) => <option key={r} value={r}>{t(`research.recency.${r}`)}</option>)}
-            </select>
+            <Select className="mt-2" value={recency} onChange={(v) => setRecency(v as typeof recency)} options={(["any", "year", "month", "week"] as const).map((r) => ({ value: r, label: t(`research.recency.${r}`) }))} />
           </label>
           <label className="block">
             <span className={label}>{t("research.form.include")}</span>

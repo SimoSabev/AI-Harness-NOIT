@@ -6,6 +6,7 @@ import type { Key } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
 import { useNeedsCode } from "./second-factor";
 import { btn, input } from "./ui";
+import { Select } from "./select";
 
 export interface CatalogRow { id: string; name: string; version: string | null; source: string; vet_status: string; vet_findings: { tool: string; reason: string }[]; egress_hosts: string[] }
 interface Found { name: string; description: string; versions: string[] }
@@ -79,7 +80,7 @@ export function McpCatalog({ rows }: { rows: CatalogRow[] }) {
       )}
       {pick && (
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-xs">{t("mcp.version")}<select className={`${input} mt-1`} value={pick.version} onChange={(e) => setPick({ ...pick, version: e.target.value })}>{pick.server.versions.map((v) => <option key={v} value={v}>{v}</option>)}</select></label>
+          <label className="text-xs">{t("mcp.version")}<Select className="mt-1" value={pick.version} onChange={(v) => setPick({ ...pick, version: v })} options={pick.server.versions.map((v) => ({ value: v, label: v }))} /></label>
           <label className="text-xs">{t("mcp.name")}<input className={`${input} mt-1 font-mono`} value={pick.name} onChange={(e) => setPick({ ...pick, name: e.target.value })} /></label>
           <button type="button" className={btn.primary} disabled={busy} onClick={() => void add()}>{t("mcp.add")}</button>
         </div>

@@ -6,6 +6,7 @@ import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
 import type { Tone } from "../lib/status";
 import { Hex, btn } from "./ui";
+import { Select } from "./select";
 
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; text: string; tone: Tone; label: string; ago: string }
@@ -81,9 +82,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           {agents.length > 1 ? (
             <label className="flex items-center gap-1.5 text-xs text-mute">
               {t("ws.agent")}
-              <select value={agent} onChange={(e) => pickAgent(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 text-sm text-ink">
-                {agents.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-              </select>
+              <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.label }))} />
             </label>
           ) : agents[0] ? (
             <span className="text-xs text-mute">{t("ws.agent")} <span className="text-ink">{agents[0].label}</span></span>
@@ -93,9 +92,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           {current && current.models.length > 1 && (
             <label className="flex items-center gap-1.5 text-xs text-mute">
               {t("ws.model")}
-              <select value={model ?? ""} onChange={(e) => setModel(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 font-mono text-sm text-ink">
-                {current.models.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <Select size="sm" mono aria-label={t("ws.model")} value={model ?? ""} onChange={setModel} options={current.models.map((m) => ({ value: m, label: m }))} />
             </label>
           )}
           {current && current.models.length === 1 && <span className="font-mono text-xs text-mute">{current.models[0]}</span>}
@@ -105,9 +102,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       {projects.length > 1 ? (
         <label className="mx-auto flex items-center gap-1.5 text-xs text-mute">
           {t("newTask.repo")}
-          <select value={repo} onChange={(e) => setRepo(e.target.value)} className="rounded-lg border border-line bg-canvas px-2 py-1 font-mono text-sm text-ink">
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-          </select>
+          <Select size="sm" mono aria-label={t("newTask.repo")} value={repo} onChange={setRepo} options={projects.map((p) => ({ value: p.id, label: p.full_name }))} />
         </label>
       ) : projects[0] ? (
         <p className="text-center text-xs text-mute">{t("newTask.repo")} <span className="font-mono">{projects[0].full_name}</span></p>

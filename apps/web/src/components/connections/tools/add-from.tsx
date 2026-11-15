@@ -6,6 +6,7 @@ import type { Key } from "../../../i18n/t";
 import { errorText, postJson } from "../../../lib/client/api";
 import { useNeedsCode } from "../../second-factor";
 import { btn, input } from "../../ui";
+import { Select } from "../../select";
 import { CandidateList, mcpKey, skillKey } from "./candidate-list";
 import { SOURCES, detectSource, sourceBody } from "./view";
 import type { Candidate, ImportSource, SkillCandidate } from "./view";
@@ -61,9 +62,7 @@ export function AddFrom() {
         <textarea className={`${input} min-h-20 font-mono text-xs`} value={raw} onChange={(e) => setRaw(e.target.value)} placeholder={t("tt.addPlaceholder")} aria-label={t("tt.addFrom")} />
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs">{t("tt.source")}
-            <select className={`${input} mt-1`} value={source} onChange={(e) => setChosen(e.target.value as ImportSource)}>
-              {SOURCES.map((s) => <option key={s} value={s}>{t(`tt.source.${s}` as Key)}</option>)}
-            </select>
+            <Select className="mt-1" value={source} onChange={(v) => setChosen(v as ImportSource)} options={SOURCES.map((s) => ({ value: s, label: t(`tt.source.${s}` as Key) }))} />
           </label>
           <button type="submit" className={btn.secondary} disabled={busy || raw.trim() === ""}>{t("tt.check")}</button>
         </div>

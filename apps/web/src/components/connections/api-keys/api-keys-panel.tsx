@@ -9,6 +9,7 @@ import type { Key } from "../../../i18n/t";
 import { errorText, postJson } from "../../../lib/client/api";
 import { ModelPicker, initialModels } from "../../connections-ui";
 import { StatusBadge, btn, card, input } from "../../ui";
+import { Select } from "../../select";
 import { addKeyBody, keyLooksRight, keyProviderGroups, keyRows, statusOf } from "./api-keys-view";
 import type { KeyRow } from "./api-keys-view";
 
@@ -123,13 +124,8 @@ function AddKey({ onSaved }: { onSaved: () => void }) {
       </div>
       <label className="block text-sm">
         <span className="font-medium">{t("apikeys.provider")}</span>
-        <select className={`${input} mt-1.5`} value={provider} onChange={(e) => pick(e.target.value as ProviderId)}>
-          {keyProviderGroups().map((g) => (
-            <optgroup key={g.group} label={t(GROUP[g.group])}>
-              {g.ids.map((id) => <option key={id} value={id}>{PROVIDERS[id].label}</option>)}
-            </optgroup>
-          ))}
-        </select>
+        <Select className="mt-1.5" value={provider} onChange={(v) => pick(v as ProviderId)}
+          options={keyProviderGroups().flatMap((g) => g.ids.map((id) => ({ value: id, label: PROVIDERS[id].label, group: t(GROUP[g.group]) })))} />
         <span className="mt-1.5 block"><AgentNote agent={info.agent} /></span>
       </label>
       <label className="block text-sm">

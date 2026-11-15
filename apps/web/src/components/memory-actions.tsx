@@ -6,6 +6,7 @@ import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
 import { btn, input } from "./ui";
+import { Select } from "./select";
 
 // D-400: changing memory from the menu — add, edit, approve/reject, archive/restore, pin, delete, tidy up. The server
 // runs every text through the same scanner as an agent's write; its refusals come back as plain sentences.
@@ -49,23 +50,17 @@ export function AddMemory({ repos, canProject }: { repos: { id: string; name: st
       <div className="flex flex-wrap items-end gap-2">
         <label className="text-xs text-mute">
           {t("mem.add.kind")}
-          <select className={`${input} mt-1 w-40`} value={kind} onChange={(e) => setKind(e.target.value as MemoryKind)}>
-            {KINDS.map((k) => <option key={k} value={k}>{t(`mem.kind.${k}`)}</option>)}
-          </select>
+          <Select className="mt-1 w-40" value={kind} onChange={(v) => setKind(v as MemoryKind)} options={KINDS.map((k) => ({ value: k, label: t(`mem.kind.${k}`) }))} />
         </label>
         <label className="text-xs text-mute">
           {t("mem.add.scope")}
-          <select className={`${input} mt-1 w-36`} value={scope} onChange={(e) => setScope(e.target.value as "user" | "project")}>
-            <option value="user">{t("mem.scope.user")}</option>
-            {canProject && repos.length > 0 && <option value="project">{t("mem.scope.project")}</option>}
-          </select>
+          <Select className="mt-1 w-36" value={scope} onChange={(v) => setScope(v as "user" | "project")}
+            options={[{ value: "user", label: t("mem.scope.user") }, ...(canProject && repos.length > 0 ? [{ value: "project", label: t("mem.scope.project") }] : [])]} />
         </label>
         {scope === "project" && (
           <label className="text-xs text-mute">
             {t("mem.project")}
-            <select className={`${input} mt-1 w-48`} value={repo} onChange={(e) => setRepo(e.target.value)}>
-              {repos.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-            </select>
+            <Select className="mt-1 w-48" value={repo} onChange={setRepo} options={repos.map((r) => ({ value: r.id, label: r.name }))} />
           </label>
         )}
         <button type="submit" className={btn.primary} disabled={text.trim().length < 3}>{t("mem.add.save")}</button>
@@ -94,9 +89,7 @@ export function MemoryEditor({ item, canEdit, after }: { item: MemoryItem; canEd
     <div className="space-y-3">
       <textarea className={`${input} min-h-20`} maxLength={500} value={text} onChange={(e) => setText(e.target.value)} aria-label={t("mem.add.text")} />
       <div className="flex flex-wrap items-center gap-2">
-        <select className={`${input} w-40`} value={kind} onChange={(e) => setKind(e.target.value as MemoryKind)} aria-label={t("mem.add.kind")}>
-          {KINDS.map((k) => <option key={k} value={k}>{t(`mem.kind.${k}`)}</option>)}
-        </select>
+        <Select className="w-40" value={kind} onChange={(v) => setKind(v as MemoryKind)} aria-label={t("mem.add.kind")} options={KINDS.map((k) => ({ value: k, label: t(`mem.kind.${k}`) }))} />
         <button type="button" className={btn.primary} disabled={!changed || text.trim().length < 3} onClick={() => void call({ action: "edit", text: text.trim(), kind })}>{t("mem.act.save")}</button>
       </div>
       <div className="flex flex-wrap gap-2">

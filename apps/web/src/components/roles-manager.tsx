@@ -5,6 +5,7 @@ import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { errorText, postJson } from "../lib/client/api";
 import { btn, card, input } from "./ui";
+import { Select } from "./select";
 
 const ERR: Record<string, Key> = { last_role_manager: "roles.lastManager", name_taken: "roles.nameTaken", bad_role: "roles.badRole" };
 const TYPES = ["bugfix", "feature", "css", "docs", "free"] as const;
@@ -46,11 +47,7 @@ export function RolesManager({ capabilities, dangerous, roles, members }: { capa
               <span className="truncate">{m.email ?? m.user_id}</span>
               <label className="flex items-center gap-2">
                 <span className="sr-only">{t("roles.assign")} — {m.email ?? m.user_id}</span>
-                <select className={input} value={m.role_id} onChange={(e) => void assign(m.user_id, e.target.value)}>
-                  {roles.map((r) => (
-                    <option key={r.id} value={r.id}>{r.name}</option>
-                  ))}
-                </select>
+                <Select value={m.role_id} onChange={(v) => void assign(m.user_id, v)} options={roles.map((r) => ({ value: r.id, label: r.name }))} />
               </label>
             </li>
           ))}
@@ -86,12 +83,7 @@ export function RolesManager({ capabilities, dangerous, roles, members }: { capa
         </fieldset>
         <label className="mt-3 block text-sm">
           {t("roles.levelCap")}
-          <select className={`${input} mt-1`} value={level} onChange={(e) => setLevel(e.target.value)}>
-            <option value="">{t("roles.noCap")}</option>
-            {[0, 1, 2, 3].map((n) => (
-              <option key={n} value={String(n)}>{n}</option>
-            ))}
-          </select>
+          <Select className="mt-1" value={level} onChange={setLevel} options={[{ value: "", label: t("roles.noCap") }, ...[0, 1, 2, 3].map((n) => ({ value: String(n), label: String(n) }))]} />
         </label>
         <button type="submit" className={`${btn.primary} mt-4`}>{t("roles.create")}</button>
       </form>

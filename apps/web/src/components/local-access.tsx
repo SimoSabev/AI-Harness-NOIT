@@ -10,6 +10,7 @@ import type { DesktopClient } from "../lib/client/desktop";
 import { EDITOR_STORAGE_KEY, WORKING_COPY_STORAGE_KEY, activityFor, joinLocal, parseEditor, suggestProject } from "../lib/client/local-access";
 import { HostTerminal } from "./host-terminal";
 import { btn, card, input } from "./ui";
+import { Select } from "./select";
 import { AddProjectForm } from "./add-project-form";
 
 // E9g A3 (AC-12.6, D-373): the web half of local access. Everything here runs only in the desktop window (the bridge);
@@ -266,9 +267,8 @@ export function LocalActions({ taskId, repoId, files }: { taskId: string; repoId
         <>
           <label className="mt-3 block">
             <span className="text-sm font-medium">{t("localActions.copy")}</span>
-            <select className={`${input} mt-1 font-mono`} value={folder} aria-label={t("localActions.choose")} onChange={(e) => (setFolder(e.target.value), setTerm(false), writeStore(storeKey, e.target.value))}>
-              {grants.map((g) => <option key={g.path} value={g.path}>{g.path}</option>)}
-            </select>
+            <Select className="mt-1" mono value={folder} aria-label={t("localActions.choose")} onChange={(v) => (setFolder(v), setTerm(false), writeStore(storeKey, v))}
+              options={grants.map((g) => ({ value: g.path, label: g.path }))} />
           </label>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" data-desktop-apply="" className={btn.secondary} disabled={busy || !grant?.scopes.includes("apply")} onClick={() => void apply()}>{t("localActions.apply")}</button>

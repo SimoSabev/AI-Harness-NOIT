@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
 import { btn, input } from "./ui";
+import { Select } from "./select";
 
 // E8g (v5 p. 4.4 (1)): the matrix is editable by tools.manage. A change that alters a repo's layer C is a new profile
 // version; allowing net:* or git push needs a TOTP code (asked for only when the server says so).
@@ -42,11 +43,8 @@ export function PermissionEditor() {
         <label className="block text-sm">{t("tools.edit.subject")}<input className={`${input} mt-1 font-mono`} value={subject} onChange={(e) => setSubject(e.target.value)} required maxLength={64} placeholder="any · agent:claude · night" /></label>
         <label className="block text-sm">{t("tools.edit.tool")}<input className={`${input} mt-1 font-mono`} value={tool} onChange={(e) => setTool(e.target.value)} required maxLength={160} placeholder="mcp:stripe.create_refund" /></label>
         <label className="block text-sm">{t("tools.edit.decision")}
-          <select className={`${input} mt-1`} value={decision} onChange={(e) => setDecision(e.target.value as "allow" | "ask" | "deny")}>
-            <option value="allow">{t("tools.perm.allow")}</option>
-            <option value="ask">{t("tools.perm.ask")}</option>
-            <option value="deny">{t("tools.perm.deny")}</option>
-          </select>
+          <Select className="mt-1" value={decision} onChange={(v) => setDecision(v as "allow" | "ask" | "deny")}
+            options={[{ value: "allow", label: t("tools.perm.allow") }, { value: "ask", label: t("tools.perm.ask") }, { value: "deny", label: t("tools.perm.deny") }]} />
         </label>
       </div>
       {needCode && (
