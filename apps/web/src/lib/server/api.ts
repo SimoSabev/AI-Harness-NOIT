@@ -30,6 +30,7 @@ import { AccountName, AddConnectionBody, AddProjectBody, RunnableAgentRef, Conne
 import { z } from "zod";
 import { UUID } from "./sql";
 import type { ColumnNo } from "../board";
+import { TwinRuleBody, decideTwinRule } from "./twin";
 
 // Demo prompt §8.1: the internal API as plain functions (Request → Response); app/api/**/route.ts only wires deps.
 export interface ApiDeps {
@@ -214,6 +215,15 @@ export async function postApprove(req: Request, d: ApiDeps, changesetId: string)
   const b = ApproveBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await approve(d.db, { uid: p.uid, changesetId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+
+/** D-523: the owner's one answer to the twin's offer (or turning a rule off) */
+export async function postTwinRule(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = TwinRuleBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await decideTwinRule(d.db, { uid: p.uid, org: p.org, body: b.data, secondFactor: d.secondFactor }), d);
 }
 
 export async function postFailureLabel(req: Request, d: ApiDeps, verdictId: string): Promise<Response> {
