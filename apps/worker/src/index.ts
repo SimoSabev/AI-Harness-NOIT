@@ -40,6 +40,7 @@ export type { NightTick } from "./online/night.js";
 export { selfFinishTick } from "./online/self-finish.js";
 export type { SelfFinishTick } from "./online/self-finish.js";
 export { twinTick } from "./online/twin.js";
+export { repoFacts } from "./online/repo-facts.js";
 export type { TwinTick } from "./online/twin.js";
 export { mcpHandlers, recordMcpBlocked, refOf, vetMcpServer } from "./online/mcp.js";
 export type { McpServerRow, McpVetResult, McpVetRunner } from "./online/mcp.js";
