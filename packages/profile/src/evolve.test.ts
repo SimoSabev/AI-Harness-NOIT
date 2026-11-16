@@ -31,6 +31,13 @@ describe("rulesFromFailures", () => {
     expect(rulesFromFailures([fail("t_8", ["D4:out_of_contract:infra/**"]), fail("t_9", ["D4:out_of_contract:infra/**"]), fail("t_10", ["D4:out_of_contract:infra/**"])], base(), NOW)).toEqual([]);
   });
 
+  it("test paths are never denied: a bugfix contract keeps tests out, but other task types must still write them", () => {
+    for (const glob of ["tests/**", "src/__tests__/**", "**/*.spec.ts", "e2e/**/*.test.js", ...base().a.tests.test_globs]) {
+      const rows = [fail("t_1", [`D4:out_of_contract:${glob}`]), fail("t_2", [`D4:out_of_contract:${glob}`]), fail("t_3", [`D4:out_of_contract:${glob}`])];
+      expect(rulesFromFailures(rows, base(), NOW)).toEqual([]);
+    }
+  });
+
   it("nothing is proposed when the profile already has it, or when the check command it needs is missing", () => {
     const has = base();
     const withBoundary: Layers = { ...has, b: { ...has.b, boundaries: [...has.b.boundaries, TESTS_KEPT] } };

@@ -35,7 +35,13 @@ function notNeeded(p: ProfileLayers, c: ProfileChange): boolean {
     const cmd = c.rule === "lint_hook" ? p.b.commands.lint : p.b.commands.typecheck;
     return !cmd || p.d.some((h) => h.script === HOOK[c.rule as "lint_hook" | "type_hook"]) || p.d.length >= 40;
   }
+  // a test path is out of a bugfix contract by design, but other task types must write tests: never deny it profile-wide
+  if (isTestPath(c.detail, p.a.tests.test_globs)) return true;
   return p.c.some((r) => r.tool === writeDeny(c.detail) && r.decision === "deny" && r.subject === "any") || p.c.length >= 500;
+}
+const TESTISH = /(^|\/)(tests?|__tests__|specs?|e2e)(\/|$)|\.(test|spec)\.[a-z0-9*]+$|\.(test|spec)\.\*/i;
+function isTestPath(glob: string, testGlobs: readonly string[]): boolean {
+  return testGlobs.includes(glob) || TESTISH.test(glob);
 }
 
 export function rulesFromFailures(rows: readonly FailureRow[], profile: ProfileLayers, now: string): ProfileManifest[] {
