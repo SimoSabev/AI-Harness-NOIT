@@ -260,6 +260,7 @@ export const LedgerKind = z.enum([
   "parked",
   "twin_rule", // D-523
   "twin_decided",
+  "profile_trial", // D-530
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
