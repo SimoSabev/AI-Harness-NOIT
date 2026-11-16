@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ProfileLayers, demoProfileLayers } from "@mandat/contract";
-import type { ProfileLayers as Layers } from "@mandat/contract";
+import type { ProfileLayers as Layers, ProfileManifest } from "@mandat/contract";
 import { TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
 import type { FailureRow } from "./evolve.js";
 
@@ -80,7 +80,7 @@ describe("applyChange and isNarrowing", () => {
 });
 
 describe("predictionHeld", () => {
-  const manifest = { change: { rule: "tests_kept", layer: "b", detail: "" }, evidence: ["t_a", "t_b", "t_c"], reason_class: "D2:missing_test", prediction: { task_type: "bugfix", next_n: 3, max_repeats: 0 } } as const;
+  const manifest: ProfileManifest = { change: { rule: "tests_kept", layer: "b", detail: "" }, evidence: ["t_a", "t_b", "t_c"], reason_class: "D2:missing_test", prediction: { task_type: "bugfix", next_n: 3, max_repeats: 0 } };
   it("waits for next_n tasks of the type; a repeat of the class beyond max_repeats falsifies it at once", () => {
     expect(predictionHeld(manifest, [fail("t_x", [])])).toEqual({ done: false, held: true, seen: 1, repeats: 0 });
     expect(predictionHeld(manifest, [fail("t_x", []), fail("t_y", ["D8:lint_fail:-"]), fail("t_z", [], { type: "free" }), fail("t_w", [])])).toEqual({ done: true, held: true, seen: 3, repeats: 0 });
