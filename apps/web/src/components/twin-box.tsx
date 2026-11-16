@@ -9,7 +9,7 @@ import { btn, input } from "./ui";
 
 // D-523 (the owner's twin) on the task card: what the twin would decide and how often it was right; the ONE
 // offer to let it decide this kind of task (a second factor where the app asks for one); turning an active rule off.
-export function TwinBox({ twin, canAct, waiting }: { twin: TwinView; canAct: boolean; waiting: boolean }) {
+export function TwinBox({ twin, canAct, waiting, taskId }: { twin: TwinView; canAct: boolean; waiting: boolean; taskId: string }) {
   const t = useT();
   const router = useRouter();
   const needsCode = useNeedsCode();
@@ -39,6 +39,8 @@ export function TwinBox({ twin, canAct, waiting }: { twin: TwinView; canAct: boo
       {canAct && twin.offer && !twin.policy && <p className="rounded-lg bg-raised p-3">{t("twin.offer_no_policy")}</p>}
       {canAct && twin.offer && twin.policy && (
         <form className="space-y-2 rounded-lg bg-raised p-3" onSubmit={(e) => (e.preventDefault(), void send(true))}>
+          {/* with stale scripts the form goes out plain to "/"; the task keeps the person on this task */}
+          <input type="hidden" name="task" value={taskId} />
           <p className="font-medium">{t("twin.offer")}</p>
           {needsCode && (
             <label className="block max-w-xs">

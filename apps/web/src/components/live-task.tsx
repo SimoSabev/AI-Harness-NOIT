@@ -221,7 +221,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
             )}
             {files.length === 0 && view.diffOmitted !== null && <p className="rounded-xl bg-raised px-4 py-3 text-sm text-mute">{t("res.tooLarge", { mb: t.num(view.diffOmitted / 1048576, 1) })}</p>}
             {shots}
-            {view.twin && <TwinBox twin={view.twin} canAct={canAct} waiting={s.key === "review"} />}
+            {view.twin && <TwinBox twin={view.twin} canAct={canAct} waiting={s.key === "review"} taskId={task.id} />}
             <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} />
             {files.length > 0 && <LocalActions taskId={task.id} repoId={view.repoId} files={files.map((f) => f.path)} />}
             {view.asks.length > 0 && <AskCards taskId={task.id} asks={view.asks} attempt={view.asks[0]?.attempt ?? 1} canDecide={canAct && s.key === "ask"} />}
