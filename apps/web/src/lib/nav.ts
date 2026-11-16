@@ -3,7 +3,7 @@ import type { Key } from "../i18n/t";
 // D-384: three sections; D-409 (E9d): research has its own place next to tasks; D-403: memory too (asked for in the
 // side bar). Every other page still opens by its link, from the section it lives under (projects → rules; settings →
 // accounts, system, tools, roles, local access); the side bar lights up that section.
-export type Page = "tasks" | "overview" | "library" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research" | "system" | "memory";
+export type Page = "tasks" | "overview" | "library" | "board" | "harness" | "new" | "task" | "login" | "keys" | "settings" | "agents" | "tools" | "night" | "research" | "system" | "memory" | "metrics";
 export type Section = "tasks" | "research" | "projects" | "memory" | "settings";
 
 export const NAV: readonly { id: Section; href: string; label: Key }[] = [
@@ -15,7 +15,7 @@ export const NAV: readonly { id: Section; href: string; label: Key }[] = [
 ];
 
 const UNDER: Record<Page, Section | null> = {
-  tasks: "tasks", task: "tasks", new: "tasks", overview: "tasks", library: "tasks", board: "tasks", agents: "tasks", night: "tasks", research: "research",
+  tasks: "tasks", task: "tasks", new: "tasks", overview: "tasks", library: "tasks", board: "tasks", agents: "tasks", night: "tasks", metrics: "tasks", research: "research",
   harness: "projects",
   memory: "memory",
   settings: "settings", keys: "settings", system: "settings", tools: "settings",

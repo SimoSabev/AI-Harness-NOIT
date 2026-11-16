@@ -71,7 +71,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <h1 className="font-display text-2xl font-semibold tracking-tight">{t("home.title")}</h1>
           <p className="mt-1 text-sm text-mute">{t("home.intro")}</p>
         </div>
-        {all.length > 0 && <ViewTabs value={view} />}
+        <div className="flex items-center gap-2">
+          <Link href="/metrics" className={btn.ghost}>{t("metrics.link")}</Link>
+          {all.length > 0 && <ViewTabs value={view} />}
+        </div>
       </div>
       {all.length === 0 ? (
         <div className={`${card} mt-8 flex flex-col items-center px-6 py-14 text-center`}>
