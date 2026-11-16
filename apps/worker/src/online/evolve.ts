@@ -1,0 +1,127 @@
+import { EVOLVE_LIMITS, ProfileLayers, ProfileManifest, profileHash } from "@mandat/contract";
+import type { ProfileLayers as Layers, TaskType } from "@mandat/contract";
+import { applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "@mandat/profile";
+import type { FailureRow } from "@mandat/profile";
+import { appendLedgerOnline } from "@mandat/ledger";
+import type { SqlClient } from "@mandat/ledger";
+
+// D-530 (round 2): profile evolution with evidence, the worker's tick.
+// 1. propose: a recurring failure class of a project → a trial (one per change, never twice);
+// 2. gate: the bench runs the same scenarios with the current and the changed profile; worse → refused; not worse and
+//    narrowing → Mandat accepts it as a new approved version (the twin's rule follows the narrowing, by Simo's choice);
+//    not narrowing → it waits for a person (never with the four fixed rules, which only narrow);
+// 3. watch: an accepted change whose prediction the next tasks falsify is rolled back to the old layers.
+export interface BenchScore { pass: number; total: number; false_verified: number }
+export type BenchRunner = (layers: Layers, taskType: TaskType) => Promise<BenchScore>;
+export interface EvolveTick { proposed: string[]; accepted: string[]; refused: string[]; rolledBack: string[] }
+
+interface Repo { id: string; org_id: string; profile_id: string; version: number; layers: unknown }
+interface Trial { id: string; org_id: string; repo_id: string; change_key: string; manifest: unknown; from_profile: string; to_profile: string | null; decided_at: string | null }
+
+const REPOS = `select r.id::text as id, r.org_id::text as org_id, h.id::text as profile_id, h.version, h.layers
+  from public.repos r join public.harness_profiles h on h.id = r.profile_id and h.status = 'approved'`;
+/** per task of the repo: its type, when it ended, the reasons of its latest verdict */
+const ROWS = `select t.id as task_id, t.type as task_type, to_char(t.state_entered_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at,
+         coalesce((select v.reasons from public.verdicts v where v.task_id = t.id order by v.created_at desc limit 1), '[]'::jsonb) as reasons
+    from public.tasks t
+   where t.repo_id = $1::uuid and t.state in ('BLOCKED', 'CLOSED', 'HELD', 'GATED', 'DELIVERED', 'OUTCOME') and t.state_entered_at > $2::timestamptz
+     and exists (select 1 from public.verdicts v where v.task_id = t.id)`;
+
+const keyOf = (m: ProfileManifest) => `${m.change.rule}|${m.change.detail}|${m.prediction.task_type}`;
+const rowsOf = (rows: { task_id: string; task_type: TaskType; at: string; reasons: unknown }[]): FailureRow[] =>
+  rows.map((r) => ({ ...r, reasons: Array.isArray(r.reasons) ? r.reasons.filter((x): x is string => typeof x === "string") : [] }));
+
+export async function evolveTick(db: SqlClient, o: { now: Date; bench?: BenchRunner }): Promise<EvolveTick> {
+  const out: EvolveTick = { proposed: [], accepted: [], refused: [], rolledBack: [] };
+  for (const r of (await db.query<Repo>(REPOS)).rows) {
+    const layers = ProfileLayers.safeParse(r.layers);
+    if (!layers.success) continue;
+    await propose(db, r, layers.data, o.now, out);
+    if (o.bench) await gate(db, r, layers.data, o.bench, out);
+    await watch(db, r, out);
+  }
+  return out;
+}
+
+async function propose(db: SqlClient, r: Repo, layers: Layers, now: Date, out: EvolveTick): Promise<void> {
+  const since = new Date(now.getTime() - EVOLVE_LIMITS.window_days * 86_400_000).toISOString();
+  const rows = rowsOf((await db.query<{ task_id: string; task_type: TaskType; at: string; reasons: unknown }>(ROWS, [r.id, since])).rows);
+  for (const m of rulesFromFailures(rows, layers, now.toISOString())) {
+    const ins = await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::uuid) on conflict (repo_id, change_key) do nothing returning id", [r.org_id, r.id, keyOf(m), JSON.stringify(m), r.profile_id]);
+    if (ins.rows.length === 0) continue;
+    await appendLedgerOnline(db, { org_id: r.org_id, kind: "profile_trial", task_id: null, payload: { status: "proposed", change: m.change, reason_class: m.reason_class, evidence: m.evidence.length, prediction: m.prediction, by: "mandat" } });
+    out.proposed.push(keyOf(m));
+  }
+}
+
+async function gate(db: SqlClient, r: Repo, layers: Layers, bench: BenchRunner, out: EvolveTick): Promise<void> {
+  const open = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'proposed' order by created_at", [r.id])).rows;
+  for (const t of open) {
+    const m = ProfileManifest.safeParse(t.manifest);
+    if (!m.success) continue;
+    const candidate = applyChange(layers, m.data.change);
+    const type = m.data.prediction.task_type;
+    const [before, after] = [await bench(layers, type), await bench(candidate, type)];
+    const scores = { before, after };
+    if (after.pass < before.pass || after.false_verified > before.false_verified) {
+      await decide(db, t, "refused", scores, `the bench got worse: ${after.pass}/${after.total} vs ${before.pass}/${before.total}`);
+      out.refused.push(t.change_key);
+      continue;
+    }
+    if (!isNarrowing(layers, candidate)) {
+      await decide(db, t, "benched", scores, "not narrowing: waits for a person");
+      continue;
+    }
+    const to = await newVersion(db, r, candidate, { action: "evolve", trial: t.id });
+    await db.query("update public.profile_trials set to_profile = $2::uuid where id = $1::uuid", [t.id, to]);
+    await decide(db, t, "accepted", scores, `${m.data.reason_class} ×${m.data.evidence.length}; the bench held: ${after.pass}/${after.total}`);
+    out.accepted.push(t.change_key);
+    return; // one change per tick: the next trial is benched against the new profile
+  }
+}
+
+async function watch(db: SqlClient, r: Repo, out: EvolveTick): Promise<void> {
+  const live = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'accepted' and to_profile = $2::uuid", [r.id, r.profile_id])).rows;
+  for (const t of live) {
+    const m = ProfileManifest.safeParse(t.manifest);
+    if (!m.success || !t.decided_at) continue;
+    const later = rowsOf((await db.query<{ task_id: string; task_type: TaskType; at: string; reasons: unknown }>(ROWS, [r.id, t.decided_at])).rows);
+    const p = predictionHeld(m.data, later);
+    if (p.held) continue;
+    const old = (await db.query<{ layers: unknown }>("select layers from public.harness_profiles where id = $1::uuid", [t.from_profile])).rows[0];
+    const back = ProfileLayers.safeParse(old?.layers);
+    if (!back.success) continue;
+    await newVersion(db, r, back.data, { action: "evolve_rollback", trial: t.id });
+    await decide(db, t, "rolled_back", null, `the prediction failed: ${m.data.reason_class} came back ${p.repeats}× in ${p.seen} task(s)`);
+    out.rolledBack.push(t.change_key);
+    return;
+  }
+}
+
+/** A new approved version of the repo's profile in one transaction; the old one superseded; twin rules follow its hash. */
+async function newVersion(db: SqlClient, r: Repo, layers: Layers, why: { action: string; trial: string }): Promise<string> {
+  const hash = profileHash(layers);
+  await db.query("begin");
+  try {
+    const old = (await db.query<{ profile_hash: string }>("select profile_hash from public.harness_profiles where id = $1::uuid", [r.profile_id])).rows[0];
+    const v = (await db.query<{ v: number }>("select coalesce(max(version), 0) + 1 as v from public.harness_profiles where repo_id = $1::uuid", [r.id])).rows[0]?.v ?? r.version + 1;
+    const ins = await db.query<{ id: string }>("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash, status, approved_at) values ($1::uuid, $2::uuid, $3, $4::jsonb, '{}', $5, 'approved', now()) returning id::text as id", [r.org_id, r.id, v, JSON.stringify(layers), hash]);
+    const id = ins.rows[0]?.id as string;
+    await db.query("update public.harness_profiles set status = 'superseded' where id = $1::uuid and status = 'approved'", [r.profile_id]);
+    await db.query("update public.repos set profile_id = $2::uuid where id = $1::uuid", [r.id, id]);
+    if (old) await db.query("update public.twin_rules set policy_hash = $3 where org_id = $1::uuid and policy_hash = $2 and revoked_at is null", [r.org_id, old.profile_hash, hash]);
+    await appendLedgerOnline(db, { org_id: r.org_id, kind: "profile_change", task_id: null, payload: { action: why.action, trial_id: why.trial, profile_id: id, profile_hash: hash, version: v, by: "mandat" } });
+    await db.query("commit");
+    r.profile_id = id;
+    r.version = v;
+    return id;
+  } catch (e) {
+    await db.query("rollback");
+    throw e;
+  }
+}
+
+async function decide(db: SqlClient, t: Trial, status: "benched" | "accepted" | "refused" | "rolled_back", bench: { before: BenchScore; after: BenchScore } | null, why: string): Promise<void> {
+  await db.query("update public.profile_trials set status = $2, bench = coalesce($3::jsonb, bench), why = $4, decided_at = case when $2 in ('accepted', 'refused') then now() else decided_at end where id = $1::uuid", [t.id, status, bench ? JSON.stringify(bench) : null, why.slice(0, 500)]);
+  await appendLedgerOnline(db, { org_id: t.org_id, kind: "profile_trial", task_id: null, payload: { trial_id: t.id, change_key: t.change_key, status, why: why.slice(0, 300), by: "mandat" } });
+}
