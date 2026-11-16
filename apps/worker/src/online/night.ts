@@ -65,7 +65,8 @@ export async function nightShiftTick(db: SqlClient, o: { now: Date; slots?: numb
     for (const it of items.filter((i) => i.status === "queued")) {
       if (running >= slots) break;
       const taskId = `t_night_${it.id}`;
-      await db.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, shift_id) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7::uuid) on conflict (id) do nothing", [taskId, s.org_id, it.repo_id, it.type, o.agent ?? "claude", it.text, s.id]);
+      // a night task belongs to whoever planned the night (round 1): it gets that person's memory, like a day task
+      await db.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, shift_id, created_by) select $1, $2::uuid, $3::uuid, $4, $5, $6, $7::uuid, n.created_by from public.night_shifts n where n.id = $7::uuid on conflict (id) do nothing", [taskId, s.org_id, it.repo_id, it.type, o.agent ?? "claude", it.text, s.id]);
       await db.query("update public.night_queue set status = 'running', task_id = $2 where id = $1::bigint and status = 'queued'", [it.id, taskId]);
       it.status = "running";
       running++;

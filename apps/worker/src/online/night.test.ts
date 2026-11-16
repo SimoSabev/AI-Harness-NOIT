@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pgliteDb } from "./pglite-db.test-helper.js";
-import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
+import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
 import { nightShiftTick } from "./night.js";
 
 // v5 E9а (5.1, D-320): the tick of the night shift — start at starts_at, fill ≤ N slots from the queue, read each
@@ -14,11 +14,11 @@ beforeAll(async () => {
 });
 afterAll(() => db.end());
 
-const shift = async (id: string, o: { startsIn?: number; endsIn?: number; budget?: number; status?: string } = {}) => {
+const shift = async (id: string, o: { startsIn?: number; endsIn?: number; budget?: number; status?: string; by?: string } = {}) => {
   await db.query(
-    `insert into public.night_shifts (id, org_id, starts_at, ends_at, budget_usd, rules, status)
-     values ($1, $2, now() + make_interval(mins => $3::int), now() + make_interval(mins => $4::int), $5, $6::jsonb, $7)`,
-    [id, DEMO_ORG_ID, o.startsIn ?? -1, o.endsIn ?? 480, o.budget ?? 10, JSON.stringify(RULES), o.status ?? "planned"],
+    `insert into public.night_shifts (id, org_id, starts_at, ends_at, budget_usd, rules, status, created_by)
+     values ($1, $2, now() + make_interval(mins => $3::int), now() + make_interval(mins => $4::int), $5, $6::jsonb, $7, $8::uuid)`,
+    [id, DEMO_ORG_ID, o.startsIn ?? -1, o.endsIn ?? 480, o.budget ?? 10, JSON.stringify(RULES), o.status ?? "planned", o.by ?? null],
   );
 };
 const queue = async (s: string, texts: string[]) => {
@@ -34,14 +34,15 @@ const S1 = "50000000-0000-4000-8000-0000000000a1";
 
 describe("night shift tick (E9а)", () => {
   it("планирана смяна тръгва в starts_at; ≤ N слота задачи от опашката (shift_id, тип, текст); повторното тиктакане не дублира", async () => {
-    await shift(S1);
+    await shift(S1, { by: DEMO_OWNER_ID });
     await queue(S1, ["fix one", "fix two", "fix three"]);
     await nightShiftTick(db, { now: new Date(), slots: 2, agent: "fake:honest-fix" });
     expect((await db.query<{ status: string }>("select status from public.night_shifts where id = $1", [S1])).rows[0]?.status).toBe("running");
     const it1 = await items(S1);
     expect(it1.map((i) => i.status)).toEqual(["running", "running", "queued"]);
-    const t = (await db.query<{ shift_id: string; type: string; text: string; agent: string; state: string }>("select shift_id::text as shift_id, type, text, agent, state from public.tasks where id = $1", [it1[0]?.task_id])).rows[0];
-    expect(t).toMatchObject({ shift_id: S1, type: "bugfix", text: "fix one", agent: "fake:honest-fix", state: "CREATED" });
+    // round 1, small fix: a night task belongs to whoever planned the night, so it gets that person's memory
+    const t = (await db.query<{ shift_id: string; type: string; text: string; agent: string; state: string; created_by: string | null }>("select shift_id::text as shift_id, type, text, agent, state, created_by::text as created_by from public.tasks where id = $1", [it1[0]?.task_id])).rows[0];
+    expect(t).toMatchObject({ shift_id: S1, type: "bugfix", text: "fix one", agent: "fake:honest-fix", state: "CREATED", created_by: DEMO_OWNER_ID });
     await nightShiftTick(db, { now: new Date(), slots: 2, agent: "fake:honest-fix" });
     expect((await items(S1)).map((i) => i.status)).toEqual(["running", "running", "queued"]);
     expect((await db.query("select 1 from public.ledger where kind = 'night_start'")).rows).toHaveLength(1);
