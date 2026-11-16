@@ -74,6 +74,20 @@ describe("accounts commands with a fake docker (D-295)", () => {
     ]);
     expect(calls.filter((c) => c[0] === "run")).toHaveLength(1);
   });
+  it("round 1: without the sandbox image the status cannot be checked, and it says so (not \"not signed in\")", async () => {
+    const { accountsCommand, listAccounts } = await import("./commands/accounts.js");
+    const calls: string[][] = [];
+    const d = fake([
+      (a) => (a[0] === "volume" && a[1] === "ls" ? { out: "mandat-profile-claude-work\n" } : undefined),
+      (a) => (a[0] === "image" && a[1] === "inspect" ? { exit: 1 } : undefined),
+    ], calls);
+    expect(await listAccounts(d as never)).toEqual([{ name: "work", agent: "claude@work", cli: "claude", loggedIn: false, email: null, plan: null, unchecked: true }]);
+    expect(calls.filter((c) => c[0] === "run")).toHaveLength(0);
+    const a = io();
+    await accountsCommand(a.io, d as never, { json: false });
+    expect(a.o.out).toContain("не мога да проверя");
+    expect(a.o.out).not.toContain("не е влязъл");
+  });
   it("logout removes the volume; login without the image → 3 (no login is started)", async () => {
     const { loginCommand, logoutCommand } = await import("./commands/accounts.js");
     const calls: string[][] = [];

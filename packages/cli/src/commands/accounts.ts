@@ -58,7 +58,8 @@ function readStatus(cli: SubscriptionId, stdout: string, exitCode: number): Prof
 }
 const OUT: ProfileStatus = { loggedIn: false, email: null, plan: null };
 
-export interface Account extends ProfileStatus { name: string; agent: string; cli: SubscriptionId }
+/** `unchecked`: the sandbox image is missing, so the status could not be read (round 1: never shown as "not signed in") */
+export interface Account extends ProfileStatus { name: string; agent: string; cli: SubscriptionId; unchecked?: true }
 
 /** D-445: calls made while a run is in progress wait for that run. A page render lists the accounts (one container each);
  * without this, renders on a slow machine pile containers up and starve the database. */
@@ -73,6 +74,7 @@ export async function listAccounts(deps: CliDeps): Promise<Account[]> {
   const r = await dockerText(deps.docker, ["volume", "ls", "--filter", "label=mandat.profile=1", "--format", "{{.Name}}"]);
   if (r.exitCode !== 0) return [];
   const image = (await imageTags(repoRoot)).sandbox;
+  const hasImage = (await dockerText(deps.docker, ["image", "inspect", "--format", "{{.Id}}", image])).exitCode === 0;
   const out: Account[] = [];
   for (const vol of r.stdout.split("\n").map((x) => x.trim())) {
     const p = parseProfileVolume(vol);
@@ -81,6 +83,10 @@ export async function listAccounts(deps: CliDeps): Promise<Account[]> {
     // D-460: a provider without a status command (planned, or Gemini behind Q-073) runs nothing and is not signed in
     if (SUBSCRIPTIONS[cli].status.argv.length === 0) {
       out.push({ name, agent: `${cli}@${name}`, cli, ...OUT });
+      continue;
+    }
+    if (!hasImage) {
+      out.push({ name, agent: `${cli}@${name}`, cli, ...OUT, unchecked: true });
       continue;
     }
     const s = await dockerText(deps.docker, buildProfileArgs("status", { image, volume: vol }), 60_000);
@@ -93,7 +99,7 @@ export async function accountsCommand(io: Io, deps: CliDeps, o: { json: boolean 
   const list = await listAccounts(deps);
   if (o.json) printJson(io, { accounts: list });
   else if (list.length === 0) io.stdout("Няма акаунти. Влез с: pnpm mandat login --name <име>\n");
-  else for (const a of list) io.stdout(`${a.name.padEnd(16)} ${a.loggedIn ? `${a.email ?? "?"} · ${a.plan ?? "абонамент"}` : "не е влязъл"}\n`);
+  else for (const a of list) io.stdout(`${a.name.padEnd(16)} ${a.unchecked ? "не мога да проверя: няма образ (pnpm mandat images build)" : a.loggedIn ? `${a.email ?? "?"} · ${a.plan ?? "абонамент"}` : "не е влязъл"}\n`);
   return 0;
 }
 
