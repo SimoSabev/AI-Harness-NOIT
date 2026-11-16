@@ -50,4 +50,20 @@ describe("rules of an own local project (D-388)", () => {
     expect(gh.state.calls).toEqual([]);
     expect((await db.query<{ kind: string }>("select kind from public.ledger where kind = 'delivered'")).rows).toHaveLength(1);
   });
+
+  // live test (16.11.2026): the local demo project carries the worker's demo repo name, so its rules went to a PR in the
+  // fake GitHub that nothing merges, while its tasks go into the mirror's main (D-367) — every next task was harness_stale
+  it("the local demo project (the worker's demo name, provider local) gets its rules in the mirror too, no PR", async () => {
+    await db.query("update public.repos set full_name = 'mandat-demo/shop' where id = $1", [DEMO_REPO_ID]);
+    const gh = fakeGitHub({ repos: { "mandat-demo/shop": {} } });
+    const deps = { db, gh, ghRepo: "mandat-demo/shop", localGh: fakeGitHub({ autoRepos: true }) };
+    const id = await scanForProposal(deps, DEMO_REPO_ID);
+    const p = (await db.query<{ policy_yaml: string; yaml_sha256: string }>("select policy_yaml, yaml_sha256 from public.harness_proposals where id = $1", [id])).rows[0];
+    const before = git("--git-dir", mirror, "show", "main:.mandat.yml");
+    const yaml = `${p?.policy_yaml.trim()}\n# v2\n`;
+    await db.query("update public.harness_proposals set status = 'approved', version = 2, generated = $2::jsonb where id = $1", [id, JSON.stringify([{ path: ".mandat.yml", content: yaml, sha256: p?.yaml_sha256, before: `${before}\n` }])]);
+    expect(await deliverHarnessPr(deps, id as string)).toBeNull();
+    expect(git("--git-dir", mirror, "show", "main:.mandat.yml")).toBe(yaml.trim());
+    expect(gh.state.calls).toEqual([]);
+  });
 });

@@ -134,7 +134,9 @@ export async function deliverHarnessPr(d: HarnessDeps, proposalId: string): Prom
   if (hp.pr_number !== null) return { number: hp.pr_number }; // idempotent
   const patch = filesPatch(hp.generated.map((f) => ({ path: f.path, before: f.before, after: f.content })));
   const g = ghFor(d, hp);
-  if (g.own) {
+  // live test (16.11.2026): a project on this computer (provider local) — the local demo too — has its tasks merged into
+  // the mirror's main (D-367), so its rules go there as well; a PR nothing merges left every next task harness_stale
+  if (g.own || hp.provider === "local") {
     await deliverHarnessLocal(d, proposalId, { ...hp, patch });
     return null;
   }
