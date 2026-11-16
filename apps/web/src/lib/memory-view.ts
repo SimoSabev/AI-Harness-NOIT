@@ -5,7 +5,8 @@ import { searchMemory } from "@mandat/memory";
 
 export const MEMORY_FILTERS = ["all", "mine", "project", "pending", "archive"] as const;
 export type MemoryFilter = (typeof MEMORY_FILTERS)[number];
-export interface MemoryQuery { view: "list" | "graph"; filter: MemoryFilter; q: string; id: string | null }
+/** `at`: round 2 — a day (YYYY-MM-DD) the memory is shown as of; absent = today */
+export interface MemoryQuery { view: "list" | "graph"; filter: MemoryFilter; q: string; id: string | null; at?: string | null }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
@@ -13,7 +14,12 @@ const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : u
 export function parseMemoryQuery(sp: Record<string, string | string[] | undefined>): MemoryQuery {
   const f = one(sp.f);
   const id = one(sp.id);
+  const at = one(sp.at);
+  // a real calendar day only (2026-13-40 parses to nothing or to another day)
+  const t = at && /^\d{4}-\d{2}-\d{2}$/.test(at) ? Date.parse(`${at}T00:00:00.000Z`) : Number.NaN;
+  const day = at && Number.isFinite(t) && new Date(t).toISOString().startsWith(at) ? at : null;
   return {
+    ...(day ? { at: day } : {}),
     view: one(sp.view) === "graph" ? "graph" : "list",
     filter: (MEMORY_FILTERS as readonly string[]).includes(f ?? "") ? (f as MemoryFilter) : "all",
     q: (one(sp.q) ?? "").trim().slice(0, 200),
@@ -47,6 +53,7 @@ export function memoryHref(q: MemoryQuery, change: Partial<MemoryQuery>): string
   if (n.filter !== "all") p.set("f", n.filter);
   if (n.q) p.set("q", n.q);
   if (n.id) p.set("id", n.id);
+  if (n.at) p.set("at", n.at);
   const s = p.toString();
   return s ? `/memory?${s}` : "/memory";
 }

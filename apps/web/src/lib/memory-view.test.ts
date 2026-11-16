@@ -34,6 +34,14 @@ describe("изгледът на паметта", () => {
     expect(visibleMemories(items, { view: "list", filter: "all", q: "тестът", id: null }).map((x) => x.text)).toEqual(["Тестовете са с vitest"]);
     expect(visibleMemories(items, { view: "list", filter: "archive", q: "npm", id: null }).map((x) => x.text)).toEqual(["Ползвам npm"]);
   });
+  it("round 2: ?at= is a day the memory is shown as of; a bad or future-looking value is ignored; links keep it", () => {
+    expect(parseMemoryQuery({ at: "2026-11-01" }).at).toBe("2026-11-01");
+    expect(parseMemoryQuery({ at: "2026-13-40" }).at).toBeUndefined();
+    expect(parseMemoryQuery({ at: "yesterday" }).at).toBeUndefined();
+    expect(memoryHref({ view: "list", filter: "all", q: "", id: null, at: "2026-11-01" }, { id: "x" })).toBe("/memory?id=x&at=2026-11-01");
+    expect(memoryHref({ view: "list", filter: "all", q: "", id: null, at: "2026-11-01" }, { at: null })).toBe("/memory");
+  });
+
   it("линкът пази изгледа, филтъра и търсенето", () => {
     expect(memoryHref({ view: "graph", filter: "pending", q: "a b", id: null }, { id: "x" })).toBe("/memory?view=graph&f=pending&q=a+b&id=x");
     expect(memoryHref({ view: "list", filter: "all", q: "", id: "x" }, { id: null })).toBe("/memory");

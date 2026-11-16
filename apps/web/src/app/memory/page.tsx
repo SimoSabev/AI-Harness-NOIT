@@ -14,7 +14,7 @@ import type { MemoryQuery } from "../../lib/memory-view";
 import { ago } from "../../lib/status";
 import type { Tone } from "../../lib/status";
 import { db } from "../../lib/server/db";
-import { memoryHistoryWeb, memoryOverview } from "../../lib/server/memory";
+import { memoryAsOfWeb, memoryHistoryWeb, memoryOverview, staleMemoriesWeb } from "../../lib/server/memory";
 import { canAct, pageCtx } from "../../lib/server/page";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
 const TONE: Record<MemoryItem["status"], Tone> = { active: "green", pending: "amber", rejected: "gray", invalid: "gray", archived: "gray" };
 const chip = "rounded-full px-3 py-1 text-sm text-mute hover:bg-raised hover:text-ink aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent-text";
 
-function Row({ m, q, t, repos, now }: { m: MemoryItem; q: MemoryQuery; t: T; repos: Record<string, string>; now: Date }) {
+function Row({ m, q, t, repos, now, stale }: { m: MemoryItem; q: MemoryQuery; t: T; repos: Record<string, string>; now: Date; stale: boolean }) {
   return (
     <li>
       <Link href={memoryHref(q, { id: m.id })} aria-current={q.id === m.id ? "page" : undefined}
@@ -36,6 +36,7 @@ function Row({ m, q, t, repos, now }: { m: MemoryItem; q: MemoryQuery; t: T; rep
           <span className="block text-[11px] text-mute">
             {t(`mem.kind.${m.kind}`)} · {m.scope === "project" && m.repo_id ? repos[m.repo_id] ?? t("mem.project") : t("mem.filter.mine")}
             {m.status !== "active" && ` · ${t(`mem.status.${m.status}`)}`}{m.pinned && ` · ${t("mem.pinned")}`} · {ago(m.created_at, now, t.lang)}
+            {stale && <span className="text-warn"> · {t("mem.stale")}</span>}
           </span>
         </span>
       </Link>
@@ -50,7 +51,9 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
   const t = await getT();
   const q = parseMemoryQuery(await searchParams);
   const o = await memoryOverview(db(), c.uid, c.org);
-  const shown = visibleMemories(o.items, q);
+  // round 2: ?at= shows the memory as it was at the end of that day (read only); today it is checked against the repo
+  const [past, stale] = await Promise.all([q.at ? memoryAsOfWeb(db(), c.uid, c.org, q.at) : null, q.at ? ({} as Record<string, string[]>) : staleMemoriesWeb(db(), c.uid, c.org)]);
+  const shown = visibleMemories(past ?? o.items, q);
   const sel = q.id ? o.items.find((m) => m.id === q.id) ?? null : null;
   const history = sel ? await memoryHistoryWeb(db(), c.uid, c.org, sel.id) : [];
   const now = new Date();
@@ -87,9 +90,24 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
             <form action="/memory" method="get" className="min-w-48 flex-1">
               {q.view === "graph" && <input type="hidden" name="view" value="graph" />}
               {q.filter !== "all" && <input type="hidden" name="f" value={q.filter} />}
+              {q.at && <input type="hidden" name="at" value={q.at} />}
               <input name="q" defaultValue={q.q} placeholder={t("mem.search")} aria-label={t("mem.search")} className="block w-full rounded-lg border border-line-strong bg-canvas px-3 py-1.5 text-sm" />
             </form>
+            <form action="/memory" method="get" className="flex items-center gap-2 text-xs text-mute">
+              {q.view === "graph" && <input type="hidden" name="view" value="graph" />}
+              {q.filter !== "all" && <input type="hidden" name="f" value={q.filter} />}
+              <label className="flex items-center gap-2">
+                {t("mem.asOf.label")}
+                <input type="date" name="at" defaultValue={q.at ?? ""} max={now.toISOString().slice(0, 10)} className="rounded-lg border border-line-strong bg-canvas px-2 py-1 text-sm text-ink" />
+              </label>
+              <button type="submit" className={chip}>{t("mem.asOf.show")}</button>
+            </form>
           </div>
+          {q.at && (
+            <p role="status" className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-text">
+              {t("mem.asOf.banner", { date: q.at })} <Link className="underline" href={memoryHref(q, { at: null })}>{t("mem.asOf.today")}</Link>
+            </p>
+          )}
           {o.items.length === 0 ? (
             <p className={`${card} p-6 text-sm text-mute`}>{t("mem.empty")}</p>
           ) : shown.length === 0 ? (
@@ -101,7 +119,7 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
             </div>
           ) : (
             <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-              {shown.map((m) => <Row key={m.id} m={m} q={q} t={t} repos={o.repos} now={now} />)}
+              {shown.map((m) => <Row key={m.id} m={m} q={q} t={t} repos={o.repos} now={now} stale={m.id in stale} />)}
             </ul>
           )}
         </div>
@@ -119,6 +137,14 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
                 {sel.provenance.task_id && <p className="text-xs"><Link className="underline" href={`/?task=${sel.provenance.task_id}`}>{t("mem.detail.task", { task: sel.provenance.task_id })}</Link></p>}
                 {sel.entities.length > 0 && <p className="text-xs text-mute">{t("mem.detail.about")}: <span className="font-mono">{sel.entities.join(", ")}</span></p>}
                 <p className="text-xs text-mute">{t("mem.detail.used", { n: sel.uses })}</p>
+                {stale[sel.id] && (
+                  <div className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
+                    <p className="font-medium">{t("mem.stale.title")}</p>
+                    <ul className="mt-1 list-disc pl-4">
+                      {(stale[sel.id] ?? []).map((w) => <li key={w}>{w.startsWith("path:") ? t("mem.stale.path", { p: w.slice(5) }) : t("mem.stale.script", { s: w.slice(7) })}</li>)}
+                    </ul>
+                  </div>
+                )}
                 {replacedBy && <p className="text-xs"><Link className="underline" href={memoryHref(q, { id: replacedBy.id })}>{t("mem.detail.replaced")}: {replacedBy.text}</Link></p>}
                 {canEdit(sel) ? <MemoryEditor key={sel.id} item={sel} canEdit after={memoryHref(q, { id: null })} /> : <p className="text-sm">{sel.text}</p>}
                 {history.length > 0 && (

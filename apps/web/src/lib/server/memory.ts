@@ -1,7 +1,8 @@
 import { MemoryNote, MemoryPatch } from "@mandat/contract";
 import type { MemoryItem } from "@mandat/contract";
-import { addMemory, applyConsolidation, consolidationPlan, deleteMemory, loadMemory, memoryHistory, memoryTokens, patchMemory, renderCore, usageRows, usageSummary } from "@mandat/memory";
-import type { MemoryEvent, UsageSummary } from "@mandat/memory";
+import { addMemory, applyConsolidation, consolidationPlan, deleteMemory, loadMemory, memoryAsOf, memoryHistory, memoryTokens, patchMemory, renderCore, staleAgainstRepo, usageRows, usageSummary } from "@mandat/memory";
+import type { MemoryEvent, TimedEvent, UsageSummary } from "@mandat/memory";
+import { repoFacts } from "@mandat/worker";
 import { UUID, asService, asUser } from "./sql";
 import type { Db } from "./sql";
 import type { Role } from "./queries";
@@ -40,6 +41,39 @@ export async function memoryOverview(db: Db, uid: string, org: string): Promise<
 export async function memoryHistoryWeb(db: Db, uid: string, org: string, id: string): Promise<MemoryEvent[]> {
   if (!UUID.test(id)) return [];
   return asUser(db, uid, (sql) => memoryHistory(sql, { org, user: uid, id }));
+}
+
+/** Round 2: the memory the person sees, as it was at the end of a day (YYYY-MM-DD), replayed from its history. */
+export async function memoryAsOfWeb(db: Db, uid: string, org: string, day: string): Promise<MemoryItem[]> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return [];
+  return asUser(db, uid, async (sql) => {
+    const items = await loadMemory(sql, { org, user: uid });
+    const ev = items.length === 0 ? [] : (await sql.query<TimedEvent & { item_id: string }>(
+      `select e.item_id::text as item_id, e.action, e.before, e.after, to_char(e.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at
+         from public.memory_events e where e.org_id = $1::uuid and e.item_id = any($2::uuid[]) order by e.id`,
+      [org, items.map((m) => m.id)],
+    )).rows;
+    const history: Record<string, TimedEvent[]> = {};
+    for (const e of ev) (history[e.item_id] ??= []).push(e);
+    return memoryAsOf(items, history, `${day}T23:59:59.999Z`);
+  });
+}
+
+/** Round 2: active project memories naming a file or script their local project's main lacks → id → reasons. */
+export async function staleMemoriesWeb(db: Db, uid: string, org: string): Promise<Record<string, string[]>> {
+  const { items, repos } = await asUser(db, uid, async (sql) => ({
+    items: (await loadMemory(sql, { org, user: uid, statuses: ["active"] })).filter((m) => m.scope === "project" && m.repo_id),
+    repos: (await sql.query<{ id: string; remote_url: string }>("select id::text as id, remote_url from public.repos where org_id = $1::uuid", [org])).rows,
+  }));
+  const out: Record<string, string[]> = {};
+  for (const r of repos) {
+    const mine = items.filter((m) => m.repo_id === r.id);
+    if (mine.length === 0) continue;
+    const facts = await repoFacts(r.remote_url).catch(() => null);
+    if (!facts) continue; // not on this computer, or unreadable: not checked
+    for (const s of staleAgainstRepo(mine, facts)) out[s.id] = s.why;
+  }
+  return out;
 }
 
 export async function createMemoryWeb(db: Db, o: { uid: string; org: string; role: Role; body: unknown }): Promise<Res> {
