@@ -8,6 +8,8 @@ export type { Hit, RecallOptions, Why } from "./recall.js";
 export { conflictsWith, consolidationPlan } from "./consolidate.js";
 export type { ConsolidationPlan } from "./consolidate.js";
 export { memoryGraph } from "./graph.js";
+export { memoryAsOf, staleAgainstRepo } from "./temporal.js";
+export type { RepoFacts, StaleMemory, TimedEvent } from "./temporal.js";
 export type { GraphEdge, GraphNode, MemoryGraph, NodeType } from "./graph.js";
 export { memoryTokens, usageSummary } from "./metrics.js";
 export type { UsageSummary } from "./metrics.js";
