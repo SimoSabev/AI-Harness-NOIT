@@ -1071,6 +1071,7 @@ export const bg: Record<Key, string> = {
   "metrics.withYou": "С твое решение",
   "metrics.cost": "Цена на приета промяна",
   "metrics.costSub": "общо {usd} за периода, с неуспешните",
+  "metrics.costNone": "няма измерена цена: задачите вървят през абонамент",
   "metrics.twin": "Точност на двойника",
   "metrics.twinSub": "позна {correct} от {scored} твои решения",
   "metrics.twinNone": "още няма оценени прогнози",

@@ -98,7 +98,7 @@ export default async function MetricsPage({ searchParams }: { searchParams: Prom
           <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Tile title={t("metrics.accepted")} value={String(m.accepted)} sub={t("metrics.acceptedSub", { n: m.finished, pct: pct(m.successRate) })} />
             <Tile title={t("metrics.alone")} value={pct(m.withoutYouRate)} sub={t("metrics.aloneSub", { n: m.withoutYou, twin: m.byTwin, self: m.selfRetries })} />
-            <Tile title={t("metrics.cost")} value={m.usdPerAccepted === null ? "—" : t.usd(m.usdPerAccepted)} sub={t("metrics.costSub", { usd: t.usd(m.usd) })} />
+            <Tile title={t("metrics.cost")} value={m.usdPerAccepted === null ? "—" : t.usd(m.usdPerAccepted)} sub={m.usd > 0 ? t("metrics.costSub", { usd: t.usd(m.usd) }) : t("metrics.costNone")} />
             <Tile title={t("metrics.twin")} value={pct(m.twin.rate)} sub={m.twin.scored === 0 ? t("metrics.twinNone") : t("metrics.twinSub", { correct: m.twin.correct, scored: m.twin.scored })} />
           </div>
           <Weeks m={m} t={t} />

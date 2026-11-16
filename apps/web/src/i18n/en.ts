@@ -1095,6 +1095,7 @@ export const en = {
   "metrics.withYou": "With your decision",
   "metrics.cost": "Cost per accepted change",
   "metrics.costSub": "{usd} in total for the period, failed ones included",
+  "metrics.costNone": "no metered cost: the tasks run on a subscription",
   "metrics.twin": "Twin accuracy",
   "metrics.twinSub": "guessed {correct} of your {scored} decisions",
   "metrics.twinNone": "no scored predictions yet",

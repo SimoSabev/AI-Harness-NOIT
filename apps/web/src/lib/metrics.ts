@@ -57,7 +57,8 @@ export function metricsOf(tasks: readonly MetricTask[], o: { now: string; days: 
     usd,
     successRate: rate(accepted.length, inWindow.length),
     withoutYouRate: rate(alone.length, accepted.length),
-    usdPerAccepted: rate(usd, accepted.length),
+    // a run through a subscription has no metered cost: no figure rather than a false $0
+    usdPerAccepted: usd > 0 ? rate(usd, accepted.length) : null,
     twin: { ...o.twin, rate: rate(o.twin.correct, o.twin.scored) },
     weeks,
   };

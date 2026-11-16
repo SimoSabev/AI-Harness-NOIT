@@ -37,6 +37,12 @@ describe("metricsOf", () => {
     expect(m.twin).toEqual({ scored: 12, correct: 11, rate: 11 / 12 });
   });
 
+  it("runs through a subscription have no metered cost: no cost per change rather than a false $0", () => {
+    const m = metricsOf([task({ usd: 0 }), task({ usd: 0 })], { now: NOW, days: 30, twin: { scored: 0, correct: 0 } });
+    expect(m.usdPerAccepted).toBeNull();
+    expect(m.usd).toBe(0);
+  });
+
   it("nothing finished → no rates, no division by zero", () => {
     const m = metricsOf([], { now: NOW, days: 7, twin: { scored: 0, correct: 0 } });
     expect(m).toMatchObject({ finished: 0, accepted: 0, successRate: null, withoutYouRate: null, usdPerAccepted: null, twin: { rate: null } });
