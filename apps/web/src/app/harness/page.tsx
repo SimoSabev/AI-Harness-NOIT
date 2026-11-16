@@ -13,6 +13,8 @@ import { fieldLabel, humanFields, proposalStatus, sourceLabel } from "../../lib/
 import { pageTitle } from "../../lib/inbox";
 import { db } from "../../lib/server/db";
 import { harnessView } from "../../lib/server/harness";
+import { profileTrials } from "../../lib/server/evolve";
+import type { TrialView } from "../../lib/server/evolve";
 import { profileView } from "../../lib/server/profile";
 import type { ProfileView } from "../../lib/server/profile";
 import type { Key, T } from "../../i18n/t";
@@ -37,6 +39,7 @@ export default async function HarnessPage() {
   for (const r of v.repos) profiles.set(r.id, await profileView(db(), c.uid, c.org, r.id));
   const hidden = new Map<string, Awaited<ReturnType<typeof hiddenSets>>>();
   for (const r of v.repos) hidden.set(r.id, await hiddenSets(db(), c.uid, r.id));
+  const trials = await profileTrials(db(), c.uid, c.org);
   return (
     <Shell current="harness" waiting={c.waiting}>
       <div className="flex flex-wrap items-center gap-3">
@@ -96,6 +99,7 @@ export default async function HarnessPage() {
             ) : (
               <p className="mt-3 text-sm">{t("harness.noProposal")}</p>
             )}
+            <Trials t={t} trials={trials[r.id] ?? []} />
             <details className="mt-5 border-t border-line pt-4">
               <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">{t("harness.advanced")}</summary>
               <ProfilePanel t={t} repoId={r.id} view={profiles.get(r.id)} canApprove={c.role === "owner"} />
@@ -113,6 +117,35 @@ export default async function HarnessPage() {
       })}
       <Live topic={`org:${c.org}:board`} since={new Date().toISOString()} realtime={c.realtime} />
     </Shell>
+  );
+}
+
+const TRIAL_TONE: Record<TrialView["status"], "green" | "amber" | "gray" | "red"> = { proposed: "amber", benched: "amber", accepted: "green", refused: "gray", rolled_back: "red" };
+
+/** D-530: what Mandat tightened by itself from recurring failures — the change, the evidence, the prediction, the bench */
+function Trials({ t, trials }: { t: T; trials: TrialView[] }) {
+  if (trials.length === 0) return null;
+  return (
+    <section aria-label={t("evolve.title")} className="mt-5 border-t border-line pt-4">
+      <h3 className="text-sm font-medium">{t("evolve.title")}</h3>
+      <p className="mt-1 text-xs text-mute">{t("evolve.intro")}</p>
+      <ul className="mt-3 space-y-2">
+        {trials.map((x) => {
+          const m = x.manifest;
+          return (
+            <li key={`${m.change.rule}|${m.change.detail}|${m.prediction.task_type}`} className="rounded-lg border border-line px-3 py-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{t(`evolve.rule.${m.change.rule}`, { p: m.change.detail })}</span>
+                <StatusBadge tone={TRIAL_TONE[x.status]} label={t(`evolve.status.${x.status}`)} />
+              </div>
+              <p className="mt-1 text-xs text-mute">{t("evolve.evidence", { n: m.evidence.length, cls: m.reason_class, type: m.prediction.task_type })}</p>
+              <p className="text-xs text-mute">{t("evolve.prediction", { cls: m.reason_class, n: m.prediction.next_n })}</p>
+              {x.bench && <p className="text-xs text-mute">{t("evolve.bench", { a: x.bench.after.pass, at: x.bench.after.total, b: x.bench.before.pass, bt: x.bench.before.total })}</p>}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
