@@ -19,7 +19,8 @@ export const ProfileChangeRule = z.enum(["tests_kept", "lint_hook", "type_hook",
 export type ProfileChangeRule = z.infer<typeof ProfileChangeRule>;
 
 // a path glob or nothing: printable, no whitespace controls, no zero-width or bidi characters
-const Detail = z.string().max(200).regex(/^[^\u0000-\u001f\u007f​-‏‪-‮⁠-⁤﻿]*$/);
+const hidden = (c: number) => c < 0x20 || c === 0x7f || (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) || (c >= 0x2060 && c <= 0x2064) || c === 0xfeff;
+const Detail = z.string().max(200).refine((s) => ![...s].some((ch) => hidden(ch.codePointAt(0) ?? 0)), "invisible or control character");
 
 export const ProfileChange = z.object({ rule: ProfileChangeRule, layer: z.enum(["b", "c", "d", "g"]), detail: Detail }).strict();
 export type ProfileChange = z.infer<typeof ProfileChange>;
