@@ -1,7 +1,9 @@
+import path from "node:path";
+import { runBench } from "@mandat/bench";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
-import type { NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
+import type { BenchRunner, EvolveTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { researchDeps, researchLoop } from "./research.js";
@@ -47,6 +49,31 @@ export function twinTicker(o: { env: NodeJS.ProcessEnv; now: () => number; log: 
     const fresh = n.offers.filter((k) => !offered.has(k));
     for (const k of fresh) offered.add(k);
     if (fresh.length > 0) o.log(`[twin] ready to offer: ${fresh.join(", ")}`);
+  };
+}
+
+/**
+ * D-530: profile evolution beside the other ticks, never blocking them (its bench takes minutes): started in the
+ * background, never twice at once, at most every `everyMs` (30 min); after an error it waits 6 hours; MANDAT_EVOLVE=0 off.
+ */
+export function evolveTicker(o: { env: NodeJS.ProcessEnv; now: () => number; log: (line: string) => void; tick: () => Promise<EvolveTick>; everyMs?: number }): () => void {
+  let next = 0;
+  let running = false;
+  return () => {
+    if (o.env.MANDAT_EVOLVE === "0" || running || o.now() < next) return;
+    running = true;
+    next = o.now() + (o.everyMs ?? 30 * 60_000);
+    void o.tick()
+      .then((n) => {
+        for (const [what, ids] of [["proposed", n.proposed], ["accepted", n.accepted], ["refused", n.refused], ["rolled back", n.rolledBack]] as const) if (ids.length > 0) o.log(`[evolve] ${what}: ${ids.join(", ")}`);
+      })
+      .catch((e: unknown) => {
+        next = o.now() + 6 * 3600_000;
+        o.log(`[evolve] paused for 6 h: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
+      })
+      .finally(() => {
+        running = false;
+      });
   };
 }
 
@@ -133,6 +160,14 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   // E9а (v5 5.1): the night shift ticks every 30 s; its tasks are normal tasks the slots claim
   const night = nightTicker({ now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => nightShiftTick(db, { now: new Date(), slots: slotsFrom(env.MANDAT_NIGHT_SLOTS, Math.max(1, slots)), agent: env.MANDAT_NIGHT_AGENT ?? "claude" }) });
   const self = selfTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => selfFinishTick(db, { now: new Date() }) });
+  // D-530: the bench gate runs the scenarios of the task type's contract with the current and the changed profile;
+  // MANDAT_EVOLVE_BENCH=0 keeps trials proposed (no bench, nothing accepted)
+  const bench: BenchRunner = async (layers, type) => {
+    const r = await runBench({ home: o.home, contractPath: path.join(repoRoot, "contracts", "fix-discount.json"), freeContractPath: path.join(repoRoot, "contracts", "free-cart.json"), env, layers, kind: type === "free" ? "free" : "default" });
+    if (r.infraError) throw new Error(`bench: ${r.infraError}`);
+    return { pass: r.pass, total: r.rows.length, false_verified: r.false_verified };
+  };
+  const evolve = evolveTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => evolveTick(db, { now: new Date(), ...(env.MANDAT_EVOLVE_BENCH === "0" ? {} : { bench }) }) });
   const twin = twinTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => twinTick(db, { now: new Date() }) });
   // E9г (D-409): research runs beside the task slots (≤ 2 here, ≤ 2 per org); MANDAT_RESEARCH=0 turns it off
   const host = hostConfig(env);
@@ -158,6 +193,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         await night();
         await self();
         await twin();
+        evolve();
         // E8g (D-356): the project's CI on Mandat's PRs (a red round → HELD ci_failed)
         const red = await pollCi({ db, gh, ghRepo: repo, localGh }).catch(() => []);
         if (red.length > 0) io.stderr(`[ci] failed: ${red.join(", ")}\n`);
