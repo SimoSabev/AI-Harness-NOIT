@@ -1,14 +1,17 @@
 import { demoProfileLayers, parseVitestReport, sealProfile } from "@mandat/contract";
+import type { ProfileLayersInput } from "@mandat/contract";
 import type { VerdictResult } from "@mandat/contract";
 import type { DockerRunner } from "@mandat/sandbox";
 import { runTask, runTestProcedure } from "@mandat/worker";
 import { CHECKS, HIDDEN, SCENARIOS } from "./scenarios.js";
 
-/** v5 E9b (D8): the demo profile with the shop's own lint and typecheck */
-function checksProfile() {
-  const l = demoProfileLayers();
+/** v5 E9b (D8): the demo profile (or the profile under trial, D-530) with the shop's own lint and typecheck */
+function checksProfile(base?: ProfileLayersInput) {
+  const l = base ?? demoProfileLayers();
   return sealProfile({ version: 1, repo_id: "local", layers: { ...l, b: { ...l.b, commands: { ...l.b.commands, ...CHECKS } } }, sources: {}, approved_by: null, approved_at: null });
 }
+/** D-530: the profile under trial, for every scenario */
+const trialProfile = (layers: ProfileLayersInput) => sealProfile({ version: 1, repo_id: "local", layers, sources: {}, approved_by: null, approved_at: null });
 
 export interface BenchRow {
   id: string;
@@ -31,20 +34,31 @@ export interface BenchResult {
 }
 
 /** 9.6 / D-110 / D-134: sequential, baseline cached after the first run. */
-export async function runBench(o: { home: string; contractPath: string; freeContractPath?: string; only?: string[]; docker?: DockerRunner; env?: Record<string, string | undefined>; onRow?: (r: BenchRow) => void }): Promise<BenchResult> {
+export async function runBench(o: {
+  home: string; contractPath: string; freeContractPath?: string; only?: string[]; docker?: DockerRunner; env?: Record<string, string | undefined>; onRow?: (r: BenchRow) => void;
+  /** D-530: the profile under trial (every scenario runs with it) */
+  layers?: ProfileLayersInput;
+  /** D-530: only the scenarios of one contract — "free" for free tasks, "default" (bugfix) for the other types */
+  kind?: "free" | "default";
+  /** tests only: the task runner */
+  run?: typeof runTask;
+}): Promise<BenchResult> {
   const rows: BenchRow[] = [];
   const t0 = Date.now();
   let infraError: string | null = null;
+  const run = o.run ?? runTask;
   for (const s of SCENARIOS) {
     if (o.only && !o.only.includes(s.id)) continue;
+    if (o.kind && (o.kind === "free") !== (s.contract === "free")) continue;
     const t = Date.now();
     if (s.contract === "free" && !o.freeContractPath) {
       infraError = `${s.id}: no free contract`;
       break;
     }
-    const r = await runTask({
+    const profile = s.checks ? checksProfile(o.layers) : o.layers ? trialProfile(o.layers) : null;
+    const r = await run({
       home: o.home, contractPath: s.contract === "free" ? (o.freeContractPath as string) : o.contractPath, agent: `fake:${s.fake}`, keep: false, json: true,
-      ...(s.hidden ? { hidden: HIDDEN } : {}), ...(s.checks ? { profile: checksProfile() } : {}),
+      ...(s.hidden ? { hidden: HIDDEN } : {}), ...(profile ? { profile } : {}),
       ...(o.docker ? { docker: o.docker } : {}), internals: { ...(o.env ? { env: o.env } : {}) },
     });
     if (!r.verdict) {
