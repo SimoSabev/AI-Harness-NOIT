@@ -115,6 +115,8 @@ export const Preferences = z.object({
   defaultModel: ModelId.nullable().default(null),
   /** the first-run page was finished or skipped */
   onboarded: z.boolean().default(false),
+  /** D-531: the task box asks first (a conversation before work) or works right away (today's task) */
+  taskMode: z.enum(["ask_first", "work_now"]).default("ask_first"),
 }).strict();
 export type Preferences = z.infer<typeof Preferences>;
 

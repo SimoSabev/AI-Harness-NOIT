@@ -49,8 +49,8 @@ describe("ConnectionStore (D-392)", () => {
   it("preferences: the default agent and model survive a restart; a broken file reads as empty", () => {
     const h = home();
     const s = new ConnectionStore(h, kek);
-    expect(s.prefs()).toEqual({ defaultAgent: null, defaultModel: null, onboarded: false });
-    s.setPrefs({ defaultAgent: "claude+deepseek", defaultModel: "deepseek-v4-pro", onboarded: true });
+    expect(s.prefs()).toEqual({ defaultAgent: null, defaultModel: null, onboarded: false, taskMode: "ask_first" });
+    s.setPrefs({ defaultAgent: "claude+deepseek", defaultModel: "deepseek-v4-pro", onboarded: true, taskMode: "ask_first" });
     expect(new ConnectionStore(h).prefs()).toMatchObject({ defaultAgent: "claude+deepseek", onboarded: true });
     writeFileSync(path.join(h, "connections.json"), "{not json");
     expect(new ConnectionStore(h).list()).toEqual([]);

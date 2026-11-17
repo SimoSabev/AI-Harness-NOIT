@@ -34,3 +34,4 @@ export * from "./subscriptions.js";
 export * from "./agent-cli.js";
 export * from "./twin.js";
 export * from "./evolve.js";
+export * from "./conversation.js";
