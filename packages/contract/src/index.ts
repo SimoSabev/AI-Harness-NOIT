@@ -38,3 +38,4 @@ export * from "./conversation.js";
 export * from "./task-profile.js";
 export * from "./task-spec.js";
 export * from "./oracle.js";
+export * from "./job.js";

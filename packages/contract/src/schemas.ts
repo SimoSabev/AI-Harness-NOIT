@@ -269,6 +269,9 @@ export const LedgerKind = z.enum([
   "spec_approved", // D-533
   "oracle_built", // D-534
   "oracle_approved",
+  "plan_built", // D-535
+  "session_sealed",
+  "job_approved",
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
