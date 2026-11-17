@@ -553,6 +553,24 @@ describe("daemon and file conflicts (E8f, AC-4.2)", () => {
   });
 });
 
+describe("daemon and a runner the sandbox cannot run (live test 17.11.2026)", () => {
+  it("node 22 in the approved policy → BLOCKED unsupported_runner with a ledger row; the daemon does not throw", async () => {
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@x" };
+    const s = await setup(0);
+    const w = path.join(mkdtempSync(path.join(os.tmpdir(), "mandat-w-")), "w");
+    execFileSync("git", ["clone", "-q", s.fx.mirror, w], { env });
+    const f = path.join(w, ".mandat.yml");
+    writeFileSync(f, readFileSync(f, "utf8").replace(/node: "24"/, 'node: "22"'));
+    execFileSync("git", ["commit", "-qam", "node 22"], { cwd: w, env });
+    execFileSync("git", ["push", "-q", "origin", "HEAD:main", "HEAD:master"], { cwd: w, env });
+    await expect(runDaemonOnce(s.deps)).resolves.not.toThrow();
+    expect((await s.db.query("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "BLOCKED", wait_reason: "unsupported_runner" });
+    const stop = (await readLedgerOnline(s.db, DEMO_ORG_ID)).find((r) => r.kind === "task_stopped");
+    expect(JSON.parse(stop?.payload_jcs ?? "{}")).toEqual({ reason: "unsupported_runner", detail: "npm/vitest" });
+    expect(s.runs).toHaveLength(0);
+  }, 30_000);
+});
+
 describe("daemon and a moved base (E8f, AC-4.5)", () => {
   const env = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@x", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@x" };
   const recorded = () => readFileSync(path.join(repoRoot, "demo/recordings/scene1-task1.patch"));

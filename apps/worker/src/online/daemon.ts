@@ -169,6 +169,18 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     await bc("BLOCKED", seq, { wait_reason: "policy_missing" });
     return { state: "BLOCKED", verdict: null };
   }
+  // A runner the sandbox cannot run (live test 17.11.2026: node "22" approved for a pnpm/vitest repo) stops this task
+  // with a reason the person can read; it never reaches contractForTask, whose throw took the whole worker down.
+  const runner = repoConfigFromPolicy(parsed.policy);
+  if (!runner.ok) {
+    const seq = await inTransaction(d.db, async (tx) => {
+      const s = await setState(tx, t, "BLOCKED", { wait_reason: "unsupported_runner" });
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: "unsupported_runner", detail: runner.detail } });
+      return s;
+    });
+    await bc("BLOCKED", seq, { wait_reason: "unsupported_runner" });
+    return { state: "BLOCKED", verdict: null };
+  }
   // E3б Поток 2 минимум: drift of the base policy against the approved harness (hard → harness_stale; soft → marker)
   const approved = (await d.db.query<{ policy_yaml: string }>(
     "select h.policy_yaml from public.harness_proposals h join public.repos r on r.id = h.repo_id and r.config_hash = h.yaml_sha256 where h.repo_id = $1::uuid and h.status = 'approved' order by h.approved_at desc limit 1",
