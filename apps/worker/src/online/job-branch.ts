@@ -36,8 +36,8 @@ export async function startJobBranch(o: { mirror: string; ref: string; tmpRoot?:
     const main = (await git.run(["rev-parse", "--verify", "refs/heads/main^{commit}"], { cwd: o.mirror })).stdout.toString("utf8").trim();
     if (!SHA.test(main)) throw new Error("startJobBranch: no main");
     // create only: update-ref with the zero old value fails when the branch already exists
-    await git.run(["update-ref", "-m", "mandat: job", `refs/heads/${o.ref}`, main, "0".repeat(40)], { cwd: o.mirror });
-    const head = (await git.run(["rev-parse", "--verify", `refs/heads/${o.ref}^{commit}`], { cwd: o.mirror })).stdout.toString("utf8").trim();
+    await git.run(["update-ref", "-m", "mandat: job", `refs/heads/${o.ref}`, main, "0".repeat(40)], { cwd: o.mirror }); // T3-7: sha (ref matches REF, main matches SHA)
+    const head = (await git.run(["rev-parse", "--verify", "--end-of-options", `refs/heads/${o.ref}^{commit}`], { cwd: o.mirror })).stdout.toString("utf8").trim();
     return { base: main, head };
   });
 }
@@ -47,7 +47,7 @@ export async function advanceJobBranch(o: { mirror: string; ref: string; head: s
   if (!REF.test(o.ref) || !SHA.test(o.head)) throw new Error("advanceJobBranch: bad input");
   return withTmp(o.tmpRoot, async (tmp) => {
     const git = cleanGit({ tmpHome: tmp });
-    const now = (await git.run(["rev-parse", "--verify", `refs/heads/${o.ref}`], { cwd: o.mirror })).stdout.toString("utf8").trim();
+    const now = (await git.run(["rev-parse", "--verify", "--end-of-options", `refs/heads/${o.ref}`], { cwd: o.mirror })).stdout.toString("utf8").trim();
     if (now !== o.head) return { ok: false, reason: "moved" };
     const w = path.join(tmp, "w");
     if ((await git.run(["clone", "-q", "--no-checkout", "--end-of-options", o.mirror, w], { cwd: tmp })).code !== 0) throw new Error("advanceJobBranch: clone failed");
@@ -79,7 +79,7 @@ export async function jobChangeFiles(o: { mirror: string; base: string; head: st
       const status = parts[k] as string;
       const file = parts[k + 1] as string;
       if (status === "D") out.push({ path: file, data: null });
-      else out.push({ path: file, data: (await git.run(["show", `${o.head}:${file}`], { cwd: o.mirror })).stdout });
+      else out.push({ path: file, data: (await git.run(["show", `${o.head}:${file}`], { cwd: o.mirror })).stdout }); // T3-7: sha (head matches SHA; the path comes from git's own diff)
     }
     return out;
   });
