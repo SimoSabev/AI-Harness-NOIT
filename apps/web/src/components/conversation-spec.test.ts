@@ -43,6 +43,12 @@ describe("the spec in the thread (D-533)", () => {
     expect(html).toContain("currencies");
     expect(html).toContain("chat.spec.approve");
   });
+  it("an unreadable answer shows a short message, never raw text (live test, 17.11.2026)", async () => {
+    const { ChatThread } = await import("./conversation");
+    const bad: ChatTurn = { seq: 4, at, kind: "assistant", text: "", questions: [], brief: null, model: "m", usd: 0, unreadable: true };
+    const html = renderToStaticMarkup(createElement(ChatThread, { chat: { row, turns: [bad] }, onRetry: () => undefined, onNew: () => undefined, busy: false }));
+    expect(html).toContain("chat.unreadable");
+  });
   it("no Approve for a person who may not, for an approved spec or for a replaced one", async () => {
     expect(await render(row, false)).not.toContain("chat.spec.approve");
     const approved = await render({ ...row, approved_spec_hash: hash }, true);

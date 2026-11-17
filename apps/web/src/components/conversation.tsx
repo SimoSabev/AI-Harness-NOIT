@@ -158,7 +158,7 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   return (
     <div className="max-w-[46rem] space-y-3">
       <p className="text-[11px] font-medium text-mute">{t("chat.assistant")}</p>
-      {turn.text.trim() !== "" && <Markdown src={turn.text} className="text-[15px]" />}
+      {turn.unreadable ? <p className="text-sm text-warn">{t("chat.unreadable")}</p> : turn.text.trim() !== "" && <Markdown src={turn.text} className="text-[15px]" />}
       {turn.questions.length > 0 && (
         <ol aria-label={t("chat.questions")} className="list-decimal space-y-1 pl-5 text-[15px]">
           {turn.questions.map((q) => <li key={q}>{q}</li>)}

@@ -1587,6 +1587,7 @@ export const en = {
   "chat.spec.approving": "Approving…",
   "chat.spec.approved": "Approved. Start work uses this spec.",
   "chat.spec.replaced": "Replaced by a newer spec.",
+  "chat.unreadable": "The model's answer could not be read. Send your message again, or pick another model.",
 } as const;
 
 export type Key = keyof typeof en;
