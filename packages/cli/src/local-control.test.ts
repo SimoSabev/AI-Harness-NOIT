@@ -185,7 +185,7 @@ describe("mandat local control: connections (D-393)", () => {
       start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base(),
       login: { state: () => login.state(), start: async (n, cli) => (starts.push(`${n}:${cli}`), { state: "starting", name: n }), submit: () => null, cancel: () => login.state() },
       connections: {
-        list: async () => (seen.push("list"), { connections: [], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }),
+        list: async () => (seen.push("list"), { connections: [], preferences: { defaultAgent: null, defaultModel: null, onboarded: false, taskMode: "ask_first" as const } }),
         add: async (b) => (seen.push(`add:${JSON.stringify(b).length > 0}`), { ok: false, error: "bad_key" }),
         setModels: async (id) => (seen.push(`models:${id}`), true),
         remove: async (id) => (seen.push(`remove:${id}`), true),

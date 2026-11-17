@@ -113,7 +113,7 @@ describe("the model of a conversation on this computer (D-531)", () => {
     expect(claims(seen[1]!.key).u).toBe("ollama");
   });
   it("a Claude subscription uses the profile's CLI (D-295); a demo agent answers from a script; unknown ones are refused", async () => {
-    const profileExec = vi.fn(async () => say({ type: "result", is_error: false, result: say({ say: "hello", call: null }), usage: {} }));
+    const profileExec = vi.fn(async (_profile: string, _argv: string[], _stdin: string) => say({ type: "result", is_error: false, result: say({ say: "hello", call: null }), usage: {} }));
     const m = chatModelFor({ proxy: null, profileExec }, route("claude@personal"));
     if (!m.ok) throw new Error(m.why);
     expect((await m.client.complete({ system: "s", user: "u", maxTokens: 10, json: true })).text).toContain("hello");
