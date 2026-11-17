@@ -79,6 +79,8 @@ interface TaskRow {
   shift_id: string | null;
   /** D-400: whose memory the task gets (null: nobody started it) */
   created_by: string | null;
+  /** D-533: the hash of the spec a person approved in the conversation that made this task (null: none) */
+  spec_hash: string | null;
 }
 
 /** E9а: the approved profile with the night's forbidden tools as deny rules for the subject night (and its hash recomputed) */
@@ -91,7 +93,7 @@ function nightProfile(hp: HarnessProfile, forbid: readonly string[]): HarnessPro
 const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n").filter((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---"))).length;
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
-export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
+export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null; spec_hash?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = taskTypeOf(policy, t.type); // D-360: "free" has a default scope
@@ -101,6 +103,8 @@ export function contractForTask(t: { id: string; type: TaskType; text: string; a
     allowed_paths: tt.allowed_paths, may_change_tests: tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
     memory_hash: memoryHash, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
     repo_config: rc.config,
+    // D-533: the approved spec's hash is sealed into the contract (and so into its hash and the ledger); never shown to the agent
+    ...(t.spec_hash ? { spec_hash: t.spec_hash } : {}),
   });
 }
 
@@ -136,7 +140,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, t.spec_hash, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -260,7 +264,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   let seq = await inTransaction(d.db, async (tx) => {
     const s = await setState(tx, t, "RUNNING");
     await tx.query("update public.tasks set channel_kind = $2 where id = $1", [t.id, contract.channel.kind]);
-    await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_created", task_id: t.id, payload: { task_id: t.id, contract_hash: contract.contract_hash, agent: t.agent } });
+    await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_created", task_id: t.id, payload: { task_id: t.id, contract_hash: contract.contract_hash, agent: t.agent, ...(contract.spec_hash ? { spec_hash: contract.spec_hash } : {}) } });
     if (mem) await appendLedgerOnline(tx, { org_id: t.org_id, kind: "memory_snapshot", task_id: t.id, payload: { snapshot_hash: mem.hash, core: mem.block.core.length, recall: mem.block.recall.length, tokens: mem.block.tokens } });
     return s;
   });

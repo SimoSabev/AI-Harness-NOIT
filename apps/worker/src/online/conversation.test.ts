@@ -10,12 +10,14 @@ import { fakeModel } from "@mandat/research";
 import type { ModelClient, ModelRequest, RouterChannel } from "@mandat/research";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_OWNER_ID, DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { CHAT_SYSTEM, answerTurn, claimConversation, loadTurns, processConversation, readReply, reapStaleConversations, runConversationOnce } from "./conversation.js";
+import { CHAT_SYSTEM, answerTurn, checkAxes, checkSpec, claimConversation, loadTurns, processConversation, readReply, reapStaleConversations, runConversationOnce } from "./conversation.js";
+import { unavailableReader } from "./repo-tools.js";
+import type { RepoReader } from "./repo-tools.js";
 import type { ChatDeps, NewTurn } from "./conversation.js";
 import { chatModelFor } from "./conversation-host.js";
 
 // D-531 (E10а ф. 1): the conversation without a sandbox. A key, a connection and a local model go through the proxy
-// with the conversation's mdt_ token; nothing starts a process or a container. The model has three tools and none that
+// with the conversation's mdt_ token; nothing starts a process or a container. The model has its listed tools and none that
 // writes; a spent budget and a passed expiry stop it; a brief is only shown.
 const spawned = vi.hoisted(() => [] as string[]);
 vi.mock("node:child_process", async (orig) => {
@@ -34,16 +36,18 @@ const human = (text: string): NewTurn => ({ kind: "human", text });
 const base = { budgetUsd: 1, spentUsd: 0, expiresAt: Date.now() + 60_000, now: Date.now, search: async () => [] };
 
 describe("one answer (D-531)", () => {
-  it("the system prompt names exactly the three tools; a call to any other tool does nothing", async () => {
+  it("the system prompt names exactly the listed tools; a call to any other tool (approving included) does nothing", async () => {
     for (const t of CHAT_TOOLS) expect(CHAT_SYSTEM).toContain(`"tool": "${t}"`);
-    expect(CHAT_SYSTEM.match(/"tool": "/g)).toHaveLength(3);
-    for (const bad of ["write_file", "run_shell", "fetch_url", "start_task"]) expect(readReply(say({ say: "done", call: { tool: bad, path: "x" } }))).toEqual({ say: "done", call: null });
+    expect(CHAT_SYSTEM.match(/\{"tool": "/g)).toHaveLength(CHAT_TOOLS.length);
+    for (const bad of ["write_file", "run_shell", "fetch_url", "start_task", "approve_spec", "approve"]) expect(readReply(say({ say: "done", call: { tool: bad, path: "x" } }))).toEqual({ say: "done", call: null });
     expect(readReply("just words")).toEqual({ say: "just words", call: null });
   });
-  it("ask_user: at most 3 questions even when the model asks 5", async () => {
-    const client = fakeModel(ch, () => say({ say: "A few questions", call: { tool: "ask_user", questions: ["1?", "2?", "3?", "4?", "5?"] } }));
+  it("ask_user: the interview has no cap — 12 questions stay 12 (D-533 supersedes the cut at 3)", async () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => `${i + 1}?`);
+    const client = fakeModel(ch, () => say({ say: "A few questions", call: { tool: "ask_user", questions: twelve } }));
     const r = await answerTurn({ ...base, client, turns: [human("make it better")] });
-    expect(r.turns).toEqual([{ kind: "assistant", text: "A few questions", questions: ["1?", "2?", "3?"], brief: null, model: "m-1", usd: 0 }]);
+    expect(r.turns).toEqual([{ kind: "assistant", text: "A few questions", questions: twelve, brief: null, model: "m-1", usd: 0 }]);
+    expect(CHAT_SYSTEM).not.toMatch(/at most 3/);
   });
   it("search_memory: the hits go back to the model, which answers once more", async () => {
     const asked: ModelRequest[] = [];
@@ -68,6 +72,81 @@ describe("one answer (D-531)", () => {
     expect(await answerTurn({ ...base, client, turns: [human("hi")] })).toMatchObject({ stop: "overloaded", error: "model endpoint answered 529" });
     const down: ModelClient = { channel: ch, complete: async () => Promise.reject(new Error("model endpoint unreachable")) };
     expect(await answerTurn({ ...base, client: down, turns: [human("hi")] })).toMatchObject({ stop: "failed" });
+  });
+});
+
+// D-533 (М1 Х1–Х2): the interview — read-only repo tools, the six axes and the spec, ready only when nothing is open.
+const known = { code: "existing", reference: "none", divisible: "no", proof: ["tests"], risk: { level: "low", outward: false }, size: "m" };
+const spec = {
+  goal: "Round discounts half up",
+  product: "The cart rounds a discount that ends in .5 up.",
+  criteria: [{ id: "AC-1", when: "a discount ends in .5", shall: "round it up", proof: "tests" }],
+  unchanged: ["whole-number totals"],
+  out_of_scope: ["currencies"],
+  profile: "other",
+};
+const script = (...answers: unknown[]) => {
+  const asked: ModelRequest[] = [];
+  const client = fakeModel(ch, (q) => (asked.push(q), say(answers[Math.min(asked.length - 1, answers.length - 1)])));
+  return { client, asked };
+};
+const reader = (over: Partial<RepoReader> = {}): RepoReader => ({ ...unavailableReader, ...over });
+
+describe("the interview (D-533)", () => {
+  it("unknown axes keep the interview going: the model sees them, and a spec is not ready while any is unknown", async () => {
+    const m = script(
+      { say: "", call: { tool: "propose_axes", axes: { ...known, size: "unknown" } } },
+      { say: "", call: { tool: "propose_spec", spec } },
+      { say: "How big is it?", call: { tool: "ask_user", questions: ["How many screens does it touch?"] } },
+    );
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("round discounts half up")] });
+    expect(r.turns.map((t) => t.kind)).toEqual(["axes", "spec", "assistant"]);
+    expect(r.turns[0]).toMatchObject({ kind: "axes", profile: "feature", unknown: ["size"] });
+    expect(r.turns[1]).toMatchObject({ kind: "spec", ready: false, unknown: ["size"], untestable: [], spec: { profile: "feature" } });
+    expect(m.asked[0]?.user).toContain("Axes: not proposed yet");
+    expect(m.asked[1]?.user).toContain("Unknown axes: size.");
+    expect(m.asked[2]?.user).toContain("Spec: not ready (unknown axes: size; untestable criteria: none)");
+    expect(r.turns[2]).toMatchObject({ kind: "assistant", questions: ["How many screens does it touch?"] });
+  });
+  it("a spec with an untestable criterion is not ready; the fixed one is, and ends the answer", async () => {
+    const vague = { ...spec, criteria: [...spec.criteria, { id: "AC-2", when: "a person looks at the cart", shall: "it feels right", proof: "human" }, { id: "AC-3", when: " ", shall: "x", proof: "tests" }] };
+    const m = script({ say: "", call: { tool: "propose_axes", axes: known } }, { say: "", call: { tool: "propose_spec", spec: vague } }, { say: "Ready for you", call: { tool: "propose_spec", spec } }, { say: "never asked", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("round discounts half up")] });
+    expect(r.turns.map((t) => t.kind)).toEqual(["axes", "spec", "spec", "assistant"]);
+    expect(r.turns[1]).toMatchObject({ ready: false, unknown: [], untestable: ["AC-2", "AC-3"] });
+    expect(m.asked[2]?.user).toContain("untestable criteria: AC-2, AC-3");
+    expect(r.turns[2]).toMatchObject({ ready: true, unknown: [], untestable: [] });
+    expect(r.turns[3]).toMatchObject({ kind: "assistant", text: "Ready for you" });
+    expect(m.asked).toHaveLength(3);
+  });
+  it("a malformed spec or axes come back to the model as problems, not as a lost call; without axes no spec is ready", async () => {
+    expect(checkSpec({ ...spec, criteria: [] }, [])).toMatchObject({ kind: "tool", tool: "propose_spec", ok: false });
+    expect(checkAxes({ ...known, size: "huge" })).toMatchObject({ kind: "tool", tool: "propose_axes", ok: false });
+    expect(checkSpec(spec, [])).toMatchObject({ kind: "spec", ready: false, unknown: ["code", "reference", "divisible", "proof", "risk", "size"] });
+    expect(checkAxes(known, "tests")).toMatchObject({ kind: "axes", hint: "tests", profile: "tests" });
+    expect(checkAxes(known, "nonsense")).toMatchObject({ kind: "axes", hint: null, profile: "feature" });
+    const m = script({ say: "", call: { tool: "propose_spec", spec: { goal: "" } } }, { say: "Let me ask", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("x")] });
+    expect(r.turns[0]).toMatchObject({ kind: "tool", ok: false });
+    expect(m.asked[1]?.user).toMatch(/\[propose_spec "spec"\] refused or failed: .*goal/);
+  });
+  it("the repo tools: the contents reach the model inside the answer, a refusal reaches it as a note", async () => {
+    const calls: string[] = [];
+    const repo = reader({
+      readFile: async (p, from, to) => (calls.push(`read ${p} ${from ?? ""}-${to ?? ""}`), { ok: true, text: "1| export const CONTENTS_SEEN = 1;", note: "lines 1-1 of 1" }),
+      grep: async (q, p) => (calls.push(`grep ${q} ${p ?? ""}`), { ok: false, note: "refused: the path is outside the project" }),
+      listDir: async (p) => (calls.push(`ls ${p}`), { ok: true, text: "src/", note: "1 entries" }),
+    });
+    const m = script({ say: "", call: { tool: "list_dir", path: "" } }, { say: "", call: { tool: "read_file", path: "src/a.ts", from_line: 1, to_line: 9 } }, { say: "", call: { tool: "grep", pattern: "round", path: "../" } }, { say: "Read it", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("look at the cart")], repo });
+    expect(calls).toEqual(["ls ", "read src/a.ts 1-9", "grep round ../"]);
+    expect(m.asked[2]?.user).toContain("CONTENTS_SEEN");
+    expect(m.asked[3]?.user).toContain('[grep "round in ../"] refused or failed: refused: the path is outside the project');
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "tool", "tool", "assistant"]);
+    // without a mirror every repo tool says the project is not on this computer
+    const n = script({ say: "", call: { tool: "read_file", path: "package.json" } }, { say: "ok", call: null });
+    await answerTurn({ ...base, client: n.client, turns: [human("x")] });
+    expect(n.asked[1]?.user).toContain("the project is not on this computer");
   });
 });
 
@@ -192,6 +271,41 @@ describe("the conversation queue (D-531)", () => {
     await open("c_dead", "hi");
     await db.query("update public.conversations set status = 'running', heartbeat_at = now() - interval '5 minutes' where id = 'c_dead'");
     expect(await reapStaleConversations(db)).toEqual(["c_dead"]);
+    expect(spawned).toEqual([]);
+  });
+  it("D-533: the axes and a ready spec are stored on the conversation; file contents are never stored or logged; nothing is approved", async () => {
+    await open("c_spec", "round discounts half up");
+    const logs: string[] = [];
+    const repo = reader({ readFile: async () => ({ ok: true, text: "1| const CONTENTS_SEEN = 1;", note: "lines 1-1 of 1" }) });
+    let n = 0;
+    const answers = [{ say: "", call: { tool: "read_file", path: "src/cart.ts" } }, { say: "", call: { tool: "propose_axes", axes: known } }, { say: "Approve it if it looks right", call: { tool: "propose_spec", spec } }];
+    await runConversationOnce({ db, modelFor: () => ({ ok: true, client: fakeModel(ch, () => say(answers[n++])) }), readerFor: () => repo, log: (l) => logs.push(l) });
+    const turns = await loadTurns(db, "c_spec");
+    expect(turns.map((t) => t.kind)).toEqual(["human", "tool", "axes", "spec", "assistant"]);
+    expect(turns[1]).toEqual({ seq: 1, at: expect.any(String), kind: "tool", tool: "read_file", target: "src/cart.ts", ok: true, note: "lines 1-1 of 1" });
+    const raw = (await db.query<{ data: unknown }>("select data from public.conversation_turns where conversation_id = 'c_spec'")).rows;
+    expect(JSON.stringify(raw)).not.toContain("CONTENTS_SEEN");
+    expect(logs.join("\n")).not.toContain("CONTENTS_SEEN");
+    const row = async () => (await db.query<{ profile: string; unknown_axes: string[]; spec_ready: boolean; spec_hash: string; approved_spec_hash: string | null; axes: unknown }>("select profile, unknown_axes, spec_ready, spec_hash, approved_spec_hash, axes from public.conversations where id = 'c_spec'")).rows[0];
+    const c = await row();
+    expect(c).toMatchObject({ profile: "feature", unknown_axes: [], spec_ready: true, approved_spec_hash: null, axes: known });
+    expect(c?.spec_hash).toBe(turns[3]?.kind === "spec" ? turns[3].hash : "");
+    // an approval of this hash survives only while the spec is the same; another spec drops it
+    await db.query("update public.conversations set approved_spec = spec, approved_spec_hash = spec_hash, approved_at = now() where id = 'c_spec'");
+    await db.query("insert into public.conversation_turns (org_id, conversation_id, seq, kind, data) values ($1::uuid, 'c_spec', 5, 'human', $2::jsonb)", [DEMO_ORG_ID, JSON.stringify({ text: "change the goal" })]);
+    await db.query("update public.conversations set status = 'queued' where id = 'c_spec'");
+    await runConversationOnce({ db, modelFor: () => ({ ok: true, client: fakeModel(ch, () => say({ say: "New one", call: { tool: "propose_spec", spec: { ...spec, goal: "Round half even" } } })) }), readerFor: () => repo });
+    expect(await row()).toMatchObject({ spec_ready: true, approved_spec_hash: null });
+    expect((await db.query("select 1 from public.tasks")).rows).toEqual([]);
+  });
+  it("D-533: a project that is not on this computer — the repo tools report it unavailable", async () => {
+    await db.query("update public.repos set remote_url = 'https://github.com/o/r.git' where id = $1::uuid", [DEMO_REPO_ID]);
+    await open("c_far", "look at the cart");
+    const asked: string[] = [];
+    let n = 0;
+    await runConversationOnce(deps(fakeModel(ch, (q) => (asked.push(q.user), n++ === 0 ? say({ say: "", call: { tool: "list_dir", path: "" } }) : say({ say: "I cannot see it", call: null })))));
+    expect(asked[1]).toContain("the project is not on this computer");
+    expect((await loadTurns(db, "c_far"))[1]).toMatchObject({ kind: "tool", ok: false, note: "the project is not on this computer" });
     expect(spawned).toEqual([]);
   });
 });

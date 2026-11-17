@@ -347,6 +347,19 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(c).toMatchObject({ allowed_paths: ["src/**"], may_change_tests: false, risk_cap: 3, agent: "claude" });
     expect(() => contractForTask({ id: "t_x", type: "css", text: "x", agent: "claude" }, p.policy, "a".repeat(40))).toThrow(/task type/);
   });
+  it("D-533: the approved spec's hash is sealed into the contract; a task without one keeps the old contract", async () => {
+    const { parseMandatYml, parseContract } = await import("@mandat/contract");
+    const { readFileSync } = await import("node:fs");
+    const p = parseMandatYml(readFileSync(path.join(repoRoot, "fixtures/demo-shop/.mandat.yml"), "utf8"));
+    if (!p.ok) throw new Error(p.error);
+    const h = `sha256:${"c".repeat(64)}`;
+    const plain = contractForTask({ id: "t_x", type: "bugfix", text: "x", agent: "claude", spec_hash: null }, p.policy, "a".repeat(40));
+    const sealed = contractForTask({ id: "t_x", type: "bugfix", text: "x", agent: "claude", spec_hash: h }, p.policy, "a".repeat(40));
+    expect(plain).not.toHaveProperty("spec_hash");
+    expect(sealed.spec_hash).toBe(h);
+    expect(sealed.contract_hash).not.toBe(plain.contract_hash);
+    expect(parseContract(JSON.parse(JSON.stringify(sealed)))).toEqual(sealed);
+  });
   it("D-360: a free task without a policy entry → the whole repo, tests may change, the medium risk cap", async () => {
     const { parseMandatYml } = await import("@mandat/contract");
     const { readFileSync } = await import("node:fs");
