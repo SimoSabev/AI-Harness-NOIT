@@ -4011,4 +4011,7 @@ run-bench-trial.test.ts (2), cli evolve-ticker.test.ts, web evolve.test.ts. Ст
 контейнер.
 Тестове: contract conversation.test.ts (6), worker conversation.test.ts (12; без процес и без Docker по пътя на ключ и
 локален модел, проверено с капан на `node:child_process`), web conversation.test.ts (4), cli connections.test.ts
-(сливане на предпочитанията), web connections-api.test.ts. Статус: решено; живата проверка с абонамента предстои.
+(сливане на предпочитанията), web connections-api.test.ts. Живата проверка (17.11.2026, `pnpm local`, Claude през абонамента): „hi“ получи отговор; описание на промяна
+получи предложено задание за ~13 s (малкият контейнер на профила), без задача. Две поправки от нея: „Изпрати“ не иска
+проект (само „Започвай“ иска), а авто-превъртането е с блоково тяло, защото новият Chromium връща Promise от
+`scrollIntoView` и React го викаше като почистване („i is not a function“). Статус: решено.
