@@ -39,3 +39,4 @@ export { SELF_FINISH, nextMove } from "./next-move.js";
 export type { SelfFinishInput, SelfMove } from "./next-move.js";
 export { twinMayDecide, twinModel, twinOffer, twinPredict, twinScore, wilsonLower } from "./twin.js";
 export type { TwinAct, TwinActInput, TwinClassStats, TwinDecision, TwinGuess, TwinModel, TwinScore, TwinScored } from "./twin.js";
+export { PROFILE_NAMES, PROFILE_UNITS, deriveProfile, unknownAxes } from "./task-profile.js";
