@@ -130,7 +130,10 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     return asking ? send() : workNow();
   };
   if (!canAct) return <p className="m-auto text-sm text-mute">{t("newTask.onlyApprovers")}</p>;
-  const blocked = busy || answering || agents.length === 0 || projects.length === 0;
+  // A conversation needs no project (D-531): "hi" works on a fresh install. Work does.
+  const cannotTalk = busy || answering || agents.length === 0;
+  const blocked = cannotTalk || projects.length === 0;
+  const sendBlocked = asking ? cannotTalk : blocked;
   const modes = (
     <div role="group" aria-label={t("chat.mode")} className="mx-auto inline-flex rounded-lg border border-line-strong bg-panel p-0.5 text-xs">
       {(["ask_first", "work_now"] as const).map((m) => (
@@ -177,7 +180,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           {current && current.models.length === 1 && <span className="font-mono text-xs text-mute">{current.models[0]}</span>}
           <span className="ml-auto flex items-center gap-2">
             {asking && <button type="button" className={btn.secondary} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
-            <button type="submit" className={btn.primary} disabled={blocked}>{busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")}</button>
+            <button type="submit" className={btn.primary} disabled={sendBlocked}>{busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")}</button>
           </span>
         </div>
       </div>

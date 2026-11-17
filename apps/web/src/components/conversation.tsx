@@ -99,7 +99,10 @@ const STOP: Partial<Record<ConversationRow["status"], "chat.overloaded" | "chat.
 export function ChatThread({ chat, onRetry, onNew, busy }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
-  useEffect(() => end.current?.scrollIntoView({ block: "end" }), [chat.turns.length, chat.row.status]);
+  // a block body: newer Chromium returns a Promise from scrollIntoView, and React would call it as the cleanup
+  useEffect(() => {
+    void end.current?.scrollIntoView({ block: "end" });
+  }, [chat.turns.length, chat.row.status]);
   const stop = STOP[chat.row.status];
   const retryable = chat.row.status === "overloaded" || chat.row.status === "failed";
   return (
