@@ -1,8 +1,8 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { packageManagerOf } from "@mandat/contract";
-import type { RepoConfig } from "@mandat/contract";
-import { splitHidden } from "@mandat/core";
+import type { OracleProblem, RepoConfig } from "@mandat/contract";
+import { oracleChange, splitHidden } from "@mandat/core";
 import type { HiddenResult } from "@mandat/core";
 import { cleanClone, removeTree } from "@mandat/export";
 import type { DockerRunner } from "@mandat/sandbox";
@@ -54,4 +54,42 @@ export async function runOracleOnBase(i: OracleBaseInput): Promise<OracleBaseRes
   } finally {
     removeTree(base.dir);
   }
+}
+
+export type OracleChangeResult =
+  | { ok: true; tests: { path: string; data: Buffer }[]; problems: OracleProblem[]; base: { results: HiddenResult[]; timedOut: boolean } | null }
+  | { ok: false; code: string };
+
+/**
+ * D-534: the oracle agent's exported change → its test files (relative to `dir`) and, when the change is tests only,
+ * their results on the base. A change that touches anything else is not run at all (the problems say why).
+ */
+export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { diffPatch: Buffer; dir: string }): Promise<OracleChangeResult> {
+  const head = await cleanClone({ mirrorPath: i.mirrorPath, baseSha: i.baseSha, tmpRoot: i.tmpRoot, name: "oracle-head" });
+  let tests: { path: string; data: Buffer }[];
+  let problems: OracleProblem[];
+  try {
+    if (i.diffPatch.length > 0) {
+      const ap = await head.git.run(["apply", "--index", "--binary", "--whitespace=nowarn", "-"], { cwd: head.dir, input: i.diffPatch });
+      if (ap.code !== 0) return { ok: false, code: "E_ORACLE_APPLY" };
+    }
+    const names = await head.git.run(["diff", "--cached", "--name-only", "-z", "--no-renames"], { cwd: head.dir });
+    const paths = names.stdout.toString("utf8").split("\0").filter(Boolean);
+    const c = oracleChange({ paths, dir: i.dir });
+    problems = c.problems;
+    const prefix = `${i.dir.replace(/\/+$/, "")}/`;
+    tests = c.tests.flatMap((p) => {
+      try {
+        return [{ path: p, data: readFileSync(path.join(head.dir, prefix + p)) }];
+      } catch {
+        return []; // a deleted file is not a test
+      }
+    });
+  } finally {
+    removeTree(head.dir);
+  }
+  if (problems.length > 0 || tests.length === 0) return { ok: true, tests, problems, base: null };
+  const r = await runOracleOnBase({ ...i, tests: { dir: i.dir, files: tests } });
+  if (!r.ok) return r;
+  return { ok: true, tests, problems, base: { results: r.results, timedOut: r.timedOut } };
 }

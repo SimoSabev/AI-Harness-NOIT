@@ -10,8 +10,8 @@ export { buildVerifyTree, listFiles, mergePackageJson, snapshot } from "./trees.
 export { RunWriter } from "./run-dir.js";
 export { writeAtomic } from "./fsx.js";
 export { MAX_MUTANTS, VerifyInfraError, verifyTrees } from "./verify-trees.js";
-export { runOracleOnBase } from "./oracle-base.js";
-export type { OracleBaseInput, OracleBaseResult } from "./oracle-base.js";
+export { oracleFromChange, runOracleOnBase } from "./oracle-base.js";
+export type { OracleBaseInput, OracleBaseResult, OracleChangeResult } from "./oracle-base.js";
 export { checksFromCommands } from "./checks.js";
 export { registryFacts } from "./registry-facts.js";
 export type { HiddenTests, UiCheck, VerifyTreesInput, VerifyTreesResult } from "./verify-trees.js";
