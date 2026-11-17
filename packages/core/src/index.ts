@@ -42,3 +42,5 @@ export type { TwinAct, TwinActInput, TwinClassStats, TwinDecision, TwinGuess, Tw
 export { PROFILE_NAMES, PROFILE_UNITS, deriveProfile, unknownAxes } from "./task-profile.js";
 export { classifyRedOnBase, d11Oracle, oracleChange } from "./oracle.js";
 export type { RedOnBase } from "./oracle.js";
+export { failingCriteria, fileTags, oracleFilesFor, sealFor, uncheckedOf, validatePlan } from "./job.js";
+export type { JobEvidence } from "./job.js";
