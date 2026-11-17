@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, Spec, briefText, jcs, sha256Tag, specHash, specText } from "@mandat/contract";
+import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, sha256Tag, specHash, specText } from "@mandat/contract";
+import { deriveProfile } from "@mandat/core";
 import type { Brief } from "@mandat/contract";
 import { canAct, createTask } from "./actions";
 import { hasCap } from "./roles";
@@ -7,9 +8,9 @@ import type { Result } from "./actions";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
 import { taskTypeFor } from "../agents";
-import type { ConversationFeed, ConversationRow } from "../conversation-types";
+import type { ConversationFeed, ConversationRow, OracleView } from "../conversation-types";
 
-export type { ConversationFeed, ConversationRow };
+export type { ConversationFeed, ConversationRow, OracleView };
 
 // D-531 (E10a phase 1): the conversation before work, from the web. A person who may start tasks writes; the server stores
 // the turn and queues the conversation (the worker answers, without a sandbox). "Start work" makes today's task from the
@@ -108,18 +109,91 @@ export async function approveSpec(db: Db, o: { uid: string; org: string; id: str
   return { status: 200, body: { id: o.id, spec_hash: hash } };
 }
 
+/** D-534: the spec needs an oracle when the plan of its profile (from the axes) has hidden tests */
+export function oracleRequired(axes: unknown, spec: Spec): boolean {
+  const a = TaskAxes.safeParse(axes);
+  return a.success ? deriveProfile(a.data).plan.oracle.includes("hidden_tests") : PROFILES_NEED_TESTS.includes(spec.profile);
+}
+interface ApprovedRow { phase: string; status: string; agent: string; model: string | null; repo: string | null; axes: unknown; approved_spec: unknown; approved_spec_hash: string | null }
+async function approvedOf(db: Db, id: string, org: string): Promise<{ row: ApprovedRow; spec: { spec: Spec; hash: string } | null } | null> {
+  const row = (await asService(db, (sql) => sql.query<ApprovedRow>("select phase, status, agent, model, repo_id::text as repo, axes, approved_spec, approved_spec_hash from public.conversations where id = $1 and org_id = $2::uuid", [id, org]))).rows[0];
+  if (!row) return null;
+  // the approved spec counts only when its hash is checked again
+  const a = Spec.safeParse(row.approved_spec);
+  return { row, spec: a.success && row.approved_spec_hash === specHash(a.data) ? { spec: a.data, hash: row.approved_spec_hash } : null };
+}
+interface OracleDbRow { id: string; status: string; spec_hash: string; oracle_hash: string | null; manifest: unknown; problems: unknown; red_on_base: unknown }
+const ORACLE_COLS = "id, status, spec_hash, oracle_hash, manifest, problems, red_on_base";
+const LATEST_ORACLE = `select ${ORACLE_COLS} from public.oracles where conversation_id = $1 and spec_hash = $2 order by created_at desc, id desc limit 1`;
+async function latestOracle(db: Db, id: string, hash: string): Promise<OracleDbRow | null> {
+  return (await asService(db, (sql) => sql.query<OracleDbRow>(LATEST_ORACLE, [id, hash]))).rows[0] ?? null;
+}
+
+/** D-534: "Build oracle": a person starts a separate agent task that writes the hidden acceptance tests of the approved spec */
+export async function buildOracle(db: Db, o: { uid: string; org: string; id: string }): Promise<Result> {
+  if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
+  const c = await approvedOf(db, o.id, o.org);
+  if (!c) return err(404, "unknown_conversation");
+  if (c.row.phase !== "conversation") return err(409, "work_started");
+  if (!c.spec) return err(409, "spec_not_approved");
+  if (!oracleRequired(c.row.axes, c.spec.spec)) return err(409, "oracle_not_needed");
+  const last = await latestOracle(db, o.id, c.spec.hash);
+  if (last?.status === "building") return err(409, "oracle_building");
+  if (last?.status === "approved") return err(409, "oracle_approved");
+  const hash = c.spec.hash;
+  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTaskText(c.spec.spec), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
+  if (r.status !== 201) return r;
+  const oid = `o_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
+  await asService(db, (sql) => sql.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, task_id, created_by) select $1, $2::uuid, t.repo_id, $3, $4, t.id, $6::uuid from public.tasks t where t.id = $5", [oid, o.org, o.id, hash, r.body.id, o.uid]));
+  return { status: 201, body: { id: oid, task_id: r.body.id, spec_hash: hash }, ...(r.broadcast ? { broadcast: r.broadcast } : {}) };
+}
+
+/** D-534: a person approves that the oracle covers the spec (the hash they saw); the ledger keeps hashes and counts */
+export async function approveOracle(db: Db, o: { uid: string; org: string; id: string; body: unknown }): Promise<Result> {
+  const b = OracleApproveBody.safeParse(o.body);
+  if (!b.success) return err(400, "bad_body");
+  const c = await approvedOf(db, o.id, o.org);
+  if (!c) return err(404, "unknown_conversation");
+  if (!(await hasCap(db, o.uid, o.org, "approve.level1", { repo: c.row.repo }))) return err(403, "not_an_approver");
+  if (c.row.phase !== "conversation") return err(409, "work_started");
+  if (!c.spec) return err(409, "spec_not_approved");
+  const spec = c.spec;
+  const last = await latestOracle(db, o.id, spec.hash);
+  if (last?.status === "approved") return err(409, "already_approved");
+  const m = OracleManifest.safeParse(last?.manifest);
+  // the stored hash must be the manifest's own hash (for this spec) and the one the person saw
+  if (!last || last.status !== "ready" || !m.success || m.data.spec_hash !== spec.hash || last.oracle_hash !== oracleHash(m.data)) return err(409, "oracle_not_ready");
+  if (b.data.oracle_hash !== last.oracle_hash) return err(409, "oracle_changed");
+  const done = await asService(db, async (sql) => {
+    const u = await sql.query("update public.oracles set status = 'approved', approved_by = $3::uuid, approved_at = now(), updated_at = now() where id = $1 and oracle_hash = $2 and status = 'ready' returning id", [last.id, last.oracle_hash, o.uid]);
+    if (u.rows.length === 0) return false;
+    const text = jcs({ conversation: o.id, oracle: last.id, oracle_hash: last.oracle_hash, spec_hash: spec.hash, tests: m.data.hidden_tests.length, criteria: m.data.red_on_base.length, by: o.uid });
+    await sql.query("select private.ledger_append($1::uuid, 'oracle_approved', null, $2, $3)", [o.org, text, sha256Tag(text)]);
+    return true;
+  });
+  if (!done) return err(409, "already_approved");
+  return { status: 200, body: { id: o.id, oracle_hash: last.oracle_hash } };
+}
+
 /** "Start work": a person's action makes today's task from the conversation; the conversation's phase becomes work */
 export async function startWork(db: Db, o: { uid: string; org: string; id: string }): Promise<Result> {
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
-  const c = (await asService(db, (sql) => sql.query<{ phase: string; agent: string; model: string | null; repo: string | null; approved_spec: unknown; approved_spec_hash: string | null }>("select phase, agent, model, repo_id::text as repo, approved_spec, approved_spec_hash from public.conversations where id = $1 and org_id = $2::uuid", [o.id, o.org]))).rows[0];
-  if (!c) return err(404, "unknown_conversation");
+  const c0 = await approvedOf(db, o.id, o.org);
+  if (!c0) return err(404, "unknown_conversation");
+  const c = c0.row;
   if (c.phase !== "conversation") return err(409, "work_started");
   // D-533: an approved spec (its hash checked again) is the task; without one the brief and the person's words (D-531)
-  const approved = Spec.safeParse(c.approved_spec);
-  const spec = approved.success && c.approved_spec_hash === specHash(approved.data) ? { spec: approved.data, hash: c.approved_spec_hash } : null;
+  const spec = c0.spec;
+  // D-534: a spec whose plan has hidden tests needs an approved oracle; its hash goes into the task next to spec_hash
+  let oracle: string | null = null;
+  if (spec && oracleRequired(c.axes, spec.spec)) {
+    const last = await latestOracle(db, o.id, spec.hash);
+    if (last?.status !== "approved" || !last.oracle_hash) return err(409, "oracle_not_approved");
+    oracle = last.oracle_hash;
+  }
   const text = spec ? specText(spec.spec) : workText(await turnsOf(db, o.id));
   if (text.trim() === "") return err(409, "nothing_to_do");
-  const r = await createTask(db, { uid: o.uid, org: o.org, body: { type: taskTypeFor(c.agent), agent: c.agent, text, ...(c.model ? { model: c.model } : {}), ...(c.repo ? { repo: c.repo } : {}) }, ...(spec ? { specHash: spec.hash } : {}) });
+  const r = await createTask(db, { uid: o.uid, org: o.org, body: { type: taskTypeFor(c.agent), agent: c.agent, text, ...(c.model ? { model: c.model } : {}), ...(c.repo ? { repo: c.repo } : {}) }, ...(spec ? { specHash: spec.hash } : {}), ...(oracle ? { oracleHash: oracle } : {}) });
   if (r.status !== 201) return r;
   await asService(db, (sql) => sql.query("update public.conversations set phase = 'work', task_id = $2, updated_at = now() where id = $1", [o.id, r.body.id]));
   return r;
@@ -141,6 +215,21 @@ export async function conversationFeed(db: Db, uid: string, org: string, id: str
   return asUser(db, uid, async (sql) => {
     const conversation = (await sql.query<ConversationRow>(`select ${COLS} from public.conversations c where c.id = $1 and c.org_id = $2::uuid`, [id, org])).rows[0];
     if (!conversation) return null;
-    return { conversation, turns: parseTurns((await sql.query<TurnRow>(TURNS, [id, after])).rows) };
+    const turns = parseTurns((await sql.query<TurnRow>(TURNS, [id, after])).rows);
+    // D-534: the oracle of the approved spec (its status, criterion ids and counts; never the tests)
+    const a = (await sql.query<{ axes: unknown; approved_spec: unknown }>("select axes, approved_spec from public.conversations where id = $1", [id])).rows[0];
+    const spec = Spec.safeParse(a?.approved_spec);
+    if (!spec.success || conversation.approved_spec_hash === null) return { conversation, turns };
+    const o = (await sql.query<OracleDbRow>(LATEST_ORACLE, [id, conversation.approved_spec_hash])).rows[0];
+    return { conversation, turns, oracle_required: oracleRequired(a?.axes, spec.data), oracle: o ? oracleView(o) : null };
   });
+}
+function oracleView(o: OracleDbRow): OracleView {
+  const m = OracleManifest.safeParse(o.manifest);
+  const problems = Array.isArray(o.problems) ? o.problems.flatMap((p) => {
+    const x = OracleProblem.safeParse(p);
+    return x.success ? [x.data] : [];
+  }) : [];
+  const red = Array.isArray(o.red_on_base) ? (o.red_on_base as { criterion_id: unknown; red: unknown }[]).flatMap((x) => (typeof x.criterion_id === "string" && typeof x.red === "boolean" ? [{ criterion_id: x.criterion_id, red: x.red }] : [])) : [];
+  return { id: o.id, status: OracleStatus.catch("failed").parse(o.status), spec_hash: o.spec_hash, oracle_hash: o.oracle_hash, problems, red_on_base: red, tests: m.success ? m.data.hidden_tests.length : 0 };
 }

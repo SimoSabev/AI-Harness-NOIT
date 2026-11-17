@@ -49,7 +49,7 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
 // D-384: the agent picker shows only agents that can run (lib/agents.ts agentChoices); one agent → just its name;
 // none → a link to sign in instead of a box that cannot start anything. D-387: more than one project → a picker.
 // D-531: "Ask first" (the default) talks before work; "Work right away" starts today's task at once (remembered).
-const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.workStarted", nothing_to_do: "chat.err.nothingToDo", budget: "chat.budget", expired: "chat.expired", spec_not_ready: "chat.err.specNotReady", spec_changed: "chat.err.specChanged", already_approved: "chat.err.alreadyApproved", not_an_approver: "chat.err.notApprover" } as const;
+const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.workStarted", nothing_to_do: "chat.err.nothingToDo", budget: "chat.budget", expired: "chat.expired", spec_not_ready: "chat.err.specNotReady", spec_changed: "chat.err.specChanged", already_approved: "chat.err.alreadyApproved", not_an_approver: "chat.err.notApprover", oracle_not_approved: "chat.err.oracleNotApproved", oracle_building: "chat.err.oracleBuilding", oracle_changed: "chat.err.oracleChanged", oracle_not_ready: "chat.err.oracleNotReady" } as const;
 const ENDED = ["budget", "expired"];
 
 export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null }) {
@@ -128,6 +128,16 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     setBusy(false);
     follow(chat.row.id);
   };
+  // D-534: a person builds the oracle of the approved spec, then approves the one they see (its hash)
+  const oracleCall = async (url: string, body: Record<string, unknown>, okStatus: number) => {
+    if (!chat) return;
+    setBusy(true);
+    setError(null);
+    const r = await postJson(url, body);
+    if (r.status !== okStatus) return fail(r);
+    setBusy(false);
+    follow(chat.row.id);
+  };
   const fresh = () => {
     reset();
     window.history.replaceState(null, "", "/");
@@ -158,7 +168,8 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   return (
     <form onSubmit={submit} className={thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
       {thread ? (
-        <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)} />
+        <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
+          onBuildOracle={() => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)} />
       ) : (
         <>
           <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>

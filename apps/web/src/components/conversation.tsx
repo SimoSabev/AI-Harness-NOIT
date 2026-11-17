@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brief, ChatTurn } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key, T } from "../i18n/t";
-import { isAnswering } from "../lib/conversation-types";
-import type { ConversationFeed, ConversationRow } from "../lib/conversation-types";
+import { isAnswering, isFollowing } from "../lib/conversation-types";
+import type { ConversationFeed, ConversationRow, OracleView } from "../lib/conversation-types";
 import { Markdown } from "./markdown";
 import { btn } from "./ui";
 
@@ -12,8 +12,10 @@ import { btn } from "./ui";
 // the worker answers; the model can ask, look in memory and propose a brief — the work starts only from "Start work".
 // D-533: it also shows what the model read, the task profile with the axes still unclear, and the proposed spec with
 // its criteria; a person approves a ready spec here. Kept small: the UI will be redesigned.
+// D-534: under an approved spec that needs one, the oracle: building, not ready (why) or ready, red/green per criterion
+// on the current code, and Approve oracle. Only statuses, criterion ids and counts reach the page, never the tests.
 
-export interface Chat { row: ConversationRow; turns: ChatTurn[] }
+export interface Chat { row: ConversationRow; turns: ChatTurn[]; oracleRequired?: boolean; oracle?: OracleView | null }
 
 const merge = (a: ChatTurn[], b: ChatTurn[]): ChatTurn[] => {
   const seen = new Set(a.map((x) => x.seq));
@@ -22,7 +24,7 @@ const merge = (a: ChatTurn[], b: ChatTurn[]): ChatTurn[] => {
 
 /** the conversation's state and its live feed: follow() opens the stream after the last turn and closes it once answered */
 export function useConversation(initial: ConversationFeed | null): { chat: Chat | null; follow: (id: string) => void; reset: () => void } {
-  const [chat, setChat] = useState<Chat | null>(initial ? { row: initial.conversation, turns: initial.turns } : null);
+  const [chat, setChat] = useState<Chat | null>(initial ? { row: initial.conversation, turns: initial.turns, oracleRequired: initial.oracle_required ?? false, oracle: initial.oracle ?? null } : null);
   const es = useRef<EventSource | null>(null);
   const last = useRef(initial?.turns.at(-1)?.seq ?? -1);
   const stop = () => {
@@ -36,8 +38,8 @@ export function useConversation(initial: ConversationFeed | null): { chat: Chat 
     src.addEventListener("feed", (ev) => {
       const f = JSON.parse((ev as MessageEvent<string>).data) as ConversationFeed;
       last.current = f.turns.at(-1)?.seq ?? last.current;
-      setChat((c) => ({ row: f.conversation, turns: merge(c?.row.id === f.conversation.id ? c.turns : [], f.turns) }));
-      if (!isAnswering(f.conversation.status)) stop();
+      setChat((c) => ({ row: f.conversation, turns: merge(c?.row.id === f.conversation.id ? c.turns : [], f.turns), oracleRequired: f.oracle_required ?? false, oracle: f.oracle ?? null }));
+      if (!isFollowing(f)) stop();
     });
   }, []);
   const reset = useCallback(() => {
@@ -46,7 +48,7 @@ export function useConversation(initial: ConversationFeed | null): { chat: Chat 
     setChat(null);
   }, []);
   useEffect(() => {
-    if (initial && isAnswering(initial.conversation.status)) follow(initial.conversation.id);
+    if (initial && isFollowing(initial)) follow(initial.conversation.id);
     return stop;
   }, [initial, follow]);
   return { chat, follow, reset };
@@ -142,6 +144,47 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
   );
 }
 
+export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: () => void; onApprove: (hash: string) => void }
+
+function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: OracleActions }) {
+  const s = oracle?.status ?? null;
+  const canBuild = a.canApprove && (s === null || s === "not_ready" || s === "failed");
+  return (
+    <section aria-label={t("chat.oracle")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
+      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.oracle")}</p>
+      {s === null && <p className="mt-1 text-mute">{t("chat.oracle.none")}</p>}
+      {s === "building" && <p className="mt-1 text-mute">{t("chat.oracle.building")}</p>}
+      {s === "failed" && <p className="mt-1 text-warn">{t("chat.oracle.failed")}</p>}
+      {s === "not_ready" && oracle && (
+        <div className="mt-1 text-warn">
+          <p>{t("chat.oracle.notReady")}</p>
+          <ul className="list-disc pl-5 text-xs">{oracle.problems.map((p) => <li key={`${p.kind}:${p.id}`}>{t(`chat.oracle.problem.${p.kind}` as Key, { id: p.id })}</li>)}</ul>
+        </div>
+      )}
+      {s === "ready" && oracle && <p className="mt-1">{t("chat.oracle.ready", { tests: String(oracle.tests) })}</p>}
+      {s === "approved" && <p className="mt-1 font-medium text-ok">{t("chat.oracle.approved")}</p>}
+      {oracle && oracle.red_on_base.length > 0 && (s === "ready" || s === "approved" || s === "not_ready") && (
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+          <dt className="col-span-2 text-mute">{t("chat.oracle.onBase")}</dt>
+          {oracle.red_on_base.map((c) => (
+            <div key={c.criterion_id} className="contents">
+              <dt className="font-mono">{c.criterion_id}</dt>
+              <dd className={c.red ? "text-ok" : "text-warn"}>{t(c.red ? "chat.oracle.red" : "chat.oracle.green")}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {(canBuild || (s === "ready" && a.canApprove)) && (
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          {canBuild && <p className="min-w-0 flex-1 text-xs text-mute">{t("chat.oracle.needed")}</p>}
+          {canBuild && <button type="button" className={btn.secondary} disabled={a.busy} onClick={a.onBuild}>{t(s === null ? "chat.oracle.build" : "chat.oracle.rebuild")}</button>}
+          {s === "ready" && oracle?.oracle_hash && <button type="button" className={btn.primary} disabled={a.busy} onClick={() => a.onApprove(oracle.oracle_hash as string)}>{t("chat.oracle.approve")}</button>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   if (turn.kind === "human") {
     return (
@@ -172,7 +215,7 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
 const STOP: Partial<Record<ConversationRow["status"], "chat.overloaded" | "chat.failed" | "chat.budget" | "chat.expired">> = { overloaded: "chat.overloaded", failed: "chat.failed", budget: "chat.budget", expired: "chat.expired" };
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
-export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void }) {
+export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: () => void; onApproveOracle?: (hash: string) => void }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
   // a block body: newer Chromium returns a Promise from scrollIntoView, and React would call it as the cleanup
@@ -184,6 +227,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
+      {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle }} />}
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">
           <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
