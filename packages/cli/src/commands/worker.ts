@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { runBench } from "@mandat/bench";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
-import type { BenchRunner, EvolveTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
+import type { BenchRunner, EvolveTick, JobTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { profilePrintExec, researchDeps, researchLoop } from "./research.js";
@@ -35,6 +35,28 @@ export function selfTicker(o: { env: NodeJS.ProcessEnv; now: () => number; log: 
     last = o.now();
     const n = await o.tick();
     if (n.retried.length > 0) o.log(`[self] new attempt by Mandat: ${n.retried.join(", ")}`);
+  };
+}
+
+/**
+ * D-535: the jobs (planner, units, final check, seal, merge after approval) beside the other ticks, never blocking them
+ * (the planner is a model call): in the background, never twice at once, at most every `everyMs` (5 s); MANDAT_JOBS=0 off.
+ */
+export function jobTicker(o: { env: NodeJS.ProcessEnv; now: () => number; log: (line: string) => void; tick: () => Promise<JobTick>; everyMs?: number }): () => void {
+  let next = 0;
+  let running = false;
+  return () => {
+    if (o.env.MANDAT_JOBS === "0" || running || o.now() < next) return;
+    running = true;
+    next = o.now() + (o.everyMs ?? 5_000);
+    void o.tick()
+      .then((n) => {
+        for (const [what, ids] of [["planned", n.planned], ["parked", n.parked], ["sealed", n.sealed], ["merged into main", n.merged]] as const) if (ids.length > 0) o.log(`[job] ${what}: ${ids.join(", ")}`);
+      })
+      .catch((e: unknown) => o.log(`[job] tick failed: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`))
+      .finally(() => {
+        running = false;
+      });
   };
 }
 
@@ -180,6 +202,10 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   const chatExec = profilePrintExec(realDockerRunner());
   const chat = env.MANDAT_CHAT === "0" ? Promise.resolve() : conversationLoop({ db, log: (l) => io.stderr(`${l}
 `), modelFor: (r) => chatModelFor({ proxy: existsSync(secretPath) ? chatProxy : null, profileExec: chatExec }, r) }, { once: o.once, pollMs: 500, ...(o.signal ? { signal: o.signal } : {}) });
+  // D-535: the jobs' planner answers through the conversation's model paths (proxy, connection, subscription, demo)
+  const jobs = jobTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}
+`), tick: () => jobTick({ db, log: (l) => io.stderr(`${l}
+`), modelFor: (r) => chatModelFor({ proxy: existsSync(secretPath) ? chatProxy : null, profileExec: chatExec }, r) }) });
   try {
     await workerSlots({
       slots,
@@ -200,6 +226,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         if (swept.length > 0) io.stderr(`[sweep] blocked: ${swept.map((x) => x.task_id).join(", ")}\n`);
         await night();
         await self();
+        jobs();
         await twin();
         evolve();
         // E8g (D-356): the project's CI on Mandat's PRs (a red round → HELD ci_failed)
