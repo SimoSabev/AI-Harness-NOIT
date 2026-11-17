@@ -92,6 +92,8 @@ export interface VerifyChangeInput {
   preVerdict?: Evidence;
   /** v5 E9б (D5): a person's hidden tests for tree B */
   hidden?: HiddenTests | null;
+  /** D-534: the hidden tests are an approved oracle, graded with the change's mutants (D11.oracle) */
+  oracle?: { threshold: number };
   /** v5 E9б (D8): lint and typecheck commands */
   checks?: { name: "lint" | "typecheck"; command: string }[];
   /** v5 E9б (D12): the UI check (paths, dev command, browser image, routes) */
@@ -116,7 +118,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
   const finish = (): VerifyOutcome => {
     const evidence = EVIDENCE_ORDER.map((d) => evd.get(d) ?? na(d));
     // D5 only when hidden tests ran (verdicts without them keep their evidence list)
-    for (const d of ["D5.hidden", "D8.static", "D12.ui"] as const) {
+    for (const d of ["D5.hidden", "D11.oracle", "D8.static", "D12.ui"] as const) {
       const e = evd.get(d);
       if (e) evidence.push(e);
     }
@@ -206,7 +208,7 @@ export async function verifyChange(i: VerifyChangeInput): Promise<VerifyOutcome>
       infraUser: deps.infraUser, ipv6Sysctl: deps.ipv6Sysctl, mirrorPath: deps.mirrorPath, baseSha: req.base_sha, baseDir, diffPatch: i.diffPatch,
       files: i.files, rc, allowedPaths: tt ? tt.allowed_paths : ["**"], mayChangeTests, mustPass: [], external, tmpRoot: deps.tmpRoot,
       ...(deps.extraCa ? { extraCa: deps.extraCa } : {}), ...(deps.startGate ? { startGate: deps.startGate } : {}), ...(deps.runTests ? { runTests: deps.runTests } : {}),
-      ...(deps.progress ? { progress: deps.progress } : {}), ...(deps.depFacts ? { depFacts: deps.depFacts } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.checks ? { checks: i.checks } : {}), ...(i.ui ? { ui: i.ui } : {}),
+      ...(deps.progress ? { progress: deps.progress } : {}), ...(deps.depFacts ? { depFacts: deps.depFacts } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.oracle ? { oracle: i.oracle } : {}), ...(i.checks ? { checks: i.checks } : {}), ...(i.ui ? { ui: i.ui } : {}),
     });
     for (const e of r.evidence) set(e);
     if (!tt) set(na("D4.contract", "no task type"));

@@ -117,6 +117,43 @@ describe("mandat-verify (т. 5.7; verify-cli без Docker, тестовете �
     expect(o.verdict.reasons.some((x) => /^D5:hidden_fail:h[0-9a-f]{8}$/.test(x))).toBe(true);
     expect(o.verdict.reasons.join(" ")).not.toContain(M_TITLE);
   });
+  // D-534 (М1 Х3): the hidden tests as an approved oracle, graded with the change's mutants (D11.oracle)
+  const weakOracle = () => {
+    const d = mkdtempSync(path.join(os.tmpdir(), "mandat-oracle-"));
+    writeFileSync(path.join(d, "cart.spec.ts"), `import { describe, expect, it } from "vitest";
+import { discountCents } from "../../src/cart";
+describe("hidden", () => {
+  it("AC-1: no discount at 0", () => {
+    expect(discountCents(0)).toBe(0);
+  });
+});
+`);
+    return d;
+  };
+  type Ev = { detector: string; status: string; agent_visible: boolean; signature?: string; data: Record<string, unknown> };
+  it("D11.oracle: the oracle's tests catch the mutant of the fix → VERIFIED with the kill score on the evidence", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const r = await verify(f, ["--external", "--type", "bugfix", "--hidden", hiddenDir(), "--oracle-min-kill", "0.6", "--json"]);
+    const o = JSON.parse(r.out.trim()) as { verdict: { result: string; evidence: Ev[] } };
+    expect(o.verdict.result).toBe("VERIFIED");
+    expect(o.verdict.evidence.find((e) => e.detector === "D11.oracle")).toMatchObject({ status: "pass", agent_visible: false, data: { killed: 1, total: 1, threshold: 0.6 } });
+  });
+  it("D11.oracle: hidden tests that pass on the mutant too → UNKNOWN oracle_too_weak, never VERIFIED (the visible tests still kill it)", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const r = await verify(f, ["--external", "--type", "bugfix", "--hidden", weakOracle(), "--oracle-min-kill", "0.6", "--json"]);
+    const o = JSON.parse(r.out.trim()) as { verdict: { result: string; reasons: string[]; evidence: Ev[] } };
+    expect(o.verdict.result).toBe("UNKNOWN");
+    expect(o.verdict.reasons).toContain("D11:oracle_too_weak:0/1");
+    expect(o.verdict.evidence.find((e) => e.detector === "D11.mutation")?.status).toBe("pass");
+    expect(o.verdict.evidence.find((e) => e.detector === "D11.oracle")).toMatchObject({ status: "unknown", agent_visible: false });
+  });
+  it("--oracle-min-kill needs --hidden and a share from 0 to 1", async () => {
+    const f = demo();
+    expect((await verify(f, ["--oracle-min-kill", "0.6"])).err).toContain("--oracle-min-kill needs --hidden");
+    expect((await verify(f, ["--hidden", hiddenDir(), "--oracle-min-kill", "2"])).err).toContain("a number from 0 to 1");
+  });
   // v5 E9б (5.2): D8 — the project's lint/typecheck on base and B (the simulator: a "LINT_ERROR" / "TYPE_ERROR" marker in src)
   const d8Of = async (f: ReturnType<typeof demo>, extra: string[]) => {
     const r = await verify(f, ["--external", "--type", "bugfix", "--lint", "npm run lint", "--typecheck", "npx tsc --noEmit", "--json", ...extra]);

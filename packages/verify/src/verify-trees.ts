@@ -3,7 +3,7 @@ import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d5Hidden, d8Static, splitHidden, d11Mutation, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, testEnvChecks, weakenedAssertions } from "@mandat/core";
+import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d5Hidden, d8Static, splitHidden, d11Mutation, d11Oracle, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, testEnvChecks, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -70,6 +70,8 @@ export interface VerifyTreesInput {
   progress?: (line: string) => void;
   /** D-300: at most this many mutants of the changed source lines (0 = off); default MAX_MUTANTS */
   maxMutants?: number;
+  /** D-534: the hidden tests are an approved oracle; its share of killed mutants must reach this threshold (D11.oracle) */
+  oracle?: { threshold: number };
 }
 
 /** D-300: each mutant reruns the tests on the installed tree B (no new install); 3 keeps a task within minutes. */
@@ -258,8 +260,17 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   evidence.push(i.mustPass.length === 0 && i.external ? na("MUST_PASS", "no contract") : mustPass({ ids: i.mustPass, a: a.report, b: b.report }).evidence);
   const bClean = !b.timedOut && (split ? b.report.valid && b.report.success : b.exit === 0) && b.report.valid;
   evidence.push(special.length > 0 || testEnv.length > 0 ? d11Mutation({ sites, runs: [], b: b.report, special, testEnv }).evidence : sites.length === 0 ? na("D11.mutation", "no mutable changed lines") : !bClean ? na("D11.mutation", "tests did not pass on B") : d11Mutation({ sites, runs: b.mutants ?? sites.map(() => null), b: b.report }).evidence);
+  // D-534: the same mutants against the oracle's hidden tests only (the visible tests do not count here)
+  if (i.oracle && hidden && split) {
+    const mutated = special.length > 0 || testEnv.length > 0 ? "not graded: see D11.mutation" : sites.length === 0 ? "no mutable changed lines" : !bClean || split.hidden.length === 0 ? "tests did not pass on B" : undefined;
+    evidence.push(
+      mutated === undefined
+        ? d11Oracle({ sites, runs: bRaw.mutants ?? sites.map(() => null), hiddenOf: (r) => splitHidden(r, hidden.dir).hidden, hiddenOnB: split.hidden, threshold: i.oracle.threshold }).evidence
+        : { ...na("D11.oracle", mutated), agent_visible: false },
+    );
+  }
   const cnt = (r: ParsedReport) => (r.valid ? `${[...r.tests.values()].filter((s) => s === "passed").length}/${r.total} passed` : `invalid (${r.error})`);
-  const mut = evidence.at(-1);
+  const mut = evidence.find((e) => e.detector === "D11.mutation");
   i.progress?.(`[verify]    baseline${cachedBaseline ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}${mut && mut.status !== "n/a" ? ` · mutants ${mut.summary}` : ""}`);
   return { evidence, cachedBaseline };
 }

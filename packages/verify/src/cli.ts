@@ -42,6 +42,8 @@ export interface VerifyArgs {
   home: string;
   /** v5 E9б (D5): a directory of a person's hidden tests (copied into tree B only) */
   hidden: string | null;
+  /** D-534: the hidden tests are an oracle; this share of the change's mutants must be caught by them (0..1) */
+  oracleMinKill: number | null;
   /** v5 E9б (D8): the project's lint and typecheck commands */
   checks: { name: "lint" | "typecheck"; command: string }[];
   /** v5 E9б (D12): UI path globs, the dev command and the routes to open (default "/") */
@@ -77,6 +79,11 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
       else if (f === "--external") a.external = true;
       else if (f === "--json") a.json = true;
       else if (f === "--hidden") a.hidden = path.resolve(io.cwd, val());
+      else if (f === "--oracle-min-kill") {
+        const n = Number(val());
+        if (!Number.isFinite(n) || n < 0 || n > 1) return { ok: false, error: "--oracle-min-kill: a number from 0 to 1" };
+        a.oracleMinKill = n;
+      }
       else if (f === "--lint" || f === "--typecheck") checks.push({ name: f === "--lint" ? "lint" : "typecheck", command: val() });
       else if (f === "--ui-paths") uiPaths.push(val());
       else if (f === "--dev") dev = val();
@@ -87,10 +94,11 @@ export function parseVerifyArgs(argv: string[], io: VerifyIo): { ok: true; args:
     }
   }
   if (!a.repo) return { ok: false, error: "--repo is required" };
+  if (a.oracleMinKill !== undefined && !a.hidden) return { ok: false, error: "--oracle-min-kill needs --hidden" };
   if (routes.length > 0 && !UiRoutes.safeParse(routes).success) return { ok: false, error: "--ui-route: at most 5 paths that start with a single /" };
   const ui = uiPaths.length > 0 ? { paths: uiPaths, devCommand: dev, routes: routes.length > 0 ? routes : ["/"] } : null;
   const home = a.home ?? io.env.MANDAT_HOME ?? path.join(os.homedir(), ".mandat");
-  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null, checks, ui } };
+  return { ok: true, args: { repo: a.repo, remote: a.remote ?? null, type: a.type ?? null, external: a.external, json: a.json, home, hidden: a.hidden ?? null, oracleMinKill: a.oracleMinKill ?? null, checks, ui } };
 }
 
 const REASON_LABEL: Record<string, string> = {
@@ -135,7 +143,7 @@ export const exitFor = (r: string): 0 | 10 | 20 => (r === "VERIFIED" ? 0 : r ===
 export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCliDeps = {}): Promise<number> {
   const parsed = parseVerifyArgs(argv, io);
   if (!parsed.ok) {
-    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir>] [--lint <cmd>] [--typecheck <cmd>] [--ui-paths <glob>]… [--dev <cmd>] [--ui-route <path>]… [--json] [--home <dir>]\n`);
+    io.stderr(`mandat-verify: ${parsed.error}\nusage: mandat-verify --repo <dir> --remote <url> [--type <task_type>] [--external] [--hidden <dir> [--oracle-min-kill <0..1>]] [--lint <cmd>] [--typecheck <cmd>] [--ui-paths <glob>]… [--dev <cmd>] [--ui-route <path>]… [--json] [--home <dir>]\n`);
     return 2;
   }
   const a = parsed.args;
@@ -225,7 +233,7 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     await writer.text("export/changeset.json", ex);
     writer.raw("export/diff.patch", diffPatch);
     const out = await verifyChange({
-      req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps, ...(a.hidden ? { hidden: readHidden(a.hidden) } : {}), ...(a.checks.length > 0 ? { checks: a.checks } : {}),
+      req: { ...reqBase, base_sha: tb.baseSha, tree_sha: ex.tree_sha, diff_hash: ex.diff_hash }, policy, diffPatch, files: ex.files as ChangedFile[], deps: vdeps, ...(a.hidden ? { hidden: readHidden(a.hidden) } : {}), ...(a.oracleMinKill !== null ? { oracle: { threshold: a.oracleMinKill } } : {}), ...(a.checks.length > 0 ? { checks: a.checks } : {}),
       ...(a.ui ? { ui: { ...a.ui, image: uiImage } } : {}),
     });
     await writer.text("verdict.json", out.verdict);
