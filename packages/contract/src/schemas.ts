@@ -77,6 +77,8 @@ export const Contract = z
     repo_config: RepoConfig,
     /** D-533: the hash of the spec a person approved (absent for a task without one); sealed, never shown to the agent */
     spec_hash: Sha256.optional(),
+    /** D-534: the hash of the oracle a person approved for that spec; its hidden tests go to tree B only */
+    oracle_hash: Sha256.optional(),
     contract_hash: Sha256,
   })
   .strict();
@@ -119,6 +121,7 @@ export const DetectorId = z.enum([
   "D7.ci",
   "POLICY",
   "D11.mutation", // D-300: mutants of the changed lines must be caught by the tests
+  "D11.oracle", // D-534: the same mutants must be caught by the approved oracle's hidden tests
   // v5 2.6 (D-341: named like the others, <id>.<what>)
   "D5.hidden",
   "D8.static",
@@ -264,6 +267,8 @@ export const LedgerKind = z.enum([
   "twin_decided",
   "profile_trial", // D-530
   "spec_approved", // D-533
+  "oracle_built", // D-534
+  "oracle_approved",
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
