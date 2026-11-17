@@ -4015,3 +4015,43 @@ run-bench-trial.test.ts (2), cli evolve-ticker.test.ts, web evolve.test.ts. Ст
 получи предложено задание за ~13 s (малкият контейнер на профила), без задача. Две поправки от нея: „Изпрати“ не иска
 проект (само „Започвай“ иска), а авто-превъртането е с блоково тяло, защото новият Chromium връща Promise от
 `scrollIntoView` и React го викаше като почистване („i is not a function“). Статус: решено.
+
+## D-532 Договорите на процеса за тежки задачи (М1 Х0, 17.11.2026)
+Решение: `packages/contract` получава договорите на процеса от docs/prd/heavy-process.md, а `packages/core` — чистото
+решение за профила.
+- `task-profile.ts`: `TaskAxes` — шестте оси (код, еталон, делимост, доказ, риск, размер); всяка приема `"unknown"`.
+  Еталонът е `none` или `{kind: old_system|reference_impl|standard, locator}`; доказът е непразен списък без повторения
+  (`ProofKind`). `TaskProfileId` (10 профила, вкл. `other`), `OracleKind`, `ProfilePlan`, `TaskProfile`, `AXIS_NAMES`.
+- `task-spec.ts`: `AcceptanceCriterion` (id `AC-<n>`, `when`, `shall`, `proof`), `Spec` (≥ 1 критерий, уникални id,
+  непроменено, извън обхвата, профил), `specHash`; `untestableCriteria`; `OracleManifest` (скрити тестове с път и
+  sha256, диференциален, e2e, червено на базата, одобрение), `oracleHash`; `WorkUnit`, `Handoff`, `SessionSeal`.
+  Хешовете са JCS + sha256 (`hashJcs`), както договорът (D-122).
+- core `task-profile.ts`: `deriveProfile(axes, hint?)`, `unknownAxes(axes)`, `PROFILE_NAMES`, `PROFILE_UNITS`.
+Правила на `deriveProfile`:
+- Профил се назовава само при ясно съвпадение по известните оси (първото вярно): еталон old_system/reference_impl →
+  migration; код + стандарт + висок риск → hardening; код, без еталон, доказ differential → refactor; без код, без
+  еталон, доказ само numbers/human → research; без код, без еталон, размер l/xl, доказ tests/ui → new_product; код,
+  без еталон, tests/ui без differential → feature. Иначе `other`.
+- upgrade, tests и infra не се различават по осите, затова идват само от `hint` (предложението на модела в Х1), и то
+  само ако известните оси не му противоречат; `"unknown"` никога не противоречи. Противоречив hint се пренебрегва.
+- Планът винаги идва от осите: работа с код (всичко освен research) → hidden_tests и mutation_graded (оракулът се
+  проверява с мутации, §3); еталон или доказ differential → differential; ui → e2e; висок риск или действие навън →
+  exploit и human_review; доказ human → human_review; research → citations. Делимост yes → waves; размер l/xl → пилот.
+  Неизвестна ос не добавя нищо: планът е окончателен чак когато `unknownAxes` е празен.
+Избори при неясно:
+- `untestableCriteria` е нарочно просто и детерминистично: празен или само интервали `when`/`shall`, или доказ
+  `human` в профил, който иска машинна проверка (всички без research и other). Неясните думи са работа на интервюто.
+  Затова схемата допуска празни `when`/`shall` (чернова), а функцията ги хваща.
+- `oracleHash` не включва `approved`: одобрението подписва хеша на съдържанието, затова не може да е част от него.
+  `specHash` хешира цялата спецификация.
+- `SessionSeal.verdict` е `VerdictResult` (VERIFIED/FAILED/UNKNOWN), не целият `Verdict` на опит: печатът е за цялата
+  сесия, а опитите са в `result_ref` и дневника (`ledger_head`).
+- Пътищата на скритите тестове са относителни, с `/`, без `..`: те са в дървото на оракула, не в хранилището.
+- `unknownAxes` е в core (чиста функция до `deriveProfile`), имената на осите (`AXIS_NAMES`) са в договора.
+- Имената на профилите са на английски като останалия код; UI-то ще ги превежда.
+Защо: docs/prd/heavy-process.md, §0 (шестте оси и профилите), §2 (критерии КОГА…ТРЯБВА, хеш в печата), §3 (скрит
+оракул с контролна сума и одобрение), §6 (бележка за предаване), §8 (печат: какво е проверено и какво не). Х0 е
+основата на М1; без общ договор Х1–Х3 биха измислили интерфейси (AGENTS.md, правило 11).
+Тестове: contract task-profile.test.ts (6), task-spec.test.ts (11) — кръгове и отхвърляния, стабилен хеш при друг ред
+на ключовете; core task-profile.test.ts (21) — таблица за всеки профил вкл. other, hint, планът, unknownAxes.
+Статус: решено.
