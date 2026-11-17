@@ -26,6 +26,7 @@ import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWe
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { approveOracle, approveSpec, buildOracle, conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
+import { approveJob } from "./job";
 import { isFollowing } from "../conversation-types";
 import { sseCursor, sseResponse } from "./sse";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
@@ -725,6 +726,13 @@ export async function postConversationOracleApprove(req: Request, d: ApiDeps, id
   const p = await post(req, d);
   if (p instanceof Response) return p;
   return done(await approveOracle(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
+}
+/** D-535: a person approves the sealed job (the seal's hash in the body); only from a person's session, CSRF and origin checked */
+export async function postConversationJobApprove(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await approveJob(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
 }
 /** the turns as Server-Sent Events while the worker answers; closes once the conversation waits for the person */
 export async function streamConversation(req: Request, d: ApiDeps, id: string, o: { intervalMs?: number; maxMs?: number } = {}): Promise<Response> {

@@ -5,12 +5,13 @@ import { DEMO_ORG_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { runConversationOnce } from "../../../../worker/src/online/conversation";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { ORACLE_DIR, OracleManifest, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText } from "@mandat/contract";
+import { ORACLE_DIR, OracleManifest, hashJcs, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText } from "@mandat/contract";
 import { contractForTask } from "../../../../worker/src/online/daemon";
-import { postConversation, postConversationApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
+import { postConversation, postConversationApprove, postConversationJobApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
 import type { ApiDeps } from "./api";
 import { approveOracle, approveSpec, buildOracle, conversationFeed, retryConversation, sendMessage, startWork, workText } from "./conversation";
 import { RateLimiter } from "./guard";
+import { approveJob } from "./job";
 import { asService } from "./sql";
 import { U, webDb } from "./web-db.test-helper";
 
@@ -157,10 +158,12 @@ describe("the spec in the web (D-533)", () => {
     const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
     expect((await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } })).status).toBe(200);
     await approvedOracle(id, hash); // D-534: the feature profile's plan has hidden tests
+    // D-535: with the approved oracle this is a job; its unit tasks carry the hash (the worker's job tests)
     const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
     expect(s.status).toBe(201);
-    const t = (await asService(db, (sql) => sql.query<{ id: string; type: "bugfix"; text: string; agent: string; spec_hash: string | null }>("select id, type, text, agent, spec_hash from public.tasks where id = $1", [s.body.id]))).rows[0]!;
-    expect(t).toMatchObject({ text: specText(spec), spec_hash: hash });
+    const j = (await asService(db, (sql) => sql.query<{ spec_hash: string }>("select spec_hash from public.jobs where id = $1", [s.body.job]))).rows[0];
+    expect(j).toEqual({ spec_hash: hash });
+    const t = { id: "t_x", type: "bugfix" as const, text: specText(spec), agent: "fake:honest-fix", spec_hash: hash };
     const p = parseMandatYml(readFileSync(path.resolve(__dirname, "../../../../../fixtures/demo-shop/.mandat.yml"), "utf8"));
     if (!p.ok) throw new Error(p.error);
     expect(contractForTask(t, p.policy, "a".repeat(40)).spec_hash).toBe(hash);
@@ -258,18 +261,58 @@ describe("the oracle in the web (D-534)", () => {
     expect((await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.oracle?.status).toBe("approved");
     expect((await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "oracle_approved" });
   });
-  it("Start work with the approved oracle: oracle_hash on the task next to spec_hash, and sealed into the contract", async () => {
+  it("Start work with the approved oracle makes a job (D-535): both hashes on the job, no task yet; a unit's contract seals both", async () => {
     const { id, hash } = await approvedSpec();
     const h = await approvedOracle(id, hash);
+    const before = await tasks();
     const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
-    expect(s.status).toBe(201);
-    const t = (await asService(db, (sql) => sql.query<{ id: string; type: "bugfix"; text: string; agent: string; kind: "work"; spec_hash: string; oracle_hash: string }>("select id, type, text, agent, kind, spec_hash, oracle_hash from public.tasks where id = $1", [s.body.id]))).rows[0]!;
-    expect(t).toMatchObject({ kind: "work", spec_hash: hash, oracle_hash: h, text: specText(spec) });
+    expect(s).toMatchObject({ status: 201, body: { job: expect.stringMatching(/^j_/), state: "planning" } });
+    expect(await tasks()).toBe(before);
+    const j = (await asService(db, (sql) => sql.query<{ status: string; spec_hash: string; oracle_hash: string; repo_id: string }>("select status, spec_hash, oracle_hash, repo_id::text as repo_id from public.jobs where id = $1", [s.body.job]))).rows[0];
+    expect(j).toEqual({ status: "planning", spec_hash: hash, oracle_hash: h, repo_id: DEMO_REPO_ID });
+    const f = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!;
+    expect(f.conversation.phase).toBe("work");
+    expect(f.job).toMatchObject({ id: s.body.job, status: "planning", units: [], seal: null });
+    expect((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "work_started" });
+    const t = { id: "t_x", type: "bugfix" as const, text: specText(spec), agent: "fake:honest-fix", spec_hash: hash, oracle_hash: h };
     const p = parseMandatYml(readFileSync(path.resolve(__dirname, "../../../../../fixtures/demo-shop/.mandat.yml"), "utf8"));
     if (!p.ok) throw new Error(p.error);
     const c = contractForTask(t, p.policy, "a".repeat(40));
     expect(c).toMatchObject({ spec_hash: hash, oracle_hash: h });
     expect(c.text).not.toContain("cart.spec.ts");
+  });
+  it("the sealed job: the feed shows units and checked / not checked; only a person who may approve, with the seal's hash, approves; the ledger keeps hashes", async () => {
+    const { id, hash } = await approvedSpec();
+    const h = await approvedOracle(id, hash);
+    const job = String((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body.job);
+    expect((await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: `sha256:${"0".repeat(64)}` } })).body).toEqual({ error: "job_not_sealed" });
+    const seal = { spec_hash: hash, oracle_hash: h, profile: "feature", verdict: "VERIFIED", result_ref: "c".repeat(40), unchecked: ["D11.oracle: not run"] };
+    const sh = hashJcs(seal);
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria, status, result) values ($1, 'u1', $2::uuid, 0, 'the rule', $3::jsonb, 'passed', 'VERIFIED')", [job, DEMO_ORG_ID, JSON.stringify(["AC-1"])]);
+      await sql.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3 where id = $1", [job, JSON.stringify(seal), sh]);
+    });
+    const f = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!;
+    expect(f.job).toMatchObject({ status: "sealed", units: [{ id: "u1", criteria: ["AC-1"], status: "passed", result: "VERIFIED" }], seal: { hash: sh, verdict: "VERIFIED", checked: ["AC-1"], unchecked: ["D11.oracle: not run"] } });
+    expect((await approveJob(db, { uid: U.viewer, org: DEMO_ORG_ID, id, body: { seal_hash: sh } })).status).toBe(403);
+    expect((await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: `sha256:${"0".repeat(64)}` } })).body).toEqual({ error: "seal_changed" });
+    expect((await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: "x" } })).status).toBe(400);
+    expect(await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: sh } })).toEqual({ status: 200, body: { job, seal_hash: sh } });
+    expect((await approveJob(db, { uid: U.owner, org: DEMO_ORG_ID, id, body: { seal_hash: sh } })).body).toEqual({ error: "already_approved" });
+    const mine = (await ledgerRows("job_approved")).filter((r) => (JSON.parse(r.payload_jcs) as { job: string }).job === job);
+    expect(mine.map((r) => JSON.parse(r.payload_jcs) as unknown)).toEqual([{ conversation: id, job, seal_hash: sh, result_ref: "c".repeat(40), by: U.approver }]);
+    expect((await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.job?.status).toBe("approved");
+  });
+  it("the job approve route: a person's session with CSRF and origin", async () => {
+    const { id, hash } = await approvedSpec();
+    await approvedOracle(id, hash);
+    await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    expect((await postConversationJobApprove(post("/api/conversations/x/job/approve", {}), deps, "../x")).status).toBe(404);
+    expect((await postConversationJobApprove(new Request(`http://localhost:3000/api/conversations/${id}/job/approve`, { method: "POST", headers: { host: "localhost:3000", origin: "http://evil.test" }, body: "{}" }), deps, id)).status).toBe(403);
+    who = null;
+    expect((await postConversationJobApprove(post(`/api/conversations/${id}/job/approve`, { seal_hash: `sha256:${"0".repeat(64)}` }), deps, id)).status).toBe(401);
+    who = U.approver;
+    expect((await postConversationJobApprove(post(`/api/conversations/${id}/job/approve`, { seal_hash: `sha256:${"0".repeat(64)}` }), deps, id)).status).toBe(409);
   });
   it("a spec whose plan has no hidden tests (research) needs no oracle: Build oracle refuses, Start work goes on", async () => {
     const id = await proposed({ code: "none", reference: "none", divisible: "no", proof: ["numbers"], risk: { level: "low", outward: false }, size: "s" });

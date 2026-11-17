@@ -9,6 +9,7 @@ import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
 import { taskTypeFor } from "../agents";
 import type { ConversationFeed, ConversationRow, OracleView } from "../conversation-types";
+import { createJob, jobView } from "./job";
 
 export type { ConversationFeed, ConversationRow, OracleView };
 
@@ -191,6 +192,8 @@ export async function startWork(db: Db, o: { uid: string; org: string; id: strin
     if (last?.status !== "approved" || !last.oracle_hash) return err(409, "oracle_not_approved");
     oracle = last.oracle_hash;
   }
+  // D-535: an approved spec with an approved oracle is a job: planned, built unit by unit, verified and sealed
+  if (spec && oracle) return createJob(db, { uid: o.uid, org: o.org, conversation: o.id, specHash: spec.hash, oracleHash: oracle, type: taskTypeFor(c.agent), agent: c.agent, model: c.model });
   const text = spec ? specText(spec.spec) : workText(await turnsOf(db, o.id));
   if (text.trim() === "") return err(409, "nothing_to_do");
   const r = await createTask(db, { uid: o.uid, org: o.org, body: { type: taskTypeFor(c.agent), agent: c.agent, text, ...(c.model ? { model: c.model } : {}), ...(c.repo ? { repo: c.repo } : {}) }, ...(spec ? { specHash: spec.hash } : {}), ...(oracle ? { oracleHash: oracle } : {}) });
@@ -221,7 +224,8 @@ export async function conversationFeed(db: Db, uid: string, org: string, id: str
     const spec = Spec.safeParse(a?.approved_spec);
     if (!spec.success || conversation.approved_spec_hash === null) return { conversation, turns };
     const o = (await sql.query<OracleDbRow>(LATEST_ORACLE, [id, conversation.approved_spec_hash])).rows[0];
-    return { conversation, turns, oracle_required: oracleRequired(a?.axes, spec.data), oracle: o ? oracleView(o) : null };
+    const job = await jobView(sql, id, spec.data);
+    return { conversation, turns, oracle_required: oracleRequired(a?.axes, spec.data), oracle: o ? oracleView(o) : null, ...(job ? { job } : {}) };
   });
 }
 function oracleView(o: OracleDbRow): OracleView {
