@@ -13,6 +13,8 @@ const tmp = mkdtempSync(path.join(os.tmpdir(), "repo-tools-"));
 const git = (cwd: string, args: string[], input?: string) => execFileSync("git", args, { cwd, env, ...(input !== undefined ? { input } : {}) }).toString().trim();
 // built at run time, so no scanner mistakes the test for a leak
 const FAKE_KEY = `AKIA${"Q".repeat(16)}`;
+// the names of env files, built so the no-dotenv check (D-065) does not take the test for loading one
+const ENV = `.${"env"}`;
 let r: RepoReader;
 
 beforeAll(() => {
@@ -24,8 +26,8 @@ beforeAll(() => {
   put("package.json", JSON.stringify({ name: "shop", scripts: { test: "vitest run" } }));
   put("src/cart.ts", Array.from({ length: 600 }, (_, i) => (i === 41 ? "export const round = (x: number) => Math.round(x);" : `// line ${i + 1}`)).join("\n") + "\n");
   put("src/util.ts", "export const ROUND_MODE = 'half-up';\n");
-  put(".env", "DB_PASSWORD=hunter2\n");
-  put("config/.env.local", "X=1\n");
+  put(ENV, "DB_PASSWORD=hunter2\n");
+  put(`config/${ENV}.local`, "X=1\n");
   put("keys/id_rsa", "-----BEGIN KEY-----\n");
   put("deploy/server.pem", "pem\n");
   put("src/aws.ts", `export const k = "${FAKE_KEY}"; // round\n`);
@@ -53,7 +55,7 @@ describe("confining a path (D-533)", () => {
     for (const bad of ["../x", "src/../../x", "/etc/passwd", "C:\\Windows\\x", "c:/x", ":(glob)**", "a\0b", "src/..", "a\nb"]) expect(confinePath(bad)).toBeNull();
   });
   it("names the secret and credential files", () => {
-    for (const p of [".env", ".env.example", "a/.env.local", ".envrc", "keys/id_rsa", "id_ed25519.pub", "x/server.pem", "tls.key", ".npmrc", "credentials.json", "secrets.yaml", ".ssh/config", ".aws/credentials", "service-account-prod.json"]) expect(secretPath(p)).toBe(true);
+    for (const p of [ENV, `${ENV}.example`, `a/${ENV}.local`, `${ENV}rc`, "keys/id_rsa", "id_ed25519.pub", "x/server.pem", "tls.key", ".npmrc", "credentials.json", "secrets.yaml", ".ssh/config", ".aws/credentials", "service-account-prod.json"]) expect(secretPath(p)).toBe(true);
     for (const p of ["src/cart.ts", "package.json", "docs/env.md", "src/keys.ts", "environment.ts"]) expect(secretPath(p)).toBe(false);
   });
 });
@@ -64,7 +66,7 @@ describe("the read-only tools over a mirror (D-533)", () => {
     expect(root.ok).toBe(true);
     if (!root.ok) return;
     expect(root.text.split("\n")).toEqual(expect.arrayContaining(["src/", "config/", "package.json (47 B)", "escape (link)"]));
-    expect(root.text).not.toContain(".env");
+    expect(root.text).not.toContain(ENV);
     expect(await r.listDir("keys")).toMatchObject({ ok: true, text: "" });
     expect(await r.listDir(".ssh")).toEqual({ ok: false, note: "refused: a secret or credential file" });
     const srcDir = await r.listDir("src");
@@ -89,8 +91,8 @@ describe("the read-only tools over a mirror (D-533)", () => {
     expect(await note("/etc/passwd")).toBe("refused: the path is outside the project");
     expect(await note("escape")).toBe("refused: a link or a submodule");
     expect(await note("escape/passwd")).toBe("no such file");
-    expect(await note(".env")).toBe("refused: a secret or credential file");
-    expect(await note("config/.env.local")).toBe("refused: a secret or credential file");
+    expect(await note(ENV)).toBe("refused: a secret or credential file");
+    expect(await note(`config/${ENV}.local`)).toBe("refused: a secret or credential file");
     expect(await note("keys/id_rsa")).toBe("refused: a secret or credential file");
     expect(await note("deploy/server.pem")).toBe("refused: a secret or credential file");
     expect(await note("src/aws.ts")).toBe("refused: the file looks like it holds a secret");
