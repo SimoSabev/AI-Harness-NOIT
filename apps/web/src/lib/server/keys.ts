@@ -32,7 +32,7 @@ export interface KeysClient {
   /** D-472: "Check the key" — one cheap request by `mandat local`; null = unknown id or no answer */
   checkConnection(id: string): Promise<CheckKeyReply | null>;
   detect(): Promise<DetectReply | null>;
-  setPrefs(p: Preferences): Promise<boolean>;
+  setPrefs(p: Partial<Preferences>): Promise<boolean>;
   /** D-370: the CLI commands of `mandat local` (page System); null = the control endpoint did not answer */
   jobs(): Promise<JobState[] | null>;
   runJob(job: SystemJob): Promise<JobState | null>;

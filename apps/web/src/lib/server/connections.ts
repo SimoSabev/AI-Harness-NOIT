@@ -14,7 +14,7 @@ export interface AgentsView {
   accountName: string;
 }
 
-const NO_PREFS: Preferences = { defaultAgent: null, defaultModel: null, onboarded: false };
+const NO_PREFS: Preferences = { defaultAgent: null, defaultModel: null, onboarded: false, taskMode: "ask_first" };
 
 export async function agentsView(lang: Lang, env: Record<string, string | undefined> = process.env): Promise<AgentsView> {
   const ctl = controlKeys(env);

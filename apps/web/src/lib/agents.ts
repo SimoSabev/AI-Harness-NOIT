@@ -84,5 +84,8 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean }[]
   return i > 0 ? [out[i] as TaskAgent, ...out.slice(0, i), ...out.slice(i + 1)] : out;
 }
 
+/** the task type of the task box: a real agent works without limits ("free", D-360), the demo agents' scenarios are bug fixes */
+export const taskTypeFor = (agent: string): "free" | "bugfix" => (agent.startsWith("fake") ? "bugfix" : "free");
+
 /** D-473: which agent can use a provider's key (Claude Code, Codex, Gemini CLI) — null: none here yet (shown honestly). */
 export const apiKeyUse = (p: ProviderId): KeyCli | null => agentFor(p);

@@ -17,7 +17,7 @@ const fake = {
   status: async () => ({ proxy: "running" as const, providers: [] }), set: async () => null, clear: async () => ({ proxy: "stopped" as const, providers: [] }), setResearch: async () => null, clearResearch: async () => null, accounts: async () => [],
   login: async (op: unknown) => (calls.push(op), { ok: true as const, state: { state: "starting" as const, name: "rabota" } }),
   logout: async () => true, jobs: async () => [], runJob: async () => null, addProject: async () => null, folders: async () => null, foundProjects: async () => null,
-  connections: async () => ({ connections: [conn], preferences: { defaultAgent: null, defaultModel: null, onboarded: false } }),
+  connections: async () => ({ connections: [conn], preferences: { defaultAgent: null, defaultModel: null, onboarded: false, taskMode: "ask_first" as const } }),
   addConnection: async (b: AddConnectionBody) => (calls.push({ add: b.provider, keyed: b.key !== undefined }), b.key === REJECTED ? { ok: false as const, error: "bad_key" as const } : { ok: true as const, connection: conn }),
   setModels: async (id: string) => (calls.push({ models: id }), id === "deepseek"),
   removeConnection: async (id: string) => (calls.push({ remove: id }), true),
@@ -51,6 +51,10 @@ describe("API /api/connections (D-393)", () => {
     expect(await (await deleteConnection(req("DELETE"), deps(fake), "deepseek")).json()).toEqual({ removed: true });
     expect((await (await getDetect(req("GET"), deps(fake))).json()).local[0].provider).toBe("ollama");
     expect((await putPreferences(req("PUT", { defaultAgent: "claude+deepseek", defaultModel: "deepseek-v4-pro", onboarded: true }), deps(fake))).status).toBe(200);
+    // D-531: the mode switch sends only its key; the rest stay as saved (`mandat local` merges)
+    expect((await putPreferences(req("PUT", { taskMode: "work_now" }), deps(fake))).status).toBe(200);
+    expect(calls).toContainEqual({ prefs: { taskMode: "work_now" } });
+    expect((await putPreferences(req("PUT", { taskMode: "later" }), deps(fake))).status).toBe(400);
     expect((await putPreferences(req("PUT", { defaultAgent: "gemini@lichno" }), deps(fake))).status).toBe(400); // D-427: gemini is an agent now; a Google login is not (Q-073)
     expect((await postLogin(req("POST", { name: "rabota", cli: "codex" }), deps(fake))).status).toBe(200);
     expect(calls).toContainEqual({ kind: "start", name: "rabota", cli: "codex" });

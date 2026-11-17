@@ -47,7 +47,7 @@ export async function factorAt(sf: SecondFactor, o: { uid: string; code?: string
   return at ? { at, method: sf.local ? "local" : "totp" } : err(403, "second_factor_invalid");
 }
 
-async function canAct(db: Db, uid: string, org: string): Promise<boolean> {
+export async function canAct(db: Db, uid: string, org: string): Promise<boolean> {
   return asUser(db, uid, async (sql) => (await sql.query<{ ok: boolean }>("select private.authorize('approver', $1::uuid) as ok", [org])).rows[0]?.ok === true);
 }
 

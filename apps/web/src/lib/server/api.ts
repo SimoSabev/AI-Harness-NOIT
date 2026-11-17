@@ -25,6 +25,9 @@ import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./per
 import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
+import { conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
+import { isAnswering } from "../conversation-types";
+import { sseCursor, sseResponse } from "./sse";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
 import { AccountName, AddConnectionBody, AddProjectBody, RunnableAgentRef, ConnectionId, LocalPath, LoginCode, ModelsBody, Preferences, SubscriptionId, SystemJob } from "@mandat/contract";
 import { z } from "zod";
@@ -435,9 +438,10 @@ export async function getDetect(req: Request, d: ApiDeps): Promise<Response> {
 export async function putPreferences(req: Request, d: ApiDeps): Promise<Response> {
   const k = await keysOwner(req, d, true);
   if (k instanceof Response) return k;
-  const p = Preferences.safeParse(k.body);
-  if (!p.success || (p.data.defaultAgent !== null && !RunnableAgentRef.safeParse(p.data.defaultAgent).success)) return json(400, { error: "bad_preferences" });
-  return (await k.keys.setPrefs(p.data)) ? json(200, { ok: true }) : unavailable();
+  // D-531: only the keys sent change (`mandat local` merges them with the saved ones), so the mode switch keeps the defaults
+  const p = Preferences.partial().safeParse(k.body);
+  if (!p.success || (typeof p.data.defaultAgent === "string" && !RunnableAgentRef.safeParse(p.data.defaultAgent).success)) return json(400, { error: "bad_preferences" });
+  return (await k.keys.setPrefs(k.body as Partial<Preferences>)) ? json(200, { ok: true }) : unavailable();
 }
 
 // D-388: "Add project" from the web — `mandat local` mirrors the folder, adds the repo and queues the rules scan
@@ -663,67 +667,63 @@ export async function streamResearch(req: Request, d: ApiDeps, id: string, o: { 
   if (!QID.test(id)) return json(404, { error: "unknown_research" });
   const c = await ctx(req, d);
   if (c instanceof Response) return c;
-  const q = new URL(req.url).searchParams.get("after");
-  const last = req.headers.get("last-event-id");
-  const cursor = last ?? q;
-  if (cursor !== null && !/^-?\d{1,6}$/.test(cursor)) return json(400, { error: "bad_query" });
-  let after = cursor === null ? -1 : Number(cursor);
+  const after = sseCursor(req);
+  if (after === null) return json(400, { error: "bad_query" });
   const first = await researchFeed(d.db, c.uid, c.org, id, after);
   if (!first) return json(404, { error: "unknown_research" });
-  const enc = new TextEncoder();
-  const intervalMs = o.intervalMs ?? 600;
-  const maxMs = o.maxMs ?? 5 * 60_000;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let sig = "";
-  const body = new ReadableStream<Uint8Array>({
-    start(ctl) {
-      const started = Date.now();
-      let pinged = started;
-      let closed = false;
-      const close = () => {
-        if (closed) return;
-        closed = true;
-        if (timer) clearTimeout(timer);
-        try {
-          ctl.close();
-        } catch {
-          // already closed by the client
-        }
-      };
-      req.signal.addEventListener("abort", close);
-      const send = (f: NonNullable<Awaited<ReturnType<typeof researchFeed>>>): boolean => {
-        const now = JSON.stringify([f.question.status, f.question.stop_requested, f.question.usd, f.question.has_report]);
-        if (f.events.length > 0 || now !== sig || f.report) {
-          sig = now;
-          after = f.events.at(-1)?.seq ?? after;
-          ctl.enqueue(enc.encode(`event: feed\nid: ${after}\ndata: ${JSON.stringify(f)}\n\n`));
-        }
-        return f.report !== null || (["failed", "stopped"].includes(f.question.status) && f.events.length === 0);
-      };
-      const tick = async () => {
-        if (closed) return;
-        if (Date.now() - started >= maxMs) return close();
-        try {
-          const f = await researchFeed(d.db, c.uid, c.org, id, after);
-          if (!f) return close();
-          if (send(f)) return close();
-          if (Date.now() - pinged >= 15_000) {
-            pinged = Date.now();
-            ctl.enqueue(enc.encode(": ping\n\n"));
-          }
-        } catch {
-          return close();
-        }
-        timer = setTimeout(() => void tick(), intervalMs);
-      };
-      if (send(first)) return close();
-      timer = setTimeout(() => void tick(), intervalMs);
-    },
-    cancel() {
-      if (timer) clearTimeout(timer);
-    },
+  return sseResponse(req, {
+    first,
+    after,
+    ...o,
+    load: (a) => researchFeed(d.db, c.uid, c.org, id, a),
+    cursorOf: (f) => f.events.at(-1)?.seq ?? null,
+    sig: (f) => JSON.stringify([f.question.status, f.question.stop_requested, f.question.usd, f.question.has_report]),
+    hasNews: (f) => f.events.length > 0 || f.report !== null,
+    done: (f) => f.report !== null || (["failed", "stopped"].includes(f.question.status) && f.events.length === 0),
   });
-  return new Response(body, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store, no-transform", "x-accel-buffering": "no" } });
+}
+
+// D-531 (E10a phase 1): the conversation before work — a message, a retry on another model, "Start work", the live feed
+const CID = /^c_[a-z0-9_]{1,40}$/;
+export async function postConversation(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!d.createLimiter.take(p.uid)) return json(429, { error: "rate_limited" });
+  return done(await sendMessage(d.db, { uid: p.uid, org: p.org, body: p.body }), d);
+}
+export async function postConversationRetry(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await retryConversation(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
+}
+export async function postConversationStart(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!d.createLimiter.take(p.uid)) return json(429, { error: "rate_limited" });
+  return done(await startWork(d.db, { uid: p.uid, org: p.org, id }), d);
+}
+/** the turns as Server-Sent Events while the worker answers; closes once the conversation waits for the person */
+export async function streamConversation(req: Request, d: ApiDeps, id: string, o: { intervalMs?: number; maxMs?: number } = {}): Promise<Response> {
+  if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
+  const c = await ctx(req, d);
+  if (c instanceof Response) return c;
+  const after = sseCursor(req);
+  if (after === null) return json(400, { error: "bad_query" });
+  const first = await conversationFeed(d.db, c.uid, c.org, id, after);
+  if (!first) return json(404, { error: "unknown_conversation" });
+  return sseResponse(req, {
+    first,
+    after,
+    intervalMs: 400,
+    ...o,
+    load: (a) => conversationFeed(d.db, c.uid, c.org, id, a),
+    cursorOf: (f) => f.turns.at(-1)?.seq ?? null,
+    sig: (f) => JSON.stringify([f.conversation.status, f.conversation.usd, f.conversation.phase]),
+    hasNews: (f) => f.turns.length > 0,
+    done: (f) => !isAnswering(f.conversation.status),
+  });
 }
 
 /** the report as a file: html (self-contained, no scripts), md or json */
