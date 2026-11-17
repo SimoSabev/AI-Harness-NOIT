@@ -31,6 +31,8 @@ import { ciNote } from "./ci.js";
 import { memoryForTask, sandboxProposals, tidyAfterTask } from "./memory.js";
 import { deliverLocal, mergeLocal } from "./deliver-local.js";
 import { finishOracle, oracleTestsFor } from "./oracle.js";
+import { finishJobTask, jobInputs } from "./job-task.js";
+import type { JobInputs } from "./job-task.js";
 
 const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
 import type { Db } from "./db.js";
@@ -86,6 +88,10 @@ interface TaskRow {
   kind: "work" | "oracle";
   /** D-534: the hash of the oracle a person approved for this task's spec (null: none) */
   oracle_hash: string | null;
+  /** D-535: a task of a job: one unit (fresh context, on the job branch) or the job's final check */
+  job_id: string | null;
+  unit_id: string | null;
+  job_role: "unit" | "final" | null;
 }
 
 /** E9а: the approved profile with the night's forbidden tools as deny rules for the subject night (and its hash recomputed) */
@@ -148,7 +154,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, t.spec_hash, t.kind, t.oracle_hash, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, t.spec_hash, t.kind, t.oracle_hash, t.job_id, t.unit_id, t.job_role, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -165,7 +171,23 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // CONTRACTED: the policy and the base come from Mandat's mirror (the trusted remote of the repo)
   const mirror = t.remote_url.replace(/^file:\/\//, "");
   const tmpHome = os.tmpdir();
-  const baseSha = (await (await import("@mandat/export")).cleanGit({ tmpHome }).run(["rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"], { cwd: mirror })).stdout.toString("utf8").trim();
+  let baseSha = (await (await import("@mandat/export")).cleanGit({ tmpHome }).run(["rev-parse", "--verify", "--end-of-options", "HEAD^{commit}"], { cwd: mirror })).stdout.toString("utf8").trim();
+  // D-535: a unit runs on its job branch's head, the final check on the job's base; main is not their base
+  let job: JobInputs | null = null;
+  if (t.job_id && t.job_role) {
+    job = await jobInputs(d.db, { id: t.id, org_id: t.org_id, repo_id: t.repo_id, attempt: t.attempt, job_id: t.job_id, unit_id: t.unit_id, job_role: t.job_role }, { mirror, hiddenDir: ORACLE_DIR });
+    if (!job.ok) {
+      const reason = job.reason;
+      const seq = await inTransaction(d.db, async (tx) => {
+        const s = await setState(tx, t, "BLOCKED", { wait_reason: reason });
+        await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason, job: t.job_id } });
+        return s;
+      });
+      await bc("BLOCKED", seq, { wait_reason: reason });
+      return { state: "BLOCKED", verdict: null };
+    }
+    baseSha = job.baseSha;
+  }
   const yml = await readAtBase({ mirror, baseSha, file: ".mandat.yml", tmpHome });
   const parsed = yml ? parseMandatYml(yml.toString("utf8")) : null;
   if (!parsed?.ok) {
@@ -271,7 +293,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // none (it writes them); every other task the latest repo-wide set (the oracles' sets are keyed by a spec)
   const hiddenDir = hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__";
   let hidden: { dir: string; files: { path: string; data: Buffer }[] } | null = null;
-  if (t.oracle_hash) {
+  if (job?.ok) {
+    // D-535: the unit's share of the approved oracle (checked file by file in jobInputs), for tree B only
+    hidden = job.hidden ? { ...job.hidden, dir: hiddenDir } : null;
+  } else if (t.oracle_hash) {
     const ot = await oracleTestsFor(d.db, { repo: t.repo_id, specHash: t.spec_hash, oracleHash: t.oracle_hash, dir: hiddenDir });
     if (!ot.ok) {
       const seq = await inTransaction(d.db, async (tx) => {
@@ -378,7 +403,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     };
     if (steerable) await d.db.query("update public.tasks set steerable = true where id = $1", [t.id]);
     const rbFile = t.retry_reason === "rebase" ? rebaseFile(d.home, t.id, t.attempt) : null;
-    const applyFiles = rbFile && existsSync(rbFile) ? (JSON.parse(readFileSync(rbFile, "utf8")) as { path: string; data: string | null }[]).map((f) => ({ path: f.path, data: f.data === null ? null : Buffer.from(f.data, "base64") })) : undefined;
+    // D-535: the final check of a job applies the job's whole change in place of an agent (like a rebase, D-355)
+    const applyFiles = job?.ok && job.applyFiles ? job.applyFiles : rbFile && existsSync(rbFile) ? (JSON.parse(readFileSync(rbFile, "utf8")) as { path: string; data: string | null }[]).map((f) => ({ path: f.path, data: f.data === null ? null : Buffer.from(f.data, "base64") })) : undefined;
     try {
       // a spill changes t.agent (key channels only); a fixed route keeps its CLI
       return await (d.run ?? runTask)({
@@ -386,7 +412,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
-        ...(hidden ? { hidden } : {}), ...(hidden && t.oracle_hash ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: { dir: ORACLE_DIR } } : {}),
+        ...(hidden ? { hidden } : {}), ...(hidden && (job?.ok ? job.grade : t.oracle_hash) ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: { dir: ORACLE_DIR } } : {}),
         ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
@@ -527,6 +553,16 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:waiting`, payload: { task_id: t.id, kind: "waiting" } });
     await bc("HELD", seq, { wait_reason: "tool_approval", usd, minutes });
     return { state: "HELD", verdict: v };
+  }
+  // D-535: a job's task never goes the delivery way: a VERIFIED unit moves the job branch, the final check is the job's
+  if (job?.ok && t.job_id && t.job_role) {
+    const dp = out.runDir && existsSync(path.join(out.runDir, "export", "diff.patch")) ? readFileSync(path.join(out.runDir, "export", "diff.patch")) : Buffer.alloc(0);
+    const end = await finishJobTask(d.db, { id: t.id, org_id: t.org_id, repo_id: t.repo_id, attempt: t.attempt, job_id: t.job_id, unit_id: t.unit_id, job_role: t.job_role }, {
+      mirror, verdict: v, out, diffPatch: dp, minutes, message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }),
+    });
+    await bc(end.state, seq + 1, { result: v.result, wait_reason: end.wait_reason, usd, minutes });
+    log(`[daemon] ${t.id}: job ${t.job_id} ${t.job_role} ${t.unit_id ?? ""} ${v.result} → ${end.state}`);
+    return { state: end.state, verdict: v };
   }
   // D-288 (EXPORT:empty_change, т. 5.7): an empty change is never VERIFIED online — no delivery, no ladder credit.
   // D-447: the worker skips the trees for it (UNKNOWN EXPORT:empty_change); any other open question goes the usual way.

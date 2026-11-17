@@ -58,3 +58,5 @@ export { MAX_STEPS, answerTurn, claimConversation, conversationLoop, loadTurns, 
 export type { ChatDeps, NewTurn } from "./online/conversation.js";
 export { chatModelFor, demoChatModel } from "./online/conversation-host.js";
 export type { ChatModelChoice, ChatRoute, HostChatOptions } from "./online/conversation-host.js";
+export { jobTick, newJobId } from "./online/job.js";
+export type { JobDeps, JobTick } from "./online/job.js";
