@@ -25,7 +25,7 @@ import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./per
 import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
-import { conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
+import { approveSpec, conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
 import { isAnswering } from "../conversation-types";
 import { sseCursor, sseResponse } from "./sse";
 import { reportHtml, reportMarkdown } from "@mandat/research/report";
@@ -704,6 +704,13 @@ export async function postConversationStart(req: Request, d: ApiDeps, id: string
   if (!d.createLimiter.take(p.uid)) return json(429, { error: "rate_limited" });
   return done(await startWork(d.db, { uid: p.uid, org: p.org, id }), d);
 }
+/** D-533: a person approves the proposed spec (its hash in the body); only from a person's session */
+export async function postConversationApprove(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await approveSpec(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
+}
 /** the turns as Server-Sent Events while the worker answers; closes once the conversation waits for the person */
 export async function streamConversation(req: Request, d: ApiDeps, id: string, o: { intervalMs?: number; maxMs?: number } = {}): Promise<Response> {
   if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
@@ -720,7 +727,7 @@ export async function streamConversation(req: Request, d: ApiDeps, id: string, o
     ...o,
     load: (a) => conversationFeed(d.db, c.uid, c.org, id, a),
     cursorOf: (f) => f.turns.at(-1)?.seq ?? null,
-    sig: (f) => JSON.stringify([f.conversation.status, f.conversation.usd, f.conversation.phase]),
+    sig: (f) => JSON.stringify([f.conversation.status, f.conversation.usd, f.conversation.phase, f.conversation.spec_hash, f.conversation.approved_spec_hash]),
     hasNews: (f) => f.turns.length > 0,
     done: (f) => !isAnswering(f.conversation.status),
   });

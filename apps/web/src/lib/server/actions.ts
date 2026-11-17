@@ -139,7 +139,8 @@ export async function labelFailure(db: Db, o: { uid: string; verdictId: string; 
   return { status: 200, body: { layer: o.body.layer }, broadcast: { org: v.org_id, task: v.task_id } };
 }
 
-export async function createTask(db: Db, o: { uid: string; org: string; body: z.infer<typeof CreateTaskBody> }): Promise<Result> {
+/** specHash (D-533): the approved spec of the conversation that makes this task — set by the server, never by the body */
+export async function createTask(db: Db, o: { uid: string; org: string; body: z.infer<typeof CreateTaskBody>; specHash?: string }): Promise<Result> {
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
   const id = `t_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
   const ok = await asService(db, async (sql) => {
@@ -148,7 +149,7 @@ export async function createTask(db: Db, o: { uid: string; org: string; body: z.
     if (chosen && (await sql.query("select 1 from public.repos where id = $1::uuid and org_id = $2::uuid", [chosen, o.org])).rows.length === 0) return "no_repo";
     const repo = (await sql.query<{ id: string }>("select r.id::text as id from public.repos r where r.org_id = $1::uuid and ($3::uuid is null or r.id = $3::uuid) and ($2 = 'free' or exists (select 1 from public.task_types tt where tt.repo_id = r.id and tt.name = $2)) order by r.created_at limit 1", [o.org, o.body.type, chosen])).rows[0];
     if (!repo) return false;
-    await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, model, text, created_by) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid)", [id, o.org, repo.id, o.body.type, o.body.agent, o.body.model ?? null, o.body.text, o.uid]);
+    await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, model, text, created_by, spec_hash) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9)", [id, o.org, repo.id, o.body.type, o.body.agent, o.body.model ?? null, o.body.text, o.uid, o.specHash ?? null]);
     return true;
   });
   if (ok === "no_repo") return err(404, "unknown_repo");

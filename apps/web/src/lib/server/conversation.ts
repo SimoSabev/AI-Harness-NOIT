@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatMessageBody, ChatRetryBody, ChatTurn, briefText } from "@mandat/contract";
+import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, Spec, briefText, jcs, sha256Tag, specHash, specText } from "@mandat/contract";
 import type { Brief } from "@mandat/contract";
 import { canAct, createTask } from "./actions";
+import { hasCap } from "./roles";
 import type { Result } from "./actions";
 import { asService, asUser } from "./sql";
 import type { Db } from "./sql";
@@ -13,10 +14,13 @@ export type { ConversationFeed, ConversationRow };
 // D-531 (E10a phase 1): the conversation before work, from the web. A person who may start tasks writes; the server stores
 // the turn and queues the conversation (the worker answers, without a sandbox). "Start work" makes today's task from the
 // conversation through createTask — the same path as the task box, no second logic — and only a person can press it.
+// D-533: only a person approves a proposed spec (approve.level1, the owner and approver roles); the approval is a
+// ledger row spec_approved with the hash (no spec text). "Start work" with an approved spec makes the task from the
+// spec and carries its hash into the task (and so into the sealed contract); without one it works as in D-531.
 
 const err = (status: number, error: string): Result => ({ status, body: { error } });
 const TS = (c: string) => `to_char(${c} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
-const COLS = "c.id, c.agent, c.model, c.phase, c.status, c.usd::float8 as usd, c.budget_usd::float8 as budget_usd, c.error, c.task_id";
+const COLS = "c.id, c.agent, c.model, c.phase, c.status, c.usd::float8 as usd, c.budget_usd::float8 as budget_usd, c.error, c.task_id, c.profile, c.unknown_axes, c.spec_hash, c.spec_ready, c.approved_spec_hash";
 /** a stop the person cannot send past: a new conversation starts instead */
 const ENDED = ["budget", "expired"];
 
@@ -79,15 +83,43 @@ export function workText(turns: readonly ChatTurn[]): string {
   return `${head}${said}`.slice(0, CHAT_TEXT_MAX);
 }
 
+/** D-533: a person approves the proposed spec of this hash; the model has no way here (a person's session, the cap) */
+export async function approveSpec(db: Db, o: { uid: string; org: string; id: string; body: unknown }): Promise<Result> {
+  const b = ChatApproveBody.safeParse(o.body);
+  if (!b.success) return err(400, "bad_body");
+  const c = (await asService(db, (sql) => sql.query<{ phase: string; status: string; repo: string | null; spec: unknown; spec_hash: string | null; spec_ready: boolean; profile: string | null }>("select phase, status, repo_id::text as repo, spec, spec_hash, spec_ready, profile from public.conversations where id = $1 and org_id = $2::uuid", [o.id, o.org]))).rows[0];
+  if (!c) return err(404, "unknown_conversation");
+  if (!(await hasCap(db, o.uid, o.org, "approve.level1", { repo: c.repo }))) return err(403, "not_an_approver");
+  if (c.phase !== "conversation") return err(409, "work_started");
+  if (c.status === "queued" || c.status === "running") return err(409, "answering");
+  const spec = Spec.safeParse(c.spec);
+  // the stored hash must be the spec's own hash and the one the person saw
+  if (!c.spec_ready || !spec.success || c.spec_hash !== specHash(spec.data)) return err(409, "spec_not_ready");
+  if (b.data.spec_hash !== c.spec_hash) return err(409, "spec_changed");
+  const hash = c.spec_hash;
+  const done = await asService(db, async (sql) => {
+    const u = await sql.query("update public.conversations set approved_spec = spec, approved_spec_hash = spec_hash, approved_by = $3::uuid, approved_at = now(), updated_at = now() where id = $1 and spec_hash = $2 and spec_ready and approved_spec_hash is distinct from $2 returning id", [o.id, hash, o.uid]);
+    if (u.rows.length === 0) return false;
+    const text = jcs({ conversation: o.id, spec_hash: hash, profile: c.profile, by: o.uid });
+    await sql.query("select private.ledger_append($1::uuid, 'spec_approved', null, $2, $3)", [o.org, text, sha256Tag(text)]);
+    return true;
+  });
+  if (!done) return err(409, "already_approved");
+  return { status: 200, body: { id: o.id, spec_hash: hash } };
+}
+
 /** "Start work": a person's action makes today's task from the conversation; the conversation's phase becomes work */
 export async function startWork(db: Db, o: { uid: string; org: string; id: string }): Promise<Result> {
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
-  const c = (await asService(db, (sql) => sql.query<{ phase: string; agent: string; model: string | null; repo: string | null }>("select phase, agent, model, repo_id::text as repo from public.conversations where id = $1 and org_id = $2::uuid", [o.id, o.org]))).rows[0];
+  const c = (await asService(db, (sql) => sql.query<{ phase: string; agent: string; model: string | null; repo: string | null; approved_spec: unknown; approved_spec_hash: string | null }>("select phase, agent, model, repo_id::text as repo, approved_spec, approved_spec_hash from public.conversations where id = $1 and org_id = $2::uuid", [o.id, o.org]))).rows[0];
   if (!c) return err(404, "unknown_conversation");
   if (c.phase !== "conversation") return err(409, "work_started");
-  const text = workText(await turnsOf(db, o.id));
+  // D-533: an approved spec (its hash checked again) is the task; without one the brief and the person's words (D-531)
+  const approved = Spec.safeParse(c.approved_spec);
+  const spec = approved.success && c.approved_spec_hash === specHash(approved.data) ? { spec: approved.data, hash: c.approved_spec_hash } : null;
+  const text = spec ? specText(spec.spec) : workText(await turnsOf(db, o.id));
   if (text.trim() === "") return err(409, "nothing_to_do");
-  const r = await createTask(db, { uid: o.uid, org: o.org, body: { type: taskTypeFor(c.agent), agent: c.agent, text, ...(c.model ? { model: c.model } : {}), ...(c.repo ? { repo: c.repo } : {}) } });
+  const r = await createTask(db, { uid: o.uid, org: o.org, body: { type: taskTypeFor(c.agent), agent: c.agent, text, ...(c.model ? { model: c.model } : {}), ...(c.repo ? { repo: c.repo } : {}) }, ...(spec ? { specHash: spec.hash } : {}) });
   if (r.status !== 201) return r;
   await asService(db, (sql) => sql.query("update public.conversations set phase = 'work', task_id = $2, updated_at = now() where id = $1", [o.id, r.body.id]));
   return r;
