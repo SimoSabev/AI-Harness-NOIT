@@ -136,7 +136,8 @@ export class Connections {
   }
 
   setPrefs(raw: unknown): boolean {
-    const p = Preferences.safeParse(raw);
+    // D-531: the keys sent change, the others keep their saved value
+    const p = Preferences.safeParse(raw !== null && typeof raw === "object" && !Array.isArray(raw) ? { ...this.d.store.prefs(), ...raw } : raw);
     if (!p.success) return false;
     this.d.store.setPrefs(p.data);
     return true;

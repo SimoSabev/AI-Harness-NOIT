@@ -1,12 +1,13 @@
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { runBench } from "@mandat/bench";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { BenchRunner, EvolveTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, closeExpiredHeld, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
-import { researchDeps, researchLoop } from "./research.js";
+import { profilePrintExec, researchDeps, researchLoop } from "./research.js";
 import { repoRoot } from "../paths.js";
 import type { Io } from "../output.js";
 
@@ -172,6 +173,13 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   // E9г (D-409): research runs beside the task slots (≤ 2 here, ≤ 2 per org); MANDAT_RESEARCH=0 turns it off
   const host = hostConfig(env);
   const research = env.MANDAT_RESEARCH === "0" ? Promise.resolve() : researchLoop(researchDeps({ db, io, home: o.home, docker: realDockerRunner(), inferencePort: host.proxyInferencePort, adminPort: host.proxyAdminPort }), { once: o.once, pollMs: o.pollMs ?? 2000, ...(o.signal ? { signal: o.signal } : {}) });
+  // D-531 (E10а ф. 1): conversations beside research — a key or a connection through the proxy (no container), a Claude
+  // subscription in its profile container (D-295); MANDAT_CHAT=0 turns it off
+  const secretPath = path.join(o.home, "proxy", "secret");
+  const chatProxy = { url: `http://127.0.0.1:${host.proxyInferencePort}`, secretPath };
+  const chatExec = profilePrintExec(realDockerRunner());
+  const chat = env.MANDAT_CHAT === "0" ? Promise.resolve() : conversationLoop({ db, log: (l) => io.stderr(`${l}
+`), modelFor: (r) => chatModelFor({ proxy: existsSync(secretPath) ? chatProxy : null, profileExec: chatExec }, r) }, { once: o.once, pollMs: 500, ...(o.signal ? { signal: o.signal } : {}) });
   try {
     await workerSlots({
       slots,
@@ -204,6 +212,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
       },
     });
     await research;
+    await chat;
     return 0;
   } finally {
     await db.end();

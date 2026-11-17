@@ -127,4 +127,13 @@ describe("Connections (D-393)", () => {
     expect(await m.c.check("nobody")).toBeNull();
     expect(m.calls.every((c) => !c.url.includes(KEY))).toBe(true);
   });
+  it("D-531: preferences change only in the keys sent (the mode switch keeps the default agent)", () => {
+    const m = make();
+    expect(m.c.setPrefs({ defaultAgent: "claude", defaultModel: "claude-sonnet-5-5", onboarded: true })).toBe(true);
+    expect(m.store.prefs().taskMode).toBe("ask_first");
+    expect(m.c.setPrefs({ taskMode: "work_now" })).toBe(true);
+    expect(m.store.prefs()).toEqual({ defaultAgent: "claude", defaultModel: "claude-sonnet-5-5", onboarded: true, taskMode: "work_now" });
+    expect(m.c.setPrefs({ taskMode: "sometimes" })).toBe(false);
+    expect(m.c.setPrefs("x")).toBe(false);
+  });
 });
