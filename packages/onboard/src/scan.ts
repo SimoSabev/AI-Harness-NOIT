@@ -152,7 +152,9 @@ export function scanRepo(v: RepoView): ScanResult {
   }
   const nvm = (v.read(".nvmrc") ?? v.read(".node-version") ?? "").trim().replace(/^v/, "");
   const engines = rec(pkg.engines).node ?? "";
-  const engineMajor = /(20|22|24)/.exec(engines)?.[1] ?? "";
+  // a lower bound (">=22", ">20") is met by 24, the one Node the sandbox runs; a pinned line ("^22", "22.x") stays as asked
+  const lowerBound = /^\s*>=?\s*(20|22|24)\b/.test(engines) && !/[<|]/.test(engines);
+  const engineMajor = lowerBound ? "24" : /(20|22|24)/.exec(engines)?.[1] ?? "";
   const node = (NODE.test(nvm) ? nvm.slice(0, 2) : engineMajor || "24") as "20" | "22" | "24";
   const nodeSource = NODE.test(nvm) ? (has(".nvmrc") ? ".nvmrc" : ".node-version") : engineMajor ? "package.json#engines.node" : "default";
   const workflows = files.filter((f) => /^\.github\/workflows\/[^/]+\.ya?ml$/.test(f)).map((f) => workflow(v, f));

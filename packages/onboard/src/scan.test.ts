@@ -11,6 +11,23 @@ import { dirView, scanRepo } from "./scan.js";
 const win = process.platform === "win32";
 const winEtc = path.join(process.env.SystemRoot ?? "C:/Windows", "System32", "drivers", "etc");
 
+describe("the Node version the sandbox can run (live test 17.11.2026)", () => {
+  const withEngines = (node: string, extra: Record<string, string> = {}) => {
+    const base = { ...(FIXTURES["npm-vitest"] as Record<string, string>) };
+    delete base[".nvmrc"]; // like luxproof: only engines.node
+    const pkg = JSON.parse(base["package.json"] as string) as Record<string, unknown>;
+    return scanRepo(memView({ ...base, "package.json": JSON.stringify({ ...pkg, engines: { node } }), ...extra }));
+  };
+  it("a lower bound that 24 satisfies (>=22, >=20, >22.1) → node 24, which the sandbox runs", () => {
+    for (const r of [">=22", ">=20.0.0", ">22.1", ">= 22"]) expect(withEngines(r).node, r).toBe("24");
+  });
+  it("a pinned older line (^22, 22.x, ~20) stays, and the proposal says the sandbox runs only 24", () => {
+    for (const r of ["^22", "22.x", "~20.1"]) expect(withEngines(r).node, r).not.toBe("24");
+    expect(propose(withEngines("^22")).needs_human.join(" ")).toContain("runtime.node");
+    expect(propose(withEngines(">=22")).needs_human.join(" ")).not.toContain("runtime.node");
+  });
+});
+
 describe("скенер без AI: 6 fixtures (т. 8.2)", () => {
   for (const [name, files] of Object.entries(FIXTURES)) {
     it(`${name} → .mandat.yml + field_sources (snapshot)`, () => {

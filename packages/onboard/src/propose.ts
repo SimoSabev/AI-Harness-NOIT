@@ -49,6 +49,7 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   src["runtime.package_manager"] = scan.packageManager ? "lockfile" : "human";
   src["runtime.install"] = scan.packageManager ? "lockfile" : "human";
   src["runtime.node"] = "human"; // .nvmrc / engines / default: a human confirms the runtime
+  if (scan.node !== "24") needs.push(`runtime.node: the project asks for Node ${scan.node}; the sandbox runs only Node 24, so tasks stop until it says 24`);
   const framework = scan.framework ?? "vitest";
   if (!scan.framework) needs.push("tests.framework: not detected");
   const fwSource: Source = o.baseline?.report_valid ? "baseline" : scan.frameworkSource === "package.json#scripts.test" ? "package.json#scripts.test" : scan.frameworkSource === "lockfile" ? "lockfile" : "human";
