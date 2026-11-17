@@ -16,6 +16,7 @@ import { agentsView } from "../lib/server/connections";
 import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
 import { twinView } from "../lib/server/twin";
+import { conversationFeed } from "../lib/server/conversation";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
 
@@ -28,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // The workspace (chat-first start page): the tasks on the left like conversations; the chosen one in the middle — the one
 // page of a task (D-386: /tasks/:id redirects here); no task chosen → one box to start a new one. The overview is at /overview.
-export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ task?: string | string[]; text?: string | string[] }> }) {
+export default async function WorkspacePage({ searchParams }: { searchParams: Promise<{ task?: string | string[]; text?: string | string[]; chat?: string | string[] }> }) {
   const c = await pageCtx();
   const t = await getT();
   const sp = await searchParams;
@@ -36,13 +37,16 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   // E9a: "Make a task" from a night question prefills the text (it used to open /tasks/new, D-384)
   const prefill = typeof sp.text === "string" ? sp.text.slice(0, 4000) : "";
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
-  const [b, projects, initial, d, sess, twin] = await Promise.all([
+  // D-531: the open conversation of "Ask first" (?chat=c_…) survives a reload
+  const chatId = !selected && typeof sp.chat === "string" && /^c_[a-z0-9_]{1,40}$/.test(sp.chat) ? sp.chat : null;
+  const [b, projects, initial, d, sess, twin, chat] = await Promise.all([
     board(db(), c.uid, c.org),
     repos(db(), c.uid, c.org),
     selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
     selected ? taskDetail(db(), c.uid, c.org, c.role, selected) : null,
     selected ? sessionOf(db(), c.uid, c.org, selected) : null,
     selected ? twinView(db(), c.uid, c.org, selected) : null,
+    chatId ? conversationFeed(db(), c.uid, c.org, chatId, -1) : null,
   ]);
   const now = new Date();
   const tasks = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1)).slice(0, 100).map((x) => {
@@ -52,10 +56,12 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
   let preferredModel: string | null = null;
+  let taskMode: "ask_first" | "work_now" = "ask_first";
   if (!initial) {
     const v = await agentsView(t.lang);
     if (v.local && v.agents.length === 0 && !v.prefs.onboarded) redirect("/welcome");
     agents = v.agents;
+    taskMode = v.prefs.taskMode;
     preferredModel = v.prefs.defaultAgent === agents[0]?.id ? v.prefs.defaultModel : null;
   }
   return (
@@ -70,7 +76,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
-            <NewTask agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} />
+            <NewTask agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={chat?.conversation.phase === "conversation" ? chat : null} />
           )}
         </div>
       </div>

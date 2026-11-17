@@ -7,6 +7,12 @@ import { errorText, postJson } from "../lib/client/api";
 import type { Tone } from "../lib/status";
 import { Hex, btn } from "./ui";
 import { Select } from "./select";
+import { ChatThread, useConversation } from "./conversation";
+import { taskTypeFor } from "../lib/agents";
+import { isAnswering } from "../lib/conversation-types";
+import type { ConversationFeed } from "../lib/conversation-types";
+
+type TaskMode = "ask_first" | "work_now";
 
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; text: string; tone: Tone; label: string; ago: string }
@@ -42,15 +48,18 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
 // scenarios are bug fixes. The narrower types stay in the project's rules (.mandat.yml) and the CLI.
 // D-384: the agent picker shows only agents that can run (lib/agents.ts agentChoices); one agent → just its name;
 // none → a link to sign in instead of a box that cannot start anything. D-387: more than one project → a picker.
-const typeFor = (agent: string) => (agent.startsWith("fake") ? "bugfix" : "free");
+// D-531: "Ask first" (the default) talks before work; "Work right away" starts today's task at once (remembered).
+const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.workStarted", nothing_to_do: "chat.err.nothingToDo", budget: "chat.budget", expired: "chat.expired" } as const;
+const ENDED = ["budget", "expired"];
 
-export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "" }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string }) {
+export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
-  const [agent, setAgent] = useState(agents[0]?.id ?? "");
+  const chatAgent = initialChat?.conversation.agent;
+  const [agent, setAgent] = useState(chatAgent && agents.some((a) => a.id === chatAgent) ? chatAgent : (agents[0]?.id ?? ""));
   // D-393: the remembered model of the default agent, else the agent's own default; changed per task here
-  const [model, setModel] = useState<string | null>(preferredModel ?? agents[0]?.defaultModel ?? null);
+  const [model, setModel] = useState<string | null>(initialChat?.conversation.model ?? preferredModel ?? agents[0]?.defaultModel ?? null);
   const current = agents.find((a) => a.id === agent);
   const pickAgent = (id: string) => {
     setAgent(id);
@@ -59,23 +68,93 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   const [repo, setRepo] = useState(projects[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<TaskMode>(taskMode);
+  const { chat, follow, reset } = useConversation(initialChat);
+  const asking = mode === "ask_first";
+  const answering = chat !== null && isAnswering(chat.row.status);
+  const pick = model && current?.models.includes(model) ? { model } : {};
+  const fail = (r: { status: number; body: Record<string, unknown> }) => {
+    setBusy(false);
+    setError(errorText(t, r, CHAT_ERRORS, t("newTask.failed", { status: r.status })));
+  };
+  const pickMode = (m: TaskMode) => {
+    setMode(m);
+    setError(null);
+    // remembered by `mandat local`; elsewhere the choice lasts for this page
+    void postJson("/api/preferences", { taskMode: m }, "PUT").catch(() => undefined);
+  };
+  const workNow = async () => {
+    const r = await postJson("/api/tasks", { text: text.trim(), type: taskTypeFor(agent), agent, ...pick, ...(repo ? { repo } : {}) });
+    if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
+    fail(r);
+  };
+  const send = async () => {
+    const open = chat !== null && !ENDED.includes(chat.row.status) ? chat.row.id : undefined;
+    const r = await postJson("/api/conversations", { text: text.trim(), agent, ...pick, ...(repo ? { repo } : {}), ...(open ? { conversation: open } : {}) });
+    if (r.status !== 201 || typeof r.body.id !== "string") return fail(r);
+    if (!open) reset();
+    setText("");
+    setBusy(false);
+    window.history.replaceState(null, "", `/?chat=${r.body.id}`);
+    follow(r.body.id);
+  };
+  const startWork = async () => {
+    setError(null);
+    if (!chat) {
+      if (text.trim() === "") return setError(t("ws.ask"));
+      setBusy(true);
+      return workNow();
+    }
+    setBusy(true);
+    const r = await postJson(`/api/conversations/${chat.row.id}/start`, {});
+    if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
+    fail(r);
+  };
+  const retry = async () => {
+    if (!chat) return;
+    setBusy(true);
+    const r = await postJson(`/api/conversations/${chat.row.id}/retry`, { agent, ...pick });
+    if (r.status !== 200) return fail(r);
+    setBusy(false);
+    follow(chat.row.id);
+  };
+  const fresh = () => {
+    reset();
+    window.history.replaceState(null, "", "/");
+  };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (text.trim() === "") return setError(t("ws.ask"));
     setBusy(true);
     setError(null);
-    const r = await postJson("/api/tasks", { text: text.trim(), type: typeFor(agent), agent, ...(model && current?.models.includes(model) ? { model } : {}), ...(repo ? { repo } : {}) });
-    if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
-    setBusy(false);
-    setError(errorText(t, r, {}, t("newTask.failed", { status: r.status })));
+    return asking ? send() : workNow();
   };
   if (!canAct) return <p className="m-auto text-sm text-mute">{t("newTask.onlyApprovers")}</p>;
+  const blocked = busy || answering || agents.length === 0 || projects.length === 0;
+  const modes = (
+    <div role="group" aria-label={t("chat.mode")} className="mx-auto inline-flex rounded-lg border border-line-strong bg-panel p-0.5 text-xs">
+      {(["ask_first", "work_now"] as const).map((m) => (
+        <button key={m} type="button" aria-pressed={mode === m} onClick={() => pickMode(m)}
+          className="rounded-md px-3 py-1.5 font-medium text-mute transition hover:text-ink aria-pressed:bg-accent-soft aria-pressed:text-ink">
+          {t(m === "ask_first" ? "chat.askFirst" : "chat.workNow")}
+        </button>
+      ))}
+    </div>
+  );
+  const thread = asking && chat !== null;
   return (
-    <form onSubmit={submit} className="m-auto flex w-full max-w-2xl flex-col gap-4 py-10">
-      <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
-      <p className="text-center text-sm text-mute">{t("ws.askHint")}</p>
+    <form onSubmit={submit} className={thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
+      {thread ? (
+        <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} />
+      ) : (
+        <>
+          <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
+          <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
+        </>
+      )}
+      {modes}
       <div className="rounded-2xl border border-line-strong bg-panel p-3 focus-within:border-accent-text">
-        <textarea value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t("ws.placeholder")} autoFocus
+        <textarea value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
           className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-mute" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -96,7 +175,10 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
             </label>
           )}
           {current && current.models.length === 1 && <span className="font-mono text-xs text-mute">{current.models[0]}</span>}
-          <button type="submit" className={`${btn.primary} ml-auto`} disabled={busy || agents.length === 0 || projects.length === 0}>{busy ? t("ws.sending") : t("ws.send")}</button>
+          <span className="ml-auto flex items-center gap-2">
+            {asking && <button type="button" className={btn.secondary} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
+            <button type="submit" className={btn.primary} disabled={blocked}>{busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")}</button>
+          </span>
         </div>
       </div>
       {projects.length > 1 ? (
