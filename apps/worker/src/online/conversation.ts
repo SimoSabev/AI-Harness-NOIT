@@ -3,7 +3,6 @@ import type { AxisName, Brief, ChatToolCall, ConversationStatus, Sha256 } from "
 import { deriveProfile, unknownAxes } from "@mandat/core";
 import { addMemory, loadMemory, rememberLines, searchMemory } from "@mandat/memory";
 import type { SqlClient } from "@mandat/ledger";
-import { parseJsonLoose } from "@mandat/research";
 import type { ModelClient } from "@mandat/research";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
 import { mirrorReader, unavailableReader } from "./repo-tools.js";
@@ -28,7 +27,7 @@ type AxesTurn = { kind: "axes"; axes: TaskAxes; hint: TaskProfileId | null; prof
 type SpecTurn = { kind: "spec"; spec: Spec; hash: Sha256; ready: boolean; unknown: AxisName[]; untestable: string[] };
 export type NewTurn =
   | { kind: "human"; text: string }
-  | { kind: "assistant"; text: string; questions: string[]; brief: Brief | null; model: string; usd: number }
+  | { kind: "assistant"; text: string; questions: string[]; brief: Brief | null; model: string; usd: number; unreadable?: true | undefined }
   | { kind: "memory"; query: string; hits: { id: string; text: string }[] }
   /** content is for the model inside this answer only; it is never stored or logged */
   | { kind: "tool"; tool: ToolName; target: string; ok: boolean; note: string; content?: string }
@@ -88,14 +87,72 @@ function stateBlock(turns: readonly NewTurn[]): string {
 }
 export const renderConversation = (turns: readonly NewTurn[]): string => `<conversation>\n${turns.map(line).join("\n")}\n</conversation>\n${stateBlock(turns)}\nAnswer with one JSON object.`;
 
-/** the model's answer as a reply; a plain-text answer is its words, an unknown tool is ignored (no tool but the listed ones) */
-export function readReply(text: string): ChatModelReply {
-  const raw = capQuestions(parseJsonLoose(text));
-  const ok = ChatModelReply.safeParse(raw);
-  if (ok.success) return ok.data;
-  const say = typeof raw === "object" && raw !== null && typeof (raw as { say?: unknown }).say === "string" ? (raw as { say: string }).say : raw === undefined ? text : "";
-  return { say: say.trim().slice(0, 8000), call: null };
+// D-533, live test (17.11.2026): a model may wrap the protocol in extra text — an XML-style <invoke> block, a JSON object,
+// a "Correction:" line and the JSON again. Only the JSON protocol counts: tags are dropped and never run, the last valid
+// object wins (a model that corrects itself means its last word), and raw protocol text never reaches the thread.
+const TAG = /<\/?(?:invoke|parameter|function_calls|function_results|tool_use|tool_call|tool_result)\b[^>]*>/gi;
+const PROTOCOL = /[{}]|<\/?[a-z_]+[\s>]|"tool"\s*:|^\s*correction\b/im;
+const stripTags = (s: string): string => s.replace(TAG, "");
+
+/** every top-level {...} of a text that parses as JSON, in order (braces inside strings are respected) */
+export function jsonObjects(text: string): unknown[] {
+  const out: unknown[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"' && depth > 0) inString = true;
+    else if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}" && depth > 0) {
+      depth--;
+      if (depth === 0) {
+        try {
+          out.push(JSON.parse(text.slice(start, i + 1)) as unknown);
+        } catch {
+          // not JSON: skip it
+        }
+      }
+    }
+  }
+  return out;
 }
+
+export type ParsedReply = { kind: "reply"; reply: ChatModelReply } | { kind: "prose"; say: string } | { kind: "garbled" };
+const cleanSay = (s: string): string => stripTags(s).trim().slice(0, 8000);
+
+/** the model's answer: one protocol reply, plain words without any protocol, or nothing readable */
+export function parseReply(text: string): ParsedReply {
+  const objects = jsonObjects(stripTags(text)).map(capQuestions);
+  const valid = objects.flatMap((o) => {
+    const r = ChatModelReply.safeParse(o);
+    return r.success ? [r.data] : [];
+  });
+  const last = valid.at(-1);
+  if (last) return { kind: "reply", reply: { ...last, say: cleanSay(last.say) } };
+  // an object with words but a call to no listed tool: the words count, the call is ignored
+  const worded = objects.findLast((o): o is { say: string } => typeof o === "object" && o !== null && typeof (o as { say?: unknown }).say === "string");
+  if (worded) return { kind: "reply", reply: { say: cleanSay(worded.say), call: null } };
+  const prose = text.trim();
+  return prose !== "" && !PROTOCOL.test(prose) ? { kind: "prose", say: prose.slice(0, 8000) } : { kind: "garbled" };
+}
+
+/** the model's answer as a reply (tests and old callers): plain words are the say, nothing readable is an empty say */
+export function readReply(text: string): ChatModelReply {
+  const p = parseReply(text);
+  return p.kind === "reply" ? p.reply : { say: p.kind === "prose" ? p.say : "", call: null };
+}
+
+const CORRECTION = "<state>\nYour last answer could not be read. Answer again with ONE JSON object and nothing else: no XML, no tags, no text around it.\n</state>";
 
 const issues = (e: { issues: readonly { path: readonly PropertyKey[]; message: string }[] }): string =>
   e.issues
@@ -167,20 +224,37 @@ export async function answerTurn(o: {
   const out: NewTurn[] = [];
   const repo = o.repo ?? unavailableReader;
   let usd = 0;
-  for (let step = 0; step < MAX_STEPS; step++) {
-    if (o.now() >= o.expiresAt) return { turns: out, usd, stop: "expired", error: null };
-    if (o.spentUsd + usd >= o.budgetUsd) return { turns: out, usd, stop: "budget", error: null };
-    let text: string;
+  const stopped = (): ChatStop | null => (o.now() >= o.expiresAt ? "expired" : o.spentUsd + usd >= o.budgetUsd ? "budget" : null);
+  /** one model call; an error is a stop with its status (the message has a status at most, never a body; rule 5) */
+  const ask = async (extra: string): Promise<{ text: string } | { stop: ChatStop; error: string }> => {
     try {
-      const r = await o.client.complete({ system: CHAT_SYSTEM, user: renderConversation([...o.turns, ...out]), maxTokens: 4000, json: true, effort: "low" }, o.signal);
+      const r = await o.client.complete({ system: CHAT_SYSTEM, user: `${renderConversation([...o.turns, ...out])}${extra}`, maxTokens: 4000, json: true, effort: "low" }, o.signal);
       usd += r.usd;
-      text = r.text;
+      return { text: r.text };
     } catch (e) {
-      // the message has a status at most, never a body (model.ts, AGENTS.md rule 5)
       const msg = e instanceof MandatError || e instanceof Error ? e.message.slice(0, 300) : "the model did not answer";
-      return { turns: out, usd, stop: OVERLOADED.test(msg) ? "overloaded" : "failed", error: msg };
+      return { stop: OVERLOADED.test(msg) ? "overloaded" : "failed", error: msg };
     }
-    const reply = readReply(text);
+  };
+  for (let step = 0; step < MAX_STEPS; step++) {
+    const before = stopped();
+    if (before) return { turns: out, usd, stop: before, error: null };
+    const first = await ask("");
+    if ("stop" in first) return { turns: out, usd, stop: first.stop, error: first.error };
+    let parsed = parseReply(first.text);
+    // one correction round for an answer that could not be read; it does not use up a step, so its call still runs
+    if (parsed.kind === "garbled") {
+      const late = stopped();
+      if (late) return { turns: out, usd, stop: late, error: null };
+      const again = await ask(`\n${CORRECTION}`);
+      if ("stop" in again) return { turns: out, usd, stop: again.stop, error: again.error };
+      parsed = parseReply(again.text);
+    }
+    if (parsed.kind === "garbled") {
+      out.push({ kind: "assistant", text: "", questions: [], brief: null, model: o.client.channel.model, usd, unreadable: true });
+      break;
+    }
+    const reply: ChatModelReply = parsed.kind === "reply" ? parsed.reply : { say: parsed.say, call: null };
     const call = reply.call;
     const result = call ? await runTool(call, { search: o.search, repo, turns: [...o.turns, ...out] }) : null;
     if (result) out.push(result);

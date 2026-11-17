@@ -10,7 +10,7 @@ import { fakeModel } from "@mandat/research";
 import type { ModelClient, ModelRequest, RouterChannel } from "@mandat/research";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_OWNER_ID, DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { CHAT_SYSTEM, answerTurn, checkAxes, checkSpec, claimConversation, loadTurns, processConversation, readReply, reapStaleConversations, runConversationOnce } from "./conversation.js";
+import { CHAT_SYSTEM, MAX_STEPS, answerTurn, checkAxes, checkSpec, claimConversation, loadTurns, parseReply, processConversation, readReply, reapStaleConversations, runConversationOnce } from "./conversation.js";
 import { unavailableReader } from "./repo-tools.js";
 import type { RepoReader } from "./repo-tools.js";
 import type { ChatDeps, NewTurn } from "./conversation.js";
@@ -87,7 +87,11 @@ const spec = {
 };
 const script = (...answers: unknown[]) => {
   const asked: ModelRequest[] = [];
-  const client = fakeModel(ch, (q) => (asked.push(q), say(answers[Math.min(asked.length - 1, answers.length - 1)])));
+  const client = fakeModel(ch, (q) => {
+    asked.push(q);
+    const a = answers[Math.min(asked.length - 1, answers.length - 1)];
+    return typeof a === "string" ? a : say(a);
+  });
   return { client, asked };
 };
 const reader = (over: Partial<RepoReader> = {}): RepoReader => ({ ...unavailableReader, ...over });
@@ -147,6 +151,66 @@ describe("the interview (D-533)", () => {
     const n = script({ say: "", call: { tool: "read_file", path: "package.json" } }, { say: "ok", call: null });
     await answerTurn({ ...base, client: n.client, turns: [human("x")] });
     expect(n.asked[1]?.user).toContain("the project is not on this computer");
+  });
+});
+
+// D-533, the live test of 17.11.2026 (Claude subscription, local/luxproof): a reply began with an XML-style
+// `<invoke name="list_dir">` block, then JSON, then a "Correction:" line and JSON again. The call never ran and the raw
+// text reached the thread. Only the JSON protocol counts; stray tags are ignored and never run; nothing raw is shown.
+const LIVE = [
+  '<invoke name="list_dir">',
+  "</invoke>",
+  say({ say: "Let me look at the tests.", call: { tool: "list_dir", path: "packages/engine/tests" } }),
+  "Correction: the folder is test, not tests.",
+  say({ say: "Let me look at the tests.", call: { tool: "list_dir", path: "packages/engine/test" } }),
+].join("\n");
+const visible = (turns: readonly NewTurn[]) => JSON.stringify(turns.map((t) => (t.kind === "assistant" ? t.text : t.kind === "tool" ? `${t.target} ${t.note}` : "")));
+
+describe("a reply that is not one clean JSON object (D-533, live test)", () => {
+  it("parseReply takes the one valid object around extra text, the last one after a correction, and never a tag", () => {
+    expect(parseReply(`Sure.\n${say({ say: "ok", call: { tool: "list_dir", path: "src" } })}\nDone.`)).toEqual({ kind: "reply", reply: { say: "ok", call: { tool: "list_dir", path: "src" } } });
+    expect(parseReply(LIVE)).toEqual({ kind: "reply", reply: { say: "Let me look at the tests.", call: { tool: "list_dir", path: "packages/engine/test" } } });
+    expect(parseReply('<invoke name="list_dir">\n<parameter name="path">src</parameter>\n</invoke>')).toEqual({ kind: "garbled" });
+    expect(parseReply('{"say": "a } in a string", "call": null}')).toEqual({ kind: "reply", reply: { say: "a } in a string", call: null } });
+    expect(parseReply("Hi! How can I help?")).toEqual({ kind: "prose", say: "Hi! How can I help?" });
+    expect(parseReply('{"oops": ')).toEqual({ kind: "garbled" });
+    expect(parseReply(say({ say: "<invoke name=\"x\"></invoke>Looking.", call: null }))).toEqual({ kind: "reply", reply: { say: "Looking.", call: null } });
+  });
+  it("the live reply: the list_dir call runs, the loop goes on, and the thread shows only say and the tool line", async () => {
+    const calls: string[] = [];
+    const repo = { ...unavailableReader, listDir: async (p: string) => (calls.push(p), { ok: true as const, text: "vec3.test.ts (120 B)", note: "1 entries" }), readFile: async () => ({ ok: true as const, text: "1| export {}", note: "lines 1-1 of 1" }) };
+    const m = script({ say: "", call: { tool: "read_file", path: "packages/engine/src/geometry/vec3.ts" } }, LIVE, { say: "I see the test file.", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("add add/scale to vec3.ts and propose a spec")], repo });
+    expect(calls).toEqual(["packages/engine/test"]);
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "tool", "assistant"]);
+    expect(r.turns.at(-1)).toMatchObject({ kind: "assistant", text: "I see the test file." });
+    expect(visible(r.turns)).not.toMatch(/invoke|Correction|"tool"|\{/);
+  });
+  it("an unreadable reply gets one correction round; a valid call from it runs and the loop continues", async () => {
+    const calls: string[] = [];
+    const repo = { ...unavailableReader, listDir: async (p: string) => (calls.push(p), { ok: true as const, text: "a.ts (1 B)", note: "1 entries" }) };
+    const m = script('<invoke name="list_dir">\n</invoke>', { say: "", call: { tool: "list_dir", path: "src" } }, { say: "Done looking.", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("look")], repo });
+    expect(m.asked[1]?.user).toContain("could not be read");
+    expect(calls).toEqual(["src"]);
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "assistant"]);
+    expect(visible(r.turns)).not.toMatch(/invoke/);
+  });
+  it("a correction round does not use up a step: a call that arrives from it on the last step still runs", async () => {
+    const calls: string[] = [];
+    const repo = { ...unavailableReader, listDir: async (p: string) => (calls.push(p), { ok: true as const, text: "", note: "0 entries" }) };
+    let n = 0;
+    const client = fakeModel(ch, () => (n++ === 0 ? "<invoke>" : say({ say: "still looking", call: { tool: "list_dir", path: `d${n}` } })));
+    const r = await answerTurn({ ...base, client, turns: [human("look")], repo });
+    expect(n).toBe(MAX_STEPS + 1);
+    expect(calls).toHaveLength(MAX_STEPS);
+    expect(r.turns.at(-1)).toMatchObject({ kind: "assistant", text: "still looking" });
+  });
+  it("nothing readable even after the correction: a marked answer without the raw text", async () => {
+    const m = script('<invoke name="list_dir">\n</invoke>\n{"say": broken', "</invoke> still not JSON {");
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("look")] });
+    expect(m.asked).toHaveLength(2);
+    expect(r.turns).toEqual([{ kind: "assistant", text: "", questions: [], brief: null, model: "m-1", usd: 0, unreadable: true }]);
   });
 });
 

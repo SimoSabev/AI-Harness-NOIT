@@ -104,6 +104,8 @@ export const ChatTurn = z.discriminatedUnion("kind", [
       brief: Brief.nullable(),
       model: z.string().max(140),
       usd: z.number().min(0),
+      /** D-533: the server could not read the model's answer even after a correction; its raw text is never shown */
+      unreadable: z.literal(true).optional(),
     })
     .strict(),
   z.object({ ...head, kind: z.literal("memory"), query: z.string().max(200), hits: z.array(z.object({ id: z.string().max(40), text: z.string().max(600) }).strict()).max(8) }).strict(),

@@ -35,6 +35,11 @@ describe("conversation contract (D-531)", () => {
     expect(capQuestions("text")).toBe("text");
     expect(ChatTurn.safeParse({ seq: 1, at: "2026-11-17T10:00:00.000Z", kind: "assistant", text: "?", questions: twelve, brief: null, model: "m", usd: 0 }).success).toBe(true);
   });
+  it("an answer the server could not read is marked unreadable, with no text (the live test of 17.11.2026)", () => {
+    const at = "2026-11-17T10:00:00.000Z";
+    expect(ChatTurn.parse({ seq: 1, at, kind: "assistant", text: "", questions: [], brief: null, model: "m", usd: 0, unreadable: true })).toMatchObject({ unreadable: true });
+    expect(ChatTurn.safeParse({ seq: 1, at, kind: "assistant", text: "", questions: [], brief: null, model: "m", usd: 0, unreadable: false }).success).toBe(false);
+  });
   it("the turns of a tool, the axes and the spec carry no file contents", () => {
     const at = "2026-11-17T10:00:00.000Z";
     expect(ChatTurn.parse({ seq: 3, at, kind: "tool", tool: "read_file", target: "src/a.ts", ok: true, note: "12 lines" }).kind).toBe("tool");
