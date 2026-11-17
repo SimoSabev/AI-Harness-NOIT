@@ -29,8 +29,8 @@ import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
 import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
-import { RunWriter, VerifyInfraError, acquireRunLock, checksFromCommands, hostConfig, infraUserFor, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
-import type { HiddenTests, RunGate, UiCheck, runTestProcedure } from "@mandat/verify";
+import { RunWriter, VerifyInfraError, acquireRunLock, checksFromCommands, hostConfig, infraUserFor, oracleFromChange, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
+import type { HiddenTests, OracleChangeResult, RunGate, UiCheck, runTestProcedure } from "@mandat/verify";
 
 export interface RunHooks {
   beforeVerdict?: (runDir: string) => Promise<void>;
@@ -61,6 +61,10 @@ export interface RunTaskInput {
   profile?: HarnessProfile;
   /** v5 E9б (D5): a person's hidden tests, copied into tree B at verification only (never into the agent's volume) */
   hidden?: HiddenTests | null;
+  /** D-534: the hidden tests are an approved oracle; its share of killed mutants must reach the threshold (D11.oracle) */
+  oracleGrade?: { threshold: number };
+  /** D-534: this run is an oracle task; its exported tests (under `dir`) are checked on the base in a run of their own */
+  oracle?: { dir: string };
   /** v5 E9б (AC-5.5): the LLM advisor (profile G.review); off by default */
   review?: "off" | "advisory";
   /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
@@ -121,6 +125,8 @@ export interface RunTaskOutput {
   /** why the harness stopped the agent, if it did */
   /** D-422: no_tools = a local model answered NO_TOOLS_LIMIT times in a row without a tool (spec 5.3, AC-3.6) */
   stopped?: "timeout" | "budget_stop" | "conflict" | "no_tools";
+  /** D-534: an oracle task's tests and their results on the base (never written to the run's files or the mirror) */
+  oracle?: OracleChangeResult;
 }
 
 const BASE62 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -319,6 +325,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let agentExit: number | null = null;
     let exportResult: ChangesetExport | null = null;
     let diffPatch: Buffer | null = null;
+    let oracleOut: OracleChangeResult | null = null;
     let integrity: "ok" | "mismatch" | "n/a" = "n/a";
     const aliases: string[] = [];
     const evd = new Map<string, Evidence>();
@@ -751,7 +758,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 docker, runId, runDir, mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
                 mirrorPath, baseSha: contract.base_commit, baseDir, diffPatch: diffPatch as Buffer, files: ex.files, rc: contract.repo_config,
                 allowedPaths: contract.allowed_paths, mayChangeTests: contract.may_change_tests, mustPass: contract.must_pass, external: false, tmpRoot,
-                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(profileChecks.length > 0 ? { checks: profileChecks } : {}), ...(uiCheck ? { ui: uiCheck } : {}),
+                startGate, ...(x.runTests ? { runTests: x.runTests } : {}), ...(i.hidden ? { hidden: i.hidden } : {}), ...(i.hidden && i.oracleGrade ? { oracle: i.oracleGrade } : {}), ...(profileChecks.length > 0 ? { checks: profileChecks } : {}), ...(uiCheck ? { ui: uiCheck } : {}),
                 onReports: async (a, b) => {
                   w.raw("verify/report-a.json", redactReport(a.raw));
                   w.raw("verify/report-b.json", redactReport(b.raw));
@@ -778,6 +785,15 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               set(ev("INTEGRITY", "unknown", `integrity ${why} after verify`, {}, { cls: why, id: "post_verify" }));
               sec({ kind: "tree_mismatch", severity: "incident", detail: { reason: why, when: "post_verify" }, source: "worker" });
             }
+          }
+          // D-534: an oracle task's tests on the base, in a run of its own (new volume and gate; nothing reaches the mirror)
+          if (i.oracle && integrity !== "mismatch" && diffPatch) {
+            const oracleDir = i.oracle.dir;
+            oracleOut = await oracleFromChange({
+              docker, runId: `${runId}-oracle`, runDir: path.join(runDir, "oracle"), mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
+              mirrorPath, baseSha: contract.base_commit, rc: contract.repo_config, tmpRoot, diffPatch: diffPatch as Buffer, dir: oracleDir, startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
+            }).catch((e: unknown): OracleChangeResult => ({ ok: false, code: e instanceof Error ? e.message.slice(0, 100) : "E_ORACLE" }));
+            out(`[oracle]    ${oracleOut.ok ? `${oracleOut.tests.length} test file(s), ${oracleOut.base ? `${oracleOut.base.results.length} test(s) on base` : "not run on base"}` : oracleOut.code}`);
           }
         }
       }
@@ -823,7 +839,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["D5.hidden", "D8.static", "D12.ui", "REVIEW", "AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "D11.oracle", "D8.static", "D12.ui", "REVIEW", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }
@@ -861,6 +877,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       ...(usage.authFailed ? { authFailed: true } : {}),
       ...(asks.length > 0 ? { asks } : {}),
       ...(agentStop ? { stopped: agentStop } : {}),
+      ...(oracleOut ? { oracle: oracleOut } : {}),
       ...(agentRan ? { agentEnd: { ok: (agentExit as number | null) === 0 && !agentErrored, replied: agentReplied, cause: agentProblem } } : {}),
     };
   } finally {

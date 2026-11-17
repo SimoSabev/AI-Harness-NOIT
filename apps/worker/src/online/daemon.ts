@@ -1,7 +1,7 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, NightRules, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
+import { HarnessProfile, NightRules, ORACLE_DIR, ORACLE_MIN_KILL, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } from "@mandat/contract";
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -30,6 +30,7 @@ import { mainHead, rebaseOnto } from "./rebase.js";
 import { ciNote } from "./ci.js";
 import { memoryForTask, sandboxProposals, tidyAfterTask } from "./memory.js";
 import { deliverLocal, mergeLocal } from "./deliver-local.js";
+import { finishOracle, oracleTestsFor } from "./oracle.js";
 
 const rebaseFile = (home: string, task: string, attempt: number) => path.join(home, "rebase", `${task}-a${attempt}.json`);
 import type { Db } from "./db.js";
@@ -81,6 +82,10 @@ interface TaskRow {
   created_by: string | null;
   /** D-533: the hash of the spec a person approved in the conversation that made this task (null: none) */
   spec_hash: string | null;
+  /** D-534: "oracle" = the agent writes the hidden acceptance tests of an approved spec (never delivered) */
+  kind: "work" | "oracle";
+  /** D-534: the hash of the oracle a person approved for this task's spec (null: none) */
+  oracle_hash: string | null;
 }
 
 /** E9а: the approved profile with the night's forbidden tools as deny rules for the subject night (and its hash recomputed) */
@@ -93,18 +98,21 @@ function nightProfile(hp: HarnessProfile, forbid: readonly string[]): HarnessPro
 const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n").filter((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---"))).length;
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
-export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null; spec_hash?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
+export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null; spec_hash?: string | null; kind?: "work" | "oracle"; oracle_hash?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = taskTypeOf(policy, t.type); // D-360: "free" has a default scope
   if (!tt) throw new Error(`task type ${t.type} not in the policy`);
   return sealContract({
     task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: [t.text, note, t.replay ? `[mandat-replay: ${t.replay}]` : null].filter(Boolean).join("\n\n"), base_commit: baseSha, scan_facts_hash: null,
-    allowed_paths: tt.allowed_paths, may_change_tests: tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
+    // D-534: the oracle agent may write only tests, and only under the oracle directory
+    allowed_paths: t.kind === "oracle" ? [`${ORACLE_DIR}/**`] : tt.allowed_paths, may_change_tests: t.kind === "oracle" ? true : tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
     memory_hash: memoryHash, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
     repo_config: rc.config,
     // D-533: the approved spec's hash is sealed into the contract (and so into its hash and the ledger); never shown to the agent
     ...(t.spec_hash ? { spec_hash: t.spec_hash } : {}),
+    // D-534: the approved oracle's hash next to it (its tests reach tree B only; the agent never sees either hash)
+    ...(t.oracle_hash ? { oracle_hash: t.oracle_hash } : {}),
   });
 }
 
@@ -140,7 +148,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   const log = d.log ?? (() => undefined);
   const now = d.now ?? (() => new Date());
   const q = await d.db.query<TaskRow>(
-    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, t.spec_hash, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
+    `select t.id, t.org_id::text as org_id, t.repo_id::text as repo_id, t.type, t.agent, t.model, t.text, t.state, t.attempt, t.replay, t.retry_reason, t.shift_id::text as shift_id, t.created_by::text as created_by, t.spec_hash, t.kind, t.oracle_hash, r.provider, r.remote_url, r.full_name, r.ruleset_strict, o.is_demo
        from public.tasks t join public.repos r on r.id = t.repo_id join public.orgs o on o.id = t.org_id where t.id = $1`,
     [taskId],
   );
@@ -259,8 +267,26 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // E8g (D-356): a "Fix CI" attempt gets the failing checks of the previous round (framed)
   const ciLog = t.retry_reason === "ci" ? await ciNote(d.db, t.id) : null;
   // E9б (D5, D-362): the repo's latest hidden test set, for tree B at verification only (the agent's volume never has it)
-  const hiddenRow = (await d.db.query<{ files: { path: string; data: string }[] }>("select files from private.hidden_tests where repo_id = $1::uuid order by version desc limit 1", [t.repo_id])).rows[0];
-  const hidden = hiddenRow ? { dir: hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__", files: hiddenRow.files.map((f) => ({ path: f.path, data: Buffer.from(f.data, "base64") })) } : null;
+  // D-534: a task with an approved oracle gets that oracle's tests (checked against its manifest); an oracle task gets
+  // none (it writes them); every other task the latest repo-wide set (the oracles' sets are keyed by a spec)
+  const hiddenDir = hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__";
+  let hidden: { dir: string; files: { path: string; data: Buffer }[] } | null = null;
+  if (t.oracle_hash) {
+    const ot = await oracleTestsFor(d.db, { repo: t.repo_id, specHash: t.spec_hash, oracleHash: t.oracle_hash, dir: hiddenDir });
+    if (!ot.ok) {
+      const seq = await inTransaction(d.db, async (tx) => {
+        const s = await setState(tx, t, "BLOCKED", { wait_reason: ot.reason });
+        await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_stopped", task_id: t.id, payload: { reason: ot.reason, oracle_hash: t.oracle_hash } });
+        return s;
+      });
+      await bc("BLOCKED", seq, { wait_reason: ot.reason });
+      return { state: "BLOCKED", verdict: null };
+    }
+    hidden = ot.hidden;
+  } else if (t.kind !== "oracle") {
+    const hiddenRow = (await d.db.query<{ files: { path: string; data: string }[] }>("select files from private.hidden_tests where repo_id = $1::uuid and spec_hash is null order by version desc limit 1", [t.repo_id])).rows[0];
+    hidden = hiddenRow ? { dir: hiddenDir, files: hiddenRow.files.map((f) => ({ path: f.path, data: Buffer.from(f.data, "base64") })) } : null;
+  }
   // E9а: a night retry gets Mandat's own note (what stopped the last attempt and the proposal by class; not external text)
   const nightNote = t.retry_reason === "night" ? (await d.db.query<{ text: string }>("select text from public.task_activities where task_id = $1 and kind = 'night' order by id desc limit 1", [t.id])).rows[0]?.text : undefined;
   // D-521: an attempt Mandat started alone by day gets its note the same way (kind self, written by self-finish)
@@ -360,7 +386,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
-        ...(hidden ? { hidden } : {}), ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
+        ...(hidden ? { hidden } : {}), ...(hidden && t.oracle_hash ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: { dir: ORACLE_DIR } } : {}),
+        ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
         ...(Object.keys(mcpSecrets).length > 0 ? { mcpSecrets } : {}),
@@ -439,6 +466,18 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     await bc("RUNNING", seq);
     out = await runOnce();
     await usageRow(out);
+  }
+  // D-534: an oracle task ends here: its tests become the oracle (or the reasons it is not ready); nothing is delivered
+  if (t.kind === "oracle") {
+    const o = await finishOracle(d.db, { org: t.org_id, repo: t.repo_id, taskId: t.id, out, dir: ORACLE_DIR });
+    // the exported diff is the tests themselves: it does not stay in the run's files
+    if (out.runDir) for (const f of [path.join(out.runDir, "export", "diff.patch"), path.join(out.runDir, "verify", "report-b.json")]) rmSync(f, { force: true });
+    const usd = out.verdict?.usage.usd ?? 0;
+    const minutes = Math.max(0, Math.round((now().getTime() - t0) / 60000));
+    seq = await inTransaction(d.db, async (tx) => setState(tx, t, "CLOSED", { wait_reason: null, usd, minutes, outcome_decided: true }));
+    await bc("CLOSED", seq, { usd, minutes });
+    log(`[daemon] ${t.id}: oracle ${o.status}${o.problems.length > 0 ? ` (${o.problems.length} problem(s))` : ""}`);
+    return { state: "CLOSED", verdict: out.verdict };
   }
   // D-400: the agent's "MEMORY:" notes (already CANARY-checked and redacted on disk) → proposals that wait for a person
   const notesFile = out.runDir ? path.join(out.runDir, "notes.txt") : null;
