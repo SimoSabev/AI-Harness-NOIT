@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { Brief, CHAT_MAX_QUESTIONS, CHAT_TOOLS, ChatMessageBody, ChatModelReply, ChatTurn, ConversationId, ConversationStatus, SessionPhase, briefText, capQuestions } from "./index.js";
+import { Brief, CHAT_QUESTIONS_LIMIT, CHAT_TOOLS, ChatApproveBody, ChatMessageBody, ChatModelReply, ChatTurn, ConversationId, ConversationStatus, SessionPhase, briefText, capQuestions, specHash, specText } from "./index.js";
+import type { Spec } from "./index.js";
 
 // E10а ф. 1 (D-531): a conversation before work — the turns, the phase of the session and the three tools.
+const spec: Spec = {
+  goal: "Round discounts half up",
+  product: "The cart rounds a discount that ends in .5 up.",
+  criteria: [{ id: "AC-1", when: "a discount ends in .5", shall: "round it up", proof: "tests" }],
+  unchanged: ["the cart total for whole numbers"],
+  out_of_scope: ["currencies"],
+  profile: "feature",
+};
 const brief = { goal: "Fix the discount rounding", touches: ["src/cart.ts"], avoid: ["the tests"], done_when: ["the cart test passes"] };
 
 describe("conversation contract (D-531)", () => {
@@ -10,16 +19,39 @@ describe("conversation contract (D-531)", () => {
     for (const s of ["idle", "queued", "running", "budget", "expired", "overloaded", "failed"]) expect(ConversationStatus.parse(s)).toBe(s);
     expect(() => SessionPhase.parse("sandbox")).toThrow();
   });
-  it("exactly three tools, none of them writes, runs or reaches the network", () => {
-    expect([...CHAT_TOOLS]).toEqual(["ask_user", "search_memory", "propose_brief"]);
-    for (const tool of ["write_file", "run_shell", "fetch", "start_task"]) expect(ChatModelReply.safeParse({ say: "ok", call: { tool } }).success).toBe(false);
+  it("the tools read, ask and propose; none of them writes, runs, reaches the network or approves (D-533)", () => {
+    expect([...CHAT_TOOLS]).toEqual(["ask_user", "search_memory", "list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_brief"]);
+    for (const tool of ["write_file", "run_shell", "fetch", "start_task", "approve_spec", "exec"]) expect(ChatModelReply.safeParse({ say: "ok", call: { tool } }).success).toBe(false);
+    expect(ChatModelReply.parse({ say: "", call: { tool: "read_file", path: "src/a.ts", from_line: 3 } }).call).toEqual({ tool: "read_file", path: "src/a.ts", from_line: 3 });
+    expect(ChatModelReply.parse({ say: "", call: { tool: "grep", pattern: "round" } }).call).toEqual({ tool: "grep", pattern: "round" });
+    expect(ChatModelReply.safeParse({ say: "", call: { tool: "read_file", path: "a", from_line: 0 } }).success).toBe(false);
   });
-  it("ask_user asks at most 3 questions; capQuestions cuts a longer list", () => {
-    expect(CHAT_MAX_QUESTIONS).toBe(3);
-    expect(ChatModelReply.safeParse({ say: "", call: { tool: "ask_user", questions: ["a?", "b?", "c?", "d?"] } }).success).toBe(false);
-    expect(capQuestions({ say: "", call: { tool: "ask_user", questions: ["a?", "b?", "c?", "d?", 5] } })).toEqual({ say: "", call: { tool: "ask_user", questions: ["a?", "b?", "c?"] } });
+  it("ask_user takes as many questions as the work needs (D-533 supersedes the cut at 3); only a safety limit stays", () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => `q${i + 1}?`);
+    expect(ChatModelReply.parse({ say: "", call: { tool: "ask_user", questions: twelve } }).call).toEqual({ tool: "ask_user", questions: twelve });
+    expect(CHAT_QUESTIONS_LIMIT).toBeGreaterThanOrEqual(50);
+    const many = Array.from({ length: CHAT_QUESTIONS_LIMIT + 5 }, (_, i) => `q${i}?`);
+    expect(capQuestions({ say: "", call: { tool: "ask_user", questions: [...many, 5] } })).toEqual({ say: "", call: { tool: "ask_user", questions: many.slice(0, CHAT_QUESTIONS_LIMIT) } });
     expect(capQuestions("text")).toBe("text");
-    expect(ChatTurn.safeParse({ seq: 1, at: "2026-11-17T10:00:00.000Z", kind: "assistant", text: "?", questions: ["a", "b", "c", "d"], brief: null, model: "m", usd: 0 }).success).toBe(false);
+    expect(ChatTurn.safeParse({ seq: 1, at: "2026-11-17T10:00:00.000Z", kind: "assistant", text: "?", questions: twelve, brief: null, model: "m", usd: 0 }).success).toBe(true);
+  });
+  it("the turns of a tool, the axes and the spec carry no file contents", () => {
+    const at = "2026-11-17T10:00:00.000Z";
+    expect(ChatTurn.parse({ seq: 3, at, kind: "tool", tool: "read_file", target: "src/a.ts", ok: true, note: "12 lines" }).kind).toBe("tool");
+    expect(ChatTurn.safeParse({ seq: 3, at, kind: "tool", tool: "read_file", target: "src/a.ts", ok: true, note: "x", content: "secret" }).success).toBe(false);
+    const axes = { code: "existing", reference: "none", divisible: "no", proof: ["tests"], risk: { level: "low", outward: false }, size: "unknown" };
+    expect(ChatTurn.parse({ seq: 4, at, kind: "axes", axes, hint: null, profile: "feature", unknown: ["size"] }).kind).toBe("axes");
+    expect(ChatTurn.parse({ seq: 5, at, kind: "spec", spec, hash: specHash(spec), ready: false, unknown: [], untestable: ["AC-1"] }).kind).toBe("spec");
+  });
+  it("the spec as the text of a task: goal, criteria as WHEN … SHALL, unchanged, out of scope; within the task's 4000 chars", () => {
+    const t = specText(spec);
+    expect(t).toContain("Goal: Round discounts half up");
+    expect(t).toContain("AC-1: WHEN a discount ends in .5 THE SYSTEM SHALL round it up (proof: tests)");
+    expect(t).toContain("Unchanged: the cart total for whole numbers");
+    expect(t).toContain("Out of scope: currencies");
+    expect(specText({ ...spec, product: "x".repeat(40_000) }).length).toBeLessThanOrEqual(4000);
+    expect(ChatApproveBody.parse({ spec_hash: specHash(spec) })).toEqual({ spec_hash: specHash(spec) });
+    expect(ChatApproveBody.safeParse({ spec_hash: "abc" }).success).toBe(false);
   });
   it("a brief has a goal, the touched parts, what not to touch and how we know it is done", () => {
     expect(Brief.parse(brief)).toEqual(brief);
@@ -27,7 +59,7 @@ describe("conversation contract (D-531)", () => {
     expect(() => Brief.parse({ ...brief, allow_paths: ["**"] })).toThrow();
     expect(briefText(brief)).toBe("Goal: Fix the discount rounding\nTouches: src/cart.ts\nDo not touch: the tests\nDone when: the cart test passes");
   });
-  it("a turn is human, assistant or memory; a reply without a call is plain text", () => {
+  it("a turn is human, assistant, memory, tool, axes or spec; a reply without a call is plain text", () => {
     expect(ChatTurn.parse({ seq: 0, at: "2026-11-17T10:00:00.000Z", kind: "human", text: "hi" }).kind).toBe("human");
     expect(ChatTurn.parse({ seq: 2, at: "2026-11-17T10:00:00.000Z", kind: "memory", query: "rounding", hits: [{ id: "00000000-0000-4000-8000-000000000001", text: "we round half up" }] }).kind).toBe("memory");
     expect(ChatModelReply.parse({ say: "Hello" })).toEqual({ say: "Hello", call: null });

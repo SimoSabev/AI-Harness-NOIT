@@ -64,6 +64,18 @@ describe("contract", () => {
     expect(() => UnsealedContract.parse({ ...unsealed, x: 1 })).toThrow();
   });
 
+  it("spec_hash (D-533): an approved spec's hash is sealed into the contract and never shown to the agent", () => {
+    const s = loadSample();
+    const h = `sha256:${"a".repeat(64)}`;
+    const withSpec = reseal({ ...s, spec_hash: h });
+    expect(withSpec.spec_hash).toBe(h);
+    expect(withSpec.contract_hash).not.toBe(reseal(s).contract_hash);
+    expect(() => parseContract(withSpec)).not.toThrow();
+    expect(codeOf(() => parseContract({ ...withSpec, spec_hash: `sha256:${"b".repeat(64)}` }))).toBe("E_CONTRACT_HASH");
+    expect(reseal(s)).not.toHaveProperty("spec_hash");
+    expect(renderAgentContract(contractForAgent(withSpec))).not.toContain(h);
+  });
+
   it("renderAgentContract: празен must_pass (D-124)", () => {
     const c = reseal({ ...loadSample(), must_pass: [] });
     expect(renderAgentContract(contractForAgent(c))).toContain("These tests must pass:\n- none\n");

@@ -75,6 +75,8 @@ export const Contract = z
     channel: ChannelRef,
     security: SecurityLimits,
     repo_config: RepoConfig,
+    /** D-533: the hash of the spec a person approved (absent for a task without one); sealed, never shown to the agent */
+    spec_hash: Sha256.optional(),
     contract_hash: Sha256,
   })
   .strict();
@@ -261,6 +263,7 @@ export const LedgerKind = z.enum([
   "twin_rule", // D-523
   "twin_decided",
   "profile_trial", // D-530
+  "spec_approved", // D-533
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z

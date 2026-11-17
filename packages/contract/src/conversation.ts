@@ -1,9 +1,14 @@
 import { z } from "zod";
 import { AgentRefString, ModelId } from "./connections.js";
+import { Sha256 } from "./schemas.js";
+import { AXIS_NAMES, TaskAxes, TaskProfileId } from "./task-profile.js";
+import { CriterionId, Spec } from "./task-spec.js";
 
 // E10а ф. 1 (D-531): a conversation before work. The model answers and asks; it cannot change files, run commands or
-// reach the network. It has exactly three tools: ask the person (≤ 3 questions), search the memory (read only) and
-// propose a brief. A brief is only shown: work starts from a person's action ("Start work"), never from the model.
+// reach the network. A brief or a spec is only shown: work starts from a person's action ("Start work"), never from
+// the model. D-533 (М1 Х1–Х2): the interview has no cap on questions; the model reads the selected project's mirror
+// (list_dir, read_file, grep — read only), proposes the six axes (the server derives the profile) and a spec with
+// checkable criteria. Only a person approves a spec; the model has no tool for it.
 
 export const ConversationId = z.string().regex(/^c_[a-z0-9_]{1,40}$/);
 export type ConversationId = z.infer<typeof ConversationId>;
@@ -16,7 +21,8 @@ export type SessionPhase = z.infer<typeof SessionPhase>;
 export const ConversationStatus = z.enum(["idle", "queued", "running", "budget", "expired", "overloaded", "failed"]);
 export type ConversationStatus = z.infer<typeof ConversationStatus>;
 
-export const CHAT_MAX_QUESTIONS = 3;
+/** a safety limit on one message, not a cap on the interview (D-533 supersedes the cut at 3 of e10a rule 2) */
+export const CHAT_QUESTIONS_LIMIT = 50;
 /** the token of a conversation: its budget and how long it lives (e10a rule 4, like research) */
 export const CHAT_BUDGET_USD = 0.5;
 export const CHAT_MINUTES = 120;
@@ -39,10 +45,35 @@ export function briefText(b: Brief): string {
   return [`Goal: ${b.goal}`, `Touches: ${list(b.touches)}`, `Do not touch: ${list(b.avoid)}`, `Done when: ${list(b.done_when)}`].join("\n");
 }
 
-export const CHAT_TOOLS = ["ask_user", "search_memory", "propose_brief"] as const;
+/** the spec as the text of today's task (what "Start work" hands to createTask; the task text is ≤ 4000 chars) */
+export function specText(s: Spec): string {
+  const list = (xs: string[]) => (xs.length > 0 ? xs.join("; ") : "-");
+  const head = [
+    `Goal: ${s.goal}`,
+    `Profile: ${s.profile}`,
+    "Acceptance criteria:",
+    ...s.criteria.map((c) => `${c.id}: WHEN ${c.when.trim()} THE SYSTEM SHALL ${c.shall.trim()} (proof: ${c.proof})`),
+    `Unchanged: ${list(s.unchanged)}`,
+    `Out of scope: ${list(s.out_of_scope)}`,
+  ].join("\n");
+  const room = CHAT_TEXT_MAX - head.length - 2;
+  const product = s.product.trim();
+  return (product !== "" && room > 20 ? `${head}\n\n${product.slice(0, room)}` : head).slice(0, CHAT_TEXT_MAX);
+}
+
+/** a path inside the selected project, as the model writes it; the server normalizes and confines it (repo-tools) */
+const RepoPathArg = z.string().max(300);
+export const CHAT_TOOLS = ["ask_user", "search_memory", "list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_brief"] as const;
+export const CHAT_REPO_TOOLS = ["list_dir", "read_file", "grep"] as const;
 export const ChatToolCall = z.discriminatedUnion("tool", [
-  z.object({ tool: z.literal("ask_user"), questions: z.array(Line).min(1).max(CHAT_MAX_QUESTIONS) }).strict(),
+  z.object({ tool: z.literal("ask_user"), questions: z.array(Line).min(1).max(CHAT_QUESTIONS_LIMIT) }).strict(),
   z.object({ tool: z.literal("search_memory"), query: z.string().trim().min(1).max(200) }).strict(),
+  z.object({ tool: z.literal("list_dir"), path: RepoPathArg.default("") }).strict(),
+  z.object({ tool: z.literal("read_file"), path: RepoPathArg, from_line: z.number().int().min(1).max(1_000_000).optional(), to_line: z.number().int().min(1).max(1_000_000).optional() }).strict(),
+  z.object({ tool: z.literal("grep"), pattern: z.string().min(2).max(200), path: RepoPathArg.optional(), ignore_case: z.boolean().optional() }).strict(),
+  // the server validates the axes and the spec itself, so the model gets the problems back instead of a lost call
+  z.object({ tool: z.literal("propose_axes"), axes: z.unknown(), hint: z.string().max(40).optional() }).strict(),
+  z.object({ tool: z.literal("propose_spec"), spec: z.unknown() }).strict(),
   z.object({ tool: z.literal("propose_brief"), brief: Brief }).strict(),
 ]);
 export type ChatToolCall = z.infer<typeof ChatToolCall>;
@@ -51,13 +82,13 @@ export type ChatToolCall = z.infer<typeof ChatToolCall>;
 export const ChatModelReply = z.object({ say: z.string().max(8000), call: ChatToolCall.nullable().default(null) }).strict();
 export type ChatModelReply = z.infer<typeof ChatModelReply>;
 
-/** a model that asks more than 3 questions keeps the first 3 (e10a rule 2) */
+/** a model that asks more than the safety limit keeps the first CHAT_QUESTIONS_LIMIT (D-533) */
 export function capQuestions(raw: unknown): unknown {
   if (typeof raw !== "object" || raw === null) return raw;
   const r = raw as { call?: unknown };
   const call = r.call as { tool?: unknown; questions?: unknown } | null | undefined;
   if (!call || call.tool !== "ask_user" || !Array.isArray(call.questions)) return raw;
-  return { ...r, call: { ...call, questions: call.questions.filter((q): q is string => typeof q === "string").slice(0, CHAT_MAX_QUESTIONS) } };
+  return { ...r, call: { ...call, questions: call.questions.filter((q): q is string => typeof q === "string").slice(0, CHAT_QUESTIONS_LIMIT) } };
 }
 
 const Instant = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/);
@@ -69,13 +100,17 @@ export const ChatTurn = z.discriminatedUnion("kind", [
       ...head,
       kind: z.literal("assistant"),
       text: z.string().max(8000),
-      questions: z.array(Line).max(CHAT_MAX_QUESTIONS),
+      questions: z.array(Line).max(CHAT_QUESTIONS_LIMIT),
       brief: Brief.nullable(),
       model: z.string().max(140),
       usd: z.number().min(0),
     })
     .strict(),
   z.object({ ...head, kind: z.literal("memory"), query: z.string().max(200), hits: z.array(z.object({ id: z.string().max(40), text: z.string().max(600) }).strict()).max(8) }).strict(),
+  // D-533: what a tool did — never what a file holds (the contents live only inside one answer)
+  z.object({ ...head, kind: z.literal("tool"), tool: z.enum(["list_dir", "read_file", "grep", "propose_axes", "propose_spec"]), target: z.string().max(300), ok: z.boolean(), note: z.string().max(300) }).strict(),
+  z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length) }).strict(),
+  z.object({ ...head, kind: z.literal("spec"), spec: Spec, hash: Sha256, ready: z.boolean(), unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), untestable: z.array(CriterionId).max(200) }).strict(),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurn>;
 
@@ -94,3 +129,7 @@ export type ChatMessageBody = z.infer<typeof ChatMessageBody>;
 /** POST /api/conversations/:id/retry: the same question again, on another model when the provider was overloaded */
 export const ChatRetryBody = z.object({ agent: AgentRefString, model: ModelId.optional() }).strict();
 export type ChatRetryBody = z.infer<typeof ChatRetryBody>;
+
+/** POST /api/conversations/:id/approve: a person approves the spec with this hash (a stale hash is refused) */
+export const ChatApproveBody = z.object({ spec_hash: Sha256 }).strict();
+export type ChatApproveBody = z.infer<typeof ChatApproveBody>;
