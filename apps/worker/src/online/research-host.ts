@@ -29,6 +29,11 @@ export interface HostResearchOptions {
 export const DEFAULT_SEARXNG = "http://127.0.0.1:8888";
 export const DEFAULT_LOCAL_MODEL = "http://127.0.0.1:11434/v1";
 
+/** an mdt_ token of a run (research, a conversation): its id, a budget, an expiry; the key stays in the proxy (rule 2) */
+export function runToken(secret: Buffer, o: { id: string; n: number; expiresAt: number; usd: number; provider: "anthropic" | "openai"; upstream?: string }): string {
+  return mintTaskToken(secret, { t: o.id, r: `${o.id}_${o.n}`, a: 1, e: o.expiresAt, b: o.usd, n: randomBytes(8).toString("hex"), ...(o.provider === "openai" ? { p: "openai" as const } : {}), ...(o.upstream !== undefined ? { u: o.upstream } : {}) });
+}
+
 async function reachable(url: string): Promise<boolean> {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(1500) });
@@ -43,8 +48,7 @@ export async function hostResearchEnv(o: HostResearchOptions, org: string, req: 
   const states = await loadChannels(o.db, org);
   const cap = { ...depthBudget(req.depth), ...(req.budget_usd !== null ? { usd: req.budget_usd } : {}) };
   const secret = o.proxy ? readFileSync(o.proxy.secretPath) : null;
-  const token = (provider: "anthropic" | "openai", n: number) =>
-    mintTaskToken(secret as Buffer, { t: questionId, r: `${questionId}_${n}`, a: 1, e: Math.floor(now() / 1000) + (cap.minutes + 5) * 60, b: cap.usd, n: randomBytes(8).toString("hex"), ...(provider === "openai" ? { p: "openai" as const } : {}) });
+  const token = (provider: "anthropic" | "openai", n: number) => runToken(secret as Buffer, { id: questionId, n, expiresAt: Math.floor(now() / 1000) + (cap.minutes + 5) * 60, usd: cap.usd, provider });
   const channels: RouterChannel[] = [];
   const clients = new Map<string, ModelClient>();
   states.forEach((c, i) => {

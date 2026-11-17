@@ -54,3 +54,7 @@ export { MAX_RUNNING_PER_ORG, claimResearch, processResearch, reapStaleResearch,
 export type { ResearchDeps, ResearchEnv } from "./online/research.js";
 export { DEFAULT_LOCAL_MODEL, DEFAULT_SEARXNG, hostResearchEnv } from "./online/research-host.js";
 export type { HostResearchOptions } from "./online/research-host.js";
+export { MAX_STEPS, answerTurn, claimConversation, conversationLoop, loadTurns, processConversation, reapStaleConversations, runConversationOnce } from "./online/conversation.js";
+export type { ChatDeps, NewTurn } from "./online/conversation.js";
+export { chatModelFor, demoChatModel } from "./online/conversation-host.js";
+export type { ChatModelChoice, ChatRoute, HostChatOptions } from "./online/conversation-host.js";
