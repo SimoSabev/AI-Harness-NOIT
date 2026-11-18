@@ -680,7 +680,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           let stderr = "";
           const exitP = runSandbox(sctx, {
             role: "export", volume: vol, volumeReadonly: true, network: "none", env: { phase: "none" },
-            cmd: ["tar", "-C", "/m/work", "--numeric-owner", "--exclude=./node_modules", "-cf", "-", "."], timeoutMs: 600_000,
+            cmd: ["tar", "-C", "/m/work", "--numeric-owner", "--exclude=node_modules", "-cf", "-", "."], timeoutMs: 600_000,
             onStdout: (c) => stream.write(c), onStderr: (c) => (stderr += c.toString("utf8")),
           }).then(
             (r) => {

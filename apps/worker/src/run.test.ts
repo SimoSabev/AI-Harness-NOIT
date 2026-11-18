@@ -160,6 +160,15 @@ describe("runTask (fake docker)", () => {
     expect(r.verdict?.result).toBe("VERIFIED");
   });
 
+  it("the export leaves out node_modules at every depth (a pnpm workspace links packages/*/node_modules; live test 18.11)", async () => {
+    const docker = new FakeDocker({ head: honest });
+    const { r } = await go({ docker });
+    expect(r.verdict?.result).toBe("VERIFIED");
+    const tar = docker.calls.find((c) => c.args.includes("tar") && c.args.includes("/m/work") && c.args.includes("-cf"));
+    expect(tar?.args).toContain("--exclude=node_modules");
+    expect(tar?.args).not.toContain("--exclude=./node_modules");
+  });
+
   it("preflight без run (D-038)", async () => {
     const h = home();
     const old = await go({ h, docker: new FakeDocker({ dockerVersion: "24.0.0" }) });
@@ -427,7 +436,7 @@ describe("runTask (fake docker)", () => {
     expect(r.verdict?.result).toBe("UNKNOWN");
     expect(r.verdict?.reasons).toContain("agent:no_tools");
     expect(r.verdict?.usage).toEqual({ usd: 0, input_tokens: 3600, output_tokens: 240, requests: 3 });
-    expect(docker.calls.some((c) => c.args.includes("--exclude=./node_modules") && c.args.includes("/m/work"))).toBe(false);
+    expect(docker.calls.some((c) => c.args.includes("tar") && c.args.includes("/m/work") && c.args.includes("-cf"))).toBe(false);
   });
 
   it("D-428: agent gemini — Gemini CLI with the mdt_ token as GEMINI_API_KEY (by name), the gate as its base URL, its stream parsed; with a profile → target gemini", async () => {
