@@ -40,7 +40,7 @@ const ok = (statusA: "failed" | "passed", statusU: "failed" | "passed"): RunTask
   base: { timedOut: false, results: [{ id: `${ORACLE_DIR}/cart.spec.ts > AC-1: applies 10% over 50`, status: statusA }, { id: `${ORACLE_DIR}/u.spec.ts > U-1: none under 50`, status: statusU }] },
 });
 
-async function setup(oracle: RunTaskOutput["oracle"], extra: Partial<RunTaskOutput> = {}) {
+async function setup(oracle: RunTaskOutput["oracle"], extra: Partial<RunTaskOutput> | ((sha: string) => Partial<RunTaskOutput>) = {}) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-oracle-"));
   const fx = buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" });
   const db = await pgliteDb();
@@ -59,7 +59,7 @@ async function setup(oracle: RunTaskOutput["oracle"], extra: Partial<RunTaskOutp
       const runDir = path.join(home, "runs", `r${runs.length}`);
       mkdirSync(path.join(runDir, "export"), { recursive: true });
       writeFileSync(path.join(runDir, "export", "diff.patch"), `diff --git a/${ORACLE_DIR}/cart.spec.ts b/${ORACLE_DIR}/cart.spec.ts\n`);
-      return Promise.resolve({ verdict: verdict(fx.sha), exit: 20, runDir, ledger: { from: 1, to: 3 }, agentExit: 0, ...extra, ...(runs.length === 1 && oracle ? { oracle } : {}) });
+      return Promise.resolve({ verdict: verdict(fx.sha), exit: 20, runDir, ledger: { from: 1, to: 3 }, agentExit: 0, ...(typeof extra === "function" ? extra(fx.sha) : extra), ...(runs.length === 1 && oracle ? { oracle } : {}) });
     },
   };
   return { db, deps, runs, fx, home };
@@ -122,6 +122,9 @@ describe("the oracle task (D-534)", () => {
     const t = await setup(undefined, { agentExit: 1 });
     await runDaemonOnce(t.deps);
     expect(await oracleRow(t.db)).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "agent_exit_1" }] });
+    const v = await setup(undefined, (sha) => ({ verdict: { ...verdict(sha), result: "FAILED", reasons: ["export:symlink", "EXPORT:symlink:x"] } }));
+    await runDaemonOnce(v.deps);
+    expect(await oracleRow(v.db)).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "export:symlink" }] });
   });
 });
 
