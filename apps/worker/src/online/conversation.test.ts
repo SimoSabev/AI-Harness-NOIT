@@ -206,6 +206,19 @@ describe("a reply that is not one clean JSON object (D-533, live test)", () => {
     expect(calls).toHaveLength(MAX_STEPS);
     expect(r.turns.at(-1)).toMatchObject({ kind: "assistant", text: "still looking" });
   });
+  it("live test 18.11: an extra key around the reply does not drop the call (propose_axes runs)", async () => {
+    const m = script({ say: "Recording the axes.", thought: "small and clear", call: { tool: "propose_axes", axes: known } }, { say: "Next the spec.", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("add vector ops")] });
+    expect(r.turns.map((t) => t.kind)).toEqual(["axes", "assistant"]);
+  });
+  it("live test 18.11: a call to a listed tool in the wrong shape goes back to the model with the problems, and its next call runs", async () => {
+    const m = script({ say: "Recording the axes.", call: { tool: "propose_axes", axes: known, reason: "small" } }, { say: "", call: { tool: "propose_axes", axes: known } }, { say: "Now the spec.", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("add vector ops")] });
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "axes", "assistant"]);
+    expect(r.turns[0]).toMatchObject({ kind: "tool", tool: "propose_axes", ok: false });
+    expect((r.turns[0] as { note: string }).note).toMatch(/reason/);
+    expect(m.asked[1]?.user).toMatch(/propose_axes/);
+  });
   it("nothing readable even after the correction: a marked answer without the raw text", async () => {
     const m = script('<invoke name="list_dir">\n</invoke>\n{"say": broken', "</invoke> still not JSON {");
     const r = await answerTurn({ ...base, client: m.client, turns: [human("look")] });

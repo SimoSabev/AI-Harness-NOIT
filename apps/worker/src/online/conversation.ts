@@ -1,5 +1,5 @@
-import { AXIS_NAMES, CHAT_TOOLS, ChatModelReply, ChatTurn, MandatError, Spec, TaskAxes, TaskProfileId, briefText, capQuestions, specHash, untestableCriteria } from "@mandat/contract";
-import type { AxisName, Brief, ChatToolCall, ConversationStatus, Sha256 } from "@mandat/contract";
+import { AXIS_NAMES, CHAT_TOOLS, ChatModelReply, ChatToolCall, ChatTurn, MandatError, Spec, TaskAxes, TaskProfileId, briefText, capQuestions, specHash, untestableCriteria } from "@mandat/contract";
+import type { AxisName, Brief, ConversationStatus, Sha256 } from "@mandat/contract";
 import { deriveProfile, unknownAxes } from "@mandat/core";
 import { addMemory, loadMemory, rememberLines, searchMemory } from "@mandat/memory";
 import type { SqlClient } from "@mandat/ledger";
@@ -127,18 +127,34 @@ export function jsonObjects(text: string): unknown[] {
   return out;
 }
 
-export type ParsedReply = { kind: "reply"; reply: ChatModelReply } | { kind: "prose"; say: string } | { kind: "garbled" };
+/** a call to a listed tool whose shape is wrong: it goes back to the model with the problems (live test 18.11.2026) */
+type FixableTool = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec";
+const FIXABLE: readonly string[] = ["list_dir", "read_file", "grep", "propose_axes", "propose_spec"] satisfies readonly FixableTool[];
+export type ParsedReply = { kind: "reply"; reply: ChatModelReply } | { kind: "badcall"; say: string; tool: FixableTool; note: string } | { kind: "prose"; say: string } | { kind: "garbled" };
+/** only say and call count: any other key of the reply (a "thought", a "reason") is dropped, not a reason to lose the call */
+const envelope = (o: unknown): unknown => (typeof o === "object" && o !== null && typeof (o as { say?: unknown }).say === "string" ? { say: (o as { say: string }).say, call: (o as { call?: unknown }).call ?? null } : o);
+const toolOf = (o: unknown): string | null => {
+  const call = typeof o === "object" && o !== null ? (o as { call?: unknown }).call : null;
+  const t = typeof call === "object" && call !== null ? (call as { tool?: unknown }).tool : null;
+  return typeof t === "string" ? t : null;
+};
 const cleanSay = (s: string): string => stripTags(s).trim().slice(0, 8000);
 
 /** the model's answer: one protocol reply, plain words without any protocol, or nothing readable */
 export function parseReply(text: string): ParsedReply {
-  const objects = jsonObjects(stripTags(text)).map(capQuestions);
+  const objects = jsonObjects(stripTags(text)).map(envelope).map(capQuestions);
   const valid = objects.flatMap((o) => {
     const r = ChatModelReply.safeParse(o);
     return r.success ? [r.data] : [];
   });
   const last = valid.at(-1);
   if (last) return { kind: "reply", reply: { ...last, say: cleanSay(last.say) } };
+  const fixable = objects.findLast((o) => FIXABLE.includes(toolOf(o) ?? ""));
+  if (fixable) {
+    const bad = ChatToolCall.safeParse((fixable as { call: unknown }).call);
+    const say = (fixable as { say?: unknown }).say;
+    return { kind: "badcall", say: typeof say === "string" ? cleanSay(say) : "", tool: toolOf(fixable) as FixableTool, note: bad.success ? "the reply was not valid" : issues(bad.error) };
+  }
   // an object with words but a call to no listed tool: the words count, the call is ignored
   const worded = objects.findLast((o): o is { say: string } => typeof o === "object" && o !== null && typeof (o as { say?: unknown }).say === "string");
   if (worded) return { kind: "reply", reply: { say: cleanSay(worded.say), call: null } };
@@ -252,6 +268,13 @@ export async function answerTurn(o: {
     }
     if (parsed.kind === "garbled") {
       out.push({ kind: "assistant", text: "", questions: [], brief: null, model: o.client.channel.model, usd, unreadable: true });
+      break;
+    }
+    if (parsed.kind === "badcall") {
+      // the model meant a listed tool: it gets the problems back and tries again (no silent loss of the call)
+      out.push({ kind: "tool", tool: parsed.tool, target: "call", ok: false, note: `the call was not valid: ${parsed.note}`.slice(0, 300) });
+      if (step < MAX_STEPS - 1) continue;
+      out.push({ kind: "assistant", text: parsed.say, questions: [], brief: null, model: o.client.channel.model, usd });
       break;
     }
     const reply: ChatModelReply = parsed.kind === "reply" ? parsed.reply : { say: parsed.say, call: null };
