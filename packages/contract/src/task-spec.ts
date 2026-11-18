@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { hashJcs } from "./hash.js";
+import { isHiddenPath } from "./hidden-path.js";
 import { GitSha, Sha256, VerdictResult } from "./schemas.js";
 import { ProofKind, TaskProfileId } from "./task-profile.js";
 
@@ -52,13 +53,8 @@ export function untestableCriteria(spec: Spec): AcceptanceCriterion[] {
   return spec.criteria.filter((c) => c.when.trim() === "" || c.shall.trim() === "" || (needsTests && c.proof === "human"));
 }
 
-/** a path inside the oracle's own tree: relative, forward slashes, no ".." */
-export const OraclePath = z
-  .string()
-  .min(1)
-  .max(300)
-  .regex(/^(?![/\\])(?![a-zA-Z]:)[^\\]*$/, "relative path with forward slashes")
-  .refine((p) => !p.split("/").includes(".."), "path escapes the oracle tree");
+/** D-536: an oracle test's path from the repo root: relative, forward slashes, no "..", inside a __hidden__ folder */
+export const OraclePath = z.string().min(1).max(300).refine(isHiddenPath, "a relative path with forward slashes inside a __hidden__ folder");
 
 export const OracleManifest = z
   .object({

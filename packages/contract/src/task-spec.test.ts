@@ -54,7 +54,7 @@ describe("untestableCriteria (D-532)", () => {
 describe("oracle manifest (D-532)", () => {
   const manifest = {
     spec_hash: H("a"),
-    hidden_tests: [{ path: "acceptance/cart.test.ts", sha256: H("b") }],
+    hidden_tests: [{ path: "packages/engine/test/__hidden__/cart.test.ts", sha256: H("b") }],
     differential: { reference: "git:base", command: "pnpm diff-check" },
     e2e: ["guest checkout"],
     red_on_base: [{ criterion_id: "AC-1", red: true }],
@@ -67,6 +67,8 @@ describe("oracle manifest (D-532)", () => {
   it("rejects an absolute or escaping test path, a bad hash, a bad approval time", () => {
     expect(OracleManifest.safeParse({ ...manifest, hidden_tests: [{ path: "/etc/x.test.ts", sha256: H("b") }] }).success).toBe(false);
     expect(OracleManifest.safeParse({ ...manifest, hidden_tests: [{ path: "../x.test.ts", sha256: H("b") }] }).success).toBe(false);
+    // D-536: the paths are relative to the repo root and name a __hidden__ folder at any depth
+    expect(OracleManifest.safeParse({ ...manifest, hidden_tests: [{ path: "acceptance/cart.test.ts", sha256: H("b") }] }).success).toBe(false);
     expect(OracleManifest.safeParse({ ...manifest, spec_hash: "abc" }).success).toBe(false);
     expect(OracleManifest.safeParse({ ...manifest, approved: { by: "simo", at: "yesterday" } }).success).toBe(false);
     expect(OracleManifest.safeParse({ ...manifest, red_on_base: [{ criterion_id: "X", red: true }] }).success).toBe(false);

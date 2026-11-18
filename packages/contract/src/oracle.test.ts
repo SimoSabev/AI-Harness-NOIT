@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_TEXT_MAX } from "./conversation.js";
-import { ORACLE_DIR, OracleApproveBody, oracleTag, oracleTaskText } from "./oracle.js";
+import { HIDDEN_SEGMENT, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText } from "./oracle.js";
 import { Contract, DetectorId, LedgerKind } from "./schemas.js";
 import type { Spec } from "./task-spec.js";
 
@@ -17,10 +17,27 @@ const spec: Spec = {
   profile: "feature",
 };
 
+describe("hidden test paths (D-536)", () => {
+  const ok = ["packages/x/test/__hidden__/a.spec.ts", "tests/__hidden__/a.spec.ts", "__hidden__/a.test.ts", "packages/engine/test/__hidden__/deep/vec3.spec.ts"];
+  const bad = ["../tests/__hidden__/a.spec.ts", "tests/__hidden__/../../a.spec.ts", "/tests/__hidden__/a.spec.ts", "C:/r/__hidden__/a.spec.ts", "tests\\__hidden__\\a.spec.ts", "tests/a.spec.ts", "tests/__hidden__x/a.spec.ts", "tests/x__hidden__/a.spec.ts", "tests//__hidden__/a.spec.ts", "./tests/__hidden__/a.spec.ts", "", "tests/__hidden__"];
+  for (const p of ok) it(`accepts ${p}`, () => expect(isHiddenPath(p)).toBe(true));
+  for (const p of bad) it(`rejects ${JSON.stringify(p)}`, () => expect(isHiddenPath(p)).toBe(false));
+  it("the oracle agent's scope is every __hidden__ folder; a legacy set joins its dir; a test id names its file", () => {
+    expect(ORACLE_GLOB).toBe("**/__hidden__/**");
+    expect(hiddenRootPath("", "packages/x/__hidden__/a.spec.ts")).toBe("packages/x/__hidden__/a.spec.ts");
+    expect(hiddenRootPath("tests/__hidden__/", "a.spec.ts")).toBe("tests/__hidden__/a.spec.ts");
+    expect(hiddenFileOf("packages/x/__hidden__/a.spec.ts > AC-1: y > z")).toBe("packages/x/__hidden__/a.spec.ts");
+    expect(OracleProblemKind.parse("not_discovered")).toBe("not_discovered");
+  });
+});
+
 describe("the oracle contract (D-534)", () => {
   it("the task text asks for tagged tests only under the oracle directory, red for criteria and green for unchanged", () => {
     const t = oracleTaskText(spec);
-    expect(t).toContain(`only new test files under ${ORACLE_DIR}/`);
+    // D-536: the tests go into a __hidden__ folder where the project's own runner finds them (monorepo workspaces)
+    expect(t).toContain(`in a ${HIDDEN_SEGMENT} folder inside a directory the project's test runner already discovers`);
+    expect(t).toMatch(/vitest\.workspace/);
+    expect(t).toContain("import the code under test by relative paths");
     expect(t).toContain("Do not change any other file");
     expect(t).toContain("AC-1: WHEN a discount ends in .5 THE SYSTEM SHALL round it up (proof: tests)");
     expect(t).toContain("U-1: whole-number totals");
