@@ -97,6 +97,10 @@ const script = (...answers: unknown[]) => {
 const reader = (over: Partial<RepoReader> = {}): RepoReader => ({ ...unavailableReader, ...over });
 
 describe("the interview (D-533)", () => {
+  it("live test 18.11: criteria are only new behavior; what must keep working goes in unchanged (an oracle needs every criterion red on the current code)", () => {
+    expect(CHAT_SYSTEM).toMatch(/criteria are only for NEW behavior/);
+    expect(CHAT_SYSTEM).toMatch(/goes in "unchanged", never in the criteria/);
+  });
   it("unknown axes keep the interview going: the model sees them, and a spec is not ready while any is unknown", async () => {
     const m = script(
       { say: "", call: { tool: "propose_axes", axes: { ...known, size: "unknown" } } },
