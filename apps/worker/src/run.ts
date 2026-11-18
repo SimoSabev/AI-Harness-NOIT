@@ -792,7 +792,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           if (i.oracle && integrity !== "mismatch" && diffPatch) {
             const oracleDir = i.oracle.dir;
             oracleOut = await oracleFromChange({
-              docker, runId: `${runId}-oracle`, runDir: path.join(runDir, "oracle"), mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
+              docker, runId: `r_${ulid(now().getTime() + 1)}`, runDir: path.join(runDir, "oracle"), mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
               mirrorPath, baseSha: contract.base_commit, rc: contract.repo_config, tmpRoot, diffPatch: diffPatch as Buffer, dir: oracleDir, startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
             }).catch((e: unknown): OracleChangeResult => ({ ok: false, code: e instanceof Error ? e.message.slice(0, 100) : "E_ORACLE" }));
             out(`[oracle]    ${oracleOut.ok ? `${oracleOut.tests.length} test file(s), ${oracleOut.base ? `${oracleOut.base.results.length} test(s) on base` : "not run on base"}` : oracleOut.code}`);

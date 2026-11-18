@@ -169,6 +169,18 @@ describe("runTask (fake docker)", () => {
     expect(tar?.args).not.toContain("--exclude=./node_modules");
   });
 
+  it("the oracle's run on the base has a run id of its own that the gate accepts (live test 18.11: E_GATE_POLICY)", async () => {
+    const oracleHead = () => shopCopy((d) => {
+      mkdirSync(path.join(d, "tests/__hidden__"), { recursive: true });
+      writeFileSync(path.join(d, "tests/__hidden__/cart.spec.ts"), ['import { it } from "vitest";', 'it("AC-1: x", () => {});', ""].join("\n"));
+    });
+    const { r, testsCalls } = await go({ docker: new FakeDocker({ head: oracleHead }), i: { oracle: { dir: "tests/__hidden__" } } });
+    expect(r.oracle?.ok).toBe(true);
+    expect(testsCalls.length).toBeGreaterThan(0);
+    for (const c of testsCalls) expect(c.runId).toMatch(/^r_[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(new Set(testsCalls.map((c) => c.runId)).size).toBeGreaterThan(1);
+  });
+
   it("preflight без run (D-038)", async () => {
     const h = home();
     const old = await go({ h, docker: new FakeDocker({ dockerVersion: "24.0.0" }) });
