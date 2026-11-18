@@ -24,10 +24,10 @@ export type JobInputs =
   | { ok: true; baseSha: string; hidden: HiddenTests | null; applyFiles: { path: string; data: Buffer | null }[] | null; grade: boolean; specHash: string; oracleHash: string }
   | { ok: false; reason: "job_missing" | "job_branch_missing" | "oracle_unapproved" | "oracle_tampered" };
 
-export async function jobInputs(db: Db, t: JobTaskRef, o: { mirror: string; hiddenDir: string }): Promise<JobInputs> {
+export async function jobInputs(db: Db, t: JobTaskRef, o: { mirror: string }): Promise<JobInputs> {
   const job = (await db.query<JobRow>("select id, spec_hash, oracle_hash, base_sha, head_sha from public.jobs where id = $1", [t.job_id])).rows[0];
   if (!job || !job.base_sha) return { ok: false, reason: "job_missing" };
-  const ot = await oracleTestsFor(db, { repo: t.repo_id, specHash: job.spec_hash, oracleHash: job.oracle_hash, dir: o.hiddenDir });
+  const ot = await oracleTestsFor(db, { repo: t.repo_id, specHash: job.spec_hash, oracleHash: job.oracle_hash });
   if (!ot.ok) return { ok: false, reason: ot.reason };
   const head = await jobHead({ mirror: o.mirror, ref: jobBranch(job.id) });
   if (!head) return { ok: false, reason: "job_branch_missing" };

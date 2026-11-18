@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ORACLE_DIR, OracleManifest, PLAN_ROUNDS, SessionSeal, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
+import { OracleManifest, PLAN_ROUNDS, SessionSeal, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
 import { fakeGitHub } from "@mandat/gate-github";
 import type { ModelClient } from "@mandat/research";
@@ -37,9 +37,9 @@ const spec: Spec = {
 const SPEC = specHash(spec);
 const SECRET_NAME = "applies ten percent over fifty";
 const FILES = [
-  { path: "a.spec.ts", data: Buffer.from(`it("AC-1: ${SECRET_NAME}", () => {});\n`) },
-  { path: "b.spec.ts", data: Buffer.from(`it("AC-2: coupon after the ten", () => {});\n`) },
-  { path: "u.spec.ts", data: Buffer.from(`it("U-1: none under fifty", () => {});\n`) },
+  { path: "packages/shop/test/__hidden__/a.spec.ts", data: Buffer.from(`it("AC-1: ${SECRET_NAME}", () => {});\n`) },
+  { path: "packages/shop/test/__hidden__/b.spec.ts", data: Buffer.from(`it("AC-2: coupon after the ten", () => {});\n`) },
+  { path: "tests/__hidden__/u.spec.ts", data: Buffer.from(`it("U-1: none under fifty", () => {});\n`) },
 ];
 const MANIFEST = OracleManifest.parse({ spec_hash: SPEC, hidden_tests: FILES.map((f) => ({ path: f.path, sha256: sha256Tag(f.data) })), red_on_base: [{ criterion_id: "AC-1", red: true }, { criterion_id: "AC-2", red: true }] });
 const ORACLE = oracleHash(MANIFEST);
@@ -104,7 +104,7 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
   return { db, deps, jd, runs, contracts, fx, git, job, units, ledger, asked };
 }
 const handoff = (done: string) => `MEMORY: nothing\nHANDOFF: ${JSON.stringify({ done, risks: ["rounding"] })}\n`;
-const d5fail = (...ids: string[]) => [ev("D5.hidden", "fail", { failed: ids.map((id) => `${ORACLE_DIR}/x.spec.ts > ${id}: ${SECRET_NAME}`) })];
+const d5fail = (...ids: string[]) => [ev("D5.hidden", "fail", { failed: ids.map((id) => `packages/shop/test/__hidden__/x.spec.ts > ${id}: ${SECRET_NAME}`) })];
 
 describe("the planner (D-535)", () => {
   it("a refused plan comes back to the planner with its problems; the good one is stored with plan_built (hashes and counts)", async () => {
@@ -140,7 +140,7 @@ describe("units, final check, seal and delivery (D-535)", () => {
     await runDaemonOnce(s.deps);
     // unit 1: base = branch head (= main now), tree B has AC-1 + U-1 only, the writer's text has no test
     expect(s.contracts[0]?.base_commit).toBe(s.fx.sha);
-    expect(s.runs[0]?.hidden?.files.map((f) => f.path)).toEqual(["a.spec.ts", "u.spec.ts"]);
+    expect(s.runs[0]?.hidden?.files.map((f) => f.path)).toEqual(["packages/shop/test/__hidden__/a.spec.ts", "tests/__hidden__/u.spec.ts"]);
     expect(s.runs[0]?.applyFiles).toBeUndefined();
     expect(s.runs[0]?.oracleGrade).toBeUndefined();
     expect(s.contracts[0]?.text).toContain("AC-1: WHEN the subtotal is over 50");
@@ -157,7 +157,7 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(s.contracts[1]?.base_commit).toBe(head1);
     expect(s.contracts[1]?.task_id).not.toBe(s.contracts[0]?.task_id);
     expect(s.contracts[1]?.text).toContain(`[u1] done: did ${us[0]!.task_id}`);
-    expect(s.runs[1]?.hidden?.files.map((f) => f.path)).toEqual(["a.spec.ts", "b.spec.ts", "u.spec.ts"]);
+    expect(s.runs[1]?.hidden?.files.map((f) => f.path)).toEqual(["packages/shop/test/__hidden__/a.spec.ts", "packages/shop/test/__hidden__/b.spec.ts", "tests/__hidden__/u.spec.ts"]);
     us = await s.units();
     expect(us.map((u) => u.status)).toEqual(["passed", "passed"]);
     const head2 = s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`);

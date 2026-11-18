@@ -174,7 +174,7 @@ describe("runTask (fake docker)", () => {
       mkdirSync(path.join(d, "tests/__hidden__"), { recursive: true });
       writeFileSync(path.join(d, "tests/__hidden__/cart.spec.ts"), ['import { it } from "vitest";', 'it("AC-1: x", () => {});', ""].join("\n"));
     });
-    const { r, testsCalls } = await go({ docker: new FakeDocker({ head: oracleHead }), i: { oracle: { dir: "tests/__hidden__" } } });
+    const { r, testsCalls } = await go({ docker: new FakeDocker({ head: oracleHead }), i: { oracle: true } });
     expect(r.oracle?.ok).toBe(true);
     expect(testsCalls.length).toBeGreaterThan(0);
     for (const c of testsCalls) expect(c.runId).toMatch(/^r_[0-9A-HJKMNP-TV-Z]{26}$/);

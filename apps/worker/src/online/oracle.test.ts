@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ORACLE_DIR, ORACLE_MIN_KILL, OracleManifest, Verdict, oracleHash, sha256Tag, specHash } from "@mandat/contract";
+import { ORACLE_GLOB, ORACLE_MIN_KILL, OracleManifest, Verdict, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
 import { fakeGitHub } from "@mandat/gate-github";
 import { buildFixture } from "../fixtures.js";
@@ -36,8 +36,8 @@ const verdict = (base: string) =>
     usage: { usd: 0.2, input_tokens: 1, output_tokens: 1, requests: 1 }, timings_ms: { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 }, created_at: "2026-11-17T00:00:00.000Z",
   });
 const ok = (statusA: "failed" | "passed", statusU: "failed" | "passed"): RunTaskOutput["oracle"] => ({
-  ok: true, tests: [{ path: "cart.spec.ts", data: TEST_A }, { path: "u.spec.ts", data: TEST_U }], problems: [],
-  base: { timedOut: false, results: [{ id: `${ORACLE_DIR}/cart.spec.ts > AC-1: applies 10% over 50`, status: statusA }, { id: `${ORACLE_DIR}/u.spec.ts > U-1: none under 50`, status: statusU }] },
+  ok: true, tests: [{ path: "tests/__hidden__/cart.spec.ts", data: TEST_A }, { path: "src/__hidden__/u.spec.ts", data: TEST_U }], problems: [],
+  base: { timedOut: false, results: [{ id: `tests/__hidden__/cart.spec.ts > AC-1: applies 10% over 50`, status: statusA }, { id: `src/__hidden__/u.spec.ts > U-1: none under 50`, status: statusU }] },
 });
 
 async function setup(oracle: RunTaskOutput["oracle"], extra: Partial<RunTaskOutput> | ((sha: string) => Partial<RunTaskOutput>) = {}) {
@@ -58,7 +58,7 @@ async function setup(oracle: RunTaskOutput["oracle"], extra: Partial<RunTaskOutp
       runs.push(i);
       const runDir = path.join(home, "runs", `r${runs.length}`);
       mkdirSync(path.join(runDir, "export"), { recursive: true });
-      writeFileSync(path.join(runDir, "export", "diff.patch"), `diff --git a/${ORACLE_DIR}/cart.spec.ts b/${ORACLE_DIR}/cart.spec.ts\n`);
+      writeFileSync(path.join(runDir, "export", "diff.patch"), `diff --git a/tests/__hidden__/cart.spec.ts b/tests/__hidden__/cart.spec.ts\n`);
       return Promise.resolve({ verdict: verdict(fx.sha), exit: 20, runDir, ledger: { from: 1, to: 3 }, agentExit: 0, ...(typeof extra === "function" ? extra(fx.sha) : extra), ...(runs.length === 1 && oracle ? { oracle } : {}) });
     },
   };
@@ -69,14 +69,16 @@ type OracleRowT = { status: string; problems: { kind: string; id: string }[]; re
 const oracleRow = async (db: Awaited<ReturnType<typeof pgliteDb>>) => (await db.query<OracleRowT>("select status, problems, red_on_base, manifest, oracle_hash, hidden_version from public.oracles where id = 'o_or1'")).rows[0]!;
 
 describe("the oracle task (D-534)", () => {
-  it("runs like a task, may write only tests under the oracle directory, and gets no hidden tests itself", async () => {
+  it("runs like a task, may write only tests in __hidden__ folders, and gets no hidden tests itself", async () => {
     const s = await setup(ok("failed", "passed"));
     await runDaemonOnce(s.deps);
     expect(s.runs).toHaveLength(1);
-    expect(s.runs[0]?.oracle).toEqual({ dir: ORACLE_DIR });
+    expect(s.runs[0]?.oracle).toBe(true);
     expect(s.runs[0]?.hidden ?? null).toBeNull();
     const c = JSON.parse(readFileSync(s.runs[0]!.contractPath, "utf8")) as { allowed_paths: string[]; may_change_tests: boolean; spec_hash: string };
-    expect(c).toMatchObject({ allowed_paths: [`${ORACLE_DIR}/**`], may_change_tests: true, spec_hash: SPEC });
+    // D-536: every __hidden__ folder at any depth, so the tests sit where the project's runner finds them
+    expect(c).toMatchObject({ allowed_paths: [ORACLE_GLOB], may_change_tests: true, spec_hash: SPEC });
+    expect(ORACLE_GLOB).toBe("**/__hidden__/**");
   });
   it("criteria red and unchanged green → ready: manifest with each file's sha256, oracle_hash, the tests stored by spec, nothing delivered", async () => {
     const s = await setup(ok("failed", "passed"));
@@ -84,11 +86,11 @@ describe("the oracle task (D-534)", () => {
     const o = await oracleRow(s.db);
     expect(o.status).toBe("ready");
     const m = OracleManifest.parse(o.manifest);
-    expect(m).toEqual({ spec_hash: SPEC, hidden_tests: [{ path: "cart.spec.ts", sha256: sha256Tag(TEST_A) }, { path: "u.spec.ts", sha256: sha256Tag(TEST_U) }], red_on_base: [{ criterion_id: "AC-1", red: true }] });
+    expect(m).toEqual({ spec_hash: SPEC, hidden_tests: [{ path: "src/__hidden__/u.spec.ts", sha256: sha256Tag(TEST_U) }, { path: "tests/__hidden__/cart.spec.ts", sha256: sha256Tag(TEST_A) }], red_on_base: [{ criterion_id: "AC-1", red: true }] });
     expect(o.oracle_hash).toBe(oracleHash(m));
     const stored = (await s.db.query<{ spec_hash: string; files: { path: string; data: string }[] }>("select spec_hash, files from private.hidden_tests where repo_id = $1 and version = $2", [DEMO_REPO_ID, o.hidden_version])).rows[0];
     expect(stored?.spec_hash).toBe(SPEC);
-    expect(stored?.files.map((f) => [f.path, Buffer.from(f.data, "base64").toString("utf8")])).toEqual([["cart.spec.ts", TEST_A.toString("utf8")], ["u.spec.ts", TEST_U.toString("utf8")]]);
+    expect(stored?.files.map((f) => [f.path, Buffer.from(f.data, "base64").toString("utf8")])).toEqual([["src/__hidden__/u.spec.ts", TEST_U.toString("utf8")], ["tests/__hidden__/cart.spec.ts", TEST_A.toString("utf8")]]);
     // never into the mirror, a changeset, a diff row or a delivery; the run's copy of the diff is gone
     expect(mainOf(s.fx.mirror)).toBe(s.fx.sha);
     for (const table of ["changesets", "changeset_diffs", "deliveries"]) expect((await s.db.query(`select 1 from public.${table}`)).rows).toEqual([]);
@@ -144,7 +146,9 @@ describe("the writer's task with an approved oracle (D-534)", () => {
     await runDaemonOnce(s.deps);
     const w = s.runs[1]!;
     expect(w.oracle).toBeUndefined();
-    expect(w.hidden?.files.map((f) => [f.path, f.data.toString("utf8")])).toEqual([["cart.spec.ts", TEST_A.toString("utf8")], ["u.spec.ts", TEST_U.toString("utf8")]]);
+    // D-536: the paths are from the repo root (dir ""), so they land where they were written, not under one root dir
+    expect(w.hidden?.dir).toBe("");
+    expect(w.hidden?.files.map((f) => [f.path, f.data.toString("utf8")])).toEqual([["src/__hidden__/u.spec.ts", TEST_U.toString("utf8")], ["tests/__hidden__/cart.spec.ts", TEST_A.toString("utf8")]]);
     expect(w.oracleGrade).toEqual({ threshold: ORACLE_MIN_KILL });
     const c = JSON.parse(readFileSync(w.contractPath, "utf8")) as { spec_hash: string; oracle_hash: string; text: string };
     expect(c).toMatchObject({ spec_hash: SPEC, oracle_hash: s.hash });

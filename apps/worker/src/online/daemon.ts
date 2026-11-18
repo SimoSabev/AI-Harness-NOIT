@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, NightRules, ORACLE_DIR, ORACLE_MIN_KILL, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
+import { HarnessProfile, NightRules, ORACLE_GLOB, ORACLE_MIN_KILL, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } from "@mandat/contract";
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -111,8 +111,8 @@ export function contractForTask(t: { id: string; type: TaskType; text: string; a
   if (!tt) throw new Error(`task type ${t.type} not in the policy`);
   return sealContract({
     task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: [t.text, note, t.replay ? `[mandat-replay: ${t.replay}]` : null].filter(Boolean).join("\n\n"), base_commit: baseSha, scan_facts_hash: null,
-    // D-534: the oracle agent may write only tests, and only under the oracle directory
-    allowed_paths: t.kind === "oracle" ? [`${ORACLE_DIR}/**`] : tt.allowed_paths, may_change_tests: t.kind === "oracle" ? true : tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
+    // D-534: the oracle agent may write only tests; D-536: in __hidden__ folders at any depth (where the runner finds them)
+    allowed_paths: t.kind === "oracle" ? [ORACLE_GLOB] : tt.allowed_paths, may_change_tests: t.kind === "oracle" ? true : tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
     memory_hash: memoryHash, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
     repo_config: rc.config,
     // D-533: the approved spec's hash is sealed into the contract (and so into its hash and the ledger); never shown to the agent
@@ -175,7 +175,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // D-535: a unit runs on its job branch's head, the final check on the job's base; main is not their base
   let job: JobInputs | null = null;
   if (t.job_id && t.job_role) {
-    job = await jobInputs(d.db, { id: t.id, org_id: t.org_id, repo_id: t.repo_id, attempt: t.attempt, job_id: t.job_id, unit_id: t.unit_id, job_role: t.job_role }, { mirror, hiddenDir: ORACLE_DIR });
+    job = await jobInputs(d.db, { id: t.id, org_id: t.org_id, repo_id: t.repo_id, attempt: t.attempt, job_id: t.job_id, unit_id: t.unit_id, job_role: t.job_role }, { mirror });
     if (!job.ok) {
       const reason = job.reason;
       const seq = await inTransaction(d.db, async (tx) => {
@@ -295,9 +295,9 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   let hidden: { dir: string; files: { path: string; data: Buffer }[] } | null = null;
   if (job?.ok) {
     // D-535: the unit's share of the approved oracle (checked file by file in jobInputs), for tree B only
-    hidden = job.hidden ? { ...job.hidden, dir: hiddenDir } : null;
+    hidden = job.hidden; // D-536: an oracle's paths are from the repo root (dir "")
   } else if (t.oracle_hash) {
-    const ot = await oracleTestsFor(d.db, { repo: t.repo_id, specHash: t.spec_hash, oracleHash: t.oracle_hash, dir: hiddenDir });
+    const ot = await oracleTestsFor(d.db, { repo: t.repo_id, specHash: t.spec_hash, oracleHash: t.oracle_hash });
     if (!ot.ok) {
       const seq = await inTransaction(d.db, async (tx) => {
         const s = await setState(tx, t, "BLOCKED", { wait_reason: ot.reason });
@@ -412,7 +412,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
-        ...(hidden ? { hidden } : {}), ...(hidden && (job?.ok ? job.grade : t.oracle_hash) ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: { dir: ORACLE_DIR } } : {}),
+        ...(hidden ? { hidden } : {}), ...(hidden && (job?.ok ? job.grade : t.oracle_hash) ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: true } : {}),
         ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),
@@ -495,7 +495,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   }
   // D-534: an oracle task ends here: its tests become the oracle (or the reasons it is not ready); nothing is delivered
   if (t.kind === "oracle") {
-    const o = await finishOracle(d.db, { org: t.org_id, repo: t.repo_id, taskId: t.id, out, dir: ORACLE_DIR });
+    const o = await finishOracle(d.db, { org: t.org_id, repo: t.repo_id, taskId: t.id, out });
     // the exported diff is the tests themselves: it does not stay in the run's files
     if (out.runDir) for (const f of [path.join(out.runDir, "export", "diff.patch"), path.join(out.runDir, "verify", "report-b.json")]) rmSync(f, { force: true });
     const usd = out.verdict?.usage.usd ?? 0;

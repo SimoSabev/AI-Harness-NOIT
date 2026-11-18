@@ -65,8 +65,8 @@ export interface RunTaskInput {
   hidden?: HiddenTests | null;
   /** D-534: the hidden tests are an approved oracle; its share of killed mutants must reach the threshold (D11.oracle) */
   oracleGrade?: { threshold: number };
-  /** D-534: this run is an oracle task; its exported tests (under `dir`) are checked on the base in a run of their own */
-  oracle?: { dir: string };
+  /** D-534: this run is an oracle task; its exported tests (D-536: in __hidden__ folders) are checked on the base in a run of their own */
+  oracle?: boolean;
   /** v5 E9б (AC-5.5): the LLM advisor (profile G.review); off by default */
   review?: "off" | "advisory";
   /** extra rule subjects (account:<name>, night); "agent:<claude|codex>" and "any" are always added */
@@ -790,10 +790,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           }
           // D-534: an oracle task's tests on the base, in a run of its own (new volume and gate; nothing reaches the mirror)
           if (i.oracle && integrity !== "mismatch" && diffPatch) {
-            const oracleDir = i.oracle.dir;
             oracleOut = await oracleFromChange({
               docker, runId: `r_${ulid(now().getTime() + 1)}`, runDir: path.join(runDir, "oracle"), mandatHome: i.home, home: os.homedir(), images, infraUser: user, ...(host.extraCa ? { extraCa: host.extraCa } : {}), ipv6Sysctl,
-              mirrorPath, baseSha: contract.base_commit, rc: contract.repo_config, tmpRoot, diffPatch: diffPatch as Buffer, dir: oracleDir, startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
+              mirrorPath, baseSha: contract.base_commit, rc: contract.repo_config, tmpRoot, diffPatch: diffPatch as Buffer, startGate, ...(x.runTests ? { runTests: x.runTests } : {}),
             }).catch((e: unknown): OracleChangeResult => ({ ok: false, code: e instanceof Error ? e.message.slice(0, 100) : "E_ORACLE" }));
             out(`[oracle]    ${oracleOut.ok ? `${oracleOut.tests.length} test file(s), ${oracleOut.base ? `${oracleOut.base.results.length} test(s) on base` : "not run on base"}` : oracleOut.code}`);
           }

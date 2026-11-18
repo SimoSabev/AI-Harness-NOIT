@@ -29,7 +29,7 @@ export async function oracleOfTask(db: Db, taskId: string): Promise<{ oracle: Or
 export interface OracleOutcome { status: "ready" | "not_ready" | "failed"; oracle_hash: Sha256 | null; problems: OracleProblem[] }
 
 /** the oracle task's run → the oracle (ready / not ready with reasons / failed); its tests stored only when ready */
-export async function finishOracle(db: Db, o: { org: string; repo: string; taskId: string; out: RunTaskOutput; dir: string }): Promise<OracleOutcome> {
+export async function finishOracle(db: Db, o: { org: string; repo: string; taskId: string; out: RunTaskOutput }): Promise<OracleOutcome> {
   const of = await oracleOfTask(db, o.taskId);
   if (!of) return { status: "failed", oracle_hash: null, problems: [{ kind: "not_run", id: "spec" }] };
   const r = o.out.oracle;
@@ -73,7 +73,7 @@ export type OracleTests = { ok: true; hidden: HiddenTests; oracleHash: string } 
  * The writer's hidden tests when its task carries an approved oracle's hash: the stored files of that oracle, each one
  * checked against the sha256 in the approved manifest (a changed file blocks the task instead of judging it).
  */
-export async function oracleTestsFor(db: Db, o: { repo: string; specHash: string | null; oracleHash: string; dir: string }): Promise<OracleTests> {
+export async function oracleTestsFor(db: Db, o: { repo: string; specHash: string | null; oracleHash: string }): Promise<OracleTests> {
   const r = (await db.query<{ manifest: unknown; hidden_version: number | null; spec_hash: string }>(
     "select manifest, hidden_version, spec_hash from public.oracles where repo_id = $1::uuid and oracle_hash = $2 and status = 'approved' order by approved_at desc limit 1",
     [o.repo, o.oracleHash],
@@ -85,5 +85,6 @@ export async function oracleTestsFor(db: Db, o: { repo: string; specHash: string
   const want = new Map(m.data.hidden_tests.map((h) => [h.path, h.sha256]));
   const same = files.length === want.size && files.every((f) => want.get(f.path) === sha256Tag(f.data));
   if (!same) return { ok: false, reason: "oracle_tampered" };
-  return { ok: true, hidden: { dir: o.dir, files }, oracleHash: o.oracleHash };
+  // D-536: the stored paths are from the repo root (in __hidden__ folders at any depth), so the set has no dir
+  return { ok: true, hidden: { dir: "", files }, oracleHash: o.oracleHash };
 }
