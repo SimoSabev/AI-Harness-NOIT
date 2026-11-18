@@ -40,7 +40,7 @@ const ok = (statusA: "failed" | "passed", statusU: "failed" | "passed"): RunTask
   base: { timedOut: false, results: [{ id: `${ORACLE_DIR}/cart.spec.ts > AC-1: applies 10% over 50`, status: statusA }, { id: `${ORACLE_DIR}/u.spec.ts > U-1: none under 50`, status: statusU }] },
 });
 
-async function setup(oracle: RunTaskOutput["oracle"]) {
+async function setup(oracle: RunTaskOutput["oracle"], extra: Partial<RunTaskOutput> = {}) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-oracle-"));
   const fx = buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" });
   const db = await pgliteDb();
@@ -59,7 +59,7 @@ async function setup(oracle: RunTaskOutput["oracle"]) {
       const runDir = path.join(home, "runs", `r${runs.length}`);
       mkdirSync(path.join(runDir, "export"), { recursive: true });
       writeFileSync(path.join(runDir, "export", "diff.patch"), `diff --git a/${ORACLE_DIR}/cart.spec.ts b/${ORACLE_DIR}/cart.spec.ts\n`);
-      return Promise.resolve({ verdict: verdict(fx.sha), exit: 20, runDir, ledger: { from: 1, to: 3 }, agentExit: 0, ...(runs.length === 1 && oracle ? { oracle } : {}) });
+      return Promise.resolve({ verdict: verdict(fx.sha), exit: 20, runDir, ledger: { from: 1, to: 3 }, agentExit: 0, ...extra, ...(runs.length === 1 && oracle ? { oracle } : {}) });
     },
   };
   return { db, deps, runs, fx, home };
@@ -114,6 +114,14 @@ describe("the oracle task (D-534)", () => {
     const f = await setup(undefined);
     await runDaemonOnce(f.deps);
     expect(await oracleRow(f.db)).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "no_output" }] });
+  });
+  it("live test 18.11: a run that stopped early names its reason, not just no_output", async () => {
+    const s = await setup(undefined, { error: { code: "E_IMAGES_MISSING", message: "x" }, agentExit: null });
+    await runDaemonOnce(s.deps);
+    expect(await oracleRow(s.db)).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "E_IMAGES_MISSING" }] });
+    const t = await setup(undefined, { agentExit: 1 });
+    await runDaemonOnce(t.deps);
+    expect(await oracleRow(t.db)).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "agent_exit_1" }] });
   });
 });
 
