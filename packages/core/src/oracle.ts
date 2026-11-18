@@ -1,4 +1,4 @@
-import { oracleTag, unchangedId } from "@mandat/contract";
+import { isHiddenPath, oracleTag, unchangedId } from "@mandat/contract";
 import type { Evidence, OracleProblem, ParsedReport, Spec, TestStatus } from "@mandat/contract";
 import type { HiddenResult } from "./d5.js";
 import type { MutantRun, MutationSite } from "./d11.js";
@@ -7,13 +7,15 @@ import { ev } from "./evidence.js";
 // D-534 (М1 Х3, heavy-process §3): the oracle checked before the writer starts, and graded after the writer passed.
 // Pure: the sandbox runs are done by @mandat/verify.
 
-/** the oracle agent's change: files under its directory are the tests (paths relative to it); anything else is a problem */
-export function oracleChange(o: { paths: readonly string[]; dir: string }): { tests: string[]; problems: OracleProblem[] } {
-  const prefix = `${o.dir.replace(/\/+$/, "")}/`;
+/**
+ * The oracle agent's change: test files in a `__hidden__` folder at any depth are the tests (D-536: paths kept from the
+ * repo root, where the project's runner finds them); anything else is a problem.
+ */
+export function oracleChange(o: { paths: readonly string[] }): { tests: string[]; problems: OracleProblem[] } {
   const tests: string[] = [];
   const problems: OracleProblem[] = [];
   for (const p of [...o.paths].sort()) {
-    if (p.startsWith(prefix) && /\.(spec|test)\.[cm]?[jt]sx?$/.test(p)) tests.push(p.slice(prefix.length));
+    if (isHiddenPath(p) && /\.(spec|test)\.[cm]?[jt]sx?$/.test(p)) tests.push(p);
     else problems.push({ kind: "non_test_change", id: p.slice(0, 300) });
   }
   if (tests.length === 0) problems.push({ kind: "no_tests", id: "-" });
@@ -29,13 +31,14 @@ export interface RedOnBase {
 /**
  * The oracle's tests on the current base. A criterion (proof other than human) needs ≥ 1 test tagged with its id and
  * every one of them red; an unchanged behavior needs ≥ 1 test tagged U-n and every one of them green. Every test has a
- * known tag. Problems name criterion ids and counts, never a test's name (the person sees them; the writer never does).
+ * known tag. Results that are empty (the runner found none of the files) are `not_discovered`. Problems name criterion ids and counts, never a test's name (the person sees them; the writer never does).
  */
 export function classifyRedOnBase(o: { spec: Spec; results: readonly HiddenResult[] | null }): RedOnBase {
   const problems: OracleProblem[] = [];
   const criteria = o.spec.criteria;
+  // null: the run did not finish (a timeout); []: it finished but the runner picked up none of the files (D-536)
   if (o.results === null || o.results.length === 0) {
-    return { ready: false, red_on_base: criteria.map((c) => ({ criterion_id: c.id, red: false })), problems: [{ kind: "not_run", id: "-" }] };
+    return { ready: false, red_on_base: criteria.map((c) => ({ criterion_id: c.id, red: false })), problems: [{ kind: o.results === null ? "not_run" : "not_discovered", id: "-" }] };
   }
   const by = new Map<string, TestStatus[]>();
   let untagged = 0;

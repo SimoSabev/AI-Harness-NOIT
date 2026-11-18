@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ORACLE_DIR, ORACLE_MIN_KILL } from "@mandat/contract";
+import { ORACLE_MIN_KILL } from "@mandat/contract";
 import { decideVerdict } from "./verdict.js";
 import type { ParsedReport, Spec, TestStatus } from "@mandat/contract";
 import { classifyRedOnBase, d11Oracle, oracleChange } from "./oracle.js";
@@ -19,18 +19,20 @@ const spec: Spec = {
   out_of_scope: [],
   profile: "feature",
 };
-const f = (name: string) => `${ORACLE_DIR}/cart.spec.ts > ${name}`;
+const FILE = "packages/cart/test/__hidden__/cart.spec.ts";
+const f = (name: string) => `${FILE} > ${name}`;
 const r = (xs: [string, TestStatus][]) => xs.map(([name, status]) => ({ id: f(name), status }));
 const good: [string, TestStatus][] = [["AC-1: rounds .5 up", "failed"], ["AC-2: negative is 0", "failed"], ["U-1: whole totals stay", "passed"]];
 
 describe("the oracle's change (D-534)", () => {
-  it("only test files under the oracle directory; any other file is a problem; none at all is a problem", () => {
-    expect(oracleChange({ paths: [`${ORACLE_DIR}/b.spec.ts`, `${ORACLE_DIR}/a/x.test.ts`], dir: ORACLE_DIR })).toEqual({ tests: ["a/x.test.ts", "b.spec.ts"], problems: [] });
-    expect(oracleChange({ paths: [`${ORACLE_DIR}/a.spec.ts`, "src/cart.ts", `${ORACLE_DIR}/helper.ts`], dir: ORACLE_DIR }).problems).toEqual([
+  it("only test files in a __hidden__ folder at any depth (kept from the repo root); any other file is a problem; none is a problem", () => {
+    expect(oracleChange({ paths: ["tests/__hidden__/b.spec.ts", "packages/engine/test/__hidden__/a/vec3.test.ts"] })).toEqual({ tests: ["packages/engine/test/__hidden__/a/vec3.test.ts", "tests/__hidden__/b.spec.ts"], problems: [] });
+    expect(oracleChange({ paths: ["tests/__hidden__/a.spec.ts", "src/cart.ts", "packages/x/__hidden__/helper.ts", "packages/x/test/a.spec.ts"] }).problems).toEqual([
+      { kind: "non_test_change", id: "packages/x/__hidden__/helper.ts" },
+      { kind: "non_test_change", id: "packages/x/test/a.spec.ts" },
       { kind: "non_test_change", id: "src/cart.ts" },
-      { kind: "non_test_change", id: `${ORACLE_DIR}/helper.ts` },
     ]);
-    expect(oracleChange({ paths: ["src/cart.ts"], dir: ORACLE_DIR }).problems.map((p) => p.kind)).toEqual(["non_test_change", "no_tests"]);
+    expect(oracleChange({ paths: ["src/cart.ts"] }).problems.map((p) => p.kind)).toEqual(["non_test_change", "no_tests"]);
   });
 });
 
@@ -60,16 +62,20 @@ describe("red on base (D-534)", () => {
       expect(JSON.stringify(c.problems)).not.toContain("rounds");
     });
   }
-  it("no results (the tests did not run) → not ready", () => {
-    expect(classifyRedOnBase({ spec, results: [] }).problems).toEqual([{ kind: "not_run", id: "-" }]);
-    expect(classifyRedOnBase({ spec, results: null }).ready).toBe(false);
+  it("no results (a timeout) → not ready, not_run", () => {
+    expect(classifyRedOnBase({ spec, results: null })).toMatchObject({ ready: false, problems: [{ kind: "not_run", id: "-" }] });
+  });
+  it("D-536: the run finished but the runner picked up none of the oracle's files → not_discovered, not every criterion not run", () => {
+    const c = classifyRedOnBase({ spec, results: [] });
+    expect(c.ready).toBe(false);
+    expect(c.problems).toEqual([{ kind: "not_discovered", id: "-" }]);
   });
 });
 
 describe("the oracle graded with the writer's mutants (D-534)", () => {
   const site = (n: number): MutationSite => ({ path: "src/cart.ts", line: n, col: 0, from: "5000", to: "0" });
   const report = (xs: [string, TestStatus][]): ParsedReport => ({ valid: true, success: !xs.some(([, s]) => s === "failed"), total: xs.length, tests: new Map(xs.map(([n, s]) => [f(n), s])) });
-  const hiddenOf = (rep: ParsedReport) => splitHidden(rep, ORACLE_DIR).hidden;
+  const hiddenOf = (rep: ParsedReport) => splitHidden(rep, [FILE]).hidden;
   const onB = hiddenOf(report([["AC-1: x", "passed"], ["AC-2: y", "passed"]]));
   const caught: MutantRun = { exit: 1, timedOut: false, report: report([["AC-1: x", "failed"], ["AC-2: y", "passed"]]) };
   // a visible test failing kills the mutant for D11, but only the oracle's own tests count for D11.oracle

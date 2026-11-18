@@ -46,6 +46,14 @@ describe("the oracle files of a unit (D-535)", () => {
     expect(r.files.map((x) => x.path)).toEqual(["a.spec.ts", "u.spec.ts"]);
     expect(r.deferred).toEqual(["AC-1"]);
     expect(oracleFilesFor(files, ["AC-1", "AC-2"]).files.map((x) => x.path)).toEqual(["a.spec.ts", "b.spec.ts", "u.spec.ts"]);
+  });  it("D-536: oracle files at any depth (paths from the repo root) are filtered by their tags the same way", () => {
+    const nested = [
+      f("packages/engine/test/__hidden__/vec3.spec.ts", 'it("AC-1: adds", () => {});'),
+      f("packages/ui/src/__hidden__/deep/b.spec.ts", 'it("AC-2: draws", () => {});'),
+      f("tests/__hidden__/u.spec.ts", "describe('U-1: stays', () => {});"),
+    ];
+    expect(oracleFilesFor(nested, ["AC-1"]).files.map((x) => x.path)).toEqual(["packages/engine/test/__hidden__/vec3.spec.ts", "tests/__hidden__/u.spec.ts"]);
+    expect(oracleFilesFor(nested, ["AC-1", "AC-2"]).files).toHaveLength(3);
   });
 });
 
