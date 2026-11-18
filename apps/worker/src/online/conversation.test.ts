@@ -100,6 +100,9 @@ describe("the interview (D-533)", () => {
   it("live test 18.11: criteria are only new behavior; what must keep working goes in unchanged (an oracle needs every criterion red on the current code)", () => {
     expect(CHAT_SYSTEM).toMatch(/criteria are only for NEW behavior/);
     expect(CHAT_SYSTEM).toMatch(/goes in "unchanged", never in the criteria/);
+    // live test 18.11 (2): "the other files of the project" is a scope limit, not a behavior a test can pin
+    expect(CHAT_SYSTEM).toMatch(/every "unchanged" item is a behavior a test can pin/i);
+    expect(CHAT_SYSTEM).toMatch(/limits on which files may change go in "out_of_scope"/);
   });
   it("unknown axes keep the interview going: the model sees them, and a spec is not ready while any is unknown", async () => {
     const m = script(
