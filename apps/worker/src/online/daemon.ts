@@ -408,7 +408,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     try {
       // a spill changes t.agent (key channels only); a fixed route keeps its CLI
       return await (d.run ?? runTask)({
-        home: d.home, contractPath: cfile, agent: (route.ref ? route.run : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"),
+        home: d.home, contractPath: cfile, agent: (route.ref ? route.run : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"), mirrorPath: mirror,
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),

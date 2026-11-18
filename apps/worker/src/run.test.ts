@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -148,6 +148,16 @@ describe("runTask (fake docker)", () => {
     expect(r.verdict?.reasons).toEqual(["infra:install_base", "INFRA:INSTALL_BASE:-"]);
     expect(r.exit).toBe(3);
     expect(ledgerLines).toHaveLength(3);
+  });
+
+  it("a project added from the web lives under projects/: the explicit mirrorPath is used (live test 18.11)", async () => {
+    const h = home();
+    const proj = path.join(h, "projects", "lux.git");
+    mkdirSync(path.dirname(proj), { recursive: true });
+    renameSync(path.join(h, "mirrors", "shop.git"), proj);
+    const { r } = await go({ h, docker: new FakeDocker({ head: honest }), i: { mirrorPath: proj } });
+    expect(r.error?.code).not.toBe("E_MIRROR_MISSING");
+    expect(r.verdict?.result).toBe("VERIFIED");
   });
 
   it("preflight без run (D-038)", async () => {

@@ -57,6 +57,8 @@ export interface RunTaskInput {
   now?: () => Date;
   /** mirror name under <home>/mirrors (default "shop"; the online worker uses "demo-shop") */
   mirror?: string;
+  /** the mirror's full path; wins over `mirror` (a project added from the web lives under <home>/projects, D-388; live test 18.11) */
+  mirrorPath?: string;
   /** v5 E8а: the approved harness profile of the repo → compiled into /m/in/harness for the agent */
   profile?: HarnessProfile;
   /** v5 E9б (D5): a person's hidden tests, copied into tree B at verification only (never into the agent's volume) */
@@ -271,7 +273,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     // D-295: a subscription profile run never touches the proxy
     if (isKeyCli(i.agent) && contract.channel.kind !== "cli_profile" && !proxyUp) return fail("E_PROXY_DOWN", `llm-proxy is not answering on 127.0.0.1:${host.proxyAdminPort}`);
     // ---- 5: mirror and base
-    const mirrorPath = path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
+    const mirrorPath = i.mirrorPath ?? path.join(i.home, "mirrors", `${i.mirror ?? "shop"}.git`);
     if (!existsSync(mirrorPath)) return fail("E_MIRROR_MISSING", "mirror missing; пусни pnpm mandat fixtures build");
     const cat = spawnSync("git", ["--git-dir", mirrorPath, "cat-file", "-e", `${contract.base_commit}^{commit}`], { env: { PATH: process.env.PATH ?? "", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", HOME: os.tmpdir() } }); // T3-7: sha (GitSha in the contract)
     if (cat.status !== 0) return fail("E_BASE_NOT_FOUND", `base_commit ${contract.base_commit} not in the mirror`);
