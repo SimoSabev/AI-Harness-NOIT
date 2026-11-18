@@ -47,6 +47,11 @@ describe("the oracle in the thread (D-534)", () => {
     expect(html).toContain("chat.oracle.rebuild");
     expect(html).not.toContain("chat.oracle.approve");
   });
+  it("D-536: tests the runner never picked up show their own reason, not every criterion 'did not run'", async () => {
+    const html = await render({ oracle: oracle({ status: "not_ready", problems: [{ kind: "not_discovered", id: "-" }] }) });
+    expect(html).toContain("chat.oracle.problem.not_discovered(-)");
+    expect(html).not.toContain("chat.oracle.problem.not_run");
+  });
   it("ready: the count, per-criterion red on base and Approve oracle only for a person who may approve", async () => {
     const ready = oracle({ status: "ready", oracle_hash: OH, tests: 3, red_on_base: [{ criterion_id: "AC-1", red: true }, { criterion_id: "AC-2", red: true }] });
     const html = await render({ oracle: ready });

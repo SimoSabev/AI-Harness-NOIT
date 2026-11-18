@@ -1615,6 +1615,7 @@ export const en = {
   "chat.oracle.problem.unchanged_untagged": "{id} (unchanged behavior) has no test",
   "chat.oracle.problem.unchanged_red": "{id} (unchanged behavior) fails on the current code",
   "chat.oracle.problem.not_run": "did not run: {id}",
+  "chat.oracle.problem.not_discovered": "the test runner did not pick up the hidden tests; put them where the project's runner finds them (a __hidden__ folder inside a directory it already runs)",
   "chat.job": "Job",
   "chat.job.status.planning": "Planning the units of work…",
   "chat.job.status.running": "Building unit by unit. Each unit is a fresh task and is checked against the oracle.",

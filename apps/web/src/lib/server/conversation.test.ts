@@ -5,7 +5,7 @@ import { DEMO_ORG_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { runConversationOnce } from "../../../../worker/src/online/conversation";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { ORACLE_DIR, OracleManifest, hashJcs, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText } from "@mandat/contract";
+import { HIDDEN_SEGMENT, OracleManifest, hashJcs, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText } from "@mandat/contract";
 import { contractForTask } from "../../../../worker/src/online/daemon";
 import { postConversation, postConversationApprove, postConversationJobApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
 import type { ApiDeps } from "./api";
@@ -191,7 +191,7 @@ describe("the spec in the web (D-533)", () => {
 const TEST = Buffer.from("it('AC-1: rounds .5 up', () => {});");
 /** what the worker writes when the oracle's tests are red on base for every criterion (finishOracle) */
 async function workerMadeReady(oracleId: string, hash: string): Promise<string> {
-  const m = OracleManifest.parse({ spec_hash: hash, hidden_tests: [{ path: "cart.spec.ts", sha256: sha256Tag(TEST) }], red_on_base: [{ criterion_id: "AC-1", red: true }] });
+  const m = OracleManifest.parse({ spec_hash: hash, hidden_tests: [{ path: "tests/__hidden__/cart.spec.ts", sha256: sha256Tag(TEST) }], red_on_base: [{ criterion_id: "AC-1", red: true }] });
   const h = oracleHash(m);
   await asService(db, (sql) => sql.query("update public.oracles set status = 'ready', manifest = $2::jsonb, red_on_base = $3::jsonb, oracle_hash = $4, hidden_version = 1 where id = $1", [oracleId, JSON.stringify(m), JSON.stringify(m.red_on_base), h]));
   return h;
@@ -221,7 +221,7 @@ describe("the oracle in the web (D-534)", () => {
     expect(b.status).toBe(201);
     const t = (await asService(db, (sql) => sql.query<{ kind: string; text: string; spec_hash: string; oracle_hash: string | null }>("select kind, text, spec_hash, oracle_hash from public.tasks where id = $1", [b.body.task_id]))).rows[0];
     expect(t).toEqual({ kind: "oracle", text: oracleTaskText(spec), spec_hash: hash, oracle_hash: null });
-    expect(t?.text).toContain(ORACLE_DIR);
+    expect(t?.text).toContain(`a ${HIDDEN_SEGMENT} folder inside a directory the project's test runner already discovers`);
     expect((await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "oracle_building" });
     const f = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!;
     expect(f.oracle_required).toBe(true);

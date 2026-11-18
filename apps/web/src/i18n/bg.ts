@@ -1591,6 +1591,7 @@ export const bg: Record<Key, string> = {
   "chat.oracle.problem.unchanged_untagged": "{id} (непроменено поведение) няма тест",
   "chat.oracle.problem.unchanged_red": "{id} (непроменено поведение) пада върху сегашния код",
   "chat.oracle.problem.not_run": "не тръгна: {id}",
+  "chat.oracle.problem.not_discovered": "тестовият инструмент не намери скритите тестове; сложи ги там, където инструментът на проекта ги търси (папка __hidden__ в директория, която той вече пуска)",
   "chat.job": "Работа",
   "chat.job.status.planning": "Разделям работата на единици…",
   "chat.job.status.running": "Строя единица по единица. Всяка е нова задача и се проверява с оракула.",
