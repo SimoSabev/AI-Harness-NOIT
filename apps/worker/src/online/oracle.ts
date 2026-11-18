@@ -37,7 +37,13 @@ export async function finishOracle(db: Db, o: { org: string; repo: string; taskI
   let manifest: OracleManifest | null = null;
   let files: { path: string; data: string }[] = [];
   // live test 18.11.2026: a run that stopped before the oracle names why (its error code, its stop, the agent's exit)
-  const why = (): string => o.out.error?.code ?? o.out.stopped ?? (o.out.agentExit !== null && o.out.agentExit !== 0 ? `agent_exit_${o.out.agentExit}` : null) ?? (o.out.verdict && o.out.verdict.result !== "VERIFIED" ? (o.out.verdict.reasons[0] ?? null) : null) ?? "no_output";
+  const why = (): string => {
+    if (o.out.error) return o.out.error.code;
+    if (o.out.stopped) return o.out.stopped;
+    if (o.out.agentExit !== null && o.out.agentExit !== 0) return `agent_exit_${o.out.agentExit}`;
+    const first = o.out.verdict && o.out.verdict.result !== "VERIFIED" ? o.out.verdict.reasons[0] : undefined;
+    return first ?? "no_output";
+  };
   if (!r || !r.ok) outcome = { status: "failed", oracle_hash: null, problems: [{ kind: "not_run", id: (r && !r.ok ? r.code : why()).slice(0, 100) }] };
   else if (r.problems.length > 0 || r.base === null) outcome = { status: "not_ready", oracle_hash: null, problems: r.problems };
   else {
