@@ -117,6 +117,19 @@ describe("mandat-verify (т. 5.7; verify-cli без Docker, тестовете �
     expect(o.verdict.reasons.some((x) => /^D5:hidden_fail:h[0-9a-f]{8}$/.test(x))).toBe(true);
     expect(o.verdict.reasons.join(" ")).not.toContain(M_TITLE);
   });
+  it("D-536: hidden files copied but the runner picked none of them up → UNKNOWN D5:not_discovered, never a silent pass", async () => {
+    const f = demo();
+    edit(f.repo, "src/cart.ts", fixCode);
+    const drop = (_i: TestProcedureInput, raw: string) => {
+      const j = JSON.parse(raw) as { testResults: { name: string }[] };
+      return JSON.stringify({ ...j, testResults: j.testResults.filter((t) => !t.name.includes("/__hidden__/")) });
+    };
+    const r = await verify(f, ["--external", "--type", "bugfix", "--hidden", hiddenDir(), "--json"], drop);
+    const o = JSON.parse(r.out.trim()) as { verdict: { result: string; reasons: string[]; evidence: { detector: string; status: string; summary: string }[] } };
+    expect(o.verdict.result).toBe("UNKNOWN");
+    expect(o.verdict.reasons).toContain("D5:not_discovered:1");
+    expect(o.verdict.evidence.find((e) => e.detector === "D5.hidden")?.summary).toContain("the test runner did not pick up");
+  });
   // D-534 (М1 Х3): the hidden tests as an approved oracle, graded with the change's mutants (D11.oracle)
   const weakOracle = () => {
     const d = mkdtempSync(path.join(os.tmpdir(), "mandat-oracle-"));

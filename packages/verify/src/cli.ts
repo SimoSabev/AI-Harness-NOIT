@@ -117,7 +117,7 @@ export function formatOutcome(o: VerifyOutcome, base: { sha: string; remote: str
   return lines.join("\n") + "\n";
 }
 
-/** D5: the hidden test files of a directory (≤ 200 files, ≤ 5 MB in all; no symlinks); copied into tree B as tests/__hidden__/… */
+/** D5: the hidden test files of a directory (≤ 200 files, ≤ 5 MB in all; no symlinks); copied into tree B as tests/__hidden__/… (D-536: a legacy set joins this dir) */
 export function readHidden(dir: string): HiddenTests {
   const files: HiddenTests["files"] = [];
   let bytes = 0;

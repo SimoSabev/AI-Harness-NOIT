@@ -9,6 +9,7 @@ import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
 import type { DockerRunner } from "@mandat/sandbox";
 import type { startRunGate } from "./gate.js";
+import { writeHiddenTests } from "./hidden-copy.js";
 import { runTestProcedure } from "./test-procedure.js";
 import type { CheckResult, TestProcedureResult } from "./test-procedure.js";
 import { registryFacts } from "./registry-facts.js";
@@ -29,6 +30,7 @@ const infra = (code: ErrorCode, message: string): never => {
 };
 
 export interface UiCheck { paths: string[]; devCommand: string | null; image: string | null; routes: string[] }
+/** D-536: `dir` "" means the paths are from the repo root (an oracle's, in __hidden__ folders); else they join `dir` (D-362) */
 export interface HiddenTests { dir: string; files: { path: string; data: Buffer }[] }
 
 export interface VerifyTreesInput {
@@ -207,13 +209,12 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   });
   // D5: the hidden tests go into tree B after the D11 inputs are read (they never shape a mutant or a special case)
   const hidden = i.hidden && i.hidden.files.length > 0 ? i.hidden : null;
+  // D-536: at their paths from the repo root (a __hidden__ folder at any depth); only these files count for D5
+  let hiddenPaths: string[] = [];
   if (hidden) {
-    for (const f of hidden.files) {
-      const rel = path.posix.normalize(`${hidden.dir}/${f.path}`);
-      if (rel.startsWith("..") || path.posix.isAbsolute(rel)) infra("E_DOCKER", "bad hidden test path");
-      mkdirSync(path.dirname(path.join(bDir, rel)), { recursive: true });
-      writeFileSync(path.join(bDir, rel), f.data);
-    }
+    const w = writeHiddenTests(bDir, hidden);
+    if (!w.ok) infra("E_DOCKER", "bad hidden test path");
+    else hiddenPaths = w.paths;
   }
   const A = await runTests(testsInput("a", aDir));
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
@@ -225,7 +226,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const a = A as Extract<TestProcedureResult, { ok: true }>;
   const bRaw = B as Extract<TestProcedureResult, { ok: true }>;
   // D5: the hidden tests are judged on their own; every other detector sees tree B without them
-  const split = hidden ? splitHidden(bRaw.report, hidden.dir) : null;
+  const split = hidden ? splitHidden(bRaw.report, hiddenPaths) : null;
   const b = split ? { ...bRaw, report: split.visible } : bRaw;
   await i.onReports?.({ raw: a.raw, exit: a.exit }, { raw: b.raw, exit: b.exit });
   if (checks.length > 0 || deps.length > 0) {
@@ -247,7 +248,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     });
     evidence.push(d12Ui({ uiTouched, routes: routes ?? null }).evidence);
   }
-  if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length }).evidence);
+  if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length, reportValid: bRaw.report.valid }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
   evidence.push(
     b.timedOut
@@ -265,7 +266,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     const mutated = special.length > 0 || testEnv.length > 0 ? "not graded: see D11.mutation" : sites.length === 0 ? "no mutable changed lines" : !bClean || split.hidden.length === 0 ? "tests did not pass on B" : undefined;
     evidence.push(
       mutated === undefined
-        ? d11Oracle({ sites, runs: bRaw.mutants ?? sites.map(() => null), hiddenOf: (r) => splitHidden(r, hidden.dir).hidden, hiddenOnB: split.hidden, threshold: i.oracle.threshold }).evidence
+        ? d11Oracle({ sites, runs: bRaw.mutants ?? sites.map(() => null), hiddenOf: (r) => splitHidden(r, hiddenPaths).hidden, hiddenOnB: split.hidden, threshold: i.oracle.threshold }).evidence
         : { ...na("D11.oracle", mutated), agent_visible: false },
     );
   }
