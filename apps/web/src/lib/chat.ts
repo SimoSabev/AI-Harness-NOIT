@@ -163,3 +163,9 @@ export function toolIcon(name: string): ToolIcon {
   if (name === "Grep" || name === "Glob" || name === "LS" || name === "WebSearch" || name === "WebFetch") return "search";
   return "tool";
 }
+
+/** live test 18.11.2026: the conversation stays on screen after Start work while it has a job (its card holds the approval) */
+export function showChat<C extends { conversation: { phase: string }; job?: unknown }>(chat: C | null | undefined): C | null {
+  if (!chat) return null;
+  return chat.conversation.phase === "conversation" || chat.job ? chat : null;
+}

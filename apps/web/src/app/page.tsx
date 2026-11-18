@@ -19,6 +19,7 @@ import { twinView } from "../lib/server/twin";
 import { conversationFeed } from "../lib/server/conversation";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
+import { showChat } from "../lib/chat";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
-            <NewTask agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={chat?.conversation.phase === "conversation" ? chat : null} />
+            <NewTask agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} />
           )}
         </div>
       </div>

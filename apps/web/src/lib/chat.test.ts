@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatItems, lastReply, liveStatusOf, toolIcon, usageOf, whyOf } from "./chat";
+import { chatItems, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -127,5 +127,14 @@ describe("the reply a person came for (D-448)", () => {
   });
   it("no reply: null", () => {
     expect(lastReply(chatItems([L2(0, "phase", "agent"), L2(1, "result", "failed: x")]))).toBeNull();
+  });
+});
+
+describe("showChat (live test 18.11): a conversation that became a job stays on screen", () => {
+  it("shows a conversation, and one in work only while it has a job", () => {
+    expect(showChat({ conversation: { phase: "conversation" } })).not.toBeNull();
+    expect(showChat({ conversation: { phase: "work" }, job: { id: "j1" } })).not.toBeNull();
+    expect(showChat({ conversation: { phase: "work" } })).toBeNull();
+    expect(showChat(null)).toBeNull();
   });
 });
