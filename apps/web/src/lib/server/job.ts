@@ -1,12 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { Spec} from "@mandat/contract";
-import { JobApproveBody, JobStatus, SessionSeal, hashJcs, jcs, sha256Tag } from "@mandat/contract";
+import { BringBody, JobApproveBody, JobStatus, SessionSeal, hashJcs, jcs, sha256Tag } from "@mandat/contract";
 import { canAct } from "./actions";
 import { hasCap } from "./roles";
 import type { Result } from "./actions";
 import { asService } from "./sql";
 import type { Db, Sql } from "./sql";
 import type { JobView } from "../conversation-types";
+import type { KeysClient } from "./keys";
 
 // D-535 (M1 X6/X7 minimum): the web's side of a job. "Start work" on an approved spec with an approved oracle makes a
 // job (the worker plans it and builds it unit by unit on its own branch); the page shows the plan, the current unit,
@@ -77,4 +78,33 @@ export async function approveJob(db: Db, o: { uid: string; org: string; id: stri
   });
   if (!done) return err(409, "already_approved");
   return { status: 200, body: { job: j.id, seal_hash: j.seal_hash } };
+}
+
+/**
+ * D-540: "Bring into my folder" — after the job is merged into the mirror's main, a person who may approve asks
+ * `mandat local` to fast-forward the project's own folder to the merged commit. The control endpoint checks the folder
+ * (source folder, branch, clean, no divergence) and refuses with a reason otherwise; the ledger keeps hashes, no path.
+ */
+const BringRequest = BringBody.pick({ branch: true }).strict();
+export async function bringJob(db: Db, keys: KeysClient | undefined, o: { uid: string; org: string; id: string; body: unknown }): Promise<Result> {
+  const b = BringRequest.safeParse(o.body ?? {});
+  if (!b.success) return err(400, "bad_body");
+  const j = (await asService(db, (sql) => sql.query<{ id: string; repo: string; status: string; merged_sha: string | null; provider: string; remote_url: string }>(
+    "select j.id, j.repo_id::text as repo, j.status, j.merged_sha, r.provider, r.remote_url from public.jobs j join public.repos r on r.id = j.repo_id where j.conversation_id = $1 and j.org_id = $2::uuid order by j.created_at desc limit 1",
+    [o.id, o.org],
+  ))).rows[0];
+  if (!j) return err(404, "unknown_job");
+  if (!(await hasCap(db, o.uid, o.org, "approve.level1", { repo: j.repo }))) return err(403, "not_an_approver");
+  if (j.status !== "delivered" || !j.merged_sha) return err(409, "job_not_delivered");
+  const mirror = j.provider === "local" && j.remote_url.startsWith("file://") ? j.remote_url.slice("file://".length) : null;
+  const body = mirror ? BringBody.safeParse({ mirror, sha: j.merged_sha, ...(b.data.branch ? { branch: b.data.branch } : {}) }) : null;
+  if (!body?.success) return err(409, "not_local");
+  if (!keys?.bring) return err(503, "control_unavailable");
+  const r = await keys.bring(body.data);
+  if (!r) return err(503, "control_unavailable");
+  if (r.ok && r.from !== r.to) {
+    const text = jcs({ conversation: o.id, job: j.id, from: r.from, to: r.to, folder: sha256Tag(r.folder), by: o.uid });
+    await asService(db, (sql) => sql.query("select private.ledger_append($1::uuid, 'folder_updated', null, $2, $3)", [o.org, text, sha256Tag(text)]));
+  }
+  return { status: 200, body: { result: r } };
 }

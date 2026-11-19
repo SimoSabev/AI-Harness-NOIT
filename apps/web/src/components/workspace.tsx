@@ -11,6 +11,7 @@ import { ChatThread, useConversation } from "./conversation";
 import { taskTypeFor } from "../lib/agents";
 import { isAnswering } from "../lib/conversation-types";
 import type { ConversationFeed } from "../lib/conversation-types";
+import { BringReply } from "@mandat/contract";
 
 type TaskMode = "ask_first" | "work_now";
 
@@ -49,7 +50,7 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
 // D-384: the agent picker shows only agents that can run (lib/agents.ts agentChoices); one agent → just its name;
 // none → a link to sign in instead of a box that cannot start anything. D-387: more than one project → a picker.
 // D-531: "Ask first" (the default) talks before work; "Work right away" starts today's task at once (remembered).
-const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.workStarted", nothing_to_do: "chat.err.nothingToDo", budget: "chat.budget", expired: "chat.expired", spec_not_ready: "chat.err.specNotReady", spec_changed: "chat.err.specChanged", already_approved: "chat.err.alreadyApproved", not_an_approver: "chat.err.notApprover", oracle_not_approved: "chat.err.oracleNotApproved", oracle_building: "chat.err.oracleBuilding", oracle_changed: "chat.err.oracleChanged", oracle_not_ready: "chat.err.oracleNotReady", job_not_sealed: "chat.err.jobNotSealed", seal_changed: "chat.err.sealChanged" } as const;
+const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.workStarted", nothing_to_do: "chat.err.nothingToDo", budget: "chat.budget", expired: "chat.expired", spec_not_ready: "chat.err.specNotReady", spec_changed: "chat.err.specChanged", already_approved: "chat.err.alreadyApproved", not_an_approver: "chat.err.notApprover", oracle_not_approved: "chat.err.oracleNotApproved", oracle_building: "chat.err.oracleBuilding", oracle_changed: "chat.err.oracleChanged", oracle_not_ready: "chat.err.oracleNotReady", job_not_sealed: "chat.err.jobNotSealed", seal_changed: "chat.err.sealChanged", job_not_delivered: "chat.err.jobNotDelivered", control_unavailable: "chat.err.controlUnavailable", not_local: "chat.err.notLocal" } as const;
 const ENDED = ["budget", "expired"];
 
 export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null }) {
@@ -143,6 +144,18 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     setBusy(false);
     follow(chat.row.id);
   };
+  // D-540: "Bring into my folder" on the delivered job — the reply (done, or exactly why not) stays on the card
+  const [brought, setBrought] = useState<BringReply | null>(null);
+  const bring = async () => {
+    if (!chat) return;
+    setBusy(true);
+    setError(null);
+    const r = await postJson(`/api/conversations/${chat.row.id}/job/bring`, {});
+    if (r.status !== 200) return fail(r);
+    const b = BringReply.safeParse(r.body.result);
+    setBrought(b.success ? b.data : null);
+    setBusy(false);
+  };
   const fresh = () => {
     reset();
     window.history.replaceState(null, "", "/");
@@ -175,7 +188,8 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       {thread ? (
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={() => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
-          onApproveJob={(h) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h }, 200)} />
+          onApproveJob={(h) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h }, 200)}
+          onBring={() => void bring()} brought={brought} />
       ) : (
         <>
           <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>

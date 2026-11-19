@@ -5,6 +5,7 @@ import { useT } from "../i18n/client";
 import type { Key, T } from "../i18n/t";
 import { isAnswering, isFollowing } from "../lib/conversation-types";
 import type { ConversationFeed, ConversationRow, JobView, OracleView } from "../lib/conversation-types";
+import type { BringReply } from "@mandat/contract";
 import { JobCard } from "./job-card";
 import { Markdown } from "./markdown";
 import { btn } from "./ui";
@@ -216,7 +217,7 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
 const STOP: Partial<Record<ConversationRow["status"], "chat.overloaded" | "chat.failed" | "chat.budget" | "chat.expired">> = { overloaded: "chat.overloaded", failed: "chat.failed", budget: "chat.budget", expired: "chat.expired" };
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
-export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: () => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string) => void }) {
+export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: () => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
   // a block body: newer Chromium returns a Promise from scrollIntoView, and React would call it as the cleanup
@@ -229,7 +230,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
       {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle }} />}
-      {chat.job && <JobCard job={chat.job} t={t} a={{ canApprove, busy, onApprove: onApproveJob }} />}
+      {chat.job && <JobCard job={chat.job} t={t} a={{ canApprove, busy, onApprove: onApproveJob, brought, ...(onBring ? { onBring } : {}) }} />}
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">
           <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>

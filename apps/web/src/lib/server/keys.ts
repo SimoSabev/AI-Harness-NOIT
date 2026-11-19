@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, FolderListing, FoundProjects, JobState, LoginState, SubscriptionId } from "@mandat/contract";
-import type { AddConnectionBody, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
+import { AddConnectionReply, AddProjectReply, BringReply, CheckKeyReply, ConnectionsReply, DetectReply, FolderListing, FoundProjects, JobState, LoginState, SubscriptionId } from "@mandat/contract";
+import type { AddConnectionBody, BringBody, ModelsBody, Preferences, SystemJob } from "@mandat/contract";
 
 // D-293: the web server forwards API keys to the control endpoint of `mandat local` (127.0.0.1 + bearer token), which
 // starts the proxy with them. The web server keeps nothing: no database row, no file, no log, no echo.
@@ -38,6 +38,8 @@ export interface KeysClient {
   runJob(job: SystemJob): Promise<JobState | null>;
   /** D-388: "Add project" — a git folder of this computer becomes a project; null = the control endpoint did not answer */
   addProject(path: string): Promise<AddProjectReply | null>;
+  /** D-540: "Bring into my folder" — the safe fast-forward of the project's own folder; null = no answer */
+  bring?: (b: BringBody) => Promise<BringReply | null>;
   /** D-388 (folder picker): the sub-folders of a folder of this computer (no path → the home folder); names and paths only */
   folders(path?: string): Promise<FoldersReply>;
   /** D-388 (folder picker): git projects found in the usual places; null = the control endpoint did not answer */
@@ -126,6 +128,11 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const j = AddProjectReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data : null;
   };
+  const bring = async (b: BringBody): Promise<BringReply | null> => {
+    const r = await send("POST", "/projects/bring", b).catch(() => null);
+    const j = BringReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
+    return j.success ? j.data : null;
+  };
   const folders = async (p?: string): Promise<FoldersReply> => {
     const r = await send("GET", p === undefined ? "/folders" : `/folders?path=${encodeURIComponent(p)}`).catch(() => null);
     const j: unknown = await r?.json().catch(() => null);
@@ -154,6 +161,7 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     jobs,
     runJob,
     addProject,
+    bring,
     accounts,
     status: async () => (await call("GET").catch(() => null)) ?? down,
     set: (k) => call("POST", k).catch(() => null),

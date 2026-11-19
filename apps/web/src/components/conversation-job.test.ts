@@ -53,3 +53,28 @@ describe("the job in the thread (D-535)", () => {
     expect(await render({ job: { ...sealed, status: "delivered", merged_sha: "c".repeat(40) } })).toContain("chat.job.merged(cccccccccccc)");
   });
 });
+
+// D-540: "Bring into my folder" on a delivered job — only for a person who may approve; the result says what happened
+// or exactly why not, with the command the person can run themselves
+describe("bring into my folder (D-540)", () => {
+  const t = Object.assign((k: string, p?: Record<string, string | number>) => (p ? `${k}(${Object.values(p).join("|")})` : k), { lang: "en" }) as unknown as import("../i18n/t").T;
+  const delivered = job({ status: "delivered", current: null, merged_sha: "c".repeat(40) });
+  const card = async (a: Partial<import("./job-card").JobActions>) => {
+    const { JobCard } = await import("./job-card");
+    return renderToStaticMarkup(createElement(JobCard, { job: delivered, t, a: { canApprove: true, busy: false, onApprove: () => undefined, onBring: () => undefined, brought: null, ...a } }));
+  };
+  it("the button only on a delivered job and for a person who may approve", async () => {
+    expect(await card({})).toContain("chat.job.bring<");
+    expect(await card({ canApprove: false })).not.toContain("chat.job.bring<");
+    const { JobCard } = await import("./job-card");
+    expect(renderToStaticMarkup(createElement(JobCard, { job: job({}), t, a: { canApprove: true, busy: false, onApprove: () => undefined, onBring: () => undefined, brought: null } }))).not.toContain("chat.job.bring<");
+  });
+  it("done: from → to; refused: the reason and the command, nothing else", async () => {
+    expect(await card({ brought: { ok: true, folder: "/home/s/shop", from: "a".repeat(40), to: "c".repeat(40), files: 3 } })).toContain("chat.job.bring.done(/home/s/shop|3)");
+    expect(await card({ brought: { ok: true, folder: "/home/s/shop", from: "c".repeat(40), to: "c".repeat(40), files: 0 } })).toContain("chat.job.bring.upToDate(/home/s/shop)");
+    const html = await card({ brought: { ok: false, reason: "dirty", folder: "/home/s/shop", detail: "2", command: 'git -C "/home/s/shop" pull --ff-only "/m/shop.git" main' } });
+    expect(html).toContain("chat.job.bring.no.dirty(/home/s/shop|2)");
+    expect(html).toContain("chat.job.bring.yourself");
+    expect(html).toContain("pull --ff-only");
+  });
+});
