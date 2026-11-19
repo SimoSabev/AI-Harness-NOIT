@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AccountName, AddProjectBody, AddProjectReply, DoctorReport, FOLDER_ENTRIES, FOUND_PROJECTS, FolderListing, FoundProjects, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
+import { AccountName, AddProjectBody, AddProjectReply, BringBody, BringReply, DoctorReport, FOLDER_ENTRIES, FOUND_PROJECTS, FolderListing, FoundProjects, JobState, LedgerReport, LoginCode, LoginState, SYSTEM_JOB_ARGV, StatsReport, SystemJob, findLoginUrl, jobLines } from "./local-control.js";
 
 // D-369: the subscription login from the web — what crosses between `mandat local` and the web server.
 const URL_LINE =
@@ -93,5 +93,20 @@ describe("folder listing and found projects (D-388, folder picker)", () => {
     expect(FoundProjects.safeParse({ found: [{ name: "shop", path: "code/shop" }] }).success).toBe(false);
     expect(FoundProjects.safeParse({ found: [{ name: "shop", path: "/a", git: true }] }).success).toBe(false);
     expect(FoundProjects.safeParse({ found: Array.from({ length: FOUND_PROJECTS + 1 }, (_, i) => ({ name: `p${i}`, path: `/p${i}` })) }).success).toBe(false);
+  });
+});
+
+// D-538: "Bring into my folder" — the web names the mirror and the delivered commit; the reply says what happened or why not
+describe("bring into my folder (D-538)", () => {
+  const sha = "a".repeat(40);
+  it("the body: an absolute mirror path, a full commit, an optional branch name; nothing else", () => {
+    expect(BringBody.safeParse({ mirror: "/home/s/.mandat/projects/lux.git", sha }).success).toBe(true);
+    expect(BringBody.safeParse({ mirror: "C:\\m\\projects\\lux.git", sha, branch: "master" }).success).toBe(true);
+    for (const b of [{ mirror: "projects/lux.git", sha }, { mirror: "/m", sha: "abc" }, { mirror: "/m", sha, branch: "-x" }, { mirror: "/m", sha, branch: "a..b" }, { mirror: "/m", sha, force: true }]) expect(BringBody.safeParse(b).success, JSON.stringify(b)).toBe(false);
+  });
+  it("the reply: done (from → to) or a reason from a closed list with the command a person can run", () => {
+    expect(BringReply.safeParse({ ok: true, folder: "/x", from: sha, to: "b".repeat(40), files: 2 }).success).toBe(true);
+    expect(BringReply.safeParse({ ok: false, reason: "dirty", folder: "/x", detail: "2 changed files", command: "git -C /x status" }).success).toBe(true);
+    expect(BringReply.safeParse({ ok: false, reason: "reset", folder: null, detail: null, command: null }).success).toBe(false);
   });
 });

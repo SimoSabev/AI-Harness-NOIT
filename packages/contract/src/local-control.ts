@@ -146,6 +146,22 @@ export const AddProjectReply = z.discriminatedUnion("ok", [
 ]);
 export type AddProjectReply = z.infer<typeof AddProjectReply>;
 
+/**
+ * D-538: "Bring into my folder" — after a job is merged into the mirror's main, a person's click fast-forwards the
+ * project's own folder (the mirror's `mandat.source`) to it, only when that is safe; otherwise nothing is touched and the
+ * reply says why, with a command the person can run themselves. Never force, stash or reset.
+ */
+const Sha40 = z.string().regex(/^[0-9a-f]{40}$/);
+const Branch = z.string().min(1).max(200).regex(/^(?!-)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._/-]+$/).refine((b) => !b.endsWith(".lock") && !b.endsWith("/") && !b.startsWith("/"), "bad branch");
+export const BringBody = z.object({ mirror: LocalPath, sha: Sha40, branch: Branch.optional() }).strict();
+export type BringBody = z.infer<typeof BringBody>;
+export const BRING_REFUSALS = ["no_source", "not_a_repo", "not_delivered", "other_branch", "dirty", "diverged", "refused"] as const;
+export const BringReply = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), folder: LocalPath, from: Sha40, to: Sha40, files: z.number().int().min(0) }).strict(),
+  z.object({ ok: z.literal(false), reason: z.enum(BRING_REFUSALS), folder: LocalPath.nullable(), detail: z.string().max(500).nullable(), command: z.string().max(8400).nullable() }).strict(),
+]);
+export type BringReply = z.infer<typeof BringReply>;
+
 // D-388 (folder picker): a browser cannot hand over an absolute folder path, so `mandat local` lists the folders of this
 // computer for the "Add project" page — names and paths of sub-folders only, never a file or its contents.
 export const FOLDER_ENTRIES = 300;
