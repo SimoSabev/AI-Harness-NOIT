@@ -150,24 +150,51 @@ export function unitWaves(units: readonly Pick<PlanUnit, "id" | "depends_on">[])
   return wave;
 }
 
-export interface UnitState { unit_id: string; ord: number; status: string; task_id: string | null; depends_on: readonly string[] }
+export interface UnitState { unit_id: string; ord: number; status: string; task_id: string | null; depends_on: readonly string[]; pilot?: boolean }
 
 /**
  * The units to start now. single: the first unit that has not passed, only when it has no task yet (one at a time, in
  * order, like М1). waves: every pending unit without a task whose dependencies all passed, in plan order, up to the
- * slots left by the units still running.
+ * slots left by the units still running. pilotOnly (D-545): while the pilot runs, only its units.
  */
-export function unitsToStart(units: readonly UnitState[], mode: JobMode, limit: number): string[] {
+export function unitsToStart(units: readonly UnitState[], mode: JobMode, limit: number, o: { pilotOnly?: boolean } = {}): string[] {
   const sorted = [...units].sort((a, b) => a.ord - b.ord);
+  const allowed = (x: UnitState) => !o.pilotOnly || x.pilot === true;
   if (mode === "single") {
     const next = sorted.find((x) => x.status !== "passed");
-    return next && !next.task_id ? [next.unit_id] : [];
+    return next && !next.task_id && allowed(next) ? [next.unit_id] : [];
   }
   const passed = new Set(sorted.filter((x) => x.status === "passed").map((x) => x.unit_id));
   const busy = sorted.filter((x) => x.task_id !== null && x.status !== "passed").length;
   const free = Math.max(0, limit - busy);
   return sorted
-    .filter((x) => x.status === "pending" && !x.task_id && x.depends_on.every((d) => passed.has(d)))
+    .filter((x) => x.status === "pending" && !x.task_id && allowed(x) && x.depends_on.every((d) => passed.has(d)))
     .slice(0, free)
     .map((x) => x.unit_id);
+}
+
+// D-545 (М2 Х5, docs/prd/heavy-process.md §5: „винаги пилот на 3–10 единици → настройка → пълно минаване“; Airbnb: 75%
+// in 4 hours, 97% in 4 days after tuning on a pilot). Large work (size l or xl) with more than PILOT_MIN units runs a
+// pilot first; its lessons become a playbook for the rest.
+export const PILOT_MIN = 3;
+export const PILOT_MAX = 10;
+
+/** how many units the pilot has: none for a plan of PILOT_MIN units or fewer; else 10%, from PILOT_MIN to PILOT_MAX */
+export function pilotSize(units: number): number {
+  if (units <= PILOT_MIN) return 0;
+  return Math.min(PILOT_MAX, Math.max(PILOT_MIN, Math.ceil(units / 10)));
+}
+
+/** the pilot: the first units in plan order whose dependencies are all in the pilot, up to size */
+export function pilotUnits(units: readonly Pick<PlanUnit, "id" | "depends_on">[], size: number): string[] {
+  const chosen = new Set<string>();
+  const out: string[] = [];
+  for (const x of units) {
+    if (out.length >= size) break;
+    if (x.depends_on.every((d) => chosen.has(d))) {
+      chosen.add(x.id);
+      out.push(x.id);
+    }
+  }
+  return out;
 }

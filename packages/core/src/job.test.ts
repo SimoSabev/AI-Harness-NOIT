@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, jobMode, oracleFilesFor, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
+import { failingCriteria, fileTags, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -94,5 +94,27 @@ describe("job mode and waves (D-541)", () => {
     expect(unitsToStart(us, "waves", 3)).toEqual(["c", "e"]);
     expect(unitsToStart(us, "waves", 1)).toEqual([]);
     expect(unitsToStart(us, "waves", 9)).toEqual(["c", "e", "f"]);
+  });
+});
+
+// D-545 (М2 Х5): a pilot on large work — the first units (closed under their dependencies) go first; the rest waits
+// until the pilot passed and its lessons are written down.
+describe("the pilot (D-545)", () => {
+  it("size: none for small plans; 10% of the units, at least 3 and at most 10", () => {
+    expect(pilotSize(3)).toBe(0);
+    expect(pilotSize(5)).toBe(3);
+    expect(pilotSize(60)).toBe(6);
+    expect(pilotSize(400)).toBe(10);
+  });
+  it("the pilot units are the first ones whose dependencies are in the pilot too", () => {
+    expect(pilotUnits([u("a", []), u("b", [], ["z"]), u("c", [], ["a"]), u("d", []), u("z", [])], 3)).toEqual(["a", "c", "d"]);
+  });
+  const s = (unit_id: string, ord: number, status: string, task_id: string | null, pilot: boolean) => ({ unit_id, ord, status, task_id, depends_on: [], pilot });
+  it("while the pilot runs only pilot units start; after it, all", () => {
+    const us = [s("a", 0, "passed", "t", true), s("b", 1, "pending", null, true), s("c", 2, "pending", null, false)];
+    expect(unitsToStart(us, "waves", 3, { pilotOnly: true })).toEqual(["b"]);
+    expect(unitsToStart(us, "waves", 3)).toEqual(["b", "c"]);
+    expect(unitsToStart(us, "single", 3, { pilotOnly: true })).toEqual(["b"]);
+    expect(unitsToStart([s("a", 0, "passed", "t", true), s("c", 1, "pending", null, false)], "single", 3, { pilotOnly: true })).toEqual([]);
   });
 });

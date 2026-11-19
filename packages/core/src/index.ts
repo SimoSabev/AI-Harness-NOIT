@@ -42,7 +42,7 @@ export type { TwinAct, TwinActInput, TwinClassStats, TwinDecision, TwinGuess, Tw
 export { PROFILE_NAMES, PROFILE_UNITS, deriveProfile, unknownAxes } from "./task-profile.js";
 export { classifyRedOnBase, d11Oracle, oracleChange } from "./oracle.js";
 export type { RedOnBase } from "./oracle.js";
-export { failingCriteria, fileTags, jobMode, oracleFilesFor, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
+export { PILOT_MAX, PILOT_MIN, failingCriteria, fileTags, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
 export type { JobEvidence, JobMode, UnitState } from "./job.js";
 export { cheatFindings, d13Cheat, toolInputs } from "./d13.js";
 export type { CheatClass, CheatFinding } from "./d13.js";
