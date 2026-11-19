@@ -4382,3 +4382,59 @@ bfb6fd5); разговор, станал работа, изчезваше от �
 остава отделно решение със свой код: правилата и профилът са различни неща (профилът носи права, MCP и скрити тестове)
 и не ги сливаме в един бутон. Тест: harness-view.test.ts `pendingProfile`. На живо: не е гледано [НП] (Docker спрян).
 Статус: решено.
+
+## D-540 Четири отворени точки от живия тест на М1: проверките на писателя, имената на комитите, вътрешните задачи, папката на човека (19.11.2026)
+Решение:
+(1) Писателят пуска проверките на проекта. Причина (записите в .mandat/runs/*/transcript.jsonl, D-538): агентът слага
+запис с heredoc (`cat >> f <<EOF`) и пускането на тестовете в ЕДНО извикване на Bash; `--permission-mode dontAsk` отказва
+цялото извикване (записът не е разрешен — правилно), агентът пише „Bash was denied in this session“ в HANDOFF и чак после,
+заради Stop hook-а `require-tests-ran`, пуска `npx vitest run`, което минава. Неуспехът на `pnpm test` (pnpm тегли
+`packageManager` на проекта) е поправен в D-538 в средите на пясъчника; тук няма втора env поправка. Поправка тук:
+- profile `checkPatterns` (packages/profile/src/checks.ts): детерминирана подразбираща се стойност само от одобрения профил —
+  командите test, test_one, lint, typecheck от слой B; `{file}`/`{files}` → `*`; при pnpm още `pnpm exec <x>` за `npx <x>` и
+  `pnpm --filter * <скрипт>` за `pnpm <скрипт>`. Команда с шел синтаксис (`&& ; | $ > ( )` и др.) никога не става правило.
+  `bashRules` дава `Bash(c *)` и `Bash(c)`. Не е тихо разширение: всяко правило идва от команда, която човекът одобри в
+  профила; всичко друго в шела остава отказано (dontAsk), deny правилата на слой C остават. За luxproof новото е
+  `pnpm --filter * test`, `pnpm exec vitest run *`, `pnpm --filter * typecheck`; за демото — `npx eslint *` (lint с
+  `{files}` досега не беше разрешен). [НП] `*` в средата на правило на Claude Code (`pnpm --filter * test`):
+  https://code.claude.com/docs/en/settings (permission rules, 19.11.2026); спайк — следващият жив рън.
+- Инструкциите (`instructions.md`): файловете се пишат с инструментите за редакция, никога с пренасочване/heredoc в шела;
+  отказано шел извикване не значи, че проверките са отказани. `HANDOFF_HINT`: първо тестовете, HANDOFF е последната стъпка.
+(2) Комитът на единица е `<тип>: <заглавие на единицата>` (gate-github `commitMessage`/`prTitle` с `title`; daemon чете
+`job_units.title`). Темата е един ред ≤ 72 знака: без водеща разметка (`#`, `>`, `-`, `*`), първото изречение на дълъг ред,
+рязане на дума с „…“; празна → `update`. Обикновените задачи пазят първия си ред (тестът „fix: Fix the VAT rounding“ е
+същият). Крайната проверка и оракулът нямат комит.
+(3) Вътрешните задачи в списъците (TaskList в работното място, дъската, прегледа, task-row) имат кратко заглавие от данните:
+„Оракул · <цел>“, „Единица u2 · <заглавие>“, „Финална проверка · <цел>“ (en/bg; чиста функция `taskTitle`,
+apps/web/src/lib/task-title.ts, ≤ 100 знака). Редът на `board()` (и `GET /api/board`) носи `internal_role`, `unit_id`,
+`unit_title`, `spec_goal` (под RLS: членовете четат job_units, jobs, oracles, conversations). Обикновените задачи са както бяха.
+(4) „Внеси в моята папка“ на доставена работа. Мястото на папката: `mandat.source` в огледалото (D-388, add-project.ts).
+Само с клик на човек: `POST /api/conversations/:id/job/bring` (сесия, CSRF, произход, `approve.level1` за проекта; само
+работа `delivered` с `merged_sha` на локален проект) → контролният endpoint на `pnpm local` `POST /projects/bring`
+(`BringBody`: огледало, комит, клон по избор; zod на двете страни) → `bringToFolder` (apps/worker/src/online/bring-to-folder.ts).
+Всичко се проверява в огледалото, преди папката да се пипне: огледалото е `MANDAT_HOME/projects/<име>.git`, комитът е в
+неговия main, папката е горната на git хранилище, на клона (по подразбиране main; detached HEAD е друг клон), чиста
+(`git status --porcelain` празен: нищо staged, променено или неследено и неигнорирано), а HEAD ѝ е предшественик на main на
+огледалото (непознат комит = собствена работа = разклонено). Тогава `fetch` + `merge --ff-only`. Иначе нищо не се прави и
+отговорът казва защо (`no_source`, `not_a_repo`, `not_delivered`, `other_branch`, `dirty`, `diverged`, `refused`) с команда,
+която човекът може да пусне сам. Никога force, stash, reset или checkout. Ред в дневника `folder_updated` само при истинско
+преместване: `{conversation, job, from, to, folder: sha256 на пътя, by}` — без път. Git тече с чиста среда (cleanGit:
+без глобален и системен config, без hooks) — затова файл, игнориран само в глобалния gitignore на човека, се брои за промяна
+(отказ, не загуба).
+Промяна на D-388: „папката само се чете“ става „папката само се чете; пише се в нея само с клика на човек ‚Внеси в моята
+папка‘, само fast-forward на чиста папка“.
+Избори при неясно: при „вече е там“ отговорът е успех без ред в дневника; клон, различен от main, се избира само с тялото
+`{branch}` (UI-то засега праща main); несвързан контролен endpoint → 503 `control_unavailable`.
+Номер: тези комити първо писаха D-538 (номерът беше зает междувременно от друга сесия); от d2ca9c9 нататък текстът е D-540.
+Тестове: profile checks.test.ts (6; формите на pnpm, шел синтаксис → нищо, npm без pnpm форми, разрешени са само правила от
+проверките, deny остава, компилаторът не добавя pnpm env, текстът на инструкциите); contract job.test.ts (тестовете преди
+HANDOFF), local-control.test.ts (+2; BringBody/BringReply); gate-github templates.test.ts (+3); worker job.test.ts (комитът на
+u1 е „fix: the 10% rule“), bring-to-folder.test.ts (7, временни git хранилища без Docker: чист ff, вече там, променен /
+неследен / staged → отказ без промяна, друг клон, разклонено, комит извън main, огледало извън projects / без source,
+папка без .git); cli local-control.test.ts (+1; маршрутът); web task-title.test.ts (3), task-title-rows.test.ts (1, PGlite под
+RLS), job-bring.test.ts (4; огледалото и комитът към контрола, дневникът без път, отказът се предава, права, само доставена,
+лошо тяло, без контрол, маршрутът с CSRF и произход), conversation-job.test.ts (+2; бутонът и резултатът).
+Образите: промените в packages/contract влизат в хеша на образите на пясъчника, филтъра и проксито (workspace deps на
+mcp-bridge, egress-gate, llm-proxy) → `pnpm mandat images build`.
+Не е проверено на живо: правилата на Claude Code за `pnpm --filter * …` в пясъчника; бутонът срещу истинската папка на luxproof.
+Статус: решено от кодера.
