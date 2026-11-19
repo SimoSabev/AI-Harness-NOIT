@@ -365,3 +365,31 @@ describe("waves: units that do not depend on each other run at once (D-541)", ()
     expect((await s.units()).map((u) => u.status)).toEqual(["passed", "passed"]);
   });
 });
+
+describe("the task harness of a job and a model per role (D-543)", () => {
+  it("each unit gets the job's map and feature list (passes from the checks only); the roles pick planner, advisor and writer", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    await s.db.query("update public.jobs set roles = $1::jsonb where id = 'j_t1'", [JSON.stringify({ planner: { agent: "claude", model: "plan-model" }, writer: { agent: "fake:honest-fix", model: "write-model" } })]);
+    const routes: { agent: string; model: string | null }[] = [];
+    const jd: JobDeps = { ...s.jd, modelFor: (r) => (routes.push({ agent: r.agent, model: r.model }), s.jd.modelFor(r)) };
+    await jobTick(jd);
+    expect(routes[0]).toEqual({ agent: "claude", model: "plan-model" });
+    await jobTick(jd);
+    expect((await s.db.query<{ agent: string; model: string | null }>("select agent, model from public.tasks where unit_id = 'u1'")).rows[0]).toEqual({ agent: "fake:honest-fix", model: "write-model" });
+    await runDaemonOnce(s.deps);
+    const f1 = Object.fromEntries((s.runs[0]?.jobFiles ?? []).map((f) => [f.path, f.data.toString("utf8")]));
+    expect(Object.keys(f1).sort()).toEqual(["README.md", "features.json"]);
+    expect(f1["README.md"]).toContain("You build unit u1");
+    expect(JSON.stringify(f1)).not.toContain(SECRET_NAME);
+    expect((JSON.parse(f1["features.json"] ?? "{}") as { features: { passes: boolean }[] }).features.map((x) => x.passes)).toEqual([false, false]);
+    await jobTick(jd);
+    await runDaemonOnce(s.deps);
+    const f2 = Object.fromEntries((s.runs[1]?.jobFiles ?? []).map((f) => [f.path, f.data.toString("utf8")]));
+    expect(f2["README.md"]).toContain("[x] u1 the 10% rule");
+    expect(f2["README.md"]).toContain("u1: did ");
+    expect((JSON.parse(f2["features.json"] ?? "{}") as { features: { passes: boolean }[] }).features.map((x) => x.passes)).toEqual([true, false]);
+    await jobTick(jd); // the final check gets no map: it has no writer
+    await runDaemonOnce(s.deps);
+    expect(s.runs[2]?.jobFiles).toBeUndefined();
+  });
+});

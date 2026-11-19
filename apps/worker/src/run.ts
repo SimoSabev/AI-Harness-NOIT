@@ -11,13 +11,14 @@ import {
   MandatError, Verdict, contractForAgent, createStreamCtx, encodeProviderNotice, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, streamEvent, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
   AgentCli,
   isKeyCli,
+  JOB_IN,
 } from "@mandat/contract";
 import type { AgentEnding, CompileTarget, Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
 import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
-import { seedHarness } from "./harness-seed.js";
+import { seedFiles, seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, subscriptionAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
@@ -81,6 +82,8 @@ export interface RunTaskInput {
   applyFiles?: { path: string; data: Buffer | null }[];
   /** E8e: calls per minute through the gate for each MCP server (catalog budget_calls_min; default 60) */
   mcpBudgets?: Record<string, number>;
+  /** D-543: a job's map and feature list for a unit's writer → /m/in/job (root, read only for the agent) */
+  jobFiles?: { path: string; data: Buffer }[];
   /** D-400: the memory block of the contract; its sha256 must be the contract's memory_hash */
   memoryBlock?: string | null;
   /** test/CLI seams (not part of the 6.14 contract) */
@@ -386,6 +389,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
         await w.text("agent-contract.txt", text);
         const c = await runSandbox(sctx, { role: "seed", user: "0:0", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "cat > /m/in/contract.txt && chmod 0444 /m/in/contract.txt"], stdin: PassThrough.from([text]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000 });
         if (c.exitCode !== 0) infra("E_DOCKER", "contract seed failed");
+        if (i.jobFiles && i.jobFiles.length > 0) await seedFiles(sctx, vol, JOB_IN, i.jobFiles.map((f) => ({ path: f.path, bytes: f.data.toString("utf8"), mode: "0444" })));
         // v5 E8а (D-311): the profile's control layer → /m/in/harness (root, read-only for the agent) before the agent
         if (i.profile) {
           // D-464: a CLI without a compiler of its own gets the harness-only layer (instructions + policy, target local)

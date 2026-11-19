@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { hashJcs, jobBranch, parseHandoff } from "@mandat/contract";
+import { Handoff, Spec, hashJcs, jobBranch, jobMapFiles, parseHandoff } from "@mandat/contract";
 import type { Verdict } from "@mandat/contract";
 import { failingCriteria, oracleFilesFor } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
@@ -21,7 +21,7 @@ export interface JobTaskRef { id: string; org_id: string; repo_id: string; attem
 interface JobRow { id: string; spec_hash: string; oracle_hash: string; base_sha: string | null; head_sha: string | null; mode: string }
 
 export type JobInputs =
-  | { ok: true; baseSha: string; hidden: HiddenTests | null; applyFiles: { path: string; data: Buffer | null }[] | null; grade: boolean; specHash: string; oracleHash: string }
+  | { ok: true; baseSha: string; hidden: HiddenTests | null; applyFiles: { path: string; data: Buffer | null }[] | null; grade: boolean; specHash: string; oracleHash: string; jobFiles: { path: string; data: Buffer }[] | null }
   | { ok: false; reason: "job_missing" | "job_branch_missing" | "oracle_unapproved" | "oracle_tampered" };
 
 export async function jobInputs(db: Db, t: JobTaskRef, o: { mirror: string }): Promise<JobInputs> {
@@ -35,11 +35,25 @@ export async function jobInputs(db: Db, t: JobTaskRef, o: { mirror: string }): P
   if (t.job_role === "final") {
     // the job's whole change over its base, verified as one change: every oracle file, and the mutation grade
     const applyFiles = await jobChangeFiles({ mirror: o.mirror, base: job.base_sha, head });
-    return { ok: true, baseSha: job.base_sha, hidden: ot.hidden, applyFiles, grade: true, ...common };
+    return { ok: true, baseSha: job.base_sha, hidden: ot.hidden, applyFiles, grade: true, jobFiles: null, ...common };
   }
   const allowed = (await db.query<{ criteria: string[] }>("select criteria from public.job_units where job_id = $1 and (status = 'passed' or unit_id = $2)", [job.id, t.unit_id])).rows.flatMap((r) => r.criteria);
   const files = oracleFilesFor(ot.hidden.files, allowed).files;
-  return { ok: true, baseSha: head, hidden: files.length > 0 ? { dir: ot.hidden.dir, files } : null, applyFiles: null, grade: false, ...common };
+  return { ok: true, baseSha: head, hidden: files.length > 0 ? { dir: ot.hidden.dir, files } : null, applyFiles: null, grade: false, jobFiles: await mapOf(db, job, t.unit_id ?? ""), ...common };
+}
+
+/** D-543: the job's map and feature list for a unit's writer (read only in the sandbox; passes only from passed units) */
+async function mapOf(db: Db, job: JobRow, unit: string): Promise<{ path: string; data: Buffer }[] | null> {
+  const c = (await db.query<{ approved_spec: unknown }>("select c.approved_spec from public.jobs j join public.conversations c on c.id = j.conversation_id where j.id = $1", [job.id])).rows[0];
+  const spec = Spec.safeParse(c?.approved_spec);
+  if (!spec.success) return null;
+  const units = (await db.query<{ unit_id: string; title: string; criteria: string[]; status: string; depends_on: string[]; handoff: unknown }>("select unit_id, title, criteria, status, depends_on, handoff from public.job_units where job_id = $1 order by ord", [job.id])).rows;
+  const handoffs = units.filter((u) => u.status === "passed").flatMap((u) => {
+    const h = Handoff.safeParse(u.handoff !== null && typeof u.handoff === "object" ? Object.fromEntries(Object.entries(u.handoff).filter(([k]) => k !== "commit")) : null);
+    return h.success ? [h.data] : [];
+  });
+  const mode = job.mode === "waves" ? "waves" : "single";
+  return jobMapFiles({ spec: spec.data, mode, units: units.map((u) => ({ id: u.unit_id, title: u.title, criteria: u.criteria, status: u.status, depends_on: u.depends_on })), current: unit, handoffs }).map((f) => ({ path: f.path, data: Buffer.from(f.data, "utf8") }));
 }
 
 const setTask = (tx: SqlClient, id: string, state: string, extra: { wait_reason: string | null; last_result: string | null; usd: number; minutes: number }) =>

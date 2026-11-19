@@ -10,7 +10,7 @@ import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import { mergeLocal } from "./deliver-local.js";
 import { startJobBranch } from "./job-branch.js";
-import { UNIT_COLS, doneBefore, insertTask, settleUnit, taskIdOf } from "./job-unit.js";
+import { UNIT_COLS, doneBefore, insertTask, routeOf, settleUnit, taskIdOf } from "./job-unit.js";
 import type { JobRow, UnitRow } from "./job-unit.js";
 
 // D-535 (М1 Х6/Х7 minimum): the job's tick. planning → the planner (a model, no sandbox, like the conversation) proposes
@@ -26,7 +26,7 @@ export const PLAN_BUDGET_USD = 0.5;
 
 
 const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.base_sha, j.head_sha,
-  j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, r.remote_url, r.provider`;
+  j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, j.roles, r.remote_url, r.provider`;
 const mirrorOf = (j: JobRow) => j.remote_url.replace(/^file:\/\//, "");
 const RUNNING = new Set<string>();
 
@@ -53,7 +53,7 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
     return "parked";
   }
   const now = d.now ?? (() => new Date());
-  const choice = d.modelFor({ id: j.id, agent: j.agent, model: j.model, budgetUsd: PLAN_BUDGET_USD, expiresAt: Math.floor(now().getTime() / 1000) + 3600 });
+  const choice = d.modelFor({ id: j.id, ...routeOf(j, "planner"), budgetUsd: PLAN_BUDGET_USD, expiresAt: Math.floor(now().getTime() / 1000) + 3600 });
   if (!choice.ok) {
     await park(d.db, j, `The planner could not start: ${choice.why}. Pick another agent or model and start again.`, { why: "no_model" });
     return "parked";

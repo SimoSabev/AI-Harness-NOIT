@@ -8,9 +8,9 @@ export const HARNESS_IN = "/m/in/harness";
 
 // Runs as root in a seed container (no network): writes each file under /m/in/harness with its mode, then every
 // directory 0555. The agent (uid 1000) can read and run them, never change them (D-311).
-const SCRIPT = `
+const script = (dir: string) => `
 const fs = require("node:fs"), path = require("node:path");
-const base = ${JSON.stringify(HARNESS_IN)};
+const base = ${JSON.stringify(dir)};
 const files = JSON.parse(fs.readFileSync(0, "utf8"));
 fs.rmSync(base, { recursive: true, force: true });
 fs.mkdirSync(base, { recursive: true });
@@ -29,13 +29,19 @@ for (const d of dirs) fs.chmodSync(d, 0o555);
 
 /** Writes Materialized.files into /m/in/harness of the run volume (before the agent phase). Returns their hash. */
 export async function seedHarness(ctx: SandboxCtx, volume: string, files: Materialized["files"]): Promise<Sha256> {
+  return harnessFilesHash(await seedFiles(ctx, volume, HARNESS_IN, files));
+}
+
+/** D-543: the same seed for another folder under /m/in (the job's map at /m/in/job): root writes, the agent only reads */
+export async function seedFiles(ctx: SandboxCtx, volume: string, dir: string, files: Materialized["files"]): Promise<Materialized["files"]> {
+  if (!/^\/m\/in\/[a-z]+$/.test(dir)) throw new MandatError("E_DOCKER", "seed: bad folder");
   const parsed = Materialized.shape.files.parse(files);
   const res = await runSandbox(ctx, {
     role: "seed", user: "0:0", volume, network: "none", env: { phase: "none" },
-    cmd: ["node", "-e", SCRIPT], stdin: PassThrough.from([JSON.stringify(parsed)]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000,
+    cmd: ["node", "-e", script(dir)], stdin: PassThrough.from([JSON.stringify(parsed)]) as unknown as NodeJS.ReadableStream, timeoutMs: 60_000,
   });
   if (res.exitCode !== 0) throw new MandatError("E_DOCKER", "harness seed failed", { exit: res.exitCode });
-  return harnessFilesHash(parsed);
+  return parsed;
 }
 
 /** The hash of the control layer as seeded (SH2-CX compares it with what is there after the agent). */

@@ -412,7 +412,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
         ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
-        ...(hidden ? { hidden } : {}), ...(hidden && (job?.ok ? job.grade : t.oracle_hash) ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: true } : {}),
+        ...(job?.ok && job.jobFiles ? { jobFiles: job.jobFiles } : {}), ...(hidden ? { hidden } : {}), ...(hidden && (job?.ok ? job.grade : t.oracle_hash) ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: true } : {}),
         ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),
         ...(applyFiles ? { applyFiles } : {}),

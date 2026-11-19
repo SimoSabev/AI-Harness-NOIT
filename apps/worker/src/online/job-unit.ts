@@ -1,5 +1,6 @@
-import { ADVISOR_SYSTEM, Handoff, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, rescueTaskText, unitTaskText } from "@mandat/contract";
-import type { Spec } from "@mandat/contract";
+import { ADVISOR_SYSTEM, Handoff, JobRoles, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, rescueTaskText, unitTaskText } from "@mandat/contract";
+import { roleRoute } from "@mandat/contract";
+import type { JobRole, Spec } from "@mandat/contract";
 import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { inTransaction } from "./db.js";
@@ -15,7 +16,7 @@ import { selfMoveOf } from "./self-finish.js";
 export interface JobRow {
   id: string; org_id: string; repo_id: string; conversation_id: string; spec_hash: string; oracle_hash: string; type: string; agent: string; model: string | null;
   status: string; mode: string; base_sha: string | null; head_sha: string | null; converge_round: number; final_task_id: string | null; seal: unknown; seal_hash: string | null; created_by: string | null;
-  remote_url: string; provider: string;
+  remote_url: string; provider: string; roles: unknown;
 }
 export interface UnitRow {
   unit_id: string; ord: number; title: string; criteria: string[]; depends_on: string[]; status: string; task_id: string | null; handoff: unknown; failing: string[];
@@ -26,12 +27,18 @@ export const UNIT_COLS = "unit_id, ord, title, criteria, depends_on, status, tas
 /** the advisor's spend per rescue (the proxy counts it like the planner's) */
 export const ADVISE_BUDGET_USD = 0.3;
 
+/** D-543: the agent and model of a role (the job's own when the role has no choice of its own) */
+export function routeOf(j: Pick<JobRow, "agent" | "model" | "roles">, role: JobRole): { agent: string; model: string | null } {
+  const r = JobRoles.safeParse(j.roles ?? {});
+  return roleRoute(j, r.success ? r.data : null, role);
+}
+
 export const taskIdOf = (job: string, tail: string): string => `t_j${job.slice(2)}_${tail}`;
 
 export async function insertTask(db: Db, j: JobRow, o: { id: string; text: string; unit: string | null; role: "unit" | "final"; attemptsMax?: number }): Promise<void> {
   await db.query(
     "insert into public.tasks (id, org_id, repo_id, type, agent, model, text, created_by, spec_hash, oracle_hash, job_id, unit_id, job_role, attempts_max) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10, $11, $12, $13, $14) on conflict (id) do nothing",
-    [o.id, j.org_id, j.repo_id, j.type, j.agent, j.model, o.text, j.created_by, j.spec_hash, j.oracle_hash, j.id, o.unit, o.role, o.attemptsMax ?? 3],
+    [o.id, j.org_id, j.repo_id, j.type, o.role === "unit" ? routeOf(j, "writer").agent : j.agent, o.role === "unit" ? routeOf(j, "writer").model : j.model, o.text, j.created_by, j.spec_hash, j.oracle_hash, j.id, o.unit, o.role, o.attemptsMax ?? 3],
   );
 }
 
@@ -84,7 +91,7 @@ async function reland(db: Db, j: JobRow, u: UnitRow, why: string): Promise<UnitR
 
 async function adviceFor(d: JobDeps, j: JobRow, spec: Spec, u: UnitRow): Promise<string | null> {
   const now = d.now ?? (() => new Date());
-  const choice = d.modelFor({ id: j.id, agent: j.agent, model: j.model, budgetUsd: ADVISE_BUDGET_USD, expiresAt: Math.floor(now().getTime() / 1000) + 3600 });
+  const choice = d.modelFor({ id: j.id, ...routeOf(j, "advisor"), budgetUsd: ADVISE_BUDGET_USD, expiresAt: Math.floor(now().getTime() / 1000) + 3600 });
   if (!choice.ok) return null;
   const reasons = (await d.db.query<{ reasons: string[] }>("select reasons from public.verdicts where task_id = $1 order by created_at desc limit 1", [u.task_id])).rows[0]?.reasons ?? [];
   const notes = handoffOf(u.handoff).map((h) => `done: ${h.done}; deviations: ${h.deviations.join("; ") || "-"}; risks: ${h.risks.join("; ") || "-"}`).join("\n");
