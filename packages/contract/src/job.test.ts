@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADVISOR_SYSTEM, PLAYBOOK_SYSTEM, playbookUser, withPlaybook, JOB_PARALLEL_MAX, RESCUE_MAX, RESCUE_TRIES, UnitStatus, advisorUser, rescueTaskText, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
+import { ADVISOR_SYSTEM, withFiles, PLAYBOOK_SYSTEM, playbookUser, withPlaybook, JOB_PARALLEL_MAX, RESCUE_MAX, RESCUE_TRIES, UnitStatus, advisorUser, rescueTaskText, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
 import type { Spec } from "./index.js";
 
 // D-535: the job's shared pieces — the planner's answer, the handoff line, a unit's task text and its retry note.
@@ -109,5 +109,21 @@ describe("the pilot's playbook (D-545)", () => {
     expect(t).toContain("Keep the old export.");
     expect(withPlaybook(base, null)).toBe(base);
     expect(withPlaybook(base, "x".repeat(9000)).length).toBeLessThanOrEqual(JOB_TEXT_MAX);
+  });
+});
+
+describe("migration sites in the plan (D-546)", () => {
+  it("a migration's planner is asked for sites, files and skip; others are not", () => {
+    expect(plannerSystem("single", { migration: true })).toContain('"sites"');
+    expect(plannerSystem("waves", { migration: true })).toContain("Every found file must be in exactly one unit or in skip");
+    expect(plannerSystem("single")).not.toContain('"sites"');
+  });
+  it("the proposal takes sites, unit files and skip; paths stay inside the project", () => {
+    const ok = PlanProposal.safeParse({ units: [{ id: "u1", title: "t", criteria: ["AC-1"], depends_on: [], files: ["src/a.ts"] }], sites: { match: "require[(]" }, skip: [{ file: "src/b.ts", why: "done" }] });
+    expect(ok.success).toBe(true);
+    for (const bad of ["../x.ts", "/etc/passwd", "a/../../b"]) expect(PlanProposal.safeParse({ units: [{ id: "u1", title: "t", criteria: [], depends_on: [], files: [bad] }] }).success).toBe(false);
+    expect(PlanProposal.safeParse({ units: [], skip: [{ file: "a.ts", why: "later" }] }).success).toBe(false);
+    expect(withFiles("text", ["src/a.ts", "src/b.ts"])).toBe("text\nFiles of this unit: src/a.ts, src/b.ts");
+    expect(withFiles("text", [])).toBe("text");
   });
 });

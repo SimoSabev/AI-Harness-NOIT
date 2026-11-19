@@ -27,14 +27,23 @@ export type JobStatus = z.infer<typeof JobStatus>;
 export const UnitStatus = z.enum(["pending", "running", "passed", "failed", "blocked", "parked"]);
 
 /** what the planner answers: units in order ({id, title, criteria, depends_on}); the status is the server's */
+/** D-546: a repo path a unit works on (relative, no "..") */
+export const SitePath = z.string().trim().min(1).max(300).refine((p) => !p.startsWith("/") && !p.split("/").includes("..") && !p.includes("\\"), "bad path");
 export const PlanUnit = z
-  .object({ id: WorkUnitId, title: z.string().trim().min(1).max(200), criteria: z.array(CriterionId).max(200), depends_on: z.array(WorkUnitId).max(200) })
+  .object({ id: WorkUnitId, title: z.string().trim().min(1).max(200), criteria: z.array(CriterionId).max(200), depends_on: z.array(WorkUnitId).max(200), files: z.array(SitePath).max(200).optional() })
   .strict();
 export type PlanUnit = z.infer<typeof PlanUnit>;
-export const PlanProposal = z.object({ units: z.array(PlanUnit).max(JOB_UNITS_MAX) }).strict();
+/** D-546: why a found site is not a unit's: already done, not relevant, or for a person */
+export const SiteSkipWhy = z.enum(["done", "irrelevant", "human"]);
+export const SiteSkip = z.object({ file: SitePath, why: SiteSkipWhy }).strict();
+export type SiteSkip = z.infer<typeof SiteSkip>;
+/** D-546: how the server finds the sites of a migration: an extended regex for git grep (deterministic, with surplus) */
+export const SiteQuery = z.object({ match: z.string().min(1).max(200) }).strict();
+export const SITES_MAX = 2000;
+export const PlanProposal = z.object({ units: z.array(PlanUnit).max(JOB_UNITS_MAX), sites: SiteQuery.optional(), skip: z.array(SiteSkip).max(SITES_MAX).optional() }).strict();
 export type PlanProposal = z.infer<typeof PlanProposal>;
 
-export const PlanProblemKind = z.enum(["no_units", "bad_schema", "duplicate_unit", "unknown_criterion", "uncovered_criterion", "unknown_dependency", "forward_dependency", "cycle"]);
+export const PlanProblemKind = z.enum(["no_units", "bad_schema", "duplicate_unit", "unknown_criterion", "uncovered_criterion", "unknown_dependency", "forward_dependency", "cycle", "missing_sites", "bad_sites", "uncovered_site", "site_twice", "too_many_sites"]);
 export const PlanProblem = z.object({ kind: PlanProblemKind, id: z.string().max(200) }).strict();
 export type PlanProblem = z.infer<typeof PlanProblem>;
 
@@ -60,8 +69,18 @@ export const PLANNER_SYSTEM_WAVES = [
   "and avoid two independent units changing the same lines.",
 ].join("\n");
 
-export function plannerSystem(mode: "single" | "waves"): string {
-  return mode === "waves" ? PLANNER_SYSTEM_WAVES : PLANNER_SYSTEM;
+// D-546 (М2 Х5, docs/prd/heavy-process.md §5 „местата се намират детерминистично с излишък и се категоризират“): a
+// migration's planner names how to find its sites; the server finds them in the code and every found file must be in
+// exactly one unit's files or skipped with a category.
+export const PLANNER_MIGRATION = [
+  "This is a migration. Also give \"sites\": {\"match\": \"<an extended regex>\"} that finds every file to migrate (git grep -E over the project; better too many than too few),",
+  "give every unit \"files\": [\"path\", ...], and list each found file that no unit takes in \"skip\": [{\"file\": \"path\", \"why\": \"done\" | \"irrelevant\" | \"human\"}].",
+  "Every found file must be in exactly one unit or in skip. Mandat sends you the files it found that you missed.",
+].join("\n");
+
+export function plannerSystem(mode: "single" | "waves", o: { migration?: boolean } = {}): string {
+  const base = mode === "waves" ? PLANNER_SYSTEM_WAVES : PLANNER_SYSTEM;
+  return o.migration ? `${base}\n${PLANNER_MIGRATION}` : base;
 }
 
 export function plannerUser(s: Spec, problems: readonly PlanProblem[]): string {
@@ -204,6 +223,13 @@ export function withPlaybook(text: string, playbook: string | null): string {
   if (!playbook || playbook.trim() === "") return text;
   const tail = `\nPlaybook from the pilot (lessons of the first units of this job; weigh them):\n${clip(playbook.trim(), PLAYBOOK_MAX)}`;
   return `${clip(text, JOB_TEXT_MAX - tail.length)}${tail}`.slice(0, JOB_TEXT_MAX);
+}
+
+/** D-546: a migration unit's text names its files (clipped to the text's bound) */
+export function withFiles(text: string, files: readonly string[]): string {
+  if (files.length === 0) return text;
+  const tail = clip(`Files of this unit: ${files.join(", ")}`, 1500);
+  return `${clip(text, JOB_TEXT_MAX - tail.length - 1)}\n${tail}`;
 }
 
 /** the approve body of a sealed job: the seal's hash the person saw */
