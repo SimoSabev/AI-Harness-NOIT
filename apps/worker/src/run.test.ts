@@ -114,7 +114,8 @@ describe("runTask (fake docker)", () => {
     const on = await go({ docker: new FakeDocker({ head: honest }), x: { reviewCall }, i: { review: "advisory" } });
     expect(on.r.verdict?.result).toBe("UNKNOWN");
     expect(on.r.verdict?.reasons).toContain("REVIEW:high:src/cart.ts");
-    expect(calls).toBe(1);
+    // D-544: the review, then the second filter for its one high finding (an unclear answer keeps it high)
+    expect(calls).toBe(2);
   });
   it("честна поправка → VERIFIED, 3 реда в дневника, verify-log ok", async () => {
     const { r, ledgerLines, events } = await go({ docker: new FakeDocker({ head: honest }) });

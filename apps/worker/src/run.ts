@@ -18,6 +18,7 @@ import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profil
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
 import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
+import { cheatEvidence } from "./cheat.js";
 import { seedFiles, seedHarness } from "./harness-seed.js";
 import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, subscriptionAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
@@ -839,12 +840,18 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     }
     // E9б (AC-5.5): the advisor reads the verified change; it can only make a human look (REVIEW unknown), never lift
     const reviewed = diffPatch as Buffer | null; // assigned inside the export step's closure
+    // D-544: the cheat monitor reads the change and the agent's tool calls; a sign makes a person look, never fails
+    if (reviewed && !evd.has("INFRA") && evd.get("EXPORT")?.status === "pass") {
+      const cheat = cheatEvidence({ diff: reviewed.toString("utf8"), transcript: path.join(runDir, "transcript.jsonl"), oracle: i.oracle === true, hidden: (i.hidden?.files.length ?? 0) > 0 });
+      if (cheat) set(cheat);
+    }
     if (i.review === "advisory" && x.reviewCall && reviewed && reviewed.length > 0 && !evd.has("INFRA") && evd.get("EXPORT")?.status === "pass") {
-      set(await reviewChange({ diff: reviewed.toString("utf8"), task: contract.text, call: x.reviewCall }));
+      // D-544: the same model checks each high finding again on its own (the second filter against false alarms)
+      set(await reviewChange({ diff: reviewed.toString("utf8"), task: contract.text, call: x.reviewCall, confirm: x.reviewCall }));
     }
     const ORDER = ["EXPORT", "INTEGRITY", "D10.lockfile", "D1.base_tests", "D2.inventory", "D3.protected", "D4.contract", "MUST_PASS", "D11.mutation", "CANARY"] as const;
     const evidence: Evidence[] = ORDER.map((d) => evd.get(d) ?? na(d));
-    for (const extra of ["D5.hidden", "D11.oracle", "D8.static", "D12.ui", "REVIEW", "AGENT", "INFRA"] as const) {
+    for (const extra of ["D5.hidden", "D11.oracle", "D8.static", "D12.ui", "D13.cheat", "REVIEW", "AGENT", "INFRA"] as const) {
       const e = evd.get(extra);
       if (e) evidence.push(e);
     }
