@@ -2,6 +2,7 @@ import type { HarnessProfile, HookSpec, Materialized } from "@mandat/contract";
 import { HARNESS_ALWAYS, HOOKS, harnessHooks, instructions, policyJson, rulesFor } from "./common.js";
 import type { CompileCtx, Files } from "./common.js";
 import { RULES, ruleKind } from "./rules.js";
+import { checkEnv } from "./checks.js";
 
 // v5 т. 4.1 [Ф openai-codex.md §2, §4–§6 @ c260087]: CODEX_HOME (tmpfs) is seeded from /m/in/harness/codex; the worker
 // hashes the seed after the run (SH2-CX). [НП] the exact hooks.json shape and the skills path → the live SH2-CX.
@@ -54,7 +55,7 @@ export function compileCodex(p: HarnessProfile, ctx: CompileCtx): Materialized {
   return {
     files: files.sort((a, b) => (a.path < b.path ? -1 : 1)),
     argv: ["-c", 'sandbox_mode="workspace-write"', "-c", 'approval_policy="never"', "-c", "project_doc_max_bytes=0"],
-    env: { CODEX_HOME: CODEX_HOME_DIR },
+    env: { CODEX_HOME: CODEX_HOME_DIR, ...checkEnv(p) },
     enforced_by_harness: enforced,
     unsupported,
   };

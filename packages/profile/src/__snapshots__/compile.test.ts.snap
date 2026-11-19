@@ -62,6 +62,7 @@ Reads the diff and reports problems; never writes.
     "allow": [
       "Bash(npx vitest run *)",
       "Bash(npx vitest run)",
+      "Bash(npx eslint *)",
       "Bash(npx tsc --noEmit *)",
       "Bash(npx tsc --noEmit)",
       "mcp__mandat__mandat_status",
@@ -149,6 +150,7 @@ A small shop: cart, discounts, checkout.
 ## Running the checks
 - Run \`npx vitest run\` before you finish and make it pass.
 - Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
+- Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.
 
 ## Boundaries
 - Do not change tests for a bugfix.
@@ -282,6 +284,7 @@ A small shop: cart, discounts, checkout.
 ## Running the checks
 - Run \`npx vitest run\` before you finish and make it pass.
 - Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
+- Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.
 
 ## Boundaries
 - Do not change tests for a bugfix.
@@ -374,6 +377,7 @@ A small shop: cart, discounts, checkout.
 ## Running the checks
 - Run \`npx vitest run\` before you finish and make it pass.
 - Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
+- Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.
 
 ## Boundaries
 - Do not change tests for a bugfix.

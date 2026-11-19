@@ -2,6 +2,7 @@ import type { HarnessProfile, Materialized, ToolRule } from "@mandat/contract";
 import { HARNESS_ALWAYS, HARNESS_DIR, instructions, policyJson, rulesFor } from "./common.js";
 import type { CompileCtx, Files } from "./common.js";
 import { RULES, ruleKind } from "./rules.js";
+import { checkEnv } from "./checks.js";
 
 // E9в (D-429, D-431): Gemini CLI's control layer, read from github.com/google-gemini/gemini-cli docs (main b8fa817,
 // 28.10.2026; D-423). `--policy` loads the TOML rules (docs/reference/policy-engine.md); `--include-directories
@@ -51,7 +52,7 @@ export function compileGemini(p: HarnessProfile, ctx: CompileCtx): Materialized 
   return {
     files: files.sort((a, b) => (a.path < b.path ? -1 : 1)),
     argv: ["--policy", `${GEMINI_DIR}/policies`, "--include-directories", HARNESS_DIR],
-    env: {},
+    env: checkEnv(p),
     enforced_by_harness: enforced,
     unsupported,
   };
