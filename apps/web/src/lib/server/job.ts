@@ -50,7 +50,7 @@ export async function jobView(sql: Sql, conversation: string, spec: Spec | null)
   const unchecked = seal.success ? seal.data.unchecked : [];
   return {
     id: j.id, status: JobStatus.catch("failed").parse(j.status), question: j.question, units,
-    current: units.find((u) => u.status === "running" || u.status === "failed" || u.status === "blocked")?.id ?? null,
+    current: units.find((u) => u.status === "running" || u.status === "failed" || u.status === "blocked" || u.status === "parked")?.id ?? null,
     final_task_id: j.final_task_id,
     seal: seal.success && j.seal_hash ? { hash: j.seal_hash, verdict: seal.data.verdict, result_ref: seal.data.result_ref, checked: all.filter((c) => !unchecked.some((u) => u.startsWith(`${c}:`))), unchecked } : null,
     merged_sha: j.merged_sha,

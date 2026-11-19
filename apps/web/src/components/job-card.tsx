@@ -12,8 +12,8 @@ import { btn } from "./ui";
 // D-540: "Bring into my folder" — the person's click moves their own folder forward to the merged change (or says why not)
 export interface JobActions { canApprove: boolean; busy: boolean; onApprove: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }
 
-const UNIT_TONE: Record<string, string> = { passed: "text-ok", failed: "text-warn", blocked: "text-warn", running: "text-ink", pending: "text-mute" };
-const UNIT_STATUSES = ["pending", "running", "passed", "failed", "blocked"] as const;
+const UNIT_TONE: Record<string, string> = { passed: "text-ok", failed: "text-warn", blocked: "text-warn", parked: "text-warn", running: "text-ink", pending: "text-mute" };
+const UNIT_STATUSES = ["pending", "running", "passed", "failed", "blocked", "parked"] as const;
 const unitStatus = (s: string): (typeof UNIT_STATUSES)[number] => UNIT_STATUSES.find((x) => x === s) ?? "blocked";
 
 export function JobCard({ job, t, a }: { job: JobView; t: T; a: JobActions }) {

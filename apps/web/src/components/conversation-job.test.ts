@@ -39,6 +39,10 @@ describe("the job in the thread (D-535)", () => {
     expect(html).not.toContain("chat.job.approve<");
     expect(await render({})).not.toContain("chat.job");
   });
+  it("a unit that waits for a person shows as waiting for you (D-542)", async () => {
+    const html = await render({ job: job({ units: [{ id: "u1", title: "the 10% rule", criteria: ["AC-1"], status: "parked", result: "FAILED", failing: ["AC-1"], task_id: "t_a" }] }) });
+    expect(html).toContain("chat.job.unit.parked");
+  });
   it("parked: the question", async () => {
     const html = await render({ job: job({ status: "parked", question: "Unit u2 stopped after 3 attempt(s). Criteria still failing: AC-3." }) });
     expect(html).toContain("chat.job.question");

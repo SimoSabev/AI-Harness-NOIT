@@ -1612,6 +1612,7 @@ export const bg: Record<Key, string> = {
   "chat.job.unit.passed": "мина",
   "chat.job.unit.failed": "не мина",
   "chat.job.unit.blocked": "спря",
+  "chat.job.unit.parked": "чака теб",
   "chat.job.failing": "Още не минават: {ids}",
   "chat.job.openUnit": "Отвори задачата на единицата",
   "chat.job.question": "Въпрос към теб",

@@ -1636,6 +1636,7 @@ export const en = {
   "chat.job.unit.passed": "passed",
   "chat.job.unit.failed": "failed",
   "chat.job.unit.blocked": "stopped",
+  "chat.job.unit.parked": "waits for you",
   "chat.job.failing": "Still failing: {ids}",
   "chat.job.openUnit": "Open the unit's task",
   "chat.job.question": "Question for you",
