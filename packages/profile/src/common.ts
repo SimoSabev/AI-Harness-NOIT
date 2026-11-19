@@ -35,7 +35,7 @@ export function instructions(p: HarnessProfile): string {
   if (cmds.length) {
     out.push("## Running the checks", ...(test ? [`- Run \`${test}\` before you finish and make it pass.`] : []));
     out.push("- Run each check on its own, not chained with `&&`, `;` or `|`: the sandbox allows these commands only as written.");
-    // D-538: in the live test a writer put a heredoc write and the test run into one shell call, was refused, and
+    // D-540: in the live test a writer put a heredoc write and the test run into one shell call, was refused, and
     // reported "Bash was denied in this session" — the checks themselves were allowed all along
     out.push("- Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.", "");
   }

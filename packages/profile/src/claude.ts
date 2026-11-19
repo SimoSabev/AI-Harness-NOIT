@@ -2,7 +2,7 @@ import type { HarnessProfile, HookSpec, Materialized } from "@mandat/contract";
 import { HARNESS_ALWAYS, HARNESS_DIR, HOOKS, harnessHooks, instructions, policyJson, rulesFor, uniq } from "./common.js";
 import type { CompileCtx, Files } from "./common.js";
 import { RULES, claudeRule, claudeToolName, ruleKind } from "./rules.js";
-import { bashRules, checkEnv, checkPatterns } from "./checks.js";
+import { bashRules, checkPatterns } from "./checks.js";
 
 const EVENT: Record<HookSpec["event"], string> = { pre_tool: "PreToolUse", post_tool: "PostToolUse", stop: "Stop", subagent_stop: "SubagentStop", session_start: "SessionStart" };
 const command = (h: HookSpec) => [`node ${HOOKS}/${h.script}.mjs`, ...Object.entries(h.args).map(([k, v]) => `--${k}=${JSON.stringify(v)}`)].join(" ");
@@ -14,7 +14,7 @@ export function compileClaude(p: HarnessProfile, ctx: CompileCtx): Materialized 
   const perms = { allow: [] as string[], deny: [] as string[], ask: [] as string[] };
   for (const r of native) perms[r.decision].push(...claudeRule(r.tool));
   // --permission-mode dontAsk refuses whatever is not pre-approved: the profile's MCP tools and its own commands are
-  // allowed (D-538: the checks of layer B in the forms the project needs — and nothing else)
+  // allowed (D-540: the checks of layer B in the forms the project needs — and nothing else)
   for (const c of checkPatterns(p)) perms.allow.push(...bashRules(c));
   for (const m of p.layers.e.mcp) perms.allow.push(...(m.enabled_tools ? m.enabled_tools.map((t) => `mcp__${m.name}__${t}`) : [`mcp__${m.name}`]));
   const hooks: Record<string, { matcher?: string; hooks: { type: "command"; command: string; timeout: number }[] }[]> = {};
@@ -51,7 +51,6 @@ export function compileClaude(p: HarnessProfile, ctx: CompileCtx): Materialized 
       CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(g.max_subagents),
       CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: String(g.max_depth),
       ...(p.layers.d.some((h) => h.event === "stop") ? { CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: "3" } : {}),
-      ...checkEnv(p),
     },
     enforced_by_harness: enforced,
     unsupported,

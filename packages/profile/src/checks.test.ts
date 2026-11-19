@@ -3,7 +3,7 @@ import type { HarnessProfile, ProfileLayersInput } from "@mandat/contract";
 import { describe, expect, it } from "vitest";
 import { checkPatterns, compileProfile } from "./index.js";
 
-// D-538 (live test 18.11): a writer of a pnpm monorepo must be able to run the project's own checks in the sandbox —
+// D-540 (live test 18.11): a writer of a pnpm monorepo must be able to run the project's own checks in the sandbox —
 // `pnpm test`, the runner itself and per-package forms — and nothing else the profile did not name.
 const luxproof = (): HarnessProfile => {
   const l = demoProfileLayers();
@@ -18,7 +18,7 @@ const ctx = { runId: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", subjects: ["agent:claude", 
 const settings = (p: HarnessProfile) =>
   JSON.parse(compileProfile(p, "claude", ctx).files.find((f) => f.path === "claude/settings.json")?.bytes ?? "{}") as { permissions: { allow: string[]; deny: string[] } };
 
-describe("checkPatterns (D-538)", () => {
+describe("checkPatterns (D-540)", () => {
   it("the profile's check commands, their placeholders as *, the runner via pnpm exec and per package via --filter", () => {
     expect(checkPatterns(luxproof())).toEqual([
       "pnpm test",
@@ -40,7 +40,7 @@ describe("checkPatterns (D-538)", () => {
   });
 });
 
-describe("compiled settings for a work task (D-538)", () => {
+describe("compiled settings for a work task (D-540)", () => {
   const s = settings(luxproof());
   it("allow the test command and its pnpm forms", () => {
     expect(s.permissions.allow).toEqual(expect.arrayContaining(["Bash(pnpm test)", "Bash(pnpm test *)", "Bash(pnpm --filter * test)", "Bash(pnpm --filter * test *)", "Bash(npx vitest run *)", "Bash(pnpm exec vitest run *)", "Bash(pnpm typecheck)"]));
@@ -53,12 +53,8 @@ describe("compiled settings for a work task (D-538)", () => {
     expect(bash).not.toContain("Bash(*)");
     expect(s.permissions.deny).toEqual(expect.arrayContaining(["Bash(git push *)", "Bash(curl *)"]));
   });
-  it("pnpm runs offline in the agent phase: it keeps the image's pnpm instead of fetching the repo's packageManager", () => {
-    for (const t of ["claude", "codex", "gemini", "local"] as const) {
-      expect(compileProfile(luxproof(), t, ctx).env).toMatchObject({ PNPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS: "false", NPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS: "false" });
-    }
-    const npm = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
-    expect(compileProfile(npm, "claude", ctx).env).not.toHaveProperty("PNPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS");
+  it("the compiler adds no pnpm env: the sandbox's agent and test envs keep the image's pnpm (D-538)", () => {
+    for (const tg of ["claude", "codex", "gemini", "local"] as const) expect(Object.keys(compileProfile(luxproof(), tg, ctx).env).some((k) => /PACKAGE_MANAGER/i.test(k))).toBe(false);
   });
   it("the instructions say: files with Edit/Write, a refused shell call is not a refused check, the handoff after the checks", () => {
     const md = compileProfile(luxproof(), "claude", ctx).files.find((f) => f.path === "instructions.md")?.bytes ?? "";

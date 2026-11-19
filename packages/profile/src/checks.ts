@@ -1,6 +1,6 @@
 import type { HarnessProfile } from "@mandat/contract";
 
-// D-538 (live test 18.11): the commands a writer may run in the sandbox are the profile's own checks (layer B), in the
+// D-540 (live test 18.11): the commands a writer may run in the sandbox are the profile's own checks (layer B), in the
 // forms a pnpm monorepo needs. A deterministic default, derived from the approved profile only: nothing else gets an
 // allow rule, and a command with shell syntax never does (Claude Code splits && ; | itself; a rule must stay a prefix).
 const CHECK_KEYS = ["test", "test_one", "lint", "typecheck"] as const;
@@ -34,11 +34,3 @@ export function checkPatterns(p: HarnessProfile): string[] {
 /** A pattern as Claude Code Bash rules: the command alone and with more arguments ([НП] the inner * of --filter). */
 export const bashRules = (pattern: string): string[] => (pattern.endsWith("*") ? [`Bash(${pattern})`] : [`Bash(${pattern} *)`, `Bash(${pattern})`]);
 
-/**
- * pnpm in the agent phase has no network: it must keep the image's pnpm and never fetch the repo's `packageManager`
- * (the install phase passes --config.manage-package-manager-versions=false for the same reason). Spike 19.11.2026: pnpm
- * 12.14.0 reads PNPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS; NPM_CONFIG_ is the name older pnpm reads.
- */
-export function checkEnv(p: HarnessProfile): Record<string, string> {
-  return pnpmOf(p) ? { PNPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS: "false", NPM_CONFIG_MANAGE_PACKAGE_MANAGER_VERSIONS: "false" } : {};
-}

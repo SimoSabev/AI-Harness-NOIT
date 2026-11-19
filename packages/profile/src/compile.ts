@@ -6,7 +6,6 @@ import { compileGemini } from "./gemini.js";
 import { HARNESS_ALWAYS, instructions, policyJson, rulesFor } from "./common.js";
 import type { CompileCtx } from "./common.js";
 import { RULES, ruleKind } from "./rules.js";
-import { checkEnv } from "./checks.js";
 
 /** v5 т. 4.1: a pure function from the profile to one agent's control layer (files under /m/in/harness, argv, env). */
 export function compileProfile(profile: HarnessProfile, target: CompileTarget, ctx: CompileCtx): Materialized {
@@ -22,7 +21,7 @@ export function compileProfile(profile: HarnessProfile, target: CompileTarget, c
       { path: "policy.json", bytes: policyJson(p, ctx), mode: "0444" },
     ],
     argv: [],
-    env: checkEnv(p),
+    env: {},
     enforced_by_harness: [
       ...rules.filter((r) => RULES[ruleKind(r.tool)][target] === "harness").map((r) => ({ rule: r.tool, why: ruleKind(r.tool) === "bash" ? "no network and no credentials in the sandbox; only the harness delivers" : "the egress gate and D4" })),
       ...HARNESS_ALWAYS,

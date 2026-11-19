@@ -3,7 +3,7 @@ export { CODEX_HOME_DIR } from "./codex.js";
 export { GEMINI_DIR, geminiPolicyRule } from "./gemini.js";
 export { HARNESS_DIR, HOOKS, instructions, policyJson, rulesFor } from "./common.js";
 export type { CompileCtx } from "./common.js";
-export { bashRules, checkEnv, checkPatterns } from "./checks.js";
+export { bashRules, checkPatterns } from "./checks.js";
 export { RULES, claudeRule, claudeToolName, ruleKind } from "./rules.js";
 export type { RuleKind, Support } from "./rules.js";
 export { applyPermissions, forbidAtNight, grantOnce, opensDangerous, parseAsks } from "./permissions.js";
