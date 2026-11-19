@@ -89,3 +89,9 @@ describe("a unit that stopped gets advice and two fresh tries (D-542)", () => {
     expect(UnitStatus.parse("parked")).toBe("parked");
   });
 });
+
+describe("the unit points to the job's map (D-543)", () => {
+  it("names the read-only folder", () => {
+    expect(unitTaskText(spec, { id: "u1", title: "t", criteria: ["AC-1"] }, [])).toContain("/m/in/job (read only)");
+  });
+});

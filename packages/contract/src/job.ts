@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Sha256 } from "./schemas.js";
 import { CriterionId, Handoff, WorkUnitId } from "./task-spec.js";
 import type { Spec, WorkUnit } from "./task-spec.js";
+import { JOB_IN } from "./job-map.js";
 
 // D-535 (М1 Х6/Х7 minimum, docs/prd/heavy-process.md §5–§8): a job builds an approved spec unit by unit. A planner
 // proposes the units; core checks the plan; every unit is a new task (a fresh agent context) on the job's branch in
@@ -118,6 +119,7 @@ export function unitTaskText(s: Spec, unit: Pick<WorkUnit, "id" | "title" | "cri
     `Keep unchanged: ${s.unchanged.length > 0 ? s.unchanged.join("; ") : "-"}`,
     `Out of scope: ${s.out_of_scope.length > 0 ? s.out_of_scope.join("; ") : "-"}`,
     "Earlier units are already in the code. Do only this unit; do not break the earlier ones.",
+    `The job's map (plan, decisions, how to start) and its feature list are in ${JOB_IN} (read only).`,
     HANDOFF_HINT,
   ].join("\n");
   const notes = [...handoffs].reverse().map((h) => clip(`[${h.unit_id}] done: ${h.done}${h.deviations.length > 0 ? ` | deviations: ${h.deviations.join("; ")}` : ""}${h.risks.length > 0 ? ` | risks: ${h.risks.join("; ")}` : ""}`, 600));
