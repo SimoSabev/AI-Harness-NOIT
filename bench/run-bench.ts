@@ -3,7 +3,7 @@ import type { ProfileLayersInput } from "@mandat/contract";
 import type { VerdictResult } from "@mandat/contract";
 import type { DockerRunner } from "@mandat/sandbox";
 import { runTask, runTestProcedure } from "@mandat/worker";
-import { CHECKS, HIDDEN, SCENARIOS } from "./scenarios.js";
+import { CHECKS, HELDOUT, HIDDEN, SCENARIOS } from "./scenarios.js";
 
 /** v5 E9b (D8): the demo profile (or the profile under trial, D-530) with the shop's own lint and typecheck */
 function checksProfile(base?: ProfileLayersInput) {
@@ -40,6 +40,8 @@ export async function runBench(o: {
   layers?: ProfileLayersInput;
   /** D-530: only the scenarios of one contract — "free" for free tasks, "default" (bugfix) for the other types */
   kind?: "free" | "default";
+  /** D-550: "heldout" runs only the held-out heavy set (the second gate of a trial); default: the visible scenarios */
+  set?: "visible" | "heldout";
   /** tests only: the task runner */
   run?: typeof runTask;
 }): Promise<BenchResult> {
@@ -47,7 +49,7 @@ export async function runBench(o: {
   const t0 = Date.now();
   let infraError: string | null = null;
   const run = o.run ?? runTask;
-  for (const s of SCENARIOS) {
+  for (const s of o.set === "heldout" ? HELDOUT : SCENARIOS) {
     if (o.only && !o.only.includes(s.id)) continue;
     if (o.kind && (o.kind === "free") !== (s.contract === "free")) continue;
     const t = Date.now();

@@ -82,3 +82,27 @@ describe("evolveTick (D-530)", () => {
     expect((await trials()).find((t) => t.change_key === "tests_kept||bugfix")).toMatchObject({ status: "rolled_back" });
   });
 });
+
+describe("the held-out heavy bench in the gate (D-550)", () => {
+  it("the visible bench holds but the held-out one gets worse → refused; only the counts are kept", async () => {
+    for (let i = 0; i < 3; i++) await task("FAILED", ["D4:out_of_contract:deploy/**"]);
+    await evolveTick(db, { now: new Date() });
+    const before = await current();
+    const denies = (l: Layers) => l.c.some((x) => x.tool === "path:write:deploy/**");
+    const r = await evolveTick(db, { now: new Date(), bench: (l) => Promise.resolve({ ...score(10), heldout: denies(l) ? { pass: 6, total: 8, false_verified: 0 } : { pass: 8, total: 8, false_verified: 0 } }) });
+    expect(r.refused).toEqual(["protect_path|deploy/**|bugfix"]);
+    const t = (await db.query<{ why: string; bench: Record<string, unknown> }>("select why, bench from public.profile_trials where change_key = 'protect_path|deploy/**|bugfix'")).rows[0];
+    expect(t?.why).toContain("held-out");
+    expect(t?.bench).toEqual({ before: { ...score(10), heldout: { pass: 8, total: 8, false_verified: 0 } }, after: { ...score(10), heldout: { pass: 6, total: 8, false_verified: 0 } } });
+    expect((await current())?.version).toBe(before?.version);
+  });
+  it("a bench without the held-out set can not accept a change by itself: it waits benched", async () => {
+    for (let i = 0; i < 3; i++) await task("FAILED", ["D4:out_of_contract:vendorx/**"]);
+    await evolveTick(db, { now: new Date() });
+    const before = await current();
+    const r = await evolveTick(db, { now: new Date(), bench: () => Promise.resolve(score(10)), requireHeldout: true });
+    expect(r.accepted).toEqual([]);
+    expect(await trials()).toContainEqual(expect.objectContaining({ change_key: "protect_path|vendorx/**|bugfix", status: "benched" }));
+    expect((await current())?.version).toBe(before?.version);
+  });
+});

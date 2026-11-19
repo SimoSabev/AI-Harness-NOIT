@@ -11,7 +11,9 @@ import type { SqlClient } from "@mandat/ledger";
 //    narrowing → Mandat accepts it as a new approved version (the twin's rule follows the narrowing, by Simo's choice);
 //    not narrowing → it waits for a person (never with the four fixed rules, which only narrow);
 // 3. watch: an accepted change whose prediction the next tasks falsify is rolled back to the old layers.
-export interface BenchScore { pass: number; total: number; false_verified: number }
+export interface Score { pass: number; total: number; false_verified: number }
+/** D-550: the visible scenarios plus, when run, the held-out heavy set (only its counts ever leave the gate) */
+export interface BenchScore extends Score { heldout?: Score }
 export type BenchRunner = (layers: Layers, taskType: TaskType) => Promise<BenchScore>;
 export interface EvolveTick { proposed: string[]; accepted: string[]; refused: string[]; rolledBack: string[] }
 
@@ -31,13 +33,15 @@ const keyOf = (m: ProfileManifest) => `${m.change.rule}|${m.change.detail}|${m.p
 const rowsOf = (rows: { task_id: string; task_type: TaskType; at: string; reasons: unknown }[]): FailureRow[] =>
   rows.map((r) => ({ ...r, reasons: Array.isArray(r.reasons) ? r.reasons.filter((x): x is string => typeof x === "string") : [] }));
 
-export async function evolveTick(db: SqlClient, o: { now: Date; bench?: BenchRunner }): Promise<EvolveTick> {
+const worse = (a: Score, b: Score) => a.pass < b.pass || a.false_verified > b.false_verified;
+
+export async function evolveTick(db: SqlClient, o: { now: Date; bench?: BenchRunner; /** D-550: no held-out counts → nothing is accepted by itself */ requireHeldout?: boolean }): Promise<EvolveTick> {
   const out: EvolveTick = { proposed: [], accepted: [], refused: [], rolledBack: [] };
   for (const r of (await db.query<Repo>(REPOS)).rows) {
     const layers = ProfileLayers.safeParse(r.layers);
     if (!layers.success) continue;
     await propose(db, r, layers.data, o.now, out);
-    if (o.bench) await gate(db, r, layers.data, o.bench, out);
+    if (o.bench) await gate(db, r, layers.data, o.bench, out, o.requireHeldout ?? false);
     await watch(db, r, out);
   }
   return out;
@@ -54,7 +58,7 @@ async function propose(db: SqlClient, r: Repo, layers: Layers, now: Date, out: E
   }
 }
 
-async function gate(db: SqlClient, r: Repo, layers: Layers, bench: BenchRunner, out: EvolveTick): Promise<void> {
+async function gate(db: SqlClient, r: Repo, layers: Layers, bench: BenchRunner, out: EvolveTick, requireHeldout: boolean): Promise<void> {
   const open = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'proposed' order by created_at", [r.id])).rows;
   for (const t of open) {
     const m = ProfileManifest.safeParse(t.manifest);
@@ -63,9 +67,19 @@ async function gate(db: SqlClient, r: Repo, layers: Layers, bench: BenchRunner, 
     const type = m.data.prediction.task_type;
     const [before, after] = [await bench(layers, type), await bench(candidate, type)];
     const scores = { before, after };
-    if (after.pass < before.pass || after.false_verified > before.false_verified) {
+    if (worse(after, before)) {
       await decide(db, t, "refused", scores, `the bench got worse: ${after.pass}/${after.total} vs ${before.pass}/${before.total}`);
       out.refused.push(t.change_key);
+      continue;
+    }
+    // D-550: the held-out heavy set is the second gate; the rules never come from it, so it cannot be fitted
+    if (before.heldout && after.heldout && worse(after.heldout, before.heldout)) {
+      await decide(db, t, "refused", scores, `the held-out bench got worse: ${after.heldout.pass}/${after.heldout.total} vs ${before.heldout.pass}/${before.heldout.total}`);
+      out.refused.push(t.change_key);
+      continue;
+    }
+    if (requireHeldout && (!before.heldout || !after.heldout)) {
+      await decide(db, t, "benched", scores, "the held-out bench did not run: waits for a person");
       continue;
     }
     if (!isNarrowing(layers, candidate)) {

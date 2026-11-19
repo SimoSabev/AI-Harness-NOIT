@@ -186,11 +186,15 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   // D-530: the bench gate runs the scenarios of the task type's contract with the current and the changed profile;
   // MANDAT_EVOLVE_BENCH=0 keeps trials proposed (no bench, nothing accepted)
   const bench: BenchRunner = async (layers, type) => {
-    const r = await runBench({ home: o.home, contractPath: path.join(repoRoot, "contracts", "fix-discount.json"), freeContractPath: path.join(repoRoot, "contracts", "free-cart.json"), env, layers, kind: type === "free" ? "free" : "default" });
+    const common = { home: o.home, contractPath: path.join(repoRoot, "contracts", "fix-discount.json"), freeContractPath: path.join(repoRoot, "contracts", "free-cart.json"), env, layers, kind: type === "free" ? ("free" as const) : ("default" as const) };
+    const r = await runBench(common);
     if (r.infraError) throw new Error(`bench: ${r.infraError}`);
-    return { pass: r.pass, total: r.rows.length, false_verified: r.false_verified };
+    // D-550: the held-out heavy set is the second gate; only its counts leave
+    const h = await runBench({ ...common, set: "heldout" });
+    if (h.infraError) throw new Error("bench: the held-out set did not run");
+    return { pass: r.pass, total: r.rows.length, false_verified: r.false_verified, heldout: { pass: h.pass, total: h.rows.length, false_verified: h.false_verified } };
   };
-  const evolve = evolveTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => evolveTick(db, { now: new Date(), ...(env.MANDAT_EVOLVE_BENCH === "0" ? {} : { bench }) }) });
+  const evolve = evolveTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => evolveTick(db, { now: new Date(), requireHeldout: true, ...(env.MANDAT_EVOLVE_BENCH === "0" ? {} : { bench }) }) });
   const twin = twinTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => twinTick(db, { now: new Date() }) });
   // E9г (D-409): research runs beside the task slots (≤ 2 here, ≤ 2 per org); MANDAT_RESEARCH=0 turns it off
   const host = hostConfig(env);
