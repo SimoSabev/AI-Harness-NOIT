@@ -17,7 +17,7 @@ export const VitestJsonReport = z
   .passthrough();
 export type TestStatus = "passed" | "failed" | "skipped" | "pending" | "todo" | "disabled";
 export type ParsedReport =
-  | { valid: true; success: boolean; total: number /* = tests.size, D-124 */; tests: Map<string, TestStatus> }
+  | { valid: true; success: boolean; total: number /* = tests.size, D-124 */; tests: Map<string, TestStatus>; /** D-548: ms per test, when the reporter gave it */ durations?: Map<string, number> }
   | { valid: false; error: "missing" | "too_large" | "json" | "schema" | "duplicate_id"; detail: string };
 
 export const MAX_REPORT_BYTES = 20 * 1024 * 1024;
@@ -38,12 +38,15 @@ export function parseVitestReport(raw: string | null, workRoot: string): ParsedR
     return { valid: false, error: "schema", detail: first ? `${first.path.join(".")}: ${first.message}` : "invalid" };
   }
   const tests = new Map<string, TestStatus>();
+  const durations = new Map<string, number>();
   for (const file of r.data.testResults) {
     for (const a of file.assertionResults) {
       const id = testIdOf(file.name, workRoot, a.ancestorTitles, a.title);
       if (tests.has(id)) return { valid: false, error: "duplicate_id", detail: id };
       tests.set(id, a.status);
+      const ms = (a as { duration?: unknown }).duration;
+      if (typeof ms === "number" && Number.isFinite(ms) && ms >= 0) durations.set(id, ms);
     }
   }
-  return { valid: true, success: r.data.success, total: tests.size, tests };
+  return { valid: true, success: r.data.success, total: tests.size, tests, durations };
 }

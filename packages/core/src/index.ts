@@ -45,4 +45,5 @@ export type { RedOnBase } from "./oracle.js";
 export { PILOT_MAX, PILOT_MIN, failingCriteria, fileTags, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
 export type { JobEvidence, JobMode, SiteCategory, SiteRow, UnitState } from "./job.js";
 export { cheatFindings, d13Cheat, toolInputs } from "./d13.js";
+export { PERF_BUDGET, d14Perf } from "./d14.js";
 export type { CheatClass, CheatFinding } from "./d13.js";

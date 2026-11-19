@@ -3,7 +3,7 @@ import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
 import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
-import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d5Hidden, d8Static, splitHidden, d11Mutation, d11Oracle, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, testEnvChecks, weakenedAssertions } from "@mandat/core";
+import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d14Perf, d5Hidden, d8Static, splitHidden, d11Mutation, d11Oracle, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, testEnvChecks, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
@@ -250,6 +250,8 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   }
   if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length, reportValid: bRaw.report.valid }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
+  // D-548: the same base tests on the result may not get much slower (a person looks; timing is noisy)
+  if (!a.timedOut) evidence.push(d14Perf({ baseline: bl, a: a.report }));
   evidence.push(
     b.timedOut
       ? ev("D2.inventory", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" })

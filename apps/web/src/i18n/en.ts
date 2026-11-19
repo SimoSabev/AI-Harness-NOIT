@@ -1599,6 +1599,8 @@ export const en = {
   "chat.err.oracleChanged": "The oracle changed since you looked. Look again.",
   "chat.err.oracleNotReady": "The oracle is not ready for approval.",
   "check.D11.oracle": "The hidden tests catch a deliberately broken change",
+  "check.D13.cheat": "No sign of gaming the checks",
+  "check.D14.perf": "The tests did not get much slower",
   "chat.oracle.none": "Before work starts, a separate agent writes hidden acceptance tests from the criteria. The writer never sees them.",
   "chat.oracle.build": "Build oracle",
   "chat.oracle.rebuild": "Build oracle again",

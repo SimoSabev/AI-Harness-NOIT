@@ -129,6 +129,7 @@ export const DetectorId = z.enum([
   "RESEARCH",
   "REVIEW",
   "D13.cheat", // D-544: signs of gaming the checks (a person looks)
+  "D14.perf", // D-548: the project's tests much slower after the change (a person looks)
 ]);
 export type DetectorId = z.infer<typeof DetectorId>;
 export const Evidence = z
