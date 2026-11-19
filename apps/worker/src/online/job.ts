@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText } from "@mandat/contract";
+import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withPlaybook } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { failingCriteria, jobMode, sealFor, unitWaves, unitsToStart, validatePlan } from "@mandat/core";
+import { deriveProfile, failingCriteria, jobMode, pilotSize, pilotUnits, sealFor, unitWaves, unitsToStart, validatePlan } from "@mandat/core";
 import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
@@ -10,7 +10,7 @@ import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import { mergeLocal } from "./deliver-local.js";
 import { startJobBranch } from "./job-branch.js";
-import { UNIT_COLS, doneBefore, insertTask, routeOf, settleUnit, taskIdOf } from "./job-unit.js";
+import { UNIT_COLS, doneBefore, insertTask, routeOf, settleUnit, taskIdOf, tunePilot } from "./job-unit.js";
 import type { JobRow, UnitRow } from "./job-unit.js";
 
 // D-535 (М1 Х6/Х7 minimum): the job's tick. planning → the planner (a model, no sandbox, like the conversation) proposes
@@ -25,7 +25,7 @@ export interface JobTick { planned: string[]; started: string[]; parked: string[
 export const PLAN_BUDGET_USD = 0.5;
 
 
-const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.base_sha, j.head_sha,
+const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.pilot_state, j.playbook, j.base_sha, j.head_sha,
   j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, j.roles, r.remote_url, r.provider`;
 const mirrorOf = (j: JobRow) => j.remote_url.replace(/^file:\/\//, "");
 const RUNNING = new Set<string>();
@@ -88,14 +88,16 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
   const plan = units;
   const branch = await startJobBranch({ mirror: mirrorOf(j), ref: jobBranch(j.id) });
   const planHash = hashJcs(plan);
+  // D-545: large work (the profile's plan says pilot) starts with a pilot of its first units
+  const pilot = new Set(axes.success && deriveProfile(axes.data).plan.pilot ? pilotUnits(plan, pilotSize(plan.length)) : []);
   await inTransaction(d.db, async (tx) => {
     for (const [n, u] of plan.entries()) {
-      await tx.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria, depends_on) values ($1, $2, $3::uuid, $4, $5, $6::jsonb, $7::jsonb)", [j.id, u.id, j.org_id, n, u.title, JSON.stringify(u.criteria), JSON.stringify(u.depends_on)]);
+      await tx.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria, depends_on, pilot) values ($1, $2, $3::uuid, $4, $5, $6::jsonb, $7::jsonb, $8)", [j.id, u.id, j.org_id, n, u.title, JSON.stringify(u.criteria), JSON.stringify(u.depends_on), pilot.has(u.id)]);
     }
-    await tx.query("update public.jobs set status = 'running', mode = $6, plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head, mode]);
+    await tx.query("update public.jobs set status = 'running', mode = $6, pilot_state = $7, plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head, mode, pilot.size > 0 ? "running" : "none"]);
     // hashes and counts only: no criterion text, no titles
     const waves = Math.max(0, ...Object.values(unitWaves(plan))) + 1;
-    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves } });
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves, pilot: pilot.size } });
   });
   return "planned";
 }
@@ -117,13 +119,16 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
     await d.db.query("update public.jobs set status = 'converging', final_task_id = $2, updated_at = now() where id = $1", [j.id, id]);
     return "final";
   }
-  const start = unitsToStart(units, mode, JOB_PARALLEL_MAX);
+  // D-545: the pilot passed → its lessons become the playbook of the rest, then the rest may start
+  if (j.pilot_state === "running" && units.filter((u) => u.pilot).every((u) => u.status === "passed")) await tunePilot(d, j, spec, units);
+  const start = unitsToStart(units, mode, JOB_PARALLEL_MAX, { pilotOnly: j.pilot_state === "running" });
   for (const unitId of start) {
     const next = units.find((u) => u.unit_id === unitId);
     if (!next) continue;
     // a new task = a fresh agent context; it gets the spec, its unit and the earlier units' handoffs (the progress)
     const id = taskIdOf(j.id, next.relands > 0 ? `${next.ord}r${next.relands}` : String(next.ord));
-    await insertTask(d.db, j, { id, text: unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), unit: next.unit_id, role: "unit" });
+    const text = unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord));
+    await insertTask(d.db, j, { id, text: next.pilot ? text : withPlaybook(text, j.playbook), unit: next.unit_id, role: "unit" });
     await d.db.query("update public.job_units set status = 'running', task_id = $3, tries = '[]'::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, next.unit_id, id]);
   }
   // a rescue started its fresh tries this tick

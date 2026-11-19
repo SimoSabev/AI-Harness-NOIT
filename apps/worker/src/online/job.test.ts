@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ADVISOR_SYSTEM, OracleManifest, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
+import { ADVISOR_SYSTEM, OracleManifest, PLAYBOOK_SYSTEM, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
 import { fakeGitHub } from "@mandat/gate-github";
 import type { ModelClient } from "@mandat/research";
@@ -58,7 +58,7 @@ const patchFor = (name: string, body = name) => `diff --git a/${name} b/${name}\
 type Contract = { task_id: string; base_commit: string; text: string; attempt?: number; oracle_hash?: string };
 type Outcome = { result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; notes?: string; patch?: string; body?: string };
 
-async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome; divisible?: "yes" | "no"; during?: (n: number) => Promise<void> }) {
+async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome; divisible?: "yes" | "no"; size?: "m" | "l"; during?: (n: number) => Promise<void> }) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-job-"));
   const fx = buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" });
   const db = await pgliteDb();
@@ -71,7 +71,7 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
   const v = (await db.query<{ v: number }>("select private.add_oracle_tests($1::uuid, $2, $3::jsonb, $4) as v", [DEMO_REPO_ID, SPEC, JSON.stringify(files), sha256Tag(jcs(files))])).rows[0]?.v;
   await db.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, status, manifest, oracle_hash, hidden_version, approved_at) values ('o_job1', $1, $2, 'c_job1', $3, 'approved', $4::jsonb, $5, $6, now())", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, JSON.stringify(MANIFEST), ORACLE, v]);
   await db.query("insert into public.jobs (id, org_id, repo_id, conversation_id, spec_hash, oracle_hash, type, agent) values ('j_t1', $1, $2, 'c_job1', $3, $4, 'bugfix', 'fake:honest-fix')", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, ORACLE]);
-  if (o.divisible) await db.query("update public.conversations set axes = $1::jsonb where id = 'c_job1'", [JSON.stringify({ code: "existing", reference: "none", divisible: o.divisible, proof: ["tests"], risk: { level: "low", outward: false }, size: "m" })]);
+  if (o.divisible) await db.query("update public.conversations set axes = $1::jsonb where id = 'c_job1'", [JSON.stringify({ code: "existing", reference: "none", divisible: o.divisible, proof: ["tests"], risk: { level: "low", outward: false }, size: o.size ?? "m" })]);
   const asked: string[] = [];
   const systems: string[] = [];
   const client: ModelClient = {
@@ -124,7 +124,7 @@ describe("the planner (D-535)", () => {
     expect(j.status).toBe("running");
     expect(s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`)).toBe(s.fx.sha);
     const [pb] = await s.ledger("plan_built");
-    expect(pb).toEqual({ job: "j_t1", spec_hash: SPEC, oracle_hash: ORACLE, plan_hash: j.plan_hash, units: 2, rounds: 2, mode: "single", waves: 2 });
+    expect(pb).toEqual({ job: "j_t1", spec_hash: SPEC, oracle_hash: ORACLE, plan_hash: j.plan_hash, units: 2, rounds: 2, mode: "single", waves: 2, pilot: 0 });
     expect(JSON.stringify(pb)).not.toContain("coupons");
   });
   it("no valid plan after the rounds → the job parks with a question", async () => {
@@ -391,5 +391,37 @@ describe("the task harness of a job and a model per role (D-543)", () => {
     await jobTick(jd); // the final check gets no map: it has no writer
     await runDaemonOnce(s.deps);
     expect(s.runs[2]?.jobFiles).toBeUndefined();
+  });
+});
+
+describe("a pilot on large work (D-545)", () => {
+  it("the first units go first; the rest waits for the pilot and its playbook", async () => {
+    const units = ["u1", "u2", "u3", "u4", "u5"].map((id, n) => ({ id, title: `part ${n + 1}`, criteria: [n % 2 === 0 ? "AC-1" : "AC-2"], depends_on: [] }));
+    const tuned = "Keep the old export next to the new one.";
+    const s = await setup({ plans: [JSON.stringify({ units }), tuned], divisible: "yes", size: "l", outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    await jobTick(s.jd);
+    expect((await s.ledger("plan_built"))[0]).toMatchObject({ pilot: 3 });
+    expect((await s.db.query<{ pilot: boolean }>("select pilot from public.job_units where job_id = 'j_t1' order by ord")).rows.map((r) => r.pilot)).toEqual([true, true, true, false, false]);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    await runDaemonOnce(s.deps);
+    await jobTick(s.jd); // two pilot units passed, one runs: nothing outside the pilot starts
+    expect((await s.units()).map((u) => u.status)).toEqual(["passed", "passed", "running", "pending", "pending"]);
+    await runDaemonOnce(s.deps);
+    expect((await jobTick(s.jd)).started).toEqual(["j_t1"]);
+    expect(s.systems.at(-1)).toBe(PLAYBOOK_SYSTEM);
+    expect(s.asked.at(-1)).toContain("3 pilot units");
+    expect(s.asked.at(-1)).not.toContain(SECRET_NAME);
+    expect((await s.ledger("pilot_done"))[0]).toMatchObject({ job: "j_t1", units: 3, rescues: 0, relands: 0 });
+    expect((await s.units()).map((u) => u.status)).toEqual(["passed", "passed", "passed", "running", "running"]);
+    const later = (await s.db.query<{ text: string }>("select text from public.tasks where job_id = 'j_t1' and unit_id in ('u4', 'u5') order by id")).rows;
+    for (const t of later) expect(t.text).toContain(tuned);
+    const pilot = (await s.db.query<{ text: string }>("select text from public.tasks where job_id = 'j_t1' and unit_id = 'u1'")).rows[0];
+    expect(pilot?.text).not.toContain("Playbook");
+  });
+  it("small or medium work has no pilot", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], divisible: "yes", size: "m", outcome: () => ({ result: "VERIFIED" }) });
+    await jobTick(s.jd);
+    expect((await s.ledger("plan_built"))[0]).toMatchObject({ pilot: 0 });
   });
 });
