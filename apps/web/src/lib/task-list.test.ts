@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { foldJobs } from "./task-list";
 
-// D-548 (screens 19.11.2026): a job's internal tasks (oracle, units, final check) crowded the task list, one row each;
+// D-554 (screens 19.11.2026): a job's internal tasks (oracle, units, final check) crowded the task list, one row each;
 // they fold into one row for their conversation, placed where the newest of them is.
 const row = (id: string, at: string, o: { role?: "oracle" | "unit" | "final"; conv?: string | null } = {}) =>
   ({ id, updated_at: at, internal_role: o.role ?? null, conversation_id: o.conv ?? null });
 
-describe("folding a job's internal tasks into one row (screens 19.11.2026, D-548)", () => {
+describe("folding a job's internal tasks into one row (screens 19.11.2026, D-554)", () => {
   it("keeps plain tasks as they are, in order", () => {
     const r = foldJobs([row("t_a", "3"), row("t_b", "2")]);
     expect(r).toEqual([{ kind: "task", row: row("t_a", "3") }, { kind: "task", row: row("t_b", "2") }]);

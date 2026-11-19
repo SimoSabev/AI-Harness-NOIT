@@ -53,7 +53,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   ]);
   const now = new Date();
   const rows = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1));
-  // D-548: a job's oracle, units and final check are one row that opens its conversation
+  // D-554: a job's oracle, units and final check are one row that opens its conversation
   const tasks = foldJobs(rows).slice(0, 100).map((it) => {
     const x = it.kind === "job" ? it.newest : it.row;
     const s = statusOf(x, t.lang);

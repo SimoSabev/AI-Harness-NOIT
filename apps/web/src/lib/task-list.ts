@@ -1,4 +1,4 @@
-// D-548 (screens 19.11.2026): the oracle, the units and the final check of one job are one piece of work for the person;
+// D-554 (screens 19.11.2026): the oracle, the units and the final check of one job are one piece of work for the person;
 // the task list shows them as one row for their conversation (opened with /?chat=…), at the place of the newest of them.
 export interface FoldSource { id: string; updated_at: string; internal_role?: "oracle" | "unit" | "final" | null; conversation_id?: string | null }
 export type ListItem<T extends FoldSource> = { kind: "task"; row: T } | { kind: "job"; conversation_id: string; newest: T; count: number };

@@ -19,7 +19,7 @@ export interface TaskRow {
   steerable?: boolean;
   /** D-540: what a short title of a job's internal task needs (lib/task-title.ts) */
   internal_role?: "oracle" | "unit" | "final" | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null;
-  /** D-548: the conversation a job's internal task belongs to (the task list folds them into one row) */
+  /** D-554: the conversation a job's internal task belongs to (the task list folds them into one row) */
   conversation_id?: string | null;
 }
 
