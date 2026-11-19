@@ -25,3 +25,9 @@ export function proposalStatus(status: string, lang: Lang = "en"): { label: stri
 export function humanFields(sources: Record<string, string>): string[] {
   return Object.entries(sources).filter(([, s]) => s === "human").map(([k]) => k).sort();
 }
+
+/** D-539: the newest profile version waits for the owner → its number (tasks stop as harness_unapproved until then) */
+export function pendingProfile(versions: readonly { status: string; version: number }[] | undefined): number | null {
+  const top = versions?.[0];
+  return top?.status === "proposed" ? top.version : null;
+}

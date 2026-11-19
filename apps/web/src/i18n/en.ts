@@ -564,6 +564,8 @@ export const en = {
   "harness.source": "Source",
   "harness.seeYaml": "See .mandat.yml",
   "harness.advanced": "Advanced: agent profile and hidden tests",
+  "harness.profilePending": "Agent profile version {v} is waiting for your approval. Tasks for this project stop until you approve it.",
+  "harness.profileReview": "Review and approve the profile",
   "evolve.title": "Tightened by itself",
   "evolve.intro": "When the same failure comes back three times in 30 days, the project's rules get stricter. The change goes through the bench and is undone by itself if its prediction fails. By themselves the rules can only get stricter.",
   "evolve.rule.tests_kept": "Boundary: existing tests are never deleted, skipped or weakened",

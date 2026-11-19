@@ -9,7 +9,7 @@ import { Shell } from "../../components/shell";
 import { StatusBadge, btn, card } from "../../components/ui";
 import { rich } from "../../i18n/rich";
 import { getT } from "../../i18n/server";
-import { fieldLabel, humanFields, proposalStatus, sourceLabel } from "../../lib/harness-view";
+import { fieldLabel, humanFields, pendingProfile, proposalStatus, sourceLabel } from "../../lib/harness-view";
 import { pageTitle } from "../../lib/inbox";
 import { db } from "../../lib/server/db";
 import { harnessView } from "../../lib/server/harness";
@@ -52,6 +52,7 @@ export default async function HarnessPage() {
         const p = r.proposal;
         const st = p ? proposalStatus(p.status, lang) : null;
         const confirm = p ? humanFields(p.field_sources) : [];
+        const waiting = pendingProfile(profiles.get(r.id)?.versions);
         return (
           <section key={r.id} aria-labelledby={`r-${r.id}`} className={`${card} mt-6 p-5`}>
             <div className="flex flex-wrap items-center gap-3">
@@ -66,6 +67,13 @@ export default async function HarnessPage() {
               {p?.pr_number !== null && p?.pr_number !== undefined && t("harness.draftPr", { n: p.pr_number })}
             </p>
             {r.harness_stale && <p className="mt-2 text-sm text-bad">{t("harness.staleText")}</p>}
+            {/* D-539: the profile is a second approval; say so at the top instead of under Advanced, ~10,000 px down */}
+            {waiting !== null && (
+              <p role="status" className="mt-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+                {t("harness.profilePending", { v: waiting })}{" "}
+                {c.role === "owner" && <a href={`#profile-${r.id}`} className="font-medium underline underline-offset-2">{t("harness.profileReview")}</a>}
+              </p>
+            )}
             {p ? (
               <>
                 {p.blocked.map((b) => <p key={b} role="alert" className="mt-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{t("harness.blocked", { reason: b })}</p>)}
@@ -100,7 +108,7 @@ export default async function HarnessPage() {
               <p className="mt-3 text-sm">{t("harness.noProposal")}</p>
             )}
             <Trials t={t} trials={trials[r.id] ?? []} />
-            <details className="mt-5 border-t border-line pt-4">
+            <details className="mt-5 border-t border-line pt-4" open={waiting !== null}>
               <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">{t("harness.advanced")}</summary>
               <ProfilePanel t={t} repoId={r.id} view={profiles.get(r.id)} canApprove={c.role === "owner"} />
               <HiddenTestsPanel repoId={r.id} sets={hidden.get(r.id) ?? []} canUpload={c.role === "owner"} />
@@ -154,7 +162,7 @@ const LAYERS = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 function ProfilePanel({ t, repoId, view, canApprove }: { t: T; repoId: string; view: ProfileView | undefined; canApprove: boolean }) {
   const top = view?.versions[0];
   return (
-    <div className="mt-6 border-t border-line pt-5">
+    <div id={`profile-${repoId}`} className="mt-6 scroll-mt-6 border-t border-line pt-5">
       <h3 className="font-display text-base font-semibold">{t("profile.title")}</h3>
       <p className="mt-1 text-sm text-mute">{t("profile.intro")}</p>
       {!view || !top ? (
