@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { AccountName, AddProjectBody, ConnectionId, LocalPath, LoginCode, LoginStart, SubscriptionId, SystemJob } from "@mandat/contract";
-import type { AddConnectionReply, AddProjectReply, CheckKeyReply, ConnectionsReply, DetectReply, FolderListing, FoundProjects, JobState, LoginState } from "@mandat/contract";
+import { AccountName, AddProjectBody, BringBody, ConnectionId, LocalPath, LoginCode, LoginStart, SubscriptionId, SystemJob } from "@mandat/contract";
+import type { AddConnectionReply, AddProjectReply, BringReply, CheckKeyReply, ConnectionsReply, DetectReply, FolderListing, FoundProjects, JobState, LoginState } from "@mandat/contract";
 
 // D-293: the web UI of `mandat local` hands API keys to the proxy through this control endpoint: 127.0.0.1 only,
 // a random bearer token known to the web server alone, the key only in memory on its way to `docker run` env.
@@ -27,6 +27,8 @@ export interface ControlDeps {
   system: { all(): JobState[]; start(job: SystemJob): JobState };
   /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
   addProject(path: string): Promise<AddProjectReply>;
+  /** D-538: "Bring into my folder" — the safe fast-forward of a project's own folder (bring-to-folder.ts) */
+  bring?: (b: BringBody) => Promise<BringReply>;
   /** D-388 (folder picker): the folders of this computer for "Add project" (folders.ts); list → null when not a folder */
   folders?: { list(path: string | undefined): Promise<FolderListing | null>; found(): Promise<FoundProjects> };
   /** D-440: the research search key — sealed by `mandat local` and the proxy restarted with it */
@@ -160,6 +162,16 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
     if (at.pathname === "/folders" || at.pathname === "/folders/found") {
       if (!d.folders) return send(404, { error: "not_found" });
       void foldersRoute(at.pathname, at.searchParams, req.method ?? "GET", d.folders).then(([code, body]) => send(code, body), () => send(500, { error: "internal" }));
+      return;
+    }
+    if (req.url === "/projects/bring") {
+      const bring = d.bring;
+      if (!bring) return send(404, { error: "not_found" });
+      if (req.method !== "POST") return send(405, { error: "method" });
+      void readJson(req).then(async (raw) => {
+        const b = BringBody.safeParse(raw);
+        return b.success ? send(200, await bring(b.data)) : send(400, { error: "bad_body" });
+      }).catch(() => send(500, { error: "internal" }));
       return;
     }
     if (req.url === "/projects") {

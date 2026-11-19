@@ -7,7 +7,7 @@ import path from "node:path";
 import { MandatError } from "@mandat/contract";
 import { ConnectionStore, loadKek } from "@mandat/llm-proxy";
 import { compareVersions, imageTags } from "@mandat/sandbox";
-import { DEMO_ORG_ID, DEMO_OWNER_ID, addLocalProject, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
+import { DEMO_ORG_ID, DEMO_OWNER_ID, addLocalProject, bringToFolder, buildFixture, hostConfig, openDb, seedLocal } from "@mandat/worker";
 import { realDeps } from "../deps.js";
 import { cliLang, tt } from "../i18n.js";
 import type { Lang } from "../i18n.js";
@@ -367,6 +367,8 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
     system: new SystemJobs({ run: cliRun(localJobEnv(clean, url)), org: DEMO_ORG_ID }),
     // D-388: "Add project" from the web — a mirror under MANDAT_HOME/projects, a repos row, the rules scan queued
     addProject: (p) => addLocalProject({ db: projectsDb, home: o.home, org: DEMO_ORG_ID, path: p }),
+    // D-538: only by a person's click on the delivered job card (the web checks the session, CSRF and the right)
+    bring: (b) => bringToFolder({ home: o.home, mirror: b.mirror, sha: b.sha, ...(b.branch ? { branch: b.branch } : {}) }),
     // D-388 (folder picker): the person's folders for the page; MANDAT_HOME is never offered (addLocalProject refuses it)
     folders: {
       list: (p) => listFolder({ home: os.homedir(), refuse: [o.home] }, p),

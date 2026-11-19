@@ -50,6 +50,7 @@ export { vetMcpDocker } from "./mcp-vet-docker.js";
 export { ciNote, fixCi, pollCi } from "./online/ci.js";
 export { deliverLocal } from "./online/deliver-local.js";
 export { addLocalProject, projectSlug } from "./online/add-project.js";
+export { bringToFolder } from "./online/bring-to-folder.js";
 export { MAX_RUNNING_PER_ORG, claimResearch, processResearch, reapStaleResearch, runResearchOnce } from "./online/research.js";
 export type { ResearchDeps, ResearchEnv } from "./online/research.js";
 export { DEFAULT_LOCAL_MODEL, DEFAULT_SEARXNG, hostResearchEnv } from "./online/research-host.js";

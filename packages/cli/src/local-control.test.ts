@@ -140,6 +140,32 @@ describe("POST /projects (D-388)", () => {
   });
 });
 
+// D-538: "Bring into my folder" — the body is checked here; the endpoint only runs the safe fast-forward of the worker
+describe("POST /projects/bring (D-538)", () => {
+  it("a valid body → the reply; a bad body → 400; GET → 405; without the service → 404", async () => {
+    const seen: unknown[] = [];
+    const sha = "a".repeat(40);
+    const c = await startControl({
+      start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base(),
+      bring: async (b) => (seen.push(b), { ok: false, reason: "dirty", folder: "/Users/simo/shop", detail: "1", command: "git -C \"/Users/simo/shop\" status" }),
+    });
+    const bare = await startControl({ start: async () => true, stop: async () => undefined, providers: async () => null, accounts: async () => [], ...base() });
+    try {
+      const post = (url: string, body: unknown) => fetch(`${url}/projects/bring`, { method: "POST", headers: { authorization: `Bearer ${url === c.url ? c.token : bare.token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+      const r = await post(c.url, { mirror: "/m/projects/shop.git", sha });
+      expect([r.status, await r.json()]).toMatchObject([200, { ok: false, reason: "dirty" }]);
+      expect((await post(c.url, { mirror: "/m/projects/shop.git", sha, force: true })).status).toBe(400);
+      expect((await post(c.url, { mirror: "shop.git", sha })).status).toBe(400);
+      expect((await fetch(`${c.url}/projects/bring`, { headers: { authorization: `Bearer ${c.token}` } })).status).toBe(405);
+      expect((await post(bare.url, { mirror: "/m/projects/shop.git", sha })).status).toBe(404);
+      expect(seen).toEqual([{ mirror: "/m/projects/shop.git", sha }]);
+    } finally {
+      await c.close();
+      await bare.close();
+    }
+  });
+});
+
 // D-388 (folder picker): the folders of this computer for "Add project" — names and paths only, behind the same token.
 describe("GET /folders, /folders/found (D-388, folder picker)", () => {
   it("a listing (no path → home), 400 on a bad path, 404 when not a folder, found projects; 405 / 401 / 404 without the service", async () => {
