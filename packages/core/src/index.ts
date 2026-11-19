@@ -44,3 +44,5 @@ export { classifyRedOnBase, d11Oracle, oracleChange } from "./oracle.js";
 export type { RedOnBase } from "./oracle.js";
 export { failingCriteria, fileTags, jobMode, oracleFilesFor, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
 export type { JobEvidence, JobMode, UnitState } from "./job.js";
+export { cheatFindings, d13Cheat, toolInputs } from "./d13.js";
+export type { CheatClass, CheatFinding } from "./d13.js";
