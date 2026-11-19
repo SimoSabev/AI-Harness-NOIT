@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
+import { failingCriteria, fileTags, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -116,5 +116,36 @@ describe("the pilot (D-545)", () => {
     expect(unitsToStart(us, "waves", 3)).toEqual(["b", "c"]);
     expect(unitsToStart(us, "single", 3, { pilotOnly: true })).toEqual(["b"]);
     expect(unitsToStart([s("a", 0, "passed", "t", true), s("c", 1, "pending", null, false)], "single", 3, { pilotOnly: true })).toEqual([]);
+  });
+});
+
+// D-546 (М2 Х5): migration sites. The server finds the places deterministically (with surplus); every found file is
+// in exactly one unit or has a category (done, irrelevant, human).
+describe("migration sites (D-546)", () => {
+  const units = [{ ...u("u1", ["AC-1"]), files: ["src/a.ts", "src/b.ts"] }, { ...u("u2", ["AC-2", "AC-3"]), files: ["src/c.ts"] }];
+  it("every found file in one unit or skipped with a category; a file twice or not at all is a problem", () => {
+    expect(validateSites(["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts"], units, [{ file: "src/d.ts", why: "irrelevant" }])).toEqual([]);
+    expect(validateSites(["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts"], units, [])).toEqual([
+      { kind: "uncovered_site", id: "src/d.ts" },
+      { kind: "uncovered_site", id: "src/e.ts" },
+    ]);
+    expect(validateSites(["src/a.ts"], [...units, { ...u("u3", []), files: ["src/a.ts"] }], [{ file: "src/a.ts", why: "done" }])).toEqual([
+      { kind: "site_twice", id: "src/a.ts" },
+    ]);
+  });
+  it("the table of sites: each file with its category and unit; files a unit names that were not found are new", () => {
+    expect(siteTable(["src/a.ts", "src/d.ts"], [{ ...u("u1", ["AC-1"]), files: ["src/a.ts", "src/new.ts"] }], [{ file: "src/d.ts", why: "human" }])).toEqual([
+      { file: "src/a.ts", category: "unit", unit: "u1" },
+      { file: "src/d.ts", category: "human" },
+      { file: "src/new.ts", category: "new", unit: "u1" },
+    ]);
+  });
+});
+
+describe("sites for a person in the seal (D-546)", () => {
+  it("each site a person must migrate is listed as not checked", () => {
+    const s = sealFor({ spec, specHash: `sha256:${"a".repeat(64)}`, oracleHash: `sha256:${"b".repeat(64)}`, verdict: "VERIFIED", head: "c".repeat(40), evidence: [], ledgerHead: null, sites: [{ file: "src/a.ts", category: "unit", unit: "u1" }, { file: "src/money.ts", category: "human" }] });
+    expect(s.unchecked).toContain("src/money.ts: a migration site for a person");
+    expect(s.unchecked.join(" ")).not.toContain("src/a.ts");
   });
 });

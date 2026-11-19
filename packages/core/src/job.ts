@@ -1,5 +1,5 @@
 import { SessionSeal, oracleTag } from "@mandat/contract";
-import type { PlanProblem, PlanUnit, Sha256, Spec, TaskAxes, VerdictResult } from "@mandat/contract";
+import type { PlanProblem, PlanUnit, Sha256, SiteSkip, Spec, TaskAxes, VerdictResult } from "@mandat/contract";
 
 /** what the job reads of a verdict's evidence (from the verdict or from its stored rows) */
 export interface JobEvidence { detector: string; status: string; data?: unknown }
@@ -108,17 +108,19 @@ export function failingCriteria(evidence: readonly JobEvidence[]): string[] {
 }
 
 /** what the final check left unchecked: criteria a person must prove, and every check that did not run or decide */
-export function uncheckedOf(spec: Pick<Spec, "criteria">, evidence: readonly JobEvidence[]): string[] {
+export function uncheckedOf(spec: Pick<Spec, "criteria">, evidence: readonly JobEvidence[], sites: readonly { file: string; category: string }[] = []): string[] {
   const human = spec.criteria.filter((c) => c.proof === "human").map((c) => `${c.id}: proof by a person`);
+  // D-546: a migration's sites left for a person are not done by the job
+  const bySomeone = sites.filter((x) => x.category === "human").map((x) => `${x.file}: a migration site for a person`);
   const notRun = evidence.filter((e) => e.status === "unknown" || e.status === "n/a").map((e) => `${e.detector}: not run`);
-  return [...human, ...notRun].slice(0, 100);
+  return [...human, ...bySomeone, ...notRun].slice(0, 100);
 }
 
 /** the seal of a job (SessionSeal, D-532); result_ref is the job branch head that was checked */
-export function sealFor(o: { spec: Spec; specHash: Sha256; oracleHash: Sha256; verdict: VerdictResult; head: string; evidence: readonly JobEvidence[]; ledgerHead: Sha256 | null }): SessionSeal {
+export function sealFor(o: { spec: Spec; specHash: Sha256; oracleHash: Sha256; verdict: VerdictResult; head: string; evidence: readonly JobEvidence[]; ledgerHead: Sha256 | null; sites?: readonly { file: string; category: string }[] }): SessionSeal {
   return SessionSeal.parse({
     spec_hash: o.specHash, oracle_hash: o.oracleHash, profile: o.spec.profile, verdict: o.verdict, result_ref: o.head,
-    unchecked: uncheckedOf(o.spec, o.evidence), ...(o.ledgerHead ? { ledger_head: o.ledgerHead } : {}),
+    unchecked: uncheckedOf(o.spec, o.evidence, o.sites ?? []), ...(o.ledgerHead ? { ledger_head: o.ledgerHead } : {}),
   });
 }
 
@@ -197,4 +199,30 @@ export function pilotUnits(units: readonly Pick<PlanUnit, "id" | "depends_on">[]
     }
   }
   return out;
+}
+
+// D-546 (М2 Х5): the sites of a migration. The server found `found` (git grep over the code, with surplus); every found
+// file is in exactly one unit's files or skipped with a category. Files a unit names that were not found are new files.
+export type SiteCategory = "unit" | "new" | "done" | "irrelevant" | "human";
+export interface SiteRow { file: string; category: SiteCategory; unit?: string }
+
+export function validateSites(found: readonly string[], units: readonly Pick<PlanUnit, "id" | "files">[], skip: readonly SiteSkip[]): PlanProblem[] {
+  const owners = new Map<string, number>();
+  for (const x of units) for (const f of new Set(x.files ?? [])) owners.set(f, (owners.get(f) ?? 0) + 1);
+  for (const k of skip) owners.set(k.file, (owners.get(k.file) ?? 0) + 1);
+  const out: PlanProblem[] = [];
+  for (const f of [...new Set(found)].sort()) {
+    const n = owners.get(f) ?? 0;
+    if (n === 0) out.push({ kind: "uncovered_site", id: f });
+    else if (n > 1) out.push({ kind: "site_twice", id: f });
+  }
+  return out;
+}
+
+export function siteTable(found: readonly string[], units: readonly Pick<PlanUnit, "id" | "files">[], skip: readonly SiteSkip[]): SiteRow[] {
+  const seen = new Set(found);
+  const rows = new Map<string, SiteRow>();
+  for (const x of units) for (const f of x.files ?? []) if (!rows.has(f)) rows.set(f, { file: f, category: seen.has(f) ? "unit" : "new", unit: x.id });
+  for (const k of skip) if (!rows.has(k.file)) rows.set(k.file, { file: k.file, category: k.why });
+  return [...rows.values()].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
 }
