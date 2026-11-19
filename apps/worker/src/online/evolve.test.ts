@@ -4,7 +4,7 @@ import type { ProfileLayers as Layers } from "@mandat/contract";
 import { TESTS_KEPT } from "@mandat/profile";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { evolveTick } from "./evolve.js";
+import { evolveTick, profileLineage } from "./evolve.js";
 import type { BenchScore } from "./evolve.js";
 
 // D-530 (round 2): the tick of profile evolution. Recurring failures → a trial; the bench gate (the same scenarios with
@@ -104,5 +104,18 @@ describe("the held-out heavy bench in the gate (D-550)", () => {
     expect(r.accepted).toEqual([]);
     expect(await trials()).toContainEqual(expect.objectContaining({ change_key: "protect_path|vendorx/**|bugfix", status: "benched" }));
     expect((await current())?.version).toBe(before?.version);
+  });
+});
+
+describe("the archive with lineage (D-551)", () => {
+  it("every version Mandat made names its parent, how it came and its trial; the chain reads back to the first", async () => {
+    const chain = await profileLineage(db, DEMO_REPO_ID);
+    expect(chain.length).toBeGreaterThanOrEqual(3);
+    // newest first: the roll back, then the accepted boundary, then the first version a person approved
+    expect(chain.slice(0, 2).map((s) => [s.origin, s.change])).toEqual([["evolve_rollback", "tests_kept"], ["evolve", "tests_kept"]]);
+    expect(chain[1]?.bench).toMatchObject({ before: "9/10", after: "10/10" });
+    expect(chain.at(-1)).toMatchObject({ version: 1, origin: null, change: null });
+    const all = (await db.query<{ n: number }>("select count(*)::int as n from public.harness_profiles where repo_id = $1", [DEMO_REPO_ID])).rows[0]?.n;
+    expect(chain).toHaveLength(all ?? 0);
   });
 });

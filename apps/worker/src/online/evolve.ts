@@ -1,7 +1,7 @@
 import { EVOLVE_LIMITS, ProfileLayers, ProfileManifest, profileHash } from "@mandat/contract";
 import type { ProfileLayers as Layers, TaskType } from "@mandat/contract";
-import { applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "@mandat/profile";
-import type { FailureRow } from "@mandat/profile";
+import { applyChange, isNarrowing, lineage, predictionHeld, rulesFromFailures } from "@mandat/profile";
+import type { FailureRow, LineageStep, LineageTrial, LineageVersion } from "@mandat/profile";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
 
@@ -119,7 +119,8 @@ async function newVersion(db: SqlClient, r: Repo, layers: Layers, why: { action:
   try {
     const old = (await db.query<{ profile_hash: string }>("select profile_hash from public.harness_profiles where id = $1::uuid", [r.profile_id])).rows[0];
     const v = (await db.query<{ v: number }>("select coalesce(max(version), 0) + 1 as v from public.harness_profiles where repo_id = $1::uuid", [r.id])).rows[0]?.v ?? r.version + 1;
-    const ins = await db.query<{ id: string }>("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash, status, approved_at) values ($1::uuid, $2::uuid, $3, $4::jsonb, '{}', $5, 'approved', now()) returning id::text as id", [r.org_id, r.id, v, JSON.stringify(layers), hash]);
+    // D-551: the new version names its parent, how it came and the trial behind it (the archive keeps the old one)
+    const ins = await db.query<{ id: string }>("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash, status, approved_at, parent_id, origin, trial_id) values ($1::uuid, $2::uuid, $3, $4::jsonb, '{}', $5, 'approved', now(), $6::uuid, $7, $8::uuid) returning id::text as id", [r.org_id, r.id, v, JSON.stringify(layers), hash, r.profile_id, why.action, why.trial]);
     const id = ins.rows[0]?.id as string;
     await db.query("update public.harness_profiles set status = 'superseded' where id = $1::uuid and status = 'approved'", [r.profile_id]);
     await db.query("update public.repos set profile_id = $2::uuid where id = $1::uuid", [r.id, id]);
@@ -138,4 +139,13 @@ async function newVersion(db: SqlClient, r: Repo, layers: Layers, why: { action:
 async function decide(db: SqlClient, t: Trial, status: "benched" | "accepted" | "refused" | "rolled_back", bench: { before: BenchScore; after: BenchScore } | null, why: string): Promise<void> {
   await db.query("update public.profile_trials set status = $2, bench = coalesce($3::jsonb, bench), why = $4, decided_at = case when $2 in ('accepted', 'refused') then now() else decided_at end where id = $1::uuid", [t.id, status, bench ? JSON.stringify(bench) : null, why.slice(0, 500)]);
   await appendLedgerOnline(db, { org_id: t.org_id, kind: "profile_trial", task_id: null, payload: { trial_id: t.id, change_key: t.change_key, status, why: why.slice(0, 300), by: "mandat" } });
+}
+
+/** D-551: the chain of the repo's profile versions, from the current one back to the first */
+export async function profileLineage(db: SqlClient, repoId: string): Promise<LineageStep[]> {
+  const cur = (await db.query<{ profile_id: string | null }>("select profile_id::text as profile_id from public.repos where id = $1::uuid", [repoId])).rows[0]?.profile_id;
+  if (!cur) return [];
+  const versions = (await db.query<LineageVersion>("select id::text as id, version, parent_id::text as parent_id, origin, trial_id::text as trial_id, status, profile_hash from public.harness_profiles where repo_id = $1::uuid order by version desc limit 500", [repoId])).rows;
+  const trials = (await db.query<LineageTrial>("select id::text as id, manifest, status, bench, why from public.profile_trials where repo_id = $1::uuid", [repoId])).rows;
+  return lineage(cur, versions, trials);
 }

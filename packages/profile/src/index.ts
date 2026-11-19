@@ -12,3 +12,5 @@ export { BUILTIN_SKILLS, builtinSkillRef, skillTexts } from "./builtin-skills.js
 export type { BuiltinSkill } from "./builtin-skills.js";
 export { NO_HIDDEN_PROBE, NO_TEST_ENV, TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
 export type { FailureRow } from "./evolve.js";
+export { lineage } from "./lineage.js";
+export type { LineageStep, LineageTrial, LineageVersion } from "./lineage.js";
