@@ -17,6 +17,8 @@ export interface TaskRow {
   ladder_level: number | null; ladder_s_up: number | null; ladder_pinned: boolean | null; ledger_seq: number | null;
   /** E8g: a steerable agent is running now (the "Steer" box) */
   steerable?: boolean;
+  /** D-538: what a short title of a job's internal task needs (lib/task-title.ts) */
+  internal_role?: "oracle" | "unit" | "final" | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null;
 }
 
 const TASKS = `
@@ -30,7 +32,11 @@ select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t
        public.board_column(t.state, t.last_result, t.wait_reason, coalesce(c.approval_needed, false), t.outcome_decided) as col,
        (e1.data ->> 'passed')::int as a_passed, (e1.data ->> 'total')::int as a_total, (e2.data ->> 'before')::int as inv_before, (e2.data ->> 'after')::int as inv_after,
        l.level as ladder_level, l.s_up::float8 as ladder_s_up, l.pinned as ladder_pinned,
-       (select max(g.seq)::int from public.ledger g where g.org_id = t.org_id and g.task_id = t.id) as ledger_seq
+       (select max(g.seq)::int from public.ledger g where g.org_id = t.org_id and g.task_id = t.id) as ledger_seq,
+       case when t.kind = 'oracle' then 'oracle' else t.job_role end as internal_role, t.unit_id,
+       (select u.title from public.job_units u where u.job_id = t.job_id and u.unit_id = t.unit_id) as unit_title,
+       coalesce((select cv.approved_spec ->> 'goal' from public.jobs j join public.conversations cv on cv.id = j.conversation_id where j.id = t.job_id),
+                (select coalesce(cv.approved_spec, cv.spec) ->> 'goal' from public.oracles o join public.conversations cv on cv.id = o.conversation_id where o.task_id = t.id order by o.created_at desc limit 1)) as spec_goal
   from public.tasks t
   -- D-452: only the current attempt's change and verdict; a new attempt has none until it makes its own
   left join lateral (select * from public.changesets x where x.task_id = t.id and x.attempt = t.attempt order by x.created_at desc limit 1) c on true

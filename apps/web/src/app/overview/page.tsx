@@ -7,6 +7,7 @@ import type { T } from "../../i18n/t";
 import { FlowMap, ProjectColumns, ProjectTiles, Rhythm, Swarm } from "../../components/overview-parts";
 import { HEALTH, Shell } from "../../components/shell";
 import { TaskRow } from "../../components/task-row";
+import { taskTitle } from "../../lib/task-title";
 import { ViewTabs } from "../../components/theme-switch";
 import { btn, card } from "../../components/ui";
 import { pageTitle } from "../../lib/inbox";
@@ -137,7 +138,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         <aside className="flex flex-col gap-4">
           {view !== "map" && <Panel title={t("home.decisions")} aside={String(decide.length)}>
             {decide.length === 0 ? <p className="p-4 text-sm text-mute">{t("home.nothingWaits")}</p> : (
-              <ul className="space-y-1.5 p-3">{decide.map((x) => { const st = statusOf(x, t.lang); return <li key={x.id}><Link href={taskHref(x.id)} className="block rounded-lg bg-raised px-3 py-2 no-underline hover:brightness-110"><span className="block truncate text-sm text-ink">{x.text}</span><span className="text-xs text-mute">{st.label}</span></Link></li>; })}</ul>
+              <ul className="space-y-1.5 p-3">{decide.map((x) => { const st = statusOf(x, t.lang); return <li key={x.id}><Link href={taskHref(x.id)} className="block rounded-lg bg-raised px-3 py-2 no-underline hover:brightness-110"><span className="block truncate text-sm text-ink">{taskTitle(x, t)}</span><span className="text-xs text-mute">{st.label}</span></Link></li>; })}</ul>
             )}
           </Panel>}
         </aside>

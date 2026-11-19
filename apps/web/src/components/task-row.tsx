@@ -6,6 +6,7 @@ import { reasonText } from "../lib/verdict-view";
 import type { TaskRow as Row } from "../lib/server/queries";
 import { StatusBadge } from "./ui";
 import { taskHref } from "../lib/nav";
+import { taskTitle } from "../lib/task-title";
 
 // D-292: one line per task in the list: status, what was asked, who did it, when; the first reason if it failed.
 export function TaskRow({ t, tr }: { t: Row; tr: T }) {
@@ -15,7 +16,7 @@ export function TaskRow({ t, tr }: { t: Row; tr: T }) {
     <li>
       <Link href={taskHref(t.id)} className="group flex items-start gap-4 px-4 py-3.5 transition hover:bg-raised">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium text-ink group-hover:underline">{t.text}</p>
+          <p className="truncate font-medium text-ink group-hover:underline">{taskTitle(t, tr)}</p>
           <p className="mt-0.5 text-sm text-mute">
             {agentLabel(t.agent, tr.lang)} · {ago(t.updated_at, new Date(), tr.lang)}
           </p>

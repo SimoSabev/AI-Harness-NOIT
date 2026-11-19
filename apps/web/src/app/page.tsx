@@ -19,6 +19,7 @@ import { twinView } from "../lib/server/twin";
 import { conversationFeed } from "../lib/server/conversation";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
+import { taskTitle } from "../lib/task-title";
 import { showChat } from "../lib/chat";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const now = new Date();
   const tasks = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1)).slice(0, 100).map((x) => {
     const s = statusOf(x, t.lang);
-    return { id: x.id, text: x.text, tone: s.tone, label: s.label, ago: ago(x.updated_at, now, t.lang) };
+    return { id: x.id, text: taskTitle(x, t), tone: s.tone, label: s.label, ago: ago(x.updated_at, now, t.lang) };
   });
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
