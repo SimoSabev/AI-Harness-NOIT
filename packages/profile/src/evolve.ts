@@ -130,3 +130,35 @@ export function predictionHeld(m: ProfileManifest, later: readonly FailureRow[])
   }
   return { done: seen >= m.prediction.next_n, held: true, seen, repeats };
 }
+
+// D-553 (М3 Х9, docs/prd/heavy-process.md §9 „при нов модел части се махат една по една и се мери“): a part Mandat added
+// for one model may be dead weight for the next. removeChange is the exact inverse of applyChange; removal widens, so a
+// removal that holds on the bench still waits for a person (isNarrowing is false for it).
+
+/** is this change's part in the profile */
+export function hasChange(p: ProfileLayers, c: ProfileChange): boolean {
+  if (isBoundary(c.rule)) return p.b.boundaries.includes(BOUNDARY[c.rule]);
+  if (c.rule === "lint_hook" || c.rule === "type_hook") return p.d.some((h) => h.script === HOOK[c.rule as "lint_hook" | "type_hook"]);
+  return p.c.some((r) => r.tool === writeDeny(c.detail) && r.decision === "deny" && r.subject === "any");
+}
+
+/** the profile without the part this change added (a new object; the input is untouched) */
+export function removeChange(p: ProfileLayers, c: ProfileChange): ProfileLayers {
+  if (isBoundary(c.rule)) {
+    const text = BOUNDARY[c.rule];
+    return { ...p, b: { ...p.b, boundaries: p.b.boundaries.filter((x) => x !== text) } };
+  }
+  if (c.rule === "lint_hook" || c.rule === "type_hook") {
+    const script = HOOK[c.rule];
+    return { ...p, d: p.d.filter((h) => !(h.script === script && h.event === "post_tool" && h.matcher === null)) };
+  }
+  return { ...p, c: p.c.filter((r) => !(r.tool === writeDeny(c.detail) && r.decision === "deny" && r.subject === "any" && r.reason === "recurring failures (D-530)")) };
+}
+
+export interface AcceptedPart { trial: string; change: ProfileChange; model: string | null }
+
+/** the parts to try without: still in the profile and accepted under another model than the one the tasks use now */
+export function ablationCandidates(accepted: readonly AcceptedPart[], p: ProfileLayers, modelNow: string | null): AcceptedPart[] {
+  if (!modelNow) return [];
+  return accepted.filter((a) => a.model !== null && a.model !== modelNow && hasChange(p, a.change));
+}

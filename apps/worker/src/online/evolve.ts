@@ -1,6 +1,6 @@
 import { EVOLVE_LIMITS, ProfileLayers, ProfileManifest, profileHash } from "@mandat/contract";
 import type { ProfileLayers as Layers, TaskType } from "@mandat/contract";
-import { applyChange, isNarrowing, lineage, predictionHeld, rulesFromFailures } from "@mandat/profile";
+import { ablationCandidates, applyChange, isNarrowing, lineage, predictionHeld, removeChange, rulesFromFailures } from "@mandat/profile";
 import type { FailureRow, LineageStep, LineageTrial, LineageVersion } from "@mandat/profile";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
@@ -15,7 +15,7 @@ export interface Score { pass: number; total: number; false_verified: number }
 /** D-550: the visible scenarios plus, when run, the held-out heavy set (only its counts ever leave the gate) */
 export interface BenchScore extends Score { heldout?: Score }
 export type BenchRunner = (layers: Layers, taskType: TaskType) => Promise<BenchScore>;
-export interface EvolveTick { proposed: string[]; accepted: string[]; refused: string[]; rolledBack: string[] }
+export interface EvolveTick { proposed: string[]; accepted: string[]; refused: string[]; rolledBack: string[]; /** D-553: removal trials benched this tick */ ablated: string[] }
 
 interface Repo { id: string; org_id: string; profile_id: string; version: number; layers: unknown }
 interface Trial { id: string; org_id: string; repo_id: string; change_key: string; manifest: unknown; from_profile: string; to_profile: string | null; decided_at: string | null }
@@ -36,13 +36,14 @@ const rowsOf = (rows: { task_id: string; task_type: TaskType; at: string; reason
 const worse = (a: Score, b: Score) => a.pass < b.pass || a.false_verified > b.false_verified;
 
 export async function evolveTick(db: SqlClient, o: { now: Date; bench?: BenchRunner; /** D-550: no held-out counts → nothing is accepted by itself */ requireHeldout?: boolean }): Promise<EvolveTick> {
-  const out: EvolveTick = { proposed: [], accepted: [], refused: [], rolledBack: [] };
+  const out: EvolveTick = { proposed: [], accepted: [], refused: [], rolledBack: [], ablated: [] };
   for (const r of (await db.query<Repo>(REPOS)).rows) {
     const layers = ProfileLayers.safeParse(r.layers);
     if (!layers.success) continue;
     await propose(db, r, layers.data, o.now, out);
     if (o.bench) await gate(db, r, layers.data, o.bench, out, o.requireHeldout ?? false);
     await watch(db, r, out);
+    if (o.bench && out.accepted.length === 0 && out.rolledBack.length === 0) await ablate(db, r, o.bench, out);
   }
   return out;
 }
@@ -148,4 +149,38 @@ export async function profileLineage(db: SqlClient, repoId: string): Promise<Lin
   const versions = (await db.query<LineageVersion>("select id::text as id, version, parent_id::text as parent_id, origin, trial_id::text as trial_id, status, profile_hash from public.harness_profiles where repo_id = $1::uuid order by version desc limit 500", [repoId])).rows;
   const trials = (await db.query<LineageTrial>("select id::text as id, manifest, status, bench, why from public.profile_trials where repo_id = $1::uuid", [repoId])).rows;
   return lineage(cur, versions, trials);
+}
+
+/** "<agent>:<model>" of a task; the connection's default model is "default" */
+const MODEL_OF = "t.agent || ':' || coalesce(t.model, 'default')";
+
+/**
+ * D-553: a part Mandat accepted under one model, while the tasks since then run on another, is tried without: the bench
+ * with the current profile and without the part. Worse → refused (the part still earns its place). Not worse → benched:
+ * removal widens, so it waits for a person; the profile never changes here. Once per part and model; one per tick.
+ */
+async function ablate(db: SqlClient, r: Repo, bench: BenchRunner, out: EvolveTick): Promise<void> {
+  const cur = (await db.query<{ layers: unknown }>("select layers from public.harness_profiles where id = $1::uuid", [r.profile_id])).rows[0];
+  const layers = ProfileLayers.safeParse(cur?.layers);
+  if (!layers.success) return;
+  const accepted = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'accepted' order by decided_at", [r.id])).rows;
+  for (const t of accepted) {
+    const m = ProfileManifest.safeParse(t.manifest);
+    if (!m.success || !t.decided_at) continue;
+    const then = (await db.query<{ m: string }>(`select ${MODEL_OF} as m from public.tasks t where t.id = any($1::text[]) group by 1 order by count(*) desc, 1 limit 1`, [m.data.evidence])).rows[0]?.m ?? null;
+    const now = (await db.query<{ m: string }>(`select ${MODEL_OF} as m from public.tasks t where t.repo_id = $1::uuid and t.state_entered_at > $2::timestamptz and t.state in ('BLOCKED', 'CLOSED', 'HELD', 'GATED', 'DELIVERED', 'OUTCOME') order by t.state_entered_at desc limit 1`, [r.id, t.decided_at])).rows[0]?.m ?? null;
+    const [part] = ablationCandidates([{ trial: t.id, change: m.data.change, model: then }], layers.data, now);
+    if (!part || !now) continue;
+    const key = `ablate|${m.data.change.rule}|${m.data.change.detail}|${now}`.slice(0, 300);
+    if ((await db.query("select 1 from public.profile_trials where repo_id = $1::uuid and change_key = $2", [r.id, key])).rows.length > 0) continue;
+    const without = removeChange(layers.data, m.data.change);
+    const [before, after] = [await bench(layers.data, m.data.prediction.task_type), await bench(without, m.data.prediction.task_type)];
+    const lost = worse(after, before) || (before.heldout && after.heldout ? worse(after.heldout, before.heldout) : !after.heldout);
+    const status = lost ? "refused" : "benched";
+    const why = lost ? `without ${m.data.change.rule} the bench got worse under ${now}: the part stays` : `without ${m.data.change.rule} the bench held under ${now}: removing it widens, so it waits for a person`;
+    await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile, status, bench, why, decided_at) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::uuid, $6, $7::jsonb, $8, case when $6 = 'refused' then now() end)", [r.org_id, r.id, key, JSON.stringify(m.data), r.profile_id, status, JSON.stringify({ before, after }), why.slice(0, 500)]);
+    await appendLedgerOnline(db, { org_id: r.org_id, kind: "profile_trial", task_id: null, payload: { action: "ablation", change_key: key, status, model_then: then, model_now: now, by: "mandat" } });
+    out.ablated.push(key);
+    return;
+  }
 }

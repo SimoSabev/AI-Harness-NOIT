@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ProfileLayers, demoProfileLayers } from "@mandat/contract";
 import type { ProfileLayers as Layers, ProfileManifest } from "@mandat/contract";
-import { NO_HIDDEN_PROBE, NO_TEST_ENV, TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
+import { NO_HIDDEN_PROBE, NO_TEST_ENV, TESTS_KEPT, ablationCandidates, applyChange, hasChange, removeChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
 import type { FailureRow } from "./evolve.js";
 
 // D-530 (round 2): profile evolution with evidence. The pure part: recurring failures → a manifest with a fixed
@@ -112,5 +112,32 @@ describe("gaming the checks becomes a rule too (D-549)", () => {
     expect(m.map((x) => x.change)).toEqual([{ rule: "protect_path", layer: "c", detail: "vitest.config.ts" }]);
     // the prediction counts the class that made the change, whichever detector reported it
     expect(predictionHeld(m[0]!, [fail("t_x", ["D13:test_config_change:vitest.config.ts"], { d: 0 })]).held).toBe(false);
+  });
+});
+
+describe("removing a part when the model changes (D-553)", () => {
+  it("removeChange undoes applyChange exactly, for every rule; hasChange tells whether the part is there", () => {
+    const changes = [
+      { rule: "tests_kept", layer: "b", detail: "" }, { rule: "no_test_env", layer: "b", detail: "" }, { rule: "no_hidden_probe", layer: "b", detail: "" },
+      { rule: "protect_path", layer: "c", detail: "ops/**" },
+    ] as const;
+    for (const c of changes) {
+      const on = applyChange(base(), c);
+      expect(hasChange(on, c)).toBe(true);
+      expect(hasChange(base(), c)).toBe(false);
+      expect(removeChange(on, c)).toEqual(base());
+      // removing widens: never a narrowing, so never accepted by Mandat alone
+      expect(isNarrowing(on, removeChange(on, c))).toBe(false);
+    }
+  });
+  it("a part is a candidate when it is in the profile and was accepted under another model than the one now", () => {
+    const on = applyChange(base(), { rule: "tests_kept", layer: "b", detail: "" });
+    const accepted = [
+      { trial: "tr1", change: { rule: "tests_kept", layer: "b", detail: "" }, model: "claude:sonnet-old" },
+      { trial: "tr2", change: { rule: "protect_path", layer: "c", detail: "ops/**" }, model: "claude:sonnet-old" },
+    ] as const;
+    expect(ablationCandidates(accepted, on, "claude:sonnet-new").map((x) => x.trial)).toEqual(["tr1"]);
+    expect(ablationCandidates(accepted, on, "claude:sonnet-old")).toEqual([]);
+    expect(ablationCandidates(accepted, on, null)).toEqual([]);
   });
 });

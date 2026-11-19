@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ProfileLayers, demoProfileLayers, profileHash } from "@mandat/contract";
 import type { ProfileLayers as Layers } from "@mandat/contract";
-import { TESTS_KEPT } from "@mandat/profile";
+import { NO_HIDDEN_PROBE, TESTS_KEPT } from "@mandat/profile";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
 import { evolveTick, profileLineage } from "./evolve.js";
@@ -117,5 +117,33 @@ describe("the archive with lineage (D-551)", () => {
     expect(chain.at(-1)).toMatchObject({ version: 1, origin: null, change: null });
     const all = (await db.query<{ n: number }>("select count(*)::int as n from public.harness_profiles where repo_id = $1", [DEMO_REPO_ID])).rows[0]?.n;
     expect(chain).toHaveLength(all ?? 0);
+  });
+});
+
+describe("parts are tried without when the model changes (D-553)", () => {
+  it("a part accepted under one model, tasks now on another → a removal trial on the bench; it holds → waits for a person, the profile stays", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) ids.push(await task("UNKNOWN", ["D13:hidden_probe:tool:1"], { minsAgo: 50 }));
+    await db.query("update public.tasks set model = 'sonnet-old' where id = any($1::text[])", [ids]);
+    await evolveTick(db, { now: new Date() });
+    const hasProbe = (l: Layers) => l.b.boundaries.includes(NO_HIDDEN_PROBE);
+    const full = { ...score(10), heldout: { pass: 8, total: 8, false_verified: 0 } };
+    let r = await evolveTick(db, { now: new Date(), bench: () => Promise.resolve(full) });
+    expect(r.accepted).toEqual(["no_hidden_probe||bugfix"]);
+    expect(r.ablated).toEqual([]);
+    const accepted = await current();
+    await db.query("update public.profile_trials set decided_at = now() - interval '5 minutes' where change_key = 'no_hidden_probe||bugfix'");
+    // the tasks move to a new model
+    const later = await task("VERIFIED", [], { minsAgo: 1 });
+    await db.query("update public.tasks set model = 'sonnet-new' where id = $1", [later]);
+    const seen: boolean[] = [];
+    r = await evolveTick(db, { now: new Date(), bench: (l) => (seen.push(hasProbe(l)), Promise.resolve(full)) });
+    expect(r.ablated).toEqual(["ablate|no_hidden_probe||claude:sonnet-new"]);
+    expect(seen).toEqual([true, false]);
+    expect(await trials()).toContainEqual(expect.objectContaining({ change_key: "ablate|no_hidden_probe||claude:sonnet-new", status: "benched" }));
+    expect((await current())?.version).toBe(accepted?.version);
+    expect((await current())?.layers.b.boundaries).toContain(NO_HIDDEN_PROBE);
+    // once per part and model
+    expect((await evolveTick(db, { now: new Date(), bench: () => Promise.resolve(full) })).ablated).toEqual([]);
   });
 });
