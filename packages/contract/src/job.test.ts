@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADVISOR_SYSTEM, JOB_PARALLEL_MAX, RESCUE_MAX, RESCUE_TRIES, UnitStatus, advisorUser, rescueTaskText, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
+import { ADVISOR_SYSTEM, PLAYBOOK_SYSTEM, playbookUser, withPlaybook, JOB_PARALLEL_MAX, RESCUE_MAX, RESCUE_TRIES, UnitStatus, advisorUser, rescueTaskText, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
 import type { Spec } from "./index.js";
 
 // D-535: the job's shared pieces — the planner's answer, the handoff line, a unit's task text and its retry note.
@@ -93,5 +93,21 @@ describe("a unit that stopped gets advice and two fresh tries (D-542)", () => {
 describe("the unit points to the job's map (D-543)", () => {
   it("names the read-only folder", () => {
     expect(unitTaskText(spec, { id: "u1", title: "t", criteria: ["AC-1"] }, [])).toContain("/m/in/job (read only)");
+  });
+});
+
+describe("the pilot's playbook (D-545)", () => {
+  it("the tuner reads the pilot's handoffs and counts, never a test; the playbook goes into later units' text, framed", () => {
+    expect(PLAYBOOK_SYSTEM).toContain("pilot");
+    const q = playbookUser(spec, [{ unit_id: "u1", done: "moved the module", deviations: ["kept the old export"], risks: ["dates"] }], { units: 3, rescues: 1, relands: 0 });
+    expect(q).toContain("Goal: Discounts");
+    expect(q).toContain("u1: moved the module; deviations: kept the old export; risks: dates");
+    expect(q).toContain("3 pilot units, 1 rescued, 0 built again");
+    const base = unitTaskText(spec, { id: "u4", title: "t", criteria: ["AC-1"] }, []);
+    const t = withPlaybook(base, "Keep the old export.");
+    expect(t).toContain("Playbook from the pilot");
+    expect(t).toContain("Keep the old export.");
+    expect(withPlaybook(base, null)).toBe(base);
+    expect(withPlaybook(base, "x".repeat(9000)).length).toBeLessThanOrEqual(JOB_TEXT_MAX);
   });
 });

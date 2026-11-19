@@ -179,5 +179,32 @@ export function rescueTaskText(base: string, advice: string, n: number): string 
   return `${clip(base, JOB_TEXT_MAX - tail.length - 1)}\n${tail}`.slice(0, JOB_TEXT_MAX);
 }
 
+// D-545 (М2 Х5): after a pilot, the planner's model writes down what the pilot taught (from its handoffs and counts,
+// never a test) as a short playbook; every later unit gets it.
+const PLAYBOOK_MAX = 2000;
+
+export const PLAYBOOK_SYSTEM = [
+  "You tune a large software job after its pilot: the first units were built and passed their hidden checks.",
+  "From the writers' handoffs (what they did, how they deviated, what risks they saw) write a short playbook for the writers of the remaining units.",
+  "At most 12 short lines of plain text: the pattern that worked, the traps to avoid, conventions to keep. No questions, no code longer than one line.",
+].join("\n");
+
+export function playbookUser(s: Spec, handoffs: readonly Handoff[], o: { units: number; rescues: number; relands: number }): string {
+  return [
+    `Goal: ${s.goal}`,
+    `Keep unchanged: ${s.unchanged.length > 0 ? s.unchanged.join("; ") : "-"}`,
+    `The pilot: ${o.units} pilot units, ${o.rescues} rescued, ${o.relands} built again on a moved branch.`,
+    "Handoffs of the pilot units:",
+    ...handoffs.slice(0, 20).map((h) => clip(`${h.unit_id}: ${h.done}${h.deviations.length > 0 ? `; deviations: ${h.deviations.join("; ")}` : ""}${h.risks.length > 0 ? `; risks: ${h.risks.join("; ")}` : ""}`, 600)),
+  ].join("\n");
+}
+
+/** a later unit's text with the pilot's playbook (framed as lessons, not orders); unchanged without one */
+export function withPlaybook(text: string, playbook: string | null): string {
+  if (!playbook || playbook.trim() === "") return text;
+  const tail = `\nPlaybook from the pilot (lessons of the first units of this job; weigh them):\n${clip(playbook.trim(), PLAYBOOK_MAX)}`;
+  return `${clip(text, JOB_TEXT_MAX - tail.length)}${tail}`.slice(0, JOB_TEXT_MAX);
+}
+
 /** the approve body of a sealed job: the seal's hash the person saw */
 export const JobApproveBody = z.object({ seal_hash: Sha256 }).strict();
