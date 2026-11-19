@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JOB_PARALLEL_MAX, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
+import { ADVISOR_SYSTEM, JOB_PARALLEL_MAX, RESCUE_MAX, RESCUE_TRIES, UnitStatus, advisorUser, rescueTaskText, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
 import type { Spec } from "./index.js";
 
 // D-535: the job's shared pieces — the planner's answer, the handoff line, a unit's task text and its retry note.
@@ -63,5 +63,29 @@ describe("the planner in waves (D-541)", () => {
     expect(JOB_PARALLEL_MAX).toBeGreaterThan(1);
     expect(RELAND_MAX).toBeGreaterThanOrEqual(1);
     expect(LedgerKind.parse("unit_relanded")).toBe("unit_relanded");
+  });
+});
+
+describe("a unit that stopped gets advice and two fresh tries (D-542)", () => {
+  const unit = { id: "u1", title: "the 10% rule", criteria: ["AC-1"] };
+  it("the advisor sees the unit, its criteria and the failing ids, never a test; asks for short concrete advice", () => {
+    expect(ADVISOR_SYSTEM).toContain("cannot see");
+    const q = advisorUser(spec, unit, ["AC-1"], ["D5:hidden_fail:h00000000"], "HANDOFF said: rounding is hard");
+    expect(q).toContain("AC-1: WHEN");
+    expect(q).toContain("Failing criteria: AC-1");
+    expect(q).toContain("rounding is hard");
+    expect(RESCUE_TRIES).toBe(2);
+    expect(RESCUE_MAX).toBeGreaterThanOrEqual(1);
+  });
+  it("each try gets the advice framed as advice; the second try is told to take another way; the text stays in bounds", () => {
+    const base = unitTaskText(spec, unit, []);
+    const a = rescueTaskText(base, "Round half up.", 0);
+    const b = rescueTaskText(base, "Round half up.", 1);
+    expect(a).toContain("Advice from a reviewer");
+    expect(a).toContain("Round half up.");
+    expect(a).not.toContain("different approach");
+    expect(b).toContain("different approach");
+    expect(rescueTaskText(base, "x".repeat(9000), 1).length).toBeLessThanOrEqual(JOB_TEXT_MAX);
+    expect(UnitStatus.parse("parked")).toBe("parked");
   });
 });

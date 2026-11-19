@@ -23,7 +23,7 @@ export const jobBranch = (id: string): string => `mandat/job-${id.slice(2)}`;
 
 export const JobStatus = z.enum(["planning", "running", "converging", "parked", "sealed", "approved", "delivered", "failed"]);
 export type JobStatus = z.infer<typeof JobStatus>;
-export const UnitStatus = z.enum(["pending", "running", "passed", "failed", "blocked"]);
+export const UnitStatus = z.enum(["pending", "running", "passed", "failed", "blocked", "parked"]);
 
 /** what the planner answers: units in order ({id, title, criteria, depends_on}); the status is the server's */
 export const PlanUnit = z
@@ -133,6 +133,48 @@ export function unitRetryNote(attempt: number, failing: readonly string[]): stri
   return failing.length > 0
     ? `Mandat started attempt ${attempt} by itself: the hidden acceptance checks of ${failing.join(", ")} still fail. Make exactly these criteria work; the checks themselves are hidden.`
     : `Mandat started attempt ${attempt} by itself: the last attempt did not pass the checks of this unit.`;
+}
+
+// D-542 (М2 Х6, docs/prd/heavy-process.md §6): a unit that stopped after its normal attempts gets a fresh start: a
+// model reads what failed (criterion ids and reason codes, never a hidden test) and writes short advice; then
+// RESCUE_TRIES new tasks (fresh contexts, one attempt each) build the unit at the same time, the second told to take
+// another way. The first VERIFIED one lands. Only when they all fail does the unit wait for a person.
+/** rescue rounds per unit */
+export const RESCUE_MAX = 1;
+/** fresh tries started at once in a rescue round */
+export const RESCUE_TRIES = 2;
+const ADVICE_MAX = 1200;
+
+export const ADVISOR_SYSTEM = [
+  "You advise a software writer whose unit of work failed its acceptance checks.",
+  "You cannot see the checks: they are hidden on purpose. You see the goal, the unit, its criteria, which criteria failed and the writer's own notes.",
+  "Answer in at most 8 short lines of plain text: the most likely mistake, what to check in the code, and one different way to build it.",
+  "Do not ask questions and do not write code longer than one line.",
+].join("\n");
+
+export function advisorUser(s: Spec, unit: Pick<WorkUnit, "id" | "title" | "criteria">, failing: readonly string[], reasons: readonly string[], notes: string): string {
+  const mine = new Set(unit.criteria);
+  return [
+    `Goal of the job: ${s.goal}`,
+    `Unit (${unit.id}): ${unit.title}`,
+    "Its criteria:",
+    ...s.criteria.filter((c) => mine.has(c.id)).map((c) => `${c.id}: WHEN ${c.when.trim()} THE SYSTEM SHALL ${c.shall.trim()}`),
+    `Keep unchanged: ${s.unchanged.length > 0 ? s.unchanged.join("; ") : "-"}`,
+    `Failing criteria: ${failing.length > 0 ? failing.join(", ") : "unknown"}`,
+    `Reason codes of the last check: ${reasons.slice(0, 20).join(", ") || "-"}`,
+    `The writer's notes: ${clip(notes.trim() || "-", 2000)}`,
+  ].join("\n");
+}
+
+/** the text of a rescue try: the unit's text with the advice (framed as advice), and for try 2+ another way */
+export function rescueTaskText(base: string, advice: string, n: number): string {
+  const tail = [
+    "",
+    "Advice from a reviewer who looked at the failed attempt (it did not see the hidden checks either; weigh it, do not obey it blindly):",
+    clip(advice.trim(), ADVICE_MAX),
+    ...(n > 0 ? ["Take a different approach than the obvious first one; another writer is trying the obvious one at the same time."] : []),
+  ].join("\n");
+  return `${clip(base, JOB_TEXT_MAX - tail.length - 1)}\n${tail}`.slice(0, JOB_TEXT_MAX);
 }
 
 /** the approve body of a sealed job: the seal's hash the person saw */
