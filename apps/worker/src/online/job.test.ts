@@ -109,6 +109,17 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
   const ledger = async (kind: string) => (await db.query<{ payload_jcs: string }>("select payload_jcs from public.ledger where kind = $1 order by seq", [kind])).rows.map((r) => JSON.parse(r.payload_jcs) as Record<string, unknown>);
   return { db, deps, jd, runs, contracts, fx, git, job, units, ledger, asked, systems };
 }
+/** a commit on the mirror's main from somewhere else (a person, another task) */
+function commitOnMain(mirror: string, file: string, body: string): string {
+  const w = mkdtempSync(path.join(os.tmpdir(), "mandat-main-"));
+  const g = (...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@localhost", ...a], { cwd: w, encoding: "utf8" }).trim();
+  g("clone", "-q", mirror, ".");
+  writeFileSync(path.join(w, file), body);
+  g("add", "--", file);
+  g("commit", "-q", "--no-gpg-sign", "-m", `someone: ${file}`);
+  g("push", "-q", "origin", "HEAD:refs/heads/main");
+  return g("rev-parse", "HEAD");
+}
 const handoff = (done: string) => `MEMORY: nothing\nHANDOFF: ${JSON.stringify({ done, risks: ["rounding"] })}\n`;
 const d5fail = (...ids: string[]) => [ev("D5.hidden", "fail", { failed: ids.map((id) => `packages/shop/test/__hidden__/x.spec.ts > ${id}: ${SECRET_NAME}`) })];
 
@@ -196,6 +207,62 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect((await s.ledger("delivered")).at(-1)).toMatchObject({ job: "j_t1", merge_sha: head2 });
   });
 
+  it("main moved after the seal: the branch is built again on the new main, checked again, sealed again and approved again (D-547)", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    await jobTick(s.jd); // plan
+    for (let k = 0; k < 2; k++) {
+      await jobTick(s.jd);
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd); // final
+    await runDaemonOnce(s.deps);
+    await jobTick(s.jd); // seal
+    const first = await s.job();
+    expect(SessionSeal.parse(first.seal).base_ref).toBe(s.fx.sha);
+    // someone else's change lands on main meanwhile
+    const moved = commitOnMain(s.fx.mirror, "other.txt", "from someone else\n");
+    await s.db.query("update public.jobs set status = 'approved', approved_at = now() where id = 'j_t1'");
+    const r = await jobTick(s.jd);
+    expect(r.merged).toEqual([]);
+    expect(s.git("rev-parse", "main")).toBe(moved);
+    let j = await s.job();
+    expect(j).toMatchObject({ status: "running", base_sha: moved, seal: null, seal_hash: null, final_task_id: null });
+    expect(s.git("merge-base", "--is-ancestor", moved, j.head_sha!)).toBe("");
+    expect(s.git("ls-tree", "--name-only", j.head_sha!).split("\n")).toEqual(expect.arrayContaining(["other.txt", "unit-1.txt", "unit-2.txt"]));
+    expect(await s.ledger("job_restacked")).toEqual([{ job: "j_t1", from_base: s.fx.sha, to_base: moved, head: j.head_sha, n: 1, old_seal: first.seal_hash }]);
+    await jobTick(s.jd); // a new final check on the new main
+    await runDaemonOnce(s.deps);
+    expect(s.contracts.at(-1)?.base_commit).toBe(moved);
+    expect(s.runs.at(-1)?.applyFiles?.map((f) => f.path).sort()).toEqual(["unit-1.txt", "unit-2.txt"]);
+    await jobTick(s.jd);
+    j = await s.job();
+    expect(j.status).toBe("sealed");
+    expect(SessionSeal.parse(j.seal)).toMatchObject({ base_ref: moved, result_ref: j.head_sha });
+    expect(j.seal_hash).not.toBe(first.seal_hash);
+    // the old approval does not carry over: the new seal waits for a person
+    await jobTick(s.jd);
+    expect(s.git("rev-parse", "main")).toBe(moved);
+    await s.db.query("update public.jobs set status = 'approved', approved_at = now() where id = 'j_t1'");
+    expect((await jobTick(s.jd)).merged).toEqual(["j_t1"]);
+    expect(s.git("rev-parse", "main")).toBe(j.head_sha);
+  });
+  it("main moved and the job no longer applies on it: the job parks with the reason (D-547)", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    await jobTick(s.jd); // plan
+    for (let k = 0; k < 2; k++) {
+      await jobTick(s.jd);
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    await jobTick(s.jd);
+    commitOnMain(s.fx.mirror, "unit-1.txt", "a different line\n");
+    await s.db.query("update public.jobs set status = 'approved', approved_at = now() where id = 'j_t1'");
+    expect((await jobTick(s.jd)).parked).toEqual(["j_t1"]);
+    const j = await s.job();
+    expect(j.status).toBe("parked");
+    expect(j.question).toContain("main moved");
+  });
   it("a failed unit is retried with the failing criterion ids only; at the cap the job parks with a question", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: d5fail("AC-1", "U-1") }) });
     await jobTick(s.jd);

@@ -117,10 +117,10 @@ export function uncheckedOf(spec: Pick<Spec, "criteria">, evidence: readonly Job
 }
 
 /** the seal of a job (SessionSeal, D-532); result_ref is the job branch head that was checked */
-export function sealFor(o: { spec: Spec; specHash: Sha256; oracleHash: Sha256; verdict: VerdictResult; head: string; evidence: readonly JobEvidence[]; ledgerHead: Sha256 | null; sites?: readonly { file: string; category: string }[] }): SessionSeal {
+export function sealFor(o: { spec: Spec; specHash: Sha256; oracleHash: Sha256; verdict: VerdictResult; head: string; evidence: readonly JobEvidence[]; ledgerHead: Sha256 | null; sites?: readonly { file: string; category: string }[]; base?: string | null }): SessionSeal {
   return SessionSeal.parse({
     spec_hash: o.specHash, oracle_hash: o.oracleHash, profile: o.spec.profile, verdict: o.verdict, result_ref: o.head,
-    unchecked: uncheckedOf(o.spec, o.evidence, o.sites ?? []), ...(o.ledgerHead ? { ledger_head: o.ledgerHead } : {}),
+    unchecked: uncheckedOf(o.spec, o.evidence, o.sites ?? []), ...(o.ledgerHead ? { ledger_head: o.ledgerHead } : {}), ...(o.base ? { base_ref: o.base } : {}),
   });
 }
 

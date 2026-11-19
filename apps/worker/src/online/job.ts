@@ -9,7 +9,7 @@ import { jsonObjects } from "./conversation.js";
 import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import { mergeLocal } from "./deliver-local.js";
-import { findSites, startJobBranch } from "./job-branch.js";
+import { findSites, restackJobBranch, startJobBranch } from "./job-branch.js";
 import { UNIT_COLS, doneBefore, insertTask, routeOf, settleUnit, taskIdOf, tunePilot } from "./job-unit.js";
 import type { JobRow, UnitRow } from "./job-unit.js";
 
@@ -26,7 +26,7 @@ export const PLAN_BUDGET_USD = 0.5;
 
 
 const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.pilot_state, j.playbook, j.sites, j.base_sha, j.head_sha,
-  j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, j.roles, r.remote_url, r.provider`;
+  j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, j.roles, j.restacks, r.remote_url, r.provider`;
 const mirrorOf = (j: JobRow) => j.remote_url.replace(/^file:\/\//, "");
 const RUNNING = new Set<string>();
 
@@ -128,7 +128,7 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
   const units: UnitRow[] = [];
   for (const u of rows) units.push(await settleUnit(d, j, spec, mode, u, rows));
   if (units.every((u) => u.status === "passed")) {
-    const id = taskIdOf(j.id, `f${j.converge_round}`);
+    const id = taskIdOf(j.id, `f${j.converge_round}${j.restacks > 0 ? `m${j.restacks}` : ""}`);
     await insertTask(d.db, j, { id, text: `Final check of job ${j.id}: the whole change against the full oracle.`, unit: null, role: "final" });
     await d.db.query("update public.jobs set status = 'converging', final_task_id = $2, updated_at = now() where id = $1", [j.id, id]);
     return "final";
@@ -172,7 +172,7 @@ export async function convergeJob(d: JobDeps, j: JobRow): Promise<"waiting" | "s
   const evidence = (await d.db.query<{ detector: string; status: "pass" | "fail" | "unknown" | "n/a"; data: unknown }>("select detector, status, data from public.evidence where verdict_id = $1::uuid order by id", [v.id])).rows;
   if (v.result === "VERIFIED" && j.head_sha) {
     const head = (await d.db.query<{ hash: string }>("select hash from public.ledger where org_id = $1::uuid order by seq desc limit 1", [j.org_id])).rows[0]?.hash ?? null;
-    const seal = sealFor({ spec, specHash: j.spec_hash as Sha256, oracleHash: j.oracle_hash as Sha256, verdict: "VERIFIED", head: j.head_sha, evidence, ledgerHead: (head as Sha256 | null), sites: sitesOf(j.sites) });
+    const seal = sealFor({ spec, specHash: j.spec_hash as Sha256, oracleHash: j.oracle_hash as Sha256, verdict: "VERIFIED", head: j.head_sha, evidence, ledgerHead: (head as Sha256 | null), sites: sitesOf(j.sites), base: j.base_sha });
     const sealHash = hashJcs(seal);
     await inTransaction(d.db, async (tx) => {
       await tx.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3, updated_at = now() where id = $1", [j.id, JSON.stringify(seal), sealHash]);
@@ -197,7 +197,7 @@ export async function convergeJob(d: JobDeps, j: JobRow): Promise<"waiting" | "s
 }
 
 /** approved by a person (web): the job branch head goes into main by the local delivery, fast-forward only */
-export async function mergeJob(d: JobDeps, j: JobRow): Promise<"merged" | "parked"> {
+export async function mergeJob(d: JobDeps, j: JobRow): Promise<"merged" | "parked" | "restacked"> {
   const seal = j.seal as { result_ref?: unknown } | null;
   const sha = typeof seal?.result_ref === "string" ? seal.result_ref : null;
   if (j.provider !== "local" || !sha) {
@@ -205,6 +205,8 @@ export async function mergeJob(d: JobDeps, j: JobRow): Promise<"merged" | "parke
     return "parked";
   }
   const m = await mergeLocal({ mirror: mirrorOf(j), sha });
+  // D-547: main moved since the check → the job goes again on the new main, is checked again and waits for a new approval
+  if (!m.ok && m.reason === "not_fast_forward") return restackJob(d, j, sha);
   if (!m.ok) {
     await park(d.db, j, `The job's branch could not go into main (${m.reason}); main may have moved since the job started.`, { why: "merge_failed", reason: m.reason });
     return "parked";
@@ -214,6 +216,28 @@ export async function mergeJob(d: JobDeps, j: JobRow): Promise<"merged" | "parke
     await appendLedgerOnline(tx, { org_id: j.org_id, kind: "delivered", task_id: null, payload: { job: j.id, merge_sha: m.to, from: m.from, seal_hash: j.seal_hash } });
   });
   return "merged";
+}
+
+/** D-547: how often a job may be built again on a moved main before it waits for a person */
+export const RESTACK_MAX = 3;
+
+async function restackJob(d: JobDeps, j: JobRow, head: string): Promise<"parked" | "restacked"> {
+  if (!j.base_sha || j.restacks >= RESTACK_MAX) {
+    await park(d.db, j, `main moved again while the job waited for its merge (${j.restacks} time(s)); look at main and start the merge again.`, { why: "restack_cap", restacks: j.restacks });
+    return "parked";
+  }
+  const r = await restackJobBranch({ mirror: mirrorOf(j), ref: jobBranch(j.id), base: j.base_sha, head, message: `job ${j.id} on the new main` });
+  if (!r.ok) {
+    await park(d.db, j, r.reason === "does_not_apply" ? "main moved since the check and the job's change no longer applies on it; the conflicting files need a person or a new job." : "main moved since the check and the job's branch moved too; look at the branch.", { why: "restack_failed", reason: r.reason });
+    return "parked";
+  }
+  const n = j.restacks + 1;
+  await inTransaction(d.db, async (tx) => {
+    // the old seal and its approval belong to the old base: both go, a new final check makes a new seal
+    await tx.query("update public.jobs set status = 'running', base_sha = $2, head_sha = $3, restacks = $4, seal = null, seal_hash = null, approved_at = null, final_task_id = null, updated_at = now() where id = $1", [j.id, r.base, r.head, n]);
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "job_restacked", task_id: null, payload: { job: j.id, from_base: j.base_sha, to_base: r.base, head: r.head, n, old_seal: j.seal_hash } });
+  });
+  return "restacked";
 }
 
 export async function jobTick(d: JobDeps): Promise<JobTick> {
@@ -229,6 +253,7 @@ export async function jobTick(d: JobDeps): Promise<JobTick> {
       else if (r === "parked") out.parked.push(j.id);
       else if (r === "sealed") out.sealed.push(j.id);
       else if (r === "merged") out.merged.push(j.id);
+      else if (r === "restacked") out.started.push(j.id);
     } catch (e) {
       d.log?.(`[job] ${j.id}: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
     } finally {

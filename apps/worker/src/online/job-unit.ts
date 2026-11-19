@@ -16,7 +16,7 @@ import { selfMoveOf } from "./self-finish.js";
 export interface JobRow {
   id: string; org_id: string; repo_id: string; conversation_id: string; spec_hash: string; oracle_hash: string; type: string; agent: string; model: string | null;
   status: string; mode: string; pilot_state: string; playbook: string | null; sites: unknown; base_sha: string | null; head_sha: string | null; converge_round: number; final_task_id: string | null; seal: unknown; seal_hash: string | null; created_by: string | null;
-  remote_url: string; provider: string; roles: unknown;
+  remote_url: string; provider: string; roles: unknown; restacks: number;
 }
 export interface UnitRow {
   unit_id: string; ord: number; title: string; criteria: string[]; depends_on: string[]; status: string; task_id: string | null; handoff: unknown; failing: string[];

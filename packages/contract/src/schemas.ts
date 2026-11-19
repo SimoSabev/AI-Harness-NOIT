@@ -277,6 +277,7 @@ export const LedgerKind = z.enum([
   "unit_relanded", // D-541
   "unit_rescued", // D-542
   "pilot_done", // D-545
+  "job_restacked", // D-547
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z

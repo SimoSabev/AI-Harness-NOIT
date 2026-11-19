@@ -109,6 +109,8 @@ export const SessionSeal = z
     result_ref: z.string().trim().min(1).max(200),
     unchecked: z.array(Line).max(100),
     ledger_head: Sha256.optional(),
+    /** D-547: main's head the result was checked on (the green branch); absent in older seals */
+    base_ref: GitSha.optional(),
   })
   .strict();
 export type SessionSeal = z.infer<typeof SessionSeal>;

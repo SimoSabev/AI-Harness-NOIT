@@ -103,3 +103,45 @@ export async function findSites(o: { mirror: string; match: string; max: number;
     return [...new Set(r.stdout.toString("utf8").split("\n").map((l) => l.trim()).filter((l) => l.startsWith(prefix)).map((l) => l.slice(prefix.length)))].sort().slice(0, o.max + 1);
   });
 }
+
+/**
+ * D-547: the job's whole change over its old base, built again on main's head with a 3-way merge (one commit). The
+ * branch moves only from the head it had (update-ref with the old value): a branch that moved meanwhile is left alone.
+ * Nothing to commit (main has all of it already) leaves the head at main.
+ */
+export async function restackJobBranch(o: { mirror: string; ref: string; base: string; head: string; message: string; tmpRoot?: string }): Promise<{ ok: true; base: string; head: string } | { ok: false; reason: "moved" | "does_not_apply" }> {
+  if (!REF.test(o.ref) || !SHA.test(o.base) || !SHA.test(o.head)) throw new Error("restackJobBranch: bad input");
+  return withTmp(o.tmpRoot, async (tmp) => {
+    const git = cleanGit({ tmpHome: tmp });
+    const now = (await git.run(["rev-parse", "--verify", "--end-of-options", `refs/heads/${o.ref}`], { cwd: o.mirror })).stdout.toString("utf8").trim();
+    if (now !== o.head) return { ok: false, reason: "moved" };
+    const main = (await git.run(["rev-parse", "--verify", "refs/heads/main^{commit}"], { cwd: o.mirror })).stdout.toString("utf8").trim();
+    if (!SHA.test(main)) throw new Error("restackJobBranch: no main");
+    const diff = await git.run(["diff", "--binary", "--full-index", o.base, o.head], { cwd: o.mirror });
+    if (diff.code !== 0) throw new Error("restackJobBranch: diff failed");
+    const w = path.join(tmp, "w");
+    if ((await git.run(["clone", "-q", "--no-checkout", "--end-of-options", o.mirror, w], { cwd: tmp })).code !== 0) throw new Error("restackJobBranch: clone failed");
+    if ((await git.run(["checkout", "-q", "--detach", main], { cwd: w })).code !== 0) throw new Error("restackJobBranch: no main");
+    let sha = main;
+    if (diff.stdout.length > 0) {
+      writeFileSync(path.join(tmp, "change.patch"), diff.stdout);
+      if ((await git.run(["apply", "--index", "--3way", "--whitespace=nowarn", path.join(tmp, "change.patch")], { cwd: w })).code !== 0) return { ok: false, reason: "does_not_apply" };
+      // a 3-way merge with conflicts still exits 0 for some git versions; unmerged paths mean it did not apply
+      const unmerged = (await git.run(["diff", "--name-only", "--diff-filter=U"], { cwd: w })).stdout.toString("utf8").trim();
+      if (unmerged !== "") return { ok: false, reason: "does_not_apply" };
+      if ((await git.run(["diff", "--cached", "--quiet"], { cwd: w })).code !== 0) {
+        writeFileSync(path.join(tmp, "msg"), o.message.endsWith("\n") ? o.message : `${o.message}\n`);
+        if ((await git.run([...IDENT, "commit", "-q", "--no-gpg-sign", "--cleanup=verbatim", "-F", path.join(tmp, "msg")], { cwd: w })).code !== 0) throw new Error("restackJobBranch: commit failed");
+        sha = (await git.run(["rev-parse", "HEAD"], { cwd: w })).stdout.toString("utf8").trim();
+        // the commit goes into the mirror under a scratch ref, then the branch moves from its old head only
+        const tmpRef = `refs/mandat/restack/${o.ref.slice("mandat/".length)}`;
+        if ((await git.run(["push", "-q", "--force", "origin", `HEAD:${tmpRef}`], { cwd: w })).code !== 0) throw new Error("restackJobBranch: push failed");
+        const moved = await git.run(["update-ref", "-m", "mandat: job on the new main", `refs/heads/${o.ref}`, sha, o.head], { cwd: o.mirror });
+        await git.run(["update-ref", "-d", tmpRef], { cwd: o.mirror });
+        return moved.code === 0 ? { ok: true, base: main, head: sha } : { ok: false, reason: "moved" };
+      }
+    }
+    const moved = await git.run(["update-ref", "-m", "mandat: job on the new main", `refs/heads/${o.ref}`, sha, o.head], { cwd: o.mirror });
+    return moved.code === 0 ? { ok: true, base: main, head: sha } : { ok: false, reason: "moved" };
+  });
+}
