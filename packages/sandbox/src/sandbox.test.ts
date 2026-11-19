@@ -231,7 +231,7 @@ describe("env", () => {
     const a = envForPhase("agent");
     expect(a.names).toEqual(["ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY"]);
     expect(Object.keys(a.publicValues).sort()).toEqual(
-      ["ANTHROPIC_BASE_URL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "CI", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "DISABLE_UPDATES", "HOME", "LANG", "MANDAT_NOTES", "PATH", "npm_config_offline", "npm_config_update_notifier"].sort(),
+      ["ANTHROPIC_BASE_URL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "CI", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "DISABLE_UPDATES", "HOME", "LANG", "MANDAT_NOTES", "PATH", "npm_config_manage_package_manager_versions", "npm_config_offline", "npm_config_update_notifier"].sort(),
     );
     expect("MANDAT_REPORT" in a.publicValues).toBe(false);
     const t = envForPhase("test", { testsEnv: { CI: "true", FOO: "1" } });
@@ -349,6 +349,21 @@ describe("uiImageTag (E9б, D12)", () => {
     expect(a).toMatch(/^mandat-sandbox-ui:pw1\.63\.0-[0-9a-f]{12}$/);
     w("packages/verify/ui-runner/ui-run.mjs", "b");
     expect(uiImageTag(root)).not.toBe(a);
+  });
+});
+
+describe("the project's own pnpm pin (live test 18.11.2026, D-538)", () => {
+  it("every agent and test env keeps the image's pnpm: no self-download of the project's packageManager version", () => {
+    const envs = [
+      envForPhase("agent"),
+      envForPhase("agent", { tokenName: "OPENAI_API_KEY" }),
+      envForPhase("agent", { tokenName: "GEMINI_API_KEY" }),
+      envForPhase("agent", { tokenName: "profile" }),
+      envForPhase("agent", { tokenName: "profile-codex" }),
+      envForPhase("agent", { tokenName: "profile", profileCli: "gemini" }),
+      envForPhase("test"),
+    ];
+    for (const e of envs) expect(e.publicValues.npm_config_manage_package_manager_versions).toBe("false");
   });
 });
 

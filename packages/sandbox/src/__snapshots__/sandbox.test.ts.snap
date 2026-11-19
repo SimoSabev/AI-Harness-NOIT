@@ -103,6 +103,8 @@ exports[`buildRunArgs > hardening (8.2) + snapshot; тайните само по
   "-e",
   "npm_config_offline=true",
   "-e",
+  "npm_config_manage_package_manager_versions=false",
+  "-e",
   "MANDAT_NOTES=/m/out/notes.txt",
   "-e",
   "ANTHROPIC_API_KEY",

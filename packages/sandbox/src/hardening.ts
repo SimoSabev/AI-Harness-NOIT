@@ -319,6 +319,10 @@ export function buildProxyRunArgs(o: ProxyRunOptions): string[] {
 }
 
 const BASE_PUBLIC = { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/home/agent", LANG: "C.UTF-8", CI: "true" };
+// D-538: the image pins its own pnpm; a project's packageManager pin (pnpm@9.15.0) must not make pnpm download that
+// version, which the network refuses (live test 18.11: `pnpm test` failed in the agent phase)
+const KEEP_PNPM = { npm_config_manage_package_manager_versions: "false" };
+const AGENT_NPM = { npm_config_update_notifier: "false", npm_config_offline: "true", ...KEEP_PNPM };
 
 /**
  * D-295: subscription profiles (several accounts). The user signs in to the unmodified CLI through the provider's own
@@ -367,7 +371,7 @@ export function envForPhase(
     // E3в: Codex. The token is the per-task mdt_ (И1); the base URL is in argv (-c model_providers.mandat.base_url).
     return {
       names: ["OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY"],
-      publicValues: { ...BASE_PUBLIC, CODEX_HOME: "/m/codex-home", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+      publicValues: { ...BASE_PUBLIC, CODEX_HOME: "/m/codex-home", ...AGENT_NPM, MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent" && o.tokenName === "GEMINI_API_KEY") {
@@ -375,14 +379,14 @@ export function envForPhase(
     // the CLI keeps .gemini in the tmpfs home and trusts /m/work for this session only; no browser sign-in ever
     return {
       names: ["GEMINI_API_KEY", "AWS_SECRET_ACCESS_KEY"],
-      publicValues: { ...BASE_PUBLIC, GOOGLE_GEMINI_BASE_URL: "http://egress-gate", GEMINI_CLI_HOME: "/home/agent", GEMINI_CLI_TRUST_WORKSPACE: "true", NO_BROWSER: "true", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+      publicValues: { ...BASE_PUBLIC, GOOGLE_GEMINI_BASE_URL: "http://egress-gate", GEMINI_CLI_HOME: "/home/agent", GEMINI_CLI_TRUST_WORKSPACE: "true", NO_BROWSER: "true", ...AGENT_NPM, MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent" && o.tokenName === "profile-codex") {
     // D-392: Codex with its own ChatGPT login; out only through the gate's CONNECT tunnel to OpenAI's hosts
     return {
       names: ["AWS_SECRET_ACCESS_KEY"],
-      publicValues: { ...BASE_PUBLIC, CODEX_HOME: CODEX_PROFILE_DIR, HTTPS_PROXY: "http://egress-gate:80", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+      publicValues: { ...BASE_PUBLIC, CODEX_HOME: CODEX_PROFILE_DIR, HTTPS_PROXY: "http://egress-gate:80", ...AGENT_NPM, MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent" && o.tokenName === "profile" && o.profileCli !== undefined && o.profileCli !== "claude") {
@@ -392,7 +396,7 @@ export function envForPhase(
     const p = SUBSCRIPTIONS[o.profileCli];
     return {
       names: ["AWS_SECRET_ACCESS_KEY"],
-      publicValues: { ...BASE_PUBLIC, ...p.env, [p.configEnv]: p.configDir, HTTPS_PROXY: "http://egress-gate:80", npm_config_update_notifier: "false", npm_config_offline: "true", MANDAT_NOTES: "/m/out/notes.txt" },
+      publicValues: { ...BASE_PUBLIC, ...p.env, [p.configEnv]: p.configDir, HTTPS_PROXY: "http://egress-gate:80", ...AGENT_NPM, MANDAT_NOTES: "/m/out/notes.txt" },
     };
   }
   if (phase === "agent" && o.tokenName === "profile") {
@@ -407,8 +411,7 @@ export function envForPhase(
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
         DISABLE_AUTOUPDATER: "1",
         DISABLE_UPDATES: "1",
-        npm_config_update_notifier: "false",
-        npm_config_offline: "true",
+        ...AGENT_NPM,
         MANDAT_NOTES: "/m/out/notes.txt",
       },
     };
@@ -429,15 +432,14 @@ export function envForPhase(
         CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
         DISABLE_AUTOUPDATER: "1",
         DISABLE_UPDATES: "1",
-        npm_config_update_notifier: "false",
-        npm_config_offline: "true",
+        ...AGENT_NPM,
         MANDAT_NOTES: "/m/out/notes.txt",
       },
     };
   }
   const testsEnv = o.testsEnv ?? {};
   for (const k of Object.keys(testsEnv)) if (SECRETS.has(k)) forbid("tests.env may not set a secret name", { name: k });
-  return { names: [], publicValues: { ...BASE_PUBLIC, MANDAT_REPORT: "/m/out/report.json", ...testsEnv } };
+  return { names: [], publicValues: { ...BASE_PUBLIC, ...KEEP_PNPM, MANDAT_REPORT: "/m/out/report.json", ...testsEnv } };
 }
 
 /**
