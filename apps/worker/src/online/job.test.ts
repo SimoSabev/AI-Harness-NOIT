@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { OracleManifest, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
+import { ADVISOR_SYSTEM, OracleManifest, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
 import { fakeGitHub } from "@mandat/gate-github";
 import type { ModelClient } from "@mandat/research";
@@ -105,7 +105,7 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
   };
   const git = (...a: string[]) => execFileSync("git", ["--git-dir", fx.mirror, ...a], { encoding: "utf8" }).trim();
   const job = async () => (await db.query<{ status: string; question: string | null; head_sha: string | null; base_sha: string | null; seal: unknown; seal_hash: string | null; plan_hash: string | null; converge_round: number; final_task_id: string | null }>("select status, question, head_sha, base_sha, seal, seal_hash, plan_hash, converge_round, final_task_id from public.jobs where id = 'j_t1'")).rows[0]!;
-  const units = async () => (await db.query<{ unit_id: string; status: string; criteria: string[]; task_id: string | null; handoff: { done: string } | null; failing: string[]; relands: number }>("select unit_id, status, criteria, task_id, handoff, failing, relands from public.job_units where job_id = 'j_t1' order by ord")).rows;
+  const units = async () => (await db.query<{ unit_id: string; status: string; criteria: string[]; task_id: string | null; handoff: { done: string } | null; failing: string[]; relands: number; rescues: number }>("select unit_id, status, criteria, task_id, handoff, failing, relands, rescues from public.job_units where job_id = 'j_t1' order by ord")).rows;
   const ledger = async (kind: string) => (await db.query<{ payload_jcs: string }>("select payload_jcs from public.ledger where kind = $1 order by seq", [kind])).rows.map((r) => JSON.parse(r.payload_jcs) as Record<string, unknown>);
   return { db, deps, jd, runs, contracts, fx, git, job, units, ledger, asked, systems };
 }
@@ -218,11 +218,76 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(s.contracts[1]?.text).toContain("Note from Mandat");
     expect(s.contracts[1]?.text).not.toContain(SECRET_NAME);
     expect(s.runs).toHaveLength(3);
+    // D-542: at the cap a model advises (it never sees a test) and two fresh tries start at once, one attempt each
+    expect((await jobTick(s.jd)).started).toEqual(["j_t1"]);
+    expect(s.systems.at(-1)).toBe(ADVISOR_SYSTEM);
+    expect(s.asked.at(-1)).toContain("Failing criteria: AC-1");
+    expect(s.asked.at(-1)).not.toContain(SECRET_NAME);
+    const tries = (await s.db.query<{ id: string; text: string; attempts_max: number }>("select id, text, attempts_max from public.tasks where job_id = 'j_t1' and unit_id = 'u1' order by id")).rows;
+    expect(tries).toHaveLength(3);
+    for (const t of tries.slice(1)) {
+      expect(t.text).toContain("Advice from a reviewer");
+      expect(t.attempts_max).toBe(1);
+    }
+    expect(tries.filter((t) => t.text.includes("different approach"))).toHaveLength(1);
+    expect((await s.units())[0]).toMatchObject({ status: "running", rescues: 1 });
+    expect((await s.ledger("unit_rescued"))[0]).toMatchObject({ job: "j_t1", unit: "u1", tries: 2, rescues: 1 });
+    await runDaemonOnce(s.deps);
+    await runDaemonOnce(s.deps);
+    await selfFinishTick(s.db, { now: new Date() });
+    await runDaemonOnce(s.deps);
+    expect(s.runs).toHaveLength(5); // a rescue try is never retried by itself
     expect((await jobTick(s.jd)).parked).toEqual(["j_t1"]);
+    expect((await s.units())[0]?.status).toBe("parked");
     const j = await s.job();
     expect(j.question).toContain("Unit u1");
     expect(j.question).toContain("AC-1");
     expect(j.question).not.toContain(SECRET_NAME);
+  });
+
+  it("a rescue try that passes lands; a second one that passes too does not land again (D-542)", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (_c, n) => (n <= 3 ? { result: "FAILED", evidence: d5fail("AC-1") } : { result: "VERIFIED" }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    for (let k = 0; k < 2; k++) {
+      await selfFinishTick(s.db, { now: new Date() });
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd); // rescue
+    await runDaemonOnce(s.deps);
+    await runDaemonOnce(s.deps);
+    const head = s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`);
+    expect(s.git("rev-list", "--count", `${s.fx.sha}..${head}`)).toBe("1");
+    expect((await s.units())[0]?.status).toBe("passed");
+    const loser = (await s.db.query<{ state: string; wait_reason: string | null }>("select state, wait_reason from public.tasks where job_id = 'j_t1' and unit_id = 'u1' order by id")).rows.at(-1);
+    expect(loser).toEqual({ state: "CLOSED", wait_reason: "another_try_won" });
+    expect((await jobTick(s.jd)).started).toEqual(["j_t1"]); // u2 goes on
+  });
+});
+
+describe("a parked unit does not stop the rest of the work (D-542)", () => {
+  it("in waves, work that does not need the parked unit goes on; the job parks only when nothing else can move", async () => {
+    const plan = JSON.stringify({ units: [{ id: "u1", title: "the 10% rule", criteria: ["AC-1"], depends_on: [] }, { id: "u2", title: "coupons", criteria: ["AC-2"], depends_on: [] }, { id: "u3", title: "coupon texts", criteria: ["AC-2"], depends_on: ["u2"] }] });
+    const s = await setup({ plans: [plan], divisible: "yes", outcome: (c) => (c.text.includes("This unit (u1)") ? { result: "FAILED", evidence: d5fail("AC-1") } : { result: "VERIFIED" }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd); // u1 and u2
+    await runDaemonOnce(s.deps); // u1 fails
+    for (let k = 0; k < 2; k++) {
+      await selfFinishTick(s.db, { now: new Date() });
+      await runDaemonOnce(s.deps); // u1 again (the oldest task)
+    }
+    await jobTick(s.jd); // u1 rescued
+    await runDaemonOnce(s.deps); // u2 passes
+    await jobTick(s.jd); // u3 starts
+    await runDaemonOnce(s.deps); // try a fails
+    await runDaemonOnce(s.deps); // try b fails
+    expect((await jobTick(s.jd)).parked).toEqual([]);
+    expect((await s.units()).map((u) => [u.unit_id, u.status])).toEqual([["u1", "parked"], ["u2", "passed"], ["u3", "running"]]);
+    expect((await s.job()).status).toBe("running");
+    await runDaemonOnce(s.deps); // u3 passes
+    expect((await jobTick(s.jd)).parked).toEqual(["j_t1"]);
+    expect((await s.job()).question).toContain("Unit u1");
   });
 
   it("the final check adds units only for the criteria still red", async () => {

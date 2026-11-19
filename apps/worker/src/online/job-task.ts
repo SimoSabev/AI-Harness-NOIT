@@ -56,7 +56,11 @@ export async function finishJobTask(db: Db, t: JobTaskRef, o: { mirror: string; 
   let state = "CLOSED";
   let wait: string | null = null;
   let commit: string | null = null;
-  if (t.job_role === "unit") {
+  // D-542: in a rescue several tries build the same unit; once one has landed, the others do not land again
+  const unit = t.job_role === "unit" ? (await db.query<{ status: string; failing: string[]; tries: string[] }>("select status, failing, tries from public.job_units where job_id = $1 and unit_id = $2", [t.job_id, t.unit_id])).rows[0] : undefined;
+  const won = unit?.status === "passed";
+  if (t.job_role === "unit" && won) [state, wait] = ["CLOSED", "another_try_won"];
+  else if (t.job_role === "unit") {
     if (v.result === "VERIFIED" && o.diffPatch.length > 0 && job) {
       const head = await jobHead({ mirror: o.mirror, ref: jobBranch(job.id) });
       // D-541: in waves another unit may have landed meanwhile; the patch goes onto the new head with a 3-way apply
@@ -80,11 +84,13 @@ export async function finishJobTask(db: Db, t: JobTaskRef, o: { mirror: string; 
       await tx.query("insert into public.evidence (org_id, verdict_id, detector, phase, status, summary, data, source, signature) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8, $9)", [t.org_id, vr.rows[0]?.id, e.detector, e.phase, e.status, e.summary, JSON.stringify(e.data), e.source, e.signature ?? null]);
     }
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "verdict", task_id: t.id, payload: { run_id: v.run_id, result: v.result, reasons: v.reasons, verdict_hash: hashJcs(v), job: t.job_id, ...(t.unit_id ? { unit: t.unit_id } : { final: true }) } });
-    if (t.job_role === "unit") {
+    if (t.job_role === "unit" && !won) {
       const status = commit ? "passed" : v.result === "FAILED" ? "failed" : "blocked";
+      // among tries at once, the unit keeps the one that failed the fewest criteria (the oracle picks the best try)
+      const keep = !commit && (unit?.tries.length ?? 0) > 1 && (unit?.failing.length ?? 0) > 0 && failing.length > (unit?.failing.length ?? 0);
       await tx.query(
-        "update public.job_units set status = $3, result = $4, reasons = $5::jsonb, failing = $6::jsonb, commit_sha = coalesce($7, commit_sha), handoff = coalesce($8::jsonb, handoff), updated_at = now() where job_id = $1 and unit_id = $2",
-        [t.job_id, t.unit_id, status, v.result, JSON.stringify(v.reasons.slice(0, 50)), JSON.stringify(failing), commit, handoff ? JSON.stringify({ ...handoff, commit }) : null],
+        "update public.job_units set status = $3, result = $4, reasons = $5::jsonb, failing = $6::jsonb, commit_sha = coalesce($7, commit_sha), handoff = coalesce($8::jsonb, handoff), updated_at = now() where job_id = $1 and unit_id = $2 and status <> 'passed'",
+        [t.job_id, t.unit_id, status, v.result, JSON.stringify(v.reasons.slice(0, 50)), JSON.stringify(keep ? unit?.failing ?? [] : failing), commit, handoff ? JSON.stringify({ ...handoff, commit }) : null],
       );
       if (commit) await tx.query("update public.jobs set head_sha = $2, updated_at = now() where id = $1", [t.job_id, commit]);
     }
