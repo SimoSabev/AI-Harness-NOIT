@@ -20,6 +20,7 @@ import { conversationFeed } from "../lib/server/conversation";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
 import { taskTitle } from "../lib/task-title";
+import { foldJobs } from "../lib/task-list";
 import { showChat } from "../lib/chat";
 
 export const dynamic = "force-dynamic";
@@ -51,9 +52,14 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     chatId ? conversationFeed(db(), c.uid, c.org, chatId, -1) : null,
   ]);
   const now = new Date();
-  const tasks = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1)).slice(0, 100).map((x) => {
+  const rows = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1));
+  // D-548: a job's oracle, units and final check are one row that opens its conversation
+  const tasks = foldJobs(rows).slice(0, 100).map((it) => {
+    const x = it.kind === "job" ? it.newest : it.row;
     const s = statusOf(x, t.lang);
-    return { id: x.id, text: taskTitle(x, t), tone: s.tone, label: s.label, ago: ago(x.updated_at, now, t.lang) };
+    const job = it.kind === "job";
+    return { id: job ? it.conversation_id : x.id, href: job ? `/?chat=${it.conversation_id}` : `/?task=${x.id}`,
+      text: job && x.spec_goal ? x.spec_goal : taskTitle(x, t), tone: s.tone, label: s.label, ago: ago(x.updated_at, now, t.lang) };
   });
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
@@ -70,7 +76,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     <Shell current="tasks" waiting={c.waiting} full>
       <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
         <div className="min-h-0 lg:border-r lg:border-line lg:pr-4">
-          <TaskList tasks={tasks} selected={initial ? selected : null} />
+          <TaskList tasks={tasks} selected={initial ? selected : chatId} />
         </div>
         <div className="flex min-h-0 flex-col">
           {initial && d && sess ? (

@@ -19,6 +19,8 @@ export interface TaskRow {
   steerable?: boolean;
   /** D-540: what a short title of a job's internal task needs (lib/task-title.ts) */
   internal_role?: "oracle" | "unit" | "final" | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null;
+  /** D-548: the conversation a job's internal task belongs to (the task list folds them into one row) */
+  conversation_id?: string | null;
 }
 
 const TASKS = `
@@ -36,7 +38,9 @@ select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t
        case when t.kind = 'oracle' then 'oracle' else t.job_role end as internal_role, t.unit_id,
        (select u.title from public.job_units u where u.job_id = t.job_id and u.unit_id = t.unit_id) as unit_title,
        coalesce((select cv.approved_spec ->> 'goal' from public.jobs j join public.conversations cv on cv.id = j.conversation_id where j.id = t.job_id),
-                (select coalesce(cv.approved_spec, cv.spec) ->> 'goal' from public.oracles o join public.conversations cv on cv.id = o.conversation_id where o.task_id = t.id order by o.created_at desc limit 1)) as spec_goal
+                (select coalesce(cv.approved_spec, cv.spec) ->> 'goal' from public.oracles o join public.conversations cv on cv.id = o.conversation_id where o.task_id = t.id order by o.created_at desc limit 1)) as spec_goal,
+       coalesce((select j.conversation_id::text from public.jobs j where j.id = t.job_id),
+                (select o.conversation_id::text from public.oracles o where o.task_id = t.id order by o.created_at desc limit 1)) as conversation_id
   from public.tasks t
   -- D-452: only the current attempt's change and verdict; a new attempt has none until it makes its own
   left join lateral (select * from public.changesets x where x.task_id = t.id and x.attempt = t.attempt order by x.created_at desc limit 1) c on true

@@ -16,7 +16,7 @@ import { BringReply } from "@mandat/contract";
 type TaskMode = "ask_first" | "work_now";
 
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
-export interface WsTask { id: string; text: string; tone: Tone; label: string; ago: string }
+export interface WsTask { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
 export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null }
 
@@ -30,7 +30,7 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
       <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
         {tasks.map((x) => (
           <li key={x.id}>
-            <Link href={`/?task=${x.id}`} aria-current={selected === x.id ? "page" : undefined}
+            <Link href={x.href} aria-current={selected === x.id ? "page" : undefined}
               className="flex items-start gap-2 rounded-lg px-2 py-2 text-sm transition hover:bg-raised aria-[current=page]:bg-accent-soft">
               <Hex tone={x.tone} className="mt-1.5 h-2 w-2.5" />
               <span className="min-w-0 flex-1">
