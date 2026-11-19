@@ -393,3 +393,21 @@ describe("the conversation queue (D-531)", () => {
     expect(spawned).toEqual([]);
   });
 });
+
+describe("a saved Other profile is offered again (D-552)", () => {
+  // axes no named profile fits: existing code, nothing to compare with, proof by numbers → "other"
+  const other = { ...known, proof: ["numbers"] };
+  it("an Other profile with a saved one for the same axes names it to the model; a named profile never looks", async () => {
+    const keys: string[] = [];
+    const saved = (k: string) => (keys.push(k), Promise.resolve(k.startsWith("v1|existing|none|") ? "Speed up the reports" : null));
+    const m = script({ say: "", call: { tool: "propose_axes", axes: other } }, { say: "ok", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("make the reports faster")], saved });
+    expect(r.turns[0]).toMatchObject({ kind: "axes", profile: "other", saved: "Speed up the reports" });
+    expect(m.asked[1]?.user).toContain('A saved profile fits: "Speed up the reports"');
+    const m2 = script({ say: "", call: { tool: "propose_axes", axes: known } }, { say: "ok", call: null });
+    const before = keys.length;
+    const r2 = await answerTurn({ ...base, client: m2.client, turns: [human("x")], saved });
+    expect(r2.turns[0]).not.toHaveProperty("saved");
+    expect(keys).toHaveLength(before);
+  });
+});

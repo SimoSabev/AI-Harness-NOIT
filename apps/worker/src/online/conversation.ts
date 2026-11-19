@@ -1,6 +1,6 @@
 import { AXIS_NAMES, CHAT_TOOLS, ChatModelReply, ChatToolCall, ChatTurn, MandatError, Spec, TaskAxes, TaskProfileId, briefText, capQuestions, specHash, untestableCriteria } from "@mandat/contract";
 import type { AxisName, Brief, ConversationStatus, Sha256 } from "@mandat/contract";
-import { deriveProfile, unknownAxes } from "@mandat/core";
+import { axesKey, deriveProfile, unknownAxes } from "@mandat/core";
 import { addMemory, loadMemory, rememberLines, searchMemory } from "@mandat/memory";
 import type { SqlClient } from "@mandat/ledger";
 import type { ModelClient } from "@mandat/research";
@@ -23,7 +23,7 @@ export const MAX_STEPS = 8;
 const NOBODY = "00000000-0000-4000-8000-000000000000";
 
 type ToolName = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec";
-type AxesTurn = { kind: "axes"; axes: TaskAxes; hint: TaskProfileId | null; profile: TaskProfileId; unknown: AxisName[] };
+type AxesTurn = { kind: "axes"; axes: TaskAxes; hint: TaskProfileId | null; profile: TaskProfileId; unknown: AxisName[]; saved?: string | undefined };
 type SpecTurn = { kind: "spec"; spec: Spec; hash: Sha256; ready: boolean; unknown: AxisName[]; untestable: string[] };
 export type NewTurn =
   | { kind: "human"; text: string }
@@ -81,7 +81,7 @@ export function interviewState(turns: readonly NewTurn[]): { axes: AxesTurn | nu
 
 function stateBlock(turns: readonly NewTurn[]): string {
   const { axes, spec } = interviewState(turns);
-  const a = axes ? `Profile: ${axes.profile}. Unknown axes: ${axes.unknown.join(", ") || "none"}.` : `Axes: not proposed yet (unknown: ${AXIS_NAMES.join(", ")}).`;
+  const a = axes ? `Profile: ${axes.profile}. Unknown axes: ${axes.unknown.join(", ") || "none"}.${axes.saved ? ` A saved profile fits: "${fence(axes.saved)}" (a job with the same axes was delivered with it; plan the same way unless the person says otherwise).` : ""}` : `Axes: not proposed yet (unknown: ${AXIS_NAMES.join(", ")}).`;
   const s = !spec ? "Spec: none yet." : spec.ready ? "Spec: ready for the person's approval." : `Spec: not ready (unknown axes: ${spec.unknown.join(", ") || "none"}; untestable criteria: ${spec.untestable.join(", ") || "none"}).`;
   return `<state>\n${a}\n${s}\n</state>`;
 }
@@ -201,7 +201,7 @@ export function checkSpec(raw: unknown, turns: readonly NewTurn[]): NewTurn {
 }
 
 /** a tool whose result goes back to the model; null for a call that ends the answer (ask_user, propose_brief) */
-async function runTool(call: ChatToolCall, o: { search: (q: string) => Promise<{ id: string; text: string }[]>; repo: RepoReader; turns: readonly NewTurn[] }): Promise<NewTurn | null> {
+async function runTool(call: ChatToolCall, o: { search: (q: string) => Promise<{ id: string; text: string }[]>; repo: RepoReader; turns: readonly NewTurn[]; saved?: (key: string) => Promise<string | null> }): Promise<NewTurn | null> {
   switch (call.tool) {
     case "search_memory":
       return { kind: "memory", query: call.query, hits: (await o.search(call.query)).slice(0, 8) };
@@ -211,8 +211,14 @@ async function runTool(call: ChatToolCall, o: { search: (q: string) => Promise<{
       return toolTurn("read_file", call.path, await o.repo.readFile(call.path, call.from_line, call.to_line));
     case "grep":
       return toolTurn("grep", `${call.pattern}${call.path ? ` in ${call.path}` : ""}`, await o.repo.grep(call.pattern, call.path, call.ignore_case));
-    case "propose_axes":
-      return checkAxes(call.axes, call.hint);
+    case "propose_axes": {
+      const t = checkAxes(call.axes, call.hint);
+      // D-552: only an Other profile looks for a saved one (a named profile has its own plan)
+      if (t.kind !== "axes" || t.profile !== "other" || !o.saved) return t;
+      const key = axesKey(t.axes);
+      const name = key ? await o.saved(key) : null;
+      return name ? { ...t, saved: name.slice(0, 80) } : t;
+    }
     case "propose_spec":
       return checkSpec(call.spec, o.turns);
     case "ask_user":
@@ -235,6 +241,8 @@ export async function answerTurn(o: {
   search: (query: string) => Promise<{ id: string; text: string }[]>;
   /** the selected project's mirror, read only (D-533); without one every repo tool says the project is not here */
   repo?: RepoReader;
+  /** D-552: the name of a saved Other profile for an axes key, or null */
+  saved?: (key: string) => Promise<string | null>;
   signal?: AbortSignal;
 }): Promise<{ turns: NewTurn[]; usd: number; stop: ChatStop | null; error: string | null }> {
   const out: NewTurn[] = [];
@@ -279,7 +287,7 @@ export async function answerTurn(o: {
     }
     const reply: ChatModelReply = parsed.kind === "reply" ? parsed.reply : { say: parsed.say, call: null };
     const call = reply.call;
-    const result = call ? await runTool(call, { search: o.search, repo, turns: [...o.turns, ...out] }) : null;
+    const result = call ? await runTool(call, { search: o.search, repo, turns: [...o.turns, ...out], ...(o.saved ? { saved: o.saved } : {}) }) : null;
     if (result) out.push(result);
     // a ready spec ends the answer (a person approves it); any other tool result goes back to the model
     const ended = result === null || (result.kind === "spec" && result.ready);
@@ -387,7 +395,9 @@ export async function processConversation(d: ChatDeps, c: ConvRow): Promise<Conv
     const items = await loadMemory(d.db, { org: c.org, user: c.user ?? NOBODY, repo: c.repo, statuses: ["active"] });
     const search = async (q: string) => searchMemory(items, q, { repoId: c.repo }).map((h) => ({ id: h.item.id, text: h.item.text.slice(0, 600) }));
     const repo = (d.readerFor ?? defaultReader)(c.remote);
-    const r = await answerTurn({ client: choice.client, turns: turns.map(strip), budgetUsd: c.budget, spentUsd: c.usd, expiresAt: c.expires, now, search, repo });
+    // D-552: a saved Other profile of the org for the same axes
+    const saved = async (key: string) => (await d.db.query<{ name: string }>("select name from public.saved_profiles where org_id = $1::uuid and axes_key = $2", [c.org, key])).rows[0]?.name ?? null;
+    const r = await answerTurn({ client: choice.client, turns: turns.map(strip), budgetUsd: c.budget, spentUsd: c.usd, expiresAt: c.expires, now, search, repo, saved });
     let seq = (turns.at(-1)?.seq ?? -1) + 1;
     for (const t of r.turns) {
       const { kind, data } = stored(t);

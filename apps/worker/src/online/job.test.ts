@@ -246,6 +246,25 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect((await jobTick(s.jd)).merged).toEqual(["j_t1"]);
     expect(s.git("rev-parse", "main")).toBe(j.head_sha);
   });
+  it("a delivered job of an Other profile keeps the profile with a name, once per axes (D-552)", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    const axes = { code: "existing", reference: "none", divisible: "no", proof: ["numbers"], risk: { level: "low", outward: false }, size: "m" };
+    await s.db.query("update public.conversations set axes = $1::jsonb, profile = 'other' where id = 'c_job1'", [JSON.stringify(axes)]);
+    await jobTick(s.jd);
+    for (let k = 0; k < 2; k++) {
+      await jobTick(s.jd);
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    await jobTick(s.jd);
+    expect((await s.db.query("select 1 from public.saved_profiles")).rows).toEqual([]);
+    await s.db.query("update public.jobs set status = 'approved', approved_at = now() where id = 'j_t1'");
+    expect((await jobTick(s.jd)).merged).toEqual(["j_t1"]);
+    const rows = (await s.db.query<{ name: string; axes_key: string; from_job: string; plan: { parallel: string } }>("select name, axes_key, from_job, plan from public.saved_profiles")).rows;
+    expect(rows).toEqual([{ name: "Discounts", axes_key: "v1|existing|none|no|numbers|low|in", from_job: "j_t1", plan: expect.objectContaining({ parallel: "single", unit: "unit" }) }]);
+    expect(await s.ledger("profile_saved")).toEqual([{ job: "j_t1", name: "Discounts", axes_key: "v1|existing|none|no|numbers|low|in" }]);
+  });
   it("main moved and the job no longer applies on it: the job parks with the reason (D-547)", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
     await jobTick(s.jd); // plan

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { deriveProfile, failingCriteria, jobMode, pilotSize, pilotUnits, sealFor, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
+import { axesKey, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, sealFor, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
 import type { JobMode, SiteRow } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
@@ -215,7 +215,23 @@ export async function mergeJob(d: JobDeps, j: JobRow): Promise<"merged" | "parke
     await tx.query("update public.jobs set status = 'delivered', merged_sha = $2, updated_at = now() where id = $1 and status = 'approved'", [j.id, m.to]);
     await appendLedgerOnline(tx, { org_id: j.org_id, kind: "delivered", task_id: null, payload: { job: j.id, merge_sha: m.to, from: m.from, seal_hash: j.seal_hash } });
   });
+  await saveOtherProfile(d, j);
   return "merged";
+}
+
+/** D-552: a delivered job of an Other profile keeps that profile with a name (the goal), once per org and axes */
+async function saveOtherProfile(d: JobDeps, j: JobRow): Promise<void> {
+  const c = (await d.db.query<{ axes: unknown; profile: string | null }>("select axes, profile from public.conversations where id = $1", [j.conversation_id])).rows[0];
+  const axes = TaskAxes.safeParse(c?.axes);
+  const spec = await specOf(d.db, j);
+  if (c?.profile !== "other" || !axes.success || !spec) return;
+  const key = axesKey(axes.data);
+  const name = savedProfileName(spec.goal);
+  if (!key || name === "") return;
+  await inTransaction(d.db, async (tx) => {
+    const ins = await tx.query("insert into public.saved_profiles (org_id, axes_key, name, axes, plan, from_job) values ($1::uuid, $2, $3, $4::jsonb, $5::jsonb, $6) on conflict (org_id, axes_key) do nothing returning id", [j.org_id, key, name, JSON.stringify(axes.data), JSON.stringify(deriveProfile(axes.data).plan), j.id]);
+    if (ins.rows.length > 0) await appendLedgerOnline(tx, { org_id: j.org_id, kind: "profile_saved", task_id: null, payload: { job: j.id, name, axes_key: key } });
+  });
 }
 
 /** D-547: how often a job may be built again on a moved main before it waits for a person */

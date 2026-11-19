@@ -111,7 +111,7 @@ export const ChatTurn = z.discriminatedUnion("kind", [
   z.object({ ...head, kind: z.literal("memory"), query: z.string().max(200), hits: z.array(z.object({ id: z.string().max(40), text: z.string().max(600) }).strict()).max(8) }).strict(),
   // D-533: what a tool did — never what a file holds (the contents live only inside one answer)
   z.object({ ...head, kind: z.literal("tool"), tool: z.enum(["list_dir", "read_file", "grep", "propose_axes", "propose_spec"]), target: z.string().max(300), ok: z.boolean(), note: z.string().max(300) }).strict(),
-  z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length) }).strict(),
+  z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), /** D-552: a saved Other profile for these axes */ saved: z.string().trim().min(1).max(80).optional() }).strict(),
   z.object({ ...head, kind: z.literal("spec"), spec: Spec, hash: Sha256, ready: z.boolean(), unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), untestable: z.array(CriterionId).max(200) }).strict(),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurn>;
