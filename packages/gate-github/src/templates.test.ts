@@ -50,3 +50,24 @@ describe("PR body", () => {
     expect(prTitle({ type: "bugfix", text: "Fix the VAT rounding" })).toBe("fix: Fix the VAT rounding");
   });
 });
+
+// D-538 (live test 18.11): the subject comes from the unit, never from the head of a long instruction
+describe("commit subject (D-538)", () => {
+  const v = { evidence: [], result: "VERIFIED" } as unknown as Parameters<typeof commitMessage>[0]["verdict"];
+  const subject = (m: string) => m.split("\n")[0] ?? "";
+  it("a job unit: <type>: <unit title>, not the first line of the unit's instructions", () => {
+    const m = commitMessage({ type: "feature", text: "You build one unit of a larger job. Goal of the job: vectors\nThis unit (u2): …", title: "Vector length and distance", taskId: "t_u2", verdict: v, ledgerSeq: 3 });
+    expect(subject(m)).toBe("feat: Vector length and distance");
+  });
+  it("a long title is cut at a word to ≤ 72 characters, on one line", () => {
+    const s = subject(commitMessage({ type: "feature", text: "x", title: `Add ${"very ".repeat(30)}long\ntitle`, taskId: "t", verdict: v, ledgerSeq: null }));
+    expect(s.length).toBeLessThanOrEqual(72);
+    expect(s).not.toContain("\n");
+    expect(s).toMatch(/^feat: Add very( very)*…$/);
+  });
+  it("an ordinary task keeps its first line; a sentence-long first line becomes its first sentence, without markup", () => {
+    expect(prTitle({ type: "bugfix", text: "Fix the VAT rounding" })).toBe("fix: Fix the VAT rounding");
+    expect(prTitle({ type: "bugfix", text: "## Fix the VAT rounding. It is off by one cent when the cart has three items and a coupon.\nMore." })).toBe("fix: Fix the VAT rounding");
+    expect(prTitle({ type: "docs", text: "   " })).toBe("docs: update");
+  });
+});

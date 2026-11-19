@@ -148,6 +148,8 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(s.contracts[0]?.oracle_hash).toBe(ORACLE);
     const head1 = s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`);
     expect(head1).not.toBe(s.fx.sha);
+    // D-538: the unit's commit is named after the unit, not after the first line of its instructions
+    expect(s.git("log", "-1", "--format=%s", head1)).toBe("fix: the 10% rule");
     expect(s.git("rev-parse", "main")).toBe(s.fx.sha);
     let us = await s.units();
     expect(us[0]).toMatchObject({ status: "passed", handoff: { done: `did ${us[0]!.task_id}` } });

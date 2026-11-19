@@ -9,14 +9,29 @@ const TYPE: Record<string, string> = { bugfix: "fix", feature: "feat", css: "sty
 const CONTROL = /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩؜]/g;
 
 const firstLine = (text: string) => (text.split("\n")[0] ?? "").replace(CONTROL, "").replace(/\s+/g, " ").trim();
-const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 const escape = (s: string) => s.replace(CONTROL, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export function prTitle(o: { type: string; text: string }): string {
-  return cut(`${TYPE[o.type] ?? "chore"}: ${firstLine(o.text)}`, 72);
+// D-538: a subject is one clean line: no leading markup, the first sentence of a long line, cut at a word
+const SUBJECT_MAX = 72;
+function subjectOf(line: string): string {
+  const s = line.replace(/^[#>*\-\s]+/, "").trim();
+  const sentence = /^(.+?)[.!?](\s|$)/.exec(s)?.[1]?.trim();
+  return sentence && sentence.length > 0 ? sentence : s;
+}
+function cutAtWord(s: string, n: number): string {
+  if (s.length <= n) return s;
+  const head = s.slice(0, n - 1);
+  const sp = head.lastIndexOf(" ");
+  return `${(sp > n / 2 ? head.slice(0, sp) : head).trimEnd()}…`;
 }
 
-export function commitMessage(o: { type: string; text: string; taskId: string; verdict: Verdict; ledgerSeq: number | null; coAuthors?: readonly string[] }): string {
+/** `<type>: <subject>` (≤ 72, one line): the subject is the given title (a job's unit) or the task's first line */
+export function prTitle(o: { type: string; text: string; title?: string | null }): string {
+  const subject = subjectOf(firstLine(o.title && o.title.trim() !== "" ? o.title : o.text)) || "update";
+  return cutAtWord(`${TYPE[o.type] ?? "chore"}: ${subject}`, SUBJECT_MAX);
+}
+
+export function commitMessage(o: { type: string; text: string; title?: string | null; taskId: string; verdict: Verdict; ledgerSeq: number | null; coAuthors?: readonly string[] }): string {
   const passed = o.verdict.evidence.filter((e) => e.status === "pass").map((e) => e.detector);
   const lines = [prTitle(o), "", `Checked: ${passed.join(", ") || "-"}`, "", `Mandat-Verdict: ${o.verdict.result} seq ${o.ledgerSeq ?? "-"}`, `Mandat-Task: ${o.taskId}`];
   for (const a of o.coAuthors ?? []) lines.push(`Co-Authored-By: ${a.replace(CONTROL, "").slice(0, 200)}`);
