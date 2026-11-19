@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JOB_TEXT_MAX, JobApproveBody, LedgerKind, PlanProposal, jobBranch, parseHandoff, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
+import { JOB_PARALLEL_MAX, JOB_TEXT_MAX, JobApproveBody, LedgerKind, PLANNER_SYSTEM, PlanProposal, RELAND_MAX, jobBranch, parseHandoff, plannerSystem, plannerUser, unitRetryNote, unitTaskText } from "./index.js";
 import type { Spec } from "./index.js";
 
 // D-535: the job's shared pieces — the planner's answer, the handoff line, a unit's task text and its retry note.
@@ -49,5 +49,19 @@ describe("job contracts (D-535)", () => {
     expect(jobBranch("j_abc")).toBe("mandat/job-abc");
     expect(JobApproveBody.safeParse({ seal_hash: `sha256:${"a".repeat(64)}` }).success).toBe(true);
     for (const k of ["plan_built", "session_sealed", "job_approved"]) expect(LedgerKind.parse(k)).toBe(k);
+  });
+});
+
+describe("the planner in waves (D-541)", () => {
+  it("single keeps the М1 instruction; waves tells the planner that units without a dependency run at the same time", () => {
+    expect(plannerSystem("single")).toBe(PLANNER_SYSTEM);
+    const w = plannerSystem("waves");
+    expect(w).toContain("at the same time");
+    expect(w).toContain("separate copies");
+    expect(w).toContain("only when");
+    expect(w).not.toContain("each one builds on the previous");
+    expect(JOB_PARALLEL_MAX).toBeGreaterThan(1);
+    expect(RELAND_MAX).toBeGreaterThanOrEqual(1);
+    expect(LedgerKind.parse("unit_relanded")).toBe("unit_relanded");
   });
 });

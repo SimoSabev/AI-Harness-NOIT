@@ -45,6 +45,24 @@ export const PLANNER_SYSTEM = [
   "a unit depends only on units listed before it; order the units so that each one builds on the previous ones; keep units small.",
 ].join("\n");
 
+// D-541 (М2 Х5): in waves mode units without a dependency between them are built at the same time, each by its own
+// writer in its own copy; a unit that lands after another is put onto the new head (3-way) or built again on it.
+/** units of one job running at the same time (the repo's WIP limit caps the tasks too) */
+export const JOB_PARALLEL_MAX = 3;
+/** a unit that no longer applies onto the moved branch is built again on the new head this many times */
+export const RELAND_MAX = 2;
+
+export const PLANNER_SYSTEM_WAVES = [
+  PLANNER_SYSTEM.replace("for ONE writer who works unit by unit", "for a TEAM of writers").replace("order the units so that each one builds on the previous ones; ", ""),
+  "Units with no dependency between them are built at the same time by different writers, in separate copies of the code.",
+  "So list a dependency only when a unit really needs the code of another unit; keep independent units free of each other,",
+  "and avoid two independent units changing the same lines.",
+].join("\n");
+
+export function plannerSystem(mode: "single" | "waves"): string {
+  return mode === "waves" ? PLANNER_SYSTEM_WAVES : PLANNER_SYSTEM;
+}
+
 export function plannerUser(s: Spec, problems: readonly PlanProblem[]): string {
   const lines = [
     `Goal: ${s.goal}`,

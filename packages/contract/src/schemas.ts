@@ -273,6 +273,7 @@ export const LedgerKind = z.enum([
   "session_sealed",
   "job_approved",
   "folder_updated", // D-540
+  "unit_relanded", // D-541
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
