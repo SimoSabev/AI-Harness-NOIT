@@ -124,7 +124,7 @@ describe("the planner (D-535)", () => {
     expect(j.status).toBe("running");
     expect(s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`)).toBe(s.fx.sha);
     const [pb] = await s.ledger("plan_built");
-    expect(pb).toEqual({ job: "j_t1", spec_hash: SPEC, oracle_hash: ORACLE, plan_hash: j.plan_hash, units: 2, rounds: 2, mode: "single", waves: 2, pilot: 0 });
+    expect(pb).toEqual({ job: "j_t1", spec_hash: SPEC, oracle_hash: ORACLE, plan_hash: j.plan_hash, units: 2, rounds: 2, mode: "single", waves: 2, pilot: 0, sites: 0 });
     expect(JSON.stringify(pb)).not.toContain("coupons");
   });
   it("no valid plan after the rounds → the job parks with a question", async () => {
@@ -423,5 +423,30 @@ describe("a pilot on large work (D-545)", () => {
     const s = await setup({ plans: [GOOD_PLAN], divisible: "yes", size: "m", outcome: () => ({ result: "VERIFIED" }) });
     await jobTick(s.jd);
     expect((await s.ledger("plan_built"))[0]).toMatchObject({ pilot: 0 });
+  });
+});
+
+describe("migration sites (D-546)", () => {
+  it("the server finds the sites; a missed file goes back to the planner; the table is kept; units name their files", async () => {
+    const missed = JSON.stringify({ sites: { match: "export function" }, units: [{ id: "u1", title: "cart", criteria: ["AC-1", "AC-2"], depends_on: [], files: ["src/cart.ts"] }] });
+    const good = JSON.stringify({ sites: { match: "export function" }, units: [{ id: "u1", title: "cart", criteria: ["AC-1", "AC-2"], depends_on: [], files: ["src/cart.ts"] }], skip: [{ file: "src/money.ts", why: "human" }] });
+    const s = await setup({ plans: [missed, good], outcome: () => ({ result: "VERIFIED" }) });
+    await s.db.query("update public.conversations set axes = $1::jsonb where id = 'c_job1'", [JSON.stringify({ code: "existing", reference: { kind: "old_system", locator: "the old shop" }, divisible: "no", proof: ["tests"], risk: { level: "low", outward: false }, size: "m" })]);
+    await jobTick(s.jd);
+    expect(s.systems[0]).toContain('"sites"');
+    expect(s.asked[1]).toContain("uncovered_site: src/money.ts");
+    const j = (await s.db.query<{ status: string; sites: unknown }>("select status, sites from public.jobs where id = 'j_t1'")).rows[0];
+    expect(j?.status).toBe("running");
+    expect(j?.sites).toEqual([{ file: "src/cart.ts", category: "unit", unit: "u1" }, { file: "src/money.ts", category: "human" }]);
+    expect((await s.ledger("plan_built"))[0]).toMatchObject({ sites: 2 });
+    await jobTick(s.jd);
+    expect((await s.db.query<{ text: string }>("select text from public.tasks where unit_id = 'u1'")).rows[0]?.text).toContain("Files of this unit: src/cart.ts");
+  });
+  it("a migration plan without sites, or with a regex git refuses, goes back to the planner", async () => {
+    const s = await setup({ plans: [GOOD_PLAN, JSON.stringify({ sites: { match: "([" }, units: JSON.parse(GOOD_PLAN).units })], outcome: () => ({ result: "VERIFIED" }) });
+    await s.db.query("update public.conversations set axes = $1::jsonb where id = 'c_job1'", [JSON.stringify({ code: "existing", reference: { kind: "old_system", locator: "x" }, divisible: "no", proof: ["tests"], risk: { level: "low", outward: false }, size: "m" })]);
+    await jobTick(s.jd);
+    expect(s.asked[1]).toContain("missing_sites");
+    expect(s.asked[2]).toContain("bad_sites");
   });
 });

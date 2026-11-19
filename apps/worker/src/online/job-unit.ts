@@ -1,4 +1,4 @@
-import { ADVISOR_SYSTEM, Handoff, JobRoles, PLAYBOOK_SYSTEM, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, playbookUser, rescueTaskText, unitTaskText, withPlaybook } from "@mandat/contract";
+import { ADVISOR_SYSTEM, Handoff, JobRoles, PLAYBOOK_SYSTEM, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, playbookUser, rescueTaskText, unitTaskText, withFiles, withPlaybook } from "@mandat/contract";
 import { roleRoute } from "@mandat/contract";
 import type { JobRole, Spec } from "@mandat/contract";
 import type { JobMode } from "@mandat/core";
@@ -15,14 +15,14 @@ import { selfMoveOf } from "./self-finish.js";
 
 export interface JobRow {
   id: string; org_id: string; repo_id: string; conversation_id: string; spec_hash: string; oracle_hash: string; type: string; agent: string; model: string | null;
-  status: string; mode: string; pilot_state: string; playbook: string | null; base_sha: string | null; head_sha: string | null; converge_round: number; final_task_id: string | null; seal: unknown; seal_hash: string | null; created_by: string | null;
+  status: string; mode: string; pilot_state: string; playbook: string | null; sites: unknown; base_sha: string | null; head_sha: string | null; converge_round: number; final_task_id: string | null; seal: unknown; seal_hash: string | null; created_by: string | null;
   remote_url: string; provider: string; roles: unknown;
 }
 export interface UnitRow {
   unit_id: string; ord: number; title: string; criteria: string[]; depends_on: string[]; status: string; task_id: string | null; handoff: unknown; failing: string[];
-  relands: number; rescues: number; tries: string[]; question: string | null; pilot: boolean;
+  relands: number; rescues: number; tries: string[]; question: string | null; pilot: boolean; files: string[];
 }
-export const UNIT_COLS = "unit_id, ord, title, criteria, depends_on, status, task_id, handoff, failing, relands, rescues, tries, question, pilot";
+export const UNIT_COLS = "unit_id, ord, title, criteria, depends_on, status, task_id, handoff, failing, relands, rescues, tries, question, pilot, files";
 
 /** the advisor's spend per rescue (the proxy counts it like the planner's) */
 export const ADVISE_BUDGET_USD = 0.3;
@@ -108,7 +108,7 @@ async function rescue(d: JobDeps, j: JobRow, spec: Spec, u: UnitRow, units: read
   const advice = await adviceFor(d, j, spec, u);
   if (!advice) return null;
   const rescues = u.rescues + 1;
-  const text = unitTaskText(spec, { id: u.unit_id, title: u.title, criteria: u.criteria }, doneBefore(units, u.ord));
+  const text = withFiles(unitTaskText(spec, { id: u.unit_id, title: u.title, criteria: u.criteria }, doneBefore(units, u.ord)), u.files);
   const base = u.pilot ? text : withPlaybook(text, j.playbook);
   const ids = Array.from({ length: RESCUE_TRIES }, (_, n) => taskIdOf(j.id, `${u.ord}x${rescues}${String.fromCharCode(97 + n)}`));
   // one attempt each: the tries are the retries now (self-finish does not multiply them)

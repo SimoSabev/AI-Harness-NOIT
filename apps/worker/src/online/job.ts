@@ -1,15 +1,15 @@
 import { randomBytes } from "node:crypto";
-import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withPlaybook } from "@mandat/contract";
+import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { deriveProfile, failingCriteria, jobMode, pilotSize, pilotUnits, sealFor, unitWaves, unitsToStart, validatePlan } from "@mandat/core";
-import type { JobMode } from "@mandat/core";
+import { deriveProfile, failingCriteria, jobMode, pilotSize, pilotUnits, sealFor, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
+import type { JobMode, SiteRow } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
 import { jsonObjects } from "./conversation.js";
 import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import { mergeLocal } from "./deliver-local.js";
-import { startJobBranch } from "./job-branch.js";
+import { findSites, startJobBranch } from "./job-branch.js";
 import { UNIT_COLS, doneBefore, insertTask, routeOf, settleUnit, taskIdOf, tunePilot } from "./job-unit.js";
 import type { JobRow, UnitRow } from "./job-unit.js";
 
@@ -25,7 +25,7 @@ export interface JobTick { planned: string[]; started: string[]; parked: string[
 export const PLAN_BUDGET_USD = 0.5;
 
 
-const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.pilot_state, j.playbook, j.base_sha, j.head_sha,
+const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.pilot_state, j.playbook, j.sites, j.base_sha, j.head_sha,
   j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, j.roles, r.remote_url, r.provider`;
 const mirrorOf = (j: JobRow) => j.remote_url.replace(/^file:\/\//, "");
 const RUNNING = new Set<string>();
@@ -61,13 +61,16 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
   // D-541: the axes the person approved decide whether a team builds it (waves) or one writer (single)
   const axes = TaskAxes.safeParse((await d.db.query<{ axes: unknown }>("select axes from public.conversations where id = $1", [j.conversation_id])).rows[0]?.axes);
   const mode = jobMode(axes.success ? axes.data : null);
+  // D-546: a migration (the approved spec's profile or the axes) finds its sites in the code
+  const migration = spec.profile === "migration" || (axes.success && deriveProfile(axes.data).id === "migration");
   let problems: PlanProblem[] = [];
   let units: PlanUnit[] | null = null;
+  let sites: SiteRow[] | null = null;
   let rounds = 0;
   for (; rounds < PLAN_ROUNDS && !units; rounds++) {
     let text: string;
     try {
-      text = (await choice.client.complete({ system: plannerSystem(mode), user: plannerUser(spec, problems), maxTokens: 4000, json: true })).text;
+      text = (await choice.client.complete({ system: plannerSystem(mode, { migration }), user: plannerUser(spec, problems.slice(0, 50)), maxTokens: 4000, json: true })).text;
     } catch (e) {
       d.log?.(`[job] ${j.id}: planner failed: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
       break;
@@ -78,6 +81,17 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
       continue;
     }
     problems = validatePlan(spec, proposal.data.units);
+    if (problems.length === 0 && migration) {
+      const p = proposal.data;
+      const found = p.sites ? await findSites({ mirror: mirrorOf(j), match: p.sites.match, max: SITES_MAX }) : null;
+      if (!p.sites) problems = [{ kind: "missing_sites", id: "sites" }];
+      else if (!found) problems = [{ kind: "bad_sites", id: "match" }];
+      else if (found.length > SITES_MAX) problems = [{ kind: "too_many_sites", id: String(SITES_MAX) }];
+      else {
+        problems = validateSites(found, p.units, p.skip ?? []);
+        sites = siteTable(found, p.units, p.skip ?? []);
+      }
+    }
     if (problems.length === 0) units = proposal.data.units;
   }
   if (!units) {
@@ -92,12 +106,12 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
   const pilot = new Set(axes.success && deriveProfile(axes.data).plan.pilot ? pilotUnits(plan, pilotSize(plan.length)) : []);
   await inTransaction(d.db, async (tx) => {
     for (const [n, u] of plan.entries()) {
-      await tx.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria, depends_on, pilot) values ($1, $2, $3::uuid, $4, $5, $6::jsonb, $7::jsonb, $8)", [j.id, u.id, j.org_id, n, u.title, JSON.stringify(u.criteria), JSON.stringify(u.depends_on), pilot.has(u.id)]);
+      await tx.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria, depends_on, pilot, files) values ($1, $2, $3::uuid, $4, $5, $6::jsonb, $7::jsonb, $8, $9::jsonb)", [j.id, u.id, j.org_id, n, u.title, JSON.stringify(u.criteria), JSON.stringify(u.depends_on), pilot.has(u.id), JSON.stringify(u.files ?? [])]);
     }
-    await tx.query("update public.jobs set status = 'running', mode = $6, pilot_state = $7, plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head, mode, pilot.size > 0 ? "running" : "none"]);
+    await tx.query("update public.jobs set status = 'running', mode = $6, pilot_state = $7, sites = $8::jsonb, plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head, mode, pilot.size > 0 ? "running" : "none", sites ? JSON.stringify(sites) : null]);
     // hashes and counts only: no criterion text, no titles
     const waves = Math.max(0, ...Object.values(unitWaves(plan))) + 1;
-    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves, pilot: pilot.size } });
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves, pilot: pilot.size, sites: sites?.length ?? 0 } });
   });
   return "planned";
 }
@@ -127,7 +141,7 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
     if (!next) continue;
     // a new task = a fresh agent context; it gets the spec, its unit and the earlier units' handoffs (the progress)
     const id = taskIdOf(j.id, next.relands > 0 ? `${next.ord}r${next.relands}` : String(next.ord));
-    const text = unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord));
+    const text = withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files);
     await insertTask(d.db, j, { id, text: next.pilot ? text : withPlaybook(text, j.playbook), unit: next.unit_id, role: "unit" });
     await d.db.query("update public.job_units set status = 'running', task_id = $3, tries = '[]'::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, next.unit_id, id]);
   }
@@ -140,6 +154,10 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
   await park(d.db, j, parked.map((u) => u.question ?? `Unit ${u.unit_id} waits for you.`).join(" ").slice(0, 2000), { why: "unit_stopped", units: parked.map((u) => u.unit_id) });
   return "parked";
 }
+
+/** the stored site table (D-546), only well-formed rows */
+const sitesOf = (raw: unknown): { file: string; category: string }[] =>
+  Array.isArray(raw) ? raw.filter((x): x is { file: string; category: string } => x !== null && typeof x === "object" && typeof (x as { file?: unknown }).file === "string" && typeof (x as { category?: unknown }).category === "string") : [];
 
 export async function convergeJob(d: JobDeps, j: JobRow): Promise<"waiting" | "sealed" | "more" | "parked"> {
   if (!j.final_task_id) return "waiting";
@@ -154,7 +172,7 @@ export async function convergeJob(d: JobDeps, j: JobRow): Promise<"waiting" | "s
   const evidence = (await d.db.query<{ detector: string; status: "pass" | "fail" | "unknown" | "n/a"; data: unknown }>("select detector, status, data from public.evidence where verdict_id = $1::uuid order by id", [v.id])).rows;
   if (v.result === "VERIFIED" && j.head_sha) {
     const head = (await d.db.query<{ hash: string }>("select hash from public.ledger where org_id = $1::uuid order by seq desc limit 1", [j.org_id])).rows[0]?.hash ?? null;
-    const seal = sealFor({ spec, specHash: j.spec_hash as Sha256, oracleHash: j.oracle_hash as Sha256, verdict: "VERIFIED", head: j.head_sha, evidence, ledgerHead: (head as Sha256 | null) });
+    const seal = sealFor({ spec, specHash: j.spec_hash as Sha256, oracleHash: j.oracle_hash as Sha256, verdict: "VERIFIED", head: j.head_sha, evidence, ledgerHead: (head as Sha256 | null), sites: sitesOf(j.sites) });
     const sealHash = hashJcs(seal);
     await inTransaction(d.db, async (tx) => {
       await tx.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3, updated_at = now() where id = $1", [j.id, JSON.stringify(seal), sealHash]);

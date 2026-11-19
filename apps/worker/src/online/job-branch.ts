@@ -88,3 +88,18 @@ export async function jobChangeFiles(o: { mirror: string; base: string; head: st
     return out;
   });
 }
+
+/**
+ * D-546: the files of main that match a migration's extended regex (git grep -E, deterministic, with surplus). [] when
+ * nothing matches; null when git refuses the regex. At most `max` + 1 paths (the caller refuses more than max).
+ */
+export async function findSites(o: { mirror: string; match: string; max: number; tmpRoot?: string }): Promise<string[] | null> {
+  if (o.match.length === 0 || o.match.length > 200) return null;
+  return withTmp(o.tmpRoot, async (tmp) => {
+    const r = await cleanGit({ tmpHome: tmp }).run(["grep", "-l", "-I", "-E", "-e", o.match, "refs/heads/main", "--"], { cwd: o.mirror });
+    if (r.code === 1) return [];
+    if (r.code !== 0) return null;
+    const prefix = "refs/heads/main:";
+    return [...new Set(r.stdout.toString("utf8").split("\n").map((l) => l.trim()).filter((l) => l.startsWith(prefix)).map((l) => l.slice(prefix.length)))].sort().slice(0, o.max + 1);
+  });
+}
