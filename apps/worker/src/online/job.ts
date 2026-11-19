@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { CONVERGE_ROUNDS, Handoff, PLANNER_SYSTEM, PLAN_ROUNDS, PlanProposal, Spec, hashJcs, jobBranch, plannerUser, unitTaskText } from "@mandat/contract";
+import { CONVERGE_ROUNDS, Handoff, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, RELAND_MAX, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { failingCriteria, sealFor, validatePlan } from "@mandat/core";
+import { failingCriteria, jobMode, sealFor, unitWaves, unitsToStart, validatePlan } from "@mandat/core";
+import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
 import { jsonObjects } from "./conversation.js";
@@ -24,12 +25,12 @@ export const PLAN_BUDGET_USD = 0.5;
 
 interface JobRow {
   id: string; org_id: string; repo_id: string; conversation_id: string; spec_hash: string; oracle_hash: string; type: string; agent: string; model: string | null;
-  status: string; base_sha: string | null; head_sha: string | null; converge_round: number; final_task_id: string | null; seal: unknown; seal_hash: string | null; created_by: string | null;
+  status: string; mode: string; base_sha: string | null; head_sha: string | null; converge_round: number; final_task_id: string | null; seal: unknown; seal_hash: string | null; created_by: string | null;
   remote_url: string; provider: string;
 }
-interface UnitRow { unit_id: string; ord: number; title: string; criteria: string[]; status: string; task_id: string | null; handoff: unknown; failing: string[] }
+interface UnitRow { unit_id: string; ord: number; title: string; criteria: string[]; depends_on: string[]; status: string; task_id: string | null; handoff: unknown; failing: string[]; relands: number }
 
-const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.base_sha, j.head_sha,
+const JOB_COLS = `j.id, j.org_id::text as org_id, j.repo_id::text as repo_id, j.conversation_id, j.spec_hash, j.oracle_hash, j.type, j.agent, j.model, j.status, j.mode, j.base_sha, j.head_sha,
   j.converge_round, j.final_task_id, j.seal, j.seal_hash, j.created_by::text as created_by, r.remote_url, r.provider`;
 const mirrorOf = (j: JobRow) => j.remote_url.replace(/^file:\/\//, "");
 const RUNNING = new Set<string>();
@@ -63,13 +64,16 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
     await park(d.db, j, `The planner could not start: ${choice.why}. Pick another agent or model and start again.`, { why: "no_model" });
     return "parked";
   }
+  // D-541: the axes the person approved decide whether a team builds it (waves) or one writer (single)
+  const axes = TaskAxes.safeParse((await d.db.query<{ axes: unknown }>("select axes from public.conversations where id = $1", [j.conversation_id])).rows[0]?.axes);
+  const mode = jobMode(axes.success ? axes.data : null);
   let problems: PlanProblem[] = [];
   let units: PlanUnit[] | null = null;
   let rounds = 0;
   for (; rounds < PLAN_ROUNDS && !units; rounds++) {
     let text: string;
     try {
-      text = (await choice.client.complete({ system: PLANNER_SYSTEM, user: plannerUser(spec, problems), maxTokens: 4000, json: true })).text;
+      text = (await choice.client.complete({ system: plannerSystem(mode), user: plannerUser(spec, problems), maxTokens: 4000, json: true })).text;
     } catch (e) {
       d.log?.(`[job] ${j.id}: planner failed: ${e instanceof Error ? e.message.slice(0, 200) : "error"}`);
       break;
@@ -94,9 +98,10 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
     for (const [n, u] of plan.entries()) {
       await tx.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria, depends_on) values ($1, $2, $3::uuid, $4, $5, $6::jsonb, $7::jsonb)", [j.id, u.id, j.org_id, n, u.title, JSON.stringify(u.criteria), JSON.stringify(u.depends_on)]);
     }
-    await tx.query("update public.jobs set status = 'running', plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head]);
+    await tx.query("update public.jobs set status = 'running', mode = $6, plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head, mode]);
     // hashes and counts only: no criterion text, no titles
-    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds } });
+    const waves = Math.max(0, ...Object.values(unitWaves(plan))) + 1;
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves } });
   });
   return "planned";
 }
@@ -119,29 +124,52 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
     await park(d.db, j, "The approved spec of this job changed or is gone.", { why: "spec_missing" });
     return "parked";
   }
-  const units = (await d.db.query<UnitRow>("select unit_id, ord, title, criteria, status, task_id, handoff, failing from public.job_units where job_id = $1 order by ord", [j.id])).rows;
-  const next = units.find((u) => u.status !== "passed");
-  if (!next) {
+  const mode: JobMode = j.mode === "waves" ? "waves" : "single";
+  const rows = (await d.db.query<UnitRow>("select unit_id, ord, title, criteria, depends_on, status, task_id, handoff, failing, relands from public.job_units where job_id = $1 order by ord", [j.id])).rows;
+  const units: UnitRow[] = [];
+  // the units with a task first: still working, built again on the moved branch (waves), or stopped (the job parks)
+  for (const u of rows) {
+    if (!u.task_id || u.status === "passed") {
+      units.push(u);
+      continue;
+    }
+    const task = (await d.db.query<{ state: string; attempt: number; wait_reason: string | null }>("select state, attempt, wait_reason from public.tasks where id = $1", [u.task_id])).rows[0];
+    const stopped = task && (task.state === "CLOSED" || ((task.state === "BLOCKED" || task.state === "HELD") && !["retry", "wait"].includes((await selfMoveOf(d.db, u.task_id, (d.now ?? (() => new Date()))())) ?? "ask")));
+    if (!task || !stopped) {
+      units.push(u);
+      continue;
+    }
+    if (mode === "waves" && task.state === "BLOCKED" && (task.wait_reason ?? "").startsWith("job_branch_") && u.relands < RELAND_MAX) {
+      // another unit landed first and this one no longer applies: a fresh task builds it again on the new head
+      const relands = u.relands + 1;
+      await inTransaction(d.db, async (tx) => {
+        await tx.query("update public.job_units set status = 'pending', task_id = null, relands = $3, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, relands]);
+        await appendLedgerOnline(tx, { org_id: j.org_id, kind: "unit_relanded", task_id: u.task_id, payload: { job: j.id, unit: u.unit_id, why: task.wait_reason, relands } });
+      });
+      units.push({ ...u, status: "pending", task_id: null, relands });
+      continue;
+    }
+    const failing = u.failing.length > 0 ? ` Criteria still failing: ${u.failing.join(", ")}.` : "";
+    await park(d.db, j, `Unit ${u.unit_id} ("${u.title}") stopped after ${task.attempt} attempt(s) (${task.wait_reason ?? task.state}).${failing} Look at the unit's task and tell Mandat how to go on.`, { why: "unit_stopped", unit: u.unit_id, task: u.task_id, attempt: task.attempt, failing: u.failing });
+    return "parked";
+  }
+  if (units.every((u) => u.status === "passed")) {
     const id = taskIdOf(j.id, `f${j.converge_round}`);
     await insertTask(d.db, j, { id, text: `Final check of job ${j.id}: the whole change against the full oracle.`, unit: null, role: "final" });
     await d.db.query("update public.jobs set status = 'converging', final_task_id = $2, updated_at = now() where id = $1", [j.id, id]);
     return "final";
   }
-  if (!next.task_id) {
+  const start = unitsToStart(units, mode, JOB_PARALLEL_MAX);
+  for (const unitId of start) {
+    const next = units.find((u) => u.unit_id === unitId);
+    if (!next) continue;
     // a new task = a fresh agent context; it gets the spec, its unit and the earlier units' handoffs (the progress)
-    const id = taskIdOf(j.id, String(next.ord));
+    const id = taskIdOf(j.id, next.relands > 0 ? `${next.ord}r${next.relands}` : String(next.ord));
     const done = units.filter((u) => u.ord < next.ord && u.status === "passed").flatMap((u) => handoffOf(u.handoff));
     await insertTask(d.db, j, { id, text: unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, done), unit: next.unit_id, role: "unit" });
     await d.db.query("update public.job_units set status = 'running', task_id = $3, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, next.unit_id, id]);
-    return "started";
   }
-  const task = (await d.db.query<{ state: string; attempt: number; wait_reason: string | null }>("select state, attempt, wait_reason from public.tasks where id = $1", [next.task_id])).rows[0];
-  if (!task) return "waiting";
-  const stopped = task.state === "CLOSED" || ((task.state === "BLOCKED" || task.state === "HELD") && !["retry", "wait"].includes((await selfMoveOf(d.db, next.task_id, (d.now ?? (() => new Date()))())) ?? "ask"));
-  if (!stopped) return "waiting";
-  const failing = next.failing.length > 0 ? ` Criteria still failing: ${next.failing.join(", ")}.` : "";
-  await park(d.db, j, `Unit ${next.unit_id} ("${next.title}") stopped after ${task.attempt} attempt(s) (${task.wait_reason ?? task.state}).${failing} Look at the unit's task and tell Mandat how to go on.`, { why: "unit_stopped", unit: next.unit_id, task: next.task_id, attempt: task.attempt, failing: next.failing });
-  return "parked";
+  return start.length > 0 ? "started" : "waiting";
 }
 
 export async function convergeJob(d: JobDeps, j: JobRow): Promise<"waiting" | "sealed" | "more" | "parked"> {

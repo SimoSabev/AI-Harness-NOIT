@@ -42,8 +42,8 @@ export async function startJobBranch(o: { mirror: string; ref: string; tmpRoot?:
   });
 }
 
-/** one VERIFIED unit onto the branch: the patch on the head it was verified on, one commit, fast-forward push */
-export async function advanceJobBranch(o: { mirror: string; ref: string; head: string; patch: Buffer; message: string; tmpRoot?: string }): Promise<{ ok: true; sha: string } | { ok: false; reason: "moved" | "does_not_apply" }> {
+/** one VERIFIED unit onto the branch: the patch on the head it was verified on (or, threeWay, on the newer head), one commit, fast-forward push */
+export async function advanceJobBranch(o: { mirror: string; ref: string; head: string; patch: Buffer; message: string; threeWay?: boolean; tmpRoot?: string }): Promise<{ ok: true; sha: string } | { ok: false; reason: "moved" | "does_not_apply" }> {
   if (!REF.test(o.ref) || !SHA.test(o.head)) throw new Error("advanceJobBranch: bad input");
   return withTmp(o.tmpRoot, async (tmp) => {
     const git = cleanGit({ tmpHome: tmp });
@@ -53,7 +53,11 @@ export async function advanceJobBranch(o: { mirror: string; ref: string; head: s
     if ((await git.run(["clone", "-q", "--no-checkout", "--end-of-options", o.mirror, w], { cwd: tmp })).code !== 0) throw new Error("advanceJobBranch: clone failed");
     if ((await git.run(["checkout", "-q", "--detach", o.head], { cwd: w })).code !== 0) throw new Error("advanceJobBranch: no such head");
     writeFileSync(path.join(tmp, "change.patch"), o.patch);
-    if ((await git.run(["apply", "--index", "--whitespace=nowarn", path.join(tmp, "change.patch")], { cwd: w })).code !== 0) return { ok: false, reason: "does_not_apply" };
+    // D-541: a patch made on an older head goes on with a 3-way merge (the clone has the older blobs); a conflict fails
+    const apply = ["apply", "--index", ...(o.threeWay ? ["--3way"] : []), "--whitespace=nowarn", path.join(tmp, "change.patch")];
+    if ((await git.run(apply, { cwd: w })).code !== 0) return { ok: false, reason: "does_not_apply" };
+    // the very same change is already on the newer head: nothing to commit, the unit is there
+    if (o.threeWay && (await git.run(["diff", "--cached", "--quiet"], { cwd: w })).code === 0) return { ok: true, sha: o.head };
     writeFileSync(path.join(tmp, "msg"), o.message.endsWith("\n") ? o.message : `${o.message}\n`);
     if ((await git.run([...IDENT, "commit", "-q", "--no-gpg-sign", "--cleanup=verbatim", "-F", path.join(tmp, "msg")], { cwd: w })).code !== 0) throw new Error("advanceJobBranch: commit failed");
     const sha = (await git.run(["rev-parse", "HEAD"], { cwd: w })).stdout.toString("utf8").trim();

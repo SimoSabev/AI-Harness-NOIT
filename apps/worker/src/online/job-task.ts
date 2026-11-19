@@ -18,14 +18,14 @@ import { oracleTestsFor } from "./oracle.js";
 // D11.oracle. Nothing of a job goes to main here.
 
 export interface JobTaskRef { id: string; org_id: string; repo_id: string; attempt: number; job_id: string; unit_id: string | null; job_role: "unit" | "final" }
-interface JobRow { id: string; spec_hash: string; oracle_hash: string; base_sha: string | null; head_sha: string | null }
+interface JobRow { id: string; spec_hash: string; oracle_hash: string; base_sha: string | null; head_sha: string | null; mode: string }
 
 export type JobInputs =
   | { ok: true; baseSha: string; hidden: HiddenTests | null; applyFiles: { path: string; data: Buffer | null }[] | null; grade: boolean; specHash: string; oracleHash: string }
   | { ok: false; reason: "job_missing" | "job_branch_missing" | "oracle_unapproved" | "oracle_tampered" };
 
 export async function jobInputs(db: Db, t: JobTaskRef, o: { mirror: string }): Promise<JobInputs> {
-  const job = (await db.query<JobRow>("select id, spec_hash, oracle_hash, base_sha, head_sha from public.jobs where id = $1", [t.job_id])).rows[0];
+  const job = (await db.query<JobRow>("select id, spec_hash, oracle_hash, base_sha, head_sha, mode from public.jobs where id = $1", [t.job_id])).rows[0];
   if (!job || !job.base_sha) return { ok: false, reason: "job_missing" };
   const ot = await oracleTestsFor(db, { repo: t.repo_id, specHash: job.spec_hash, oracleHash: job.oracle_hash });
   if (!ot.ok) return { ok: false, reason: ot.reason };
@@ -52,14 +52,17 @@ const setTask = (tx: SqlClient, id: string, state: string, extra: { wait_reason:
 export async function finishJobTask(db: Db, t: JobTaskRef, o: { mirror: string; verdict: Verdict; out: RunTaskOutput; diffPatch: Buffer; minutes: number; message: string }): Promise<{ state: string; wait_reason: string | null }> {
   const v = o.verdict;
   const usd = v.usage.usd;
-  const job = (await db.query<JobRow>("select id, spec_hash, oracle_hash, base_sha, head_sha from public.jobs where id = $1", [t.job_id])).rows[0];
+  const job = (await db.query<JobRow>("select id, spec_hash, oracle_hash, base_sha, head_sha, mode from public.jobs where id = $1", [t.job_id])).rows[0];
   let state = "CLOSED";
   let wait: string | null = null;
   let commit: string | null = null;
   if (t.job_role === "unit") {
     if (v.result === "VERIFIED" && o.diffPatch.length > 0 && job) {
       const head = await jobHead({ mirror: o.mirror, ref: jobBranch(job.id) });
-      const adv = head === v.base_sha ? await advanceJobBranch({ mirror: o.mirror, ref: jobBranch(job.id), head, patch: o.diffPatch, message: o.message }) : ({ ok: false, reason: "moved" } as const);
+      // D-541: in waves another unit may have landed meanwhile; the patch goes onto the new head with a 3-way apply
+      // (the final check verifies the whole branch). A conflict blocks the unit and the job builds it again.
+      const moved = head !== null && head !== v.base_sha;
+      const adv = head && (!moved || job.mode === "waves") ? await advanceJobBranch({ mirror: o.mirror, ref: jobBranch(job.id), head, patch: o.diffPatch, message: o.message, threeWay: moved }) : ({ ok: false, reason: "moved" } as const);
       if (adv.ok) commit = adv.sha;
       else [state, wait] = ["BLOCKED", `job_branch_${adv.reason}`];
     } else if (v.result === "FAILED") [state, wait] = ["BLOCKED", "failed"];

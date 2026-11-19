@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { OracleManifest, PLAN_ROUNDS, SessionSeal, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
+import { OracleManifest, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
 import { fakeGitHub } from "@mandat/gate-github";
 import type { ModelClient } from "@mandat/research";
@@ -54,11 +54,11 @@ const verdict = (o: { base: string; task: string; attempt: number; result: "VERI
     contract_hash: `sha256:${"a".repeat(64)}`, base_sha: o.base, tree_sha: "b".repeat(40), diff_hash: `sha256:${"c".repeat(64)}`, integrity: "ok",
     usage: { usd: 0.1, input_tokens: 1, output_tokens: 1, requests: 1 }, timings_ms: { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 }, created_at: "2026-11-17T00:00:00.000Z",
   });
-const patchFor = (name: string) => `diff --git a/${name} b/${name}\nnew file mode 100644\n--- /dev/null\n+++ b/${name}\n@@ -0,0 +1 @@\n+${name}\n`;
+const patchFor = (name: string, body = name) => `diff --git a/${name} b/${name}\nnew file mode 100644\n--- /dev/null\n+++ b/${name}\n@@ -0,0 +1 @@\n+${body}\n`;
 type Contract = { task_id: string; base_commit: string; text: string; attempt?: number; oracle_hash?: string };
-type Outcome = { result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; notes?: string };
+type Outcome = { result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; notes?: string; patch?: string; body?: string };
 
-async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome }) {
+async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome; divisible?: "yes" | "no"; during?: (n: number) => Promise<void> }) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-job-"));
   const fx = buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" });
   const db = await pgliteDb();
@@ -71,11 +71,14 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
   const v = (await db.query<{ v: number }>("select private.add_oracle_tests($1::uuid, $2, $3::jsonb, $4) as v", [DEMO_REPO_ID, SPEC, JSON.stringify(files), sha256Tag(jcs(files))])).rows[0]?.v;
   await db.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, status, manifest, oracle_hash, hidden_version, approved_at) values ('o_job1', $1, $2, 'c_job1', $3, 'approved', $4::jsonb, $5, $6, now())", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, JSON.stringify(MANIFEST), ORACLE, v]);
   await db.query("insert into public.jobs (id, org_id, repo_id, conversation_id, spec_hash, oracle_hash, type, agent) values ('j_t1', $1, $2, 'c_job1', $3, $4, 'bugfix', 'fake:honest-fix')", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, ORACLE]);
+  if (o.divisible) await db.query("update public.conversations set axes = $1::jsonb where id = 'c_job1'", [JSON.stringify({ code: "existing", reference: "none", divisible: o.divisible, proof: ["tests"], risk: { level: "low", outward: false }, size: "m" })]);
   const asked: string[] = [];
+  const systems: string[] = [];
   const client: ModelClient = {
     channel: { id: "chat:fake", label: "fake", kind: "local", model: "demo", enabled: true, health: "ok", quality: 0.8, cost: 0.5 },
     complete: (r) => {
       asked.push(r.user);
+      systems.push(r.system ?? "");
       return Promise.resolve({ text: o.plans[Math.min(asked.length - 1, o.plans.length - 1)] ?? "", inputTokens: 1, outputTokens: 1, usd: 0 });
     },
   };
@@ -84,24 +87,27 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
   const contracts: Contract[] = [];
   const deps: DaemonDeps = {
     db, home, gh: fakeGitHub({ repos: { "mandat-demo/shop": {} } }), ghRepo: "mandat-demo/shop",
-    run: (i): Promise<RunTaskOutput> => {
+    run: async (i): Promise<RunTaskOutput> => {
       runs.push(i);
+      const n = runs.length;
       const c = JSON.parse(readFileSync(i.contractPath, "utf8")) as Contract;
       contracts.push(c);
-      const out = o.outcome(c, runs.length);
-      const runDir = path.join(home, "runs", `r${runs.length}`);
+      const out = o.outcome(c, n);
+      const runDir = path.join(home, "runs", `r${n}`);
       mkdirSync(path.join(runDir, "export"), { recursive: true });
-      writeFileSync(path.join(runDir, "export", "diff.patch"), patchFor(`unit-${runs.length}.txt`));
+      writeFileSync(path.join(runDir, "export", "diff.patch"), patchFor(out.patch ?? `unit-${n}.txt`, out.body));
+      // a second task running while this one runs (two writers at once, each in its own copy)
+      if (o.during) await o.during(n);
       if (out.notes) writeFileSync(path.join(runDir, "notes.txt"), out.notes);
       const attempt = Number(/-a(\d+)\.json$/.exec(i.contractPath)?.[1] ?? 1);
-      return Promise.resolve({ verdict: verdict({ base: c.base_commit, task: c.task_id, attempt, result: out.result, ...(out.evidence ? { evidence: out.evidence } : {}) }), exit: 0, runDir, ledger: { from: 1, to: 3 }, agentExit: 0 });
+      return { verdict: verdict({ base: c.base_commit, task: c.task_id, attempt, result: out.result, ...(out.evidence ? { evidence: out.evidence } : {}) }), exit: 0, runDir, ledger: { from: 1, to: 3 }, agentExit: 0 };
     },
   };
   const git = (...a: string[]) => execFileSync("git", ["--git-dir", fx.mirror, ...a], { encoding: "utf8" }).trim();
   const job = async () => (await db.query<{ status: string; question: string | null; head_sha: string | null; base_sha: string | null; seal: unknown; seal_hash: string | null; plan_hash: string | null; converge_round: number; final_task_id: string | null }>("select status, question, head_sha, base_sha, seal, seal_hash, plan_hash, converge_round, final_task_id from public.jobs where id = 'j_t1'")).rows[0]!;
-  const units = async () => (await db.query<{ unit_id: string; status: string; criteria: string[]; task_id: string | null; handoff: { done: string } | null; failing: string[] }>("select unit_id, status, criteria, task_id, handoff, failing from public.job_units where job_id = 'j_t1' order by ord")).rows;
+  const units = async () => (await db.query<{ unit_id: string; status: string; criteria: string[]; task_id: string | null; handoff: { done: string } | null; failing: string[]; relands: number }>("select unit_id, status, criteria, task_id, handoff, failing, relands from public.job_units where job_id = 'j_t1' order by ord")).rows;
   const ledger = async (kind: string) => (await db.query<{ payload_jcs: string }>("select payload_jcs from public.ledger where kind = $1 order by seq", [kind])).rows.map((r) => JSON.parse(r.payload_jcs) as Record<string, unknown>);
-  return { db, deps, jd, runs, contracts, fx, git, job, units, ledger, asked };
+  return { db, deps, jd, runs, contracts, fx, git, job, units, ledger, asked, systems };
 }
 const handoff = (done: string) => `MEMORY: nothing\nHANDOFF: ${JSON.stringify({ done, risks: ["rounding"] })}\n`;
 const d5fail = (...ids: string[]) => [ev("D5.hidden", "fail", { failed: ids.map((id) => `packages/shop/test/__hidden__/x.spec.ts > ${id}: ${SECRET_NAME}`) })];
@@ -118,7 +124,7 @@ describe("the planner (D-535)", () => {
     expect(j.status).toBe("running");
     expect(s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`)).toBe(s.fx.sha);
     const [pb] = await s.ledger("plan_built");
-    expect(pb).toEqual({ job: "j_t1", spec_hash: SPEC, oracle_hash: ORACLE, plan_hash: j.plan_hash, units: 2, rounds: 2 });
+    expect(pb).toEqual({ job: "j_t1", spec_hash: SPEC, oracle_hash: ORACLE, plan_hash: j.plan_hash, units: 2, rounds: 2, mode: "single", waves: 2 });
     expect(JSON.stringify(pb)).not.toContain("coupons");
   });
   it("no valid plan after the rounds → the job parks with a question", async () => {
@@ -233,5 +239,64 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(us.map((u) => [u.unit_id, u.criteria, u.status])).toEqual([["u1", ["AC-1"], "passed"], ["u2", ["AC-2"], "passed"], ["fix-1", ["AC-2"], "pending"]]);
     const j = await s.job();
     expect(j).toMatchObject({ status: "running", converge_round: 1, final_task_id: null });
+  });
+});
+
+// D-541 (М2 Х5/Х6): a team only where the work divides
+const PAR_PLAN = JSON.stringify({ units: [{ id: "u1", title: "the 10% rule", criteria: ["AC-1"], depends_on: [] }, { id: "u2", title: "coupons", criteria: ["AC-2"], depends_on: [] }] });
+describe("waves: units that do not depend on each other run at once (D-541)", () => {
+  it("work that does not divide keeps the one writer and the М1 planner", async () => {
+    const s = await setup({ plans: [PAR_PLAN], divisible: "no", outcome: () => ({ result: "VERIFIED" }) });
+    await jobTick(s.jd);
+    expect(s.systems[0]).toBe(PLANNER_SYSTEM);
+    expect((await s.db.query<{ mode: string }>("select mode from public.jobs where id = 'j_t1'")).rows[0]?.mode).toBe("single");
+    await jobTick(s.jd);
+    expect((await s.units()).map((u) => u.status)).toEqual(["running", "pending"]);
+  });
+  it("divisible work: both units start, run on the same base, and the later one lands on the moved branch", async () => {
+    let s: Awaited<ReturnType<typeof setup>> | null = null;
+    s = await setup({ plans: [PAR_PLAN], divisible: "yes", outcome: () => ({ result: "VERIFIED" }), during: async (n) => { if (n === 1 && s) await runDaemonOnce(s.deps); } });
+    await jobTick(s.jd);
+    expect(s.systems[0]).toBe(plannerSystem("waves"));
+    expect((await s.ledger("plan_built"))[0]).toMatchObject({ mode: "waves", waves: 1 });
+    expect((await jobTick(s.jd)).started).toEqual(["j_t1"]);
+    expect((await s.units()).map((u) => u.status)).toEqual(["running", "running"]);
+    await runDaemonOnce(s.deps); // runs u1, and u2 while u1 runs
+    expect(s.contracts.map((c) => c.base_commit)).toEqual([s.fx.sha, s.fx.sha]);
+    expect((await s.units()).map((u) => u.status)).toEqual(["passed", "passed"]);
+    const head = s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`);
+    expect(s.git("rev-list", "--count", `${s.fx.sha}..${head}`)).toBe("2");
+    expect(s.git("ls-tree", "--name-only", head).split("\n")).toEqual(expect.arrayContaining(["unit-1.txt", "unit-2.txt"]));
+    expect(s.git("rev-parse", "main")).toBe(s.fx.sha);
+    await jobTick(s.jd);
+    expect((await s.job()).status).toBe("converging");
+  });
+  it("two writers made the very same change: the later one is already there and passes without a second commit", async () => {
+    let s: Awaited<ReturnType<typeof setup>> | null = null;
+    s = await setup({ plans: [PAR_PLAN], divisible: "yes", outcome: () => ({ result: "VERIFIED", patch: "same.txt" }), during: async (n) => { if (n === 1 && s) await runDaemonOnce(s.deps); } });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    expect((await s.units()).map((u) => u.status)).toEqual(["passed", "passed"]);
+    const head = s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`);
+    expect(s.git("rev-list", "--count", `${s.fx.sha}..${head}`)).toBe("1");
+  });
+  it("a unit that no longer applies onto the moved branch is built again on the new head, with a ledger row", async () => {
+    let s: Awaited<ReturnType<typeof setup>> | null = null;
+    s = await setup({ plans: [PAR_PLAN], divisible: "yes", outcome: (_c, n) => ({ result: "VERIFIED", patch: n <= 2 ? "same.txt" : `unit-${n}.txt`, body: `writer ${n}` }), during: async (n) => { if (n === 1 && s) await runDaemonOnce(s.deps); } });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    let us = await s.units();
+    expect(us.map((u) => u.status)).toEqual(["blocked", "passed"]);
+    const moved = s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`);
+    await jobTick(s.jd);
+    us = await s.units();
+    expect(us[0]).toMatchObject({ status: "running", relands: 1 });
+    expect((await s.ledger("unit_relanded"))[0]).toMatchObject({ job: "j_t1", unit: "u1", relands: 1 });
+    await runDaemonOnce(s.deps);
+    expect(s.contracts[2]?.base_commit).toBe(moved);
+    expect(s.contracts[2]?.task_id).not.toBe(s.contracts[0]?.task_id);
+    expect((await s.units()).map((u) => u.status)).toEqual(["passed", "passed"]);
   });
 });
