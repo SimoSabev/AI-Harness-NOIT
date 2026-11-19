@@ -57,7 +57,7 @@ export async function bringToFolder(o: { home: string; mirror: string; sha: stri
     if (head.code !== 0 || !SHA.test(head.out)) return no("not_a_repo", folder);
     if (head.out === main.out) return { ok: true, folder, from: head.out, to: main.out, files: 0 };
     // a fast-forward only when the folder's HEAD is in the mirror's main (an unknown commit is the person's own work)
-    if ((await text(["merge-base", "--is-ancestor", head.out, main.out], mirror)).code !== 0) return no("diverged", folder, null, `git -C ${q(folder)} pull --no-rebase ${q(mirror)} main`);
+    if ((await text(["merge-base", "--is-ancestor", head.out, main.out], mirror)).code !== 0) return no("diverged", folder, null, `git -C ${q(folder)} pull --no-rebase ${q(mirror)} main`); // T3-7: sha (both checked by SHA above; the string is only shown to the person)
     const files = (await text(["diff", "--name-only", head.out, main.out], mirror)).out.split("\n").filter(Boolean).length;
     if ((await git.run(["fetch", "-q", "--no-tags", "--end-of-options", mirror, "refs/heads/main"], { cwd: folder })).code !== 0) return no("refused", folder, "fetch", pull);
     if ((await text(["rev-parse", "FETCH_HEAD"], folder)).out !== main.out) return no("refused", folder, "the mirror moved", pull);
