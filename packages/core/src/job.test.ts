@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, oracleFilesFor, sealFor, uncheckedOf, validatePlan } from "./job.js";
+import { failingCriteria, fileTags, jobMode, oracleFilesFor, sealFor, uncheckedOf, unitWaves, unitsToStart, validatePlan } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -68,5 +68,31 @@ describe("failing criteria, unchecked and the seal (D-535)", () => {
     expect(uncheckedOf(spec, ev)).toEqual(["AC-3: proof by a person", "D11.oracle: not run", "D12.ui: not run"]);
     const s = sealFor({ spec, specHash: `sha256:${"a".repeat(64)}`, oracleHash: `sha256:${"b".repeat(64)}`, verdict: "VERIFIED", head: "c".repeat(40), evidence: ev, ledgerHead: `sha256:${"d".repeat(64)}` });
     expect(SessionSeal.parse(s)).toEqual({ spec_hash: `sha256:${"a".repeat(64)}`, oracle_hash: `sha256:${"b".repeat(64)}`, profile: "feature", verdict: "VERIFIED", result_ref: "c".repeat(40), unchecked: ["AC-3: proof by a person", "D11.oracle: not run", "D12.ui: not run"], ledger_head: `sha256:${"d".repeat(64)}` });
+  });
+});
+
+// D-541 (М2 Х5/Х6): a team only where the work divides. The axes decide the mode; in waves mode every unit whose
+// dependencies passed starts at once (each in its own task = its own copy), up to the limit.
+describe("job mode and waves (D-541)", () => {
+  const axes = (divisible: "yes" | "no" | "unknown") => ({ code: "existing", reference: "none", divisible, proof: ["tests"], risk: { level: "low", outward: false }, size: "m" }) as const;
+  it("only work that divides runs in waves; unknown or no axes stay with one writer", () => {
+    expect(jobMode(axes("yes"))).toBe("waves");
+    expect(jobMode(axes("no"))).toBe("single");
+    expect(jobMode(axes("unknown"))).toBe("single");
+    expect(jobMode(null)).toBe("single");
+  });
+  it("the wave of a unit is one more than the latest wave it depends on", () => {
+    expect(unitWaves([u("a", []), u("b", []), u("c", [], ["a"]), u("d", [], ["c", "b"])])).toEqual({ a: 0, b: 0, c: 1, d: 2 });
+  });
+  const s = (unit_id: string, ord: number, status: string, task_id: string | null, depends_on: string[] = []) => ({ unit_id, ord, status, task_id, depends_on });
+  it("single: the first unit that has not passed, and only when it has no task yet", () => {
+    expect(unitsToStart([s("a", 0, "passed", "t0"), s("b", 1, "pending", null), s("c", 2, "pending", null)], "single", 3)).toEqual(["b"]);
+    expect(unitsToStart([s("a", 0, "running", "t0"), s("b", 1, "pending", null)], "single", 3)).toEqual([]);
+  });
+  it("waves: every pending unit whose dependencies passed, up to the free slots", () => {
+    const us = [s("a", 0, "passed", "t0"), s("b", 1, "running", "t1"), s("c", 2, "pending", null, ["a"]), s("d", 3, "pending", null, ["b"]), s("e", 4, "pending", null), s("f", 5, "pending", null)];
+    expect(unitsToStart(us, "waves", 3)).toEqual(["c", "e"]);
+    expect(unitsToStart(us, "waves", 1)).toEqual([]);
+    expect(unitsToStart(us, "waves", 9)).toEqual(["c", "e", "f"]);
   });
 });

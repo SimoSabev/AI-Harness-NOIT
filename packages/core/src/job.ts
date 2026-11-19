@@ -1,5 +1,5 @@
 import { SessionSeal, oracleTag } from "@mandat/contract";
-import type { PlanProblem, PlanUnit, Sha256, Spec, VerdictResult } from "@mandat/contract";
+import type { PlanProblem, PlanUnit, Sha256, Spec, TaskAxes, VerdictResult } from "@mandat/contract";
 
 /** what the job reads of a verdict's evidence (from the verdict or from its stored rows) */
 export interface JobEvidence { detector: string; status: string; data?: unknown }
@@ -120,4 +120,54 @@ export function sealFor(o: { spec: Spec; specHash: Sha256; oracleHash: Sha256; v
     spec_hash: o.specHash, oracle_hash: o.oracleHash, profile: o.spec.profile, verdict: o.verdict, result_ref: o.head,
     unchecked: uncheckedOf(o.spec, o.evidence), ...(o.ledgerHead ? { ledger_head: o.ledgerHead } : {}),
   });
+}
+
+// D-541 (М2 Х5/Х6, docs/prd/heavy-process.md §4–§6): a team only where the work divides. The fable system card (§8.12)
+// and Kim et al. show a team is no better than one writer on work that does not split; so only axes that say
+// "divisible: yes" make a job run in waves. Everything else keeps the one writer of М1.
+
+export type JobMode = "single" | "waves";
+
+/** waves only when the person's task was understood as divisible; unknown or missing axes stay single */
+export function jobMode(axes: Pick<TaskAxes, "divisible"> | null | undefined): JobMode {
+  return axes?.divisible === "yes" ? "waves" : "single";
+}
+
+/** the wave of each unit: 0 without dependencies, else one more than its latest dependency (the plan has no cycle) */
+export function unitWaves(units: readonly Pick<PlanUnit, "id" | "depends_on">[]): Record<string, number> {
+  const deps = new Map(units.map((x) => [x.id, x.depends_on]));
+  const wave: Record<string, number> = {};
+  const of = (id: string, seen: Set<string>): number => {
+    const known = wave[id];
+    if (known !== undefined) return known;
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    const w = Math.max(-1, ...(deps.get(id) ?? []).filter((d) => deps.has(d)).map((d) => of(d, seen))) + 1;
+    wave[id] = w;
+    return w;
+  };
+  for (const x of units) of(x.id, new Set());
+  return wave;
+}
+
+export interface UnitState { unit_id: string; ord: number; status: string; task_id: string | null; depends_on: readonly string[] }
+
+/**
+ * The units to start now. single: the first unit that has not passed, only when it has no task yet (one at a time, in
+ * order, like М1). waves: every pending unit without a task whose dependencies all passed, in plan order, up to the
+ * slots left by the units still running.
+ */
+export function unitsToStart(units: readonly UnitState[], mode: JobMode, limit: number): string[] {
+  const sorted = [...units].sort((a, b) => a.ord - b.ord);
+  if (mode === "single") {
+    const next = sorted.find((x) => x.status !== "passed");
+    return next && !next.task_id ? [next.unit_id] : [];
+  }
+  const passed = new Set(sorted.filter((x) => x.status === "passed").map((x) => x.unit_id));
+  const busy = sorted.filter((x) => x.task_id !== null && x.status !== "passed").length;
+  const free = Math.max(0, limit - busy);
+  return sorted
+    .filter((x) => x.status === "pending" && !x.task_id && x.depends_on.every((d) => passed.has(d)))
+    .slice(0, free)
+    .map((x) => x.unit_id);
 }
