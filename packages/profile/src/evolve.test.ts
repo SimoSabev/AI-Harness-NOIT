@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ProfileLayers, demoProfileLayers } from "@mandat/contract";
 import type { ProfileLayers as Layers, ProfileManifest } from "@mandat/contract";
-import { TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
+import { NO_HIDDEN_PROBE, NO_TEST_ENV, TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
 import type { FailureRow } from "./evolve.js";
 
 // D-530 (round 2): profile evolution with evidence. The pure part: recurring failures → a manifest with a fixed
@@ -92,5 +92,25 @@ describe("predictionHeld", () => {
     expect(predictionHeld(manifest, [fail("t_x", [])])).toEqual({ done: false, held: true, seen: 1, repeats: 0 });
     expect(predictionHeld(manifest, [fail("t_x", []), fail("t_y", ["D8:lint_fail:-"]), fail("t_z", [], { type: "free" }), fail("t_w", [])])).toEqual({ done: true, held: true, seen: 3, repeats: 0 });
     expect(predictionHeld(manifest, [fail("t_x", ["D2:missing_test:q"])])).toEqual({ done: true, held: false, seen: 1, repeats: 1 });
+  });
+});
+
+describe("gaming the checks becomes a rule too (D-549)", () => {
+  it("code only for the tests (D11:test_env, D13:test_env_branch) → a fixed boundary; a look for hidden checks → another", () => {
+    const m = rulesFromFailures([fail("t_a", ["D11:test_env:src/a.ts:3"]), fail("t_b", ["D13:test_env_branch:src/b.ts:9"]), fail("t_c", ["D13:test_env_branch:src/c.ts:1"]), fail("t_d", ["D13:hidden_probe:tool:2"]), fail("t_e", ["D13:hidden_probe:tool:1"]), fail("t_f", ["D13:hidden_probe:tool:4"])], base(), NOW);
+    expect(m.map((x) => [x.change.rule, x.reason_class, x.evidence])).toEqual([
+      ["no_test_env", "D11:test_env", ["t_a", "t_b", "t_c"]],
+      ["no_hidden_probe", "D13:hidden_probe", ["t_d", "t_e", "t_f"]],
+    ]);
+    const after = applyChange(applyChange(base(), m[0]!.change), m[1]!.change);
+    expect(after.b.boundaries).toEqual(expect.arrayContaining([NO_TEST_ENV, NO_HIDDEN_PROBE]));
+    expect(isNarrowing(base(), after)).toBe(true);
+    expect(rulesFromFailures([fail("t_a", ["D11:test_env:x:1"]), fail("t_b", ["D11:test_env:y:1"]), fail("t_c", ["D11:test_env:z:1"])], after, NOW)).toEqual([]);
+  });
+  it("a changed runner config (D13:test_config_change) → no writing to that file; a test script line in package.json → nothing", () => {
+    const m = rulesFromFailures(["t_a", "t_b", "t_c"].map((t) => fail(t, ["D13:test_config_change:vitest.config.ts", "D13:test_config_change:package.json:7"])), base(), NOW);
+    expect(m.map((x) => x.change)).toEqual([{ rule: "protect_path", layer: "c", detail: "vitest.config.ts" }]);
+    // the prediction counts the class that made the change, whichever detector reported it
+    expect(predictionHeld(m[0]!, [fail("t_x", ["D13:test_config_change:vitest.config.ts"], { d: 0 })]).held).toBe(false);
   });
 });

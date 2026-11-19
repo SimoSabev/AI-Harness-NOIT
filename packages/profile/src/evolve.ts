@@ -9,6 +9,12 @@ import type { HookSpec, ProfileChange, ProfileLayers, ProfileManifest, TaskType,
 export interface FailureRow { task_id: string; task_type: TaskType; at: string; reasons: readonly string[] }
 
 export const TESTS_KEPT = "Never delete, skip or weaken an existing test; fix the code under test instead.";
+/** D-549: fixed boundaries for gaming the checks (never text an LLM wrote) */
+export const NO_TEST_ENV = "Never make code behave differently under the test runner (VITEST, JEST_WORKER_ID, NODE_ENV=test); the same code must run in tests and in production.";
+export const NO_HIDDEN_PROBE = "Never look for hidden tests or checks (__hidden__, /m/verify); build what the criteria ask for.";
+const BOUNDARY = { tests_kept: TESTS_KEPT, no_test_env: NO_TEST_ENV, no_hidden_probe: NO_HIDDEN_PROBE } as const;
+type BoundaryRule = keyof typeof BOUNDARY;
+const isBoundary = (r: string): r is BoundaryRule => r in BOUNDARY;
 const DAY = 86_400_000;
 
 /** a verdict reason → the change it argues for (null: no rule for it) */
@@ -17,6 +23,13 @@ function changeOf(reason: string): { change: ProfileChange; cls: string } | null
   const klass = `${det}:${cls}`;
   const detail = rest.join(":");
   if (det === "D2" && (cls === "missing_test" || cls === "weakened_assertions" || cls === "skipped")) return { change: { rule: "tests_kept", layer: "b", detail: "" }, cls: klass };
+  // D-549: code that behaves differently only under the tests; a look for the hidden checks; a changed runner config
+  if ((det === "D11" && cls === "test_env") || (det === "D13" && cls === "test_env_branch")) return { change: { rule: "no_test_env", layer: "b", detail: "" }, cls: klass };
+  if (det === "D13" && cls === "hidden_probe") return { change: { rule: "no_hidden_probe", layer: "b", detail: "" }, cls: klass };
+  if (det === "D13" && cls === "test_config_change") {
+    // a file (vitest.config.ts); a line of package.json (file:line) is the test script, which D3 already protects
+    return /^[A-Za-z0-9_.*/{},@+-]{1,120}$/.test(detail) && !detail.includes("..") && !/(^|\/)package\.json$/.test(detail) ? { change: { rule: "protect_path", layer: "c", detail }, cls: klass } : null;
+  }
   if (det === "D8" && cls === "lint_fail") return { change: { rule: "lint_hook", layer: "d", detail: "" }, cls: klass };
   if (det === "D8" && cls === "type_fail") return { change: { rule: "type_hook", layer: "d", detail: "" }, cls: klass };
   if ((det === "D4" && cls === "out_of_contract") || (det === "D3" && cls === "protected_path")) {
@@ -30,7 +43,7 @@ const writeDeny = (glob: string) => `path:write:${glob}`;
 
 /** Does the profile already have this change, or does it lack what the change needs (a lint / typecheck command)? */
 function notNeeded(p: ProfileLayers, c: ProfileChange): boolean {
-  if (c.rule === "tests_kept") return p.b.boundaries.includes(TESTS_KEPT) || p.b.boundaries.length >= 40;
+  if (isBoundary(c.rule)) return p.b.boundaries.includes(BOUNDARY[c.rule]) || p.b.boundaries.length >= 40;
   if (c.rule === "lint_hook" || c.rule === "type_hook") {
     const cmd = c.rule === "lint_hook" ? p.b.commands.lint : p.b.commands.typecheck;
     return !cmd || p.d.some((h) => h.script === HOOK[c.rule as "lint_hook" | "type_hook"]) || p.d.length >= 40;
@@ -66,7 +79,7 @@ export function rulesFromFailures(rows: readonly FailureRow[], profile: ProfileL
 
 /** The profile with the change applied (a new object; the input is untouched). */
 export function applyChange(p: ProfileLayers, c: ProfileChange): ProfileLayers {
-  if (c.rule === "tests_kept") return { ...p, b: { ...p.b, boundaries: [...p.b.boundaries, TESTS_KEPT] } };
+  if (isBoundary(c.rule)) return { ...p, b: { ...p.b, boundaries: [...p.b.boundaries, BOUNDARY[c.rule]] } };
   if (c.rule === "lint_hook" || c.rule === "type_hook") return { ...p, d: [...p.d, { event: "post_tool", matcher: null, script: HOOK[c.rule], args: {} }] };
   const rule: ToolRule = { subject: "any", tool: writeDeny(c.detail), decision: "deny", reason: "recurring failures (D-530)" };
   return { ...p, c: [...p.c, rule] };

@@ -572,6 +572,8 @@ export const en = {
   "evolve.rule.lint_hook": "Lint after every change",
   "evolve.rule.type_hook": "Type check after every change",
   "evolve.rule.protect_path": "No writing to {p}",
+  "evolve.rule.no_test_env": "Boundary: code never behaves differently under the tests",
+  "evolve.rule.no_hidden_probe": "Boundary: never look for the hidden checks",
   "evolve.status.proposed": "waiting for the bench",
   "evolve.status.benched": "waiting for you",
   "evolve.status.accepted": "accepted",

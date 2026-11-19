@@ -15,7 +15,7 @@ export const EVOLVE_LIMITS = Object.freeze({
 });
 
 /** the fixed narrowing rules; each maps to one layer */
-export const ProfileChangeRule = z.enum(["tests_kept", "lint_hook", "type_hook", "protect_path"]);
+export const ProfileChangeRule = z.enum(["tests_kept", "lint_hook", "type_hook", "protect_path", "no_test_env", "no_hidden_probe"]); // D-549: the last two
 export type ProfileChangeRule = z.infer<typeof ProfileChangeRule>;
 
 // a path glob or nothing: printable, no whitespace controls, no zero-width or bidi characters

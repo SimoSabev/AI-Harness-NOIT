@@ -554,6 +554,8 @@ export const bg: Record<Key, string> = {
   "evolve.rule.lint_hook": "Lint след всяка промяна",
   "evolve.rule.type_hook": "Проверка на типовете след всяка промяна",
   "evolve.rule.protect_path": "Забрана за писане в {p}",
+  "evolve.rule.no_test_env": "Граница: кодът никога не се държи различно под тестовете",
+  "evolve.rule.no_hidden_probe": "Граница: скритите проверки никога не се търсят",
   "evolve.status.proposed": "чака bench",
   "evolve.status.benched": "чака теб",
   "evolve.status.accepted": "прието",

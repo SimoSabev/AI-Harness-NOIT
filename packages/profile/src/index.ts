@@ -10,5 +10,5 @@ export { applyPermissions, forbidAtNight, grantOnce, opensDangerous, parseAsks }
 export type { Ask, Decision, PermissionRow } from "./permissions.js";
 export { BUILTIN_SKILLS, builtinSkillRef, skillTexts } from "./builtin-skills.js";
 export type { BuiltinSkill } from "./builtin-skills.js";
-export { TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
+export { NO_HIDDEN_PROBE, NO_TEST_ENV, TESTS_KEPT, applyChange, isNarrowing, predictionHeld, rulesFromFailures } from "./evolve.js";
 export type { FailureRow } from "./evolve.js";
