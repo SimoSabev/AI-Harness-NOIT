@@ -17,7 +17,7 @@ export interface TaskRow {
   ladder_level: number | null; ladder_s_up: number | null; ladder_pinned: boolean | null; ledger_seq: number | null;
   /** E8g: a steerable agent is running now (the "Steer" box) */
   steerable?: boolean;
-  /** D-538: what a short title of a job's internal task needs (lib/task-title.ts) */
+  /** D-540: what a short title of a job's internal task needs (lib/task-title.ts) */
   internal_role?: "oracle" | "unit" | "final" | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null;
 }
 

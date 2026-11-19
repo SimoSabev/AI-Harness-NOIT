@@ -557,7 +557,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // D-535: a job's task never goes the delivery way: a VERIFIED unit moves the job branch, the final check is the job's
   if (job?.ok && t.job_id && t.job_role) {
     const dp = out.runDir && existsSync(path.join(out.runDir, "export", "diff.patch")) ? readFileSync(path.join(out.runDir, "export", "diff.patch")) : Buffer.alloc(0);
-    // D-538: a unit's commit is named after the unit (its title in the plan), not after its instructions' first line
+    // D-540: a unit's commit is named after the unit (its title in the plan), not after its instructions' first line
     const unitTitle = t.unit_id ? ((await d.db.query<{ title: string }>("select title from public.job_units where job_id = $1 and unit_id = $2", [t.job_id, t.unit_id])).rows[0]?.title ?? null) : null;
     const end = await finishJobTask(d.db, { id: t.id, org_id: t.org_id, repo_id: t.repo_id, attempt: t.attempt, job_id: t.job_id, unit_id: t.unit_id, job_role: t.job_role }, {
       mirror, verdict: v, out, diffPatch: dp, minutes, message: commitMessage({ type: t.type, text: t.text, title: unitTitle, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }),

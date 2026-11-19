@@ -51,8 +51,8 @@ describe("PR body", () => {
   });
 });
 
-// D-538 (live test 18.11): the subject comes from the unit, never from the head of a long instruction
-describe("commit subject (D-538)", () => {
+// D-540 (live test 18.11): the subject comes from the unit, never from the head of a long instruction
+describe("commit subject (D-540)", () => {
   const v = { evidence: [], result: "VERIFIED" } as unknown as Parameters<typeof commitMessage>[0]["verdict"];
   const subject = (m: string) => m.split("\n")[0] ?? "";
   it("a job unit: <type>: <unit title>, not the first line of the unit's instructions", () => {

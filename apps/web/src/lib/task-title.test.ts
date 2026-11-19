@@ -3,13 +3,13 @@ import { translate } from "../i18n/t";
 import type { Key, Params } from "../i18n/t";
 import { taskTitle } from "./task-title";
 
-// D-538 (live test 18.11): the internal tasks of a job (oracle, units, the final check) stay in the list, but with a short
+// D-540 (live test 18.11): the internal tasks of a job (oracle, units, the final check) stay in the list, but with a short
 // title from their data instead of their whole instruction text.
 const en = (k: Key, p?: Params) => translate("en", k, p);
 const bg = (k: Key, p?: Params) => translate("bg", k, p);
 const goal = "Vector math for the engine: length, distance, normalize";
 
-describe("taskTitle (D-538)", () => {
+describe("taskTitle (D-540)", () => {
   it("an ordinary task keeps its text", () => {
     expect(taskTitle({ text: "Fix the VAT rounding", internal_role: null }, en)).toBe("Fix the VAT rounding");
   });

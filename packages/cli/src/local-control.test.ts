@@ -140,8 +140,8 @@ describe("POST /projects (D-388)", () => {
   });
 });
 
-// D-538: "Bring into my folder" — the body is checked here; the endpoint only runs the safe fast-forward of the worker
-describe("POST /projects/bring (D-538)", () => {
+// D-540: "Bring into my folder" — the body is checked here; the endpoint only runs the safe fast-forward of the worker
+describe("POST /projects/bring (D-540)", () => {
   it("a valid body → the reply; a bad body → 400; GET → 405; without the service → 404", async () => {
     const seen: unknown[] = [];
     const sha = "a".repeat(40);

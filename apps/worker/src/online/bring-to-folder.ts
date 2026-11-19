@@ -4,7 +4,7 @@ import path from "node:path";
 import { cleanGit } from "@mandat/export";
 import type { BringReply } from "@mandat/contract";
 
-// D-538 (live test 18.11): after a job is merged, the change is only in Mandat's mirror. "Bring into my folder" — a
+// D-540 (live test 18.11): after a job is merged, the change is only in Mandat's mirror. "Bring into my folder" — a
 // person's click, never the worker by itself — fast-forwards the project's own folder (the mirror's `mandat.source`,
 // D-388) to the delivered commit. Only when it is safe: the folder is a git repo on the delivered branch, clean (nothing
 // staged, changed, or untracked and not ignored), and its HEAD is an ancestor of the mirror's main. Everything is checked

@@ -96,8 +96,8 @@ describe("folder listing and found projects (D-388, folder picker)", () => {
   });
 });
 
-// D-538: "Bring into my folder" — the web names the mirror and the delivered commit; the reply says what happened or why not
-describe("bring into my folder (D-538)", () => {
+// D-540: "Bring into my folder" — the web names the mirror and the delivered commit; the reply says what happened or why not
+describe("bring into my folder (D-540)", () => {
   const sha = "a".repeat(40);
   it("the body: an absolute mirror path, a full commit, an optional branch name; nothing else", () => {
     expect(BringBody.safeParse({ mirror: "/home/s/.mandat/projects/lux.git", sha }).success).toBe(true);

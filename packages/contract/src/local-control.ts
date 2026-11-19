@@ -147,7 +147,7 @@ export const AddProjectReply = z.discriminatedUnion("ok", [
 export type AddProjectReply = z.infer<typeof AddProjectReply>;
 
 /**
- * D-538: "Bring into my folder" — after a job is merged into the mirror's main, a person's click fast-forwards the
+ * D-540: "Bring into my folder" — after a job is merged into the mirror's main, a person's click fast-forwards the
  * project's own folder (the mirror's `mandat.source`) to it, only when that is safe; otherwise nothing is touched and the
  * reply says why, with a command the person can run themselves. Never force, stash or reset.
  */

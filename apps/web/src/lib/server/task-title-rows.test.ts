@@ -7,7 +7,7 @@ import { board } from "./queries";
 import { asService } from "./sql";
 import { U, webDb } from "./web-db.test-helper";
 
-// D-538: the list rows carry what a short title of an internal task needs (role, unit, the spec's goal), read under RLS.
+// D-540: the list rows carry what a short title of an internal task needs (role, unit, the spec's goal), read under RLS.
 let db: Awaited<ReturnType<typeof webDb>>;
 const H = `sha256:${"a".repeat(64)}`;
 const spec = { goal: "Vector math for the engine", criteria: [], unchanged: [], out_of_scope: [], product: "" };
@@ -26,7 +26,7 @@ beforeAll(async () => {
 });
 afterAll(async () => db.end());
 
-describe("internal task rows (D-538)", () => {
+describe("internal task rows (D-540)", () => {
   it("a viewer's list has short titles for the oracle, the unit and the final check; ordinary tasks keep their text", async () => {
     const rows = (await board(db, U.viewer, DEMO_ORG_ID)).columns.flatMap((c) => c.items);
     const en = (k: Key, p?: Params) => translate("en", k, p);

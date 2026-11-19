@@ -27,7 +27,7 @@ export interface ControlDeps {
   system: { all(): JobState[]; start(job: SystemJob): JobState };
   /** D-388: "Add project" from the web — a git folder of this computer becomes a project (add-project.ts) */
   addProject(path: string): Promise<AddProjectReply>;
-  /** D-538: "Bring into my folder" — the safe fast-forward of a project's own folder (bring-to-folder.ts) */
+  /** D-540: "Bring into my folder" — the safe fast-forward of a project's own folder (bring-to-folder.ts) */
   bring?: (b: BringBody) => Promise<BringReply>;
   /** D-388 (folder picker): the folders of this computer for "Add project" (folders.ts); list → null when not a folder */
   folders?: { list(path: string | undefined): Promise<FolderListing | null>; found(): Promise<FoundProjects> };

@@ -11,7 +11,7 @@ const CONTROL = /[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩؜]/g;
 const firstLine = (text: string) => (text.split("\n")[0] ?? "").replace(CONTROL, "").replace(/\s+/g, " ").trim();
 const escape = (s: string) => s.replace(CONTROL, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-// D-538: a subject is one clean line: no leading markup, the first sentence of a long line, cut at a word
+// D-540: a subject is one clean line: no leading markup, the first sentence of a long line, cut at a word
 const SUBJECT_MAX = 72;
 function subjectOf(line: string): string {
   const s = line.replace(/^[#>*\-\s]+/, "").trim();

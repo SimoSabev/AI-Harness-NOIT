@@ -1,6 +1,6 @@
 import type { Key, Params } from "../i18n/t";
 
-// D-538 (live test 18.11): a job's internal tasks (the oracle, the units, the final check) are listed with a short title
+// D-540 (live test 18.11): a job's internal tasks (the oracle, the units, the final check) are listed with a short title
 // from their data — the spec's goal, the unit's id and title — never with their whole instruction text.
 export type InternalRole = "oracle" | "unit" | "final";
 export interface TitleSource { text: string; internal_role?: InternalRole | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null }

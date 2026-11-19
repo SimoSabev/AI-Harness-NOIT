@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { BringReply } from "@mandat/contract";
 import { bringToFolder } from "./bring-to-folder.js";
 
-// D-538: "Bring into my folder" with temp git repos (no Docker): the person's folder moves only by a fast-forward, only
+// D-540: "Bring into my folder" with temp git repos (no Docker): the person's folder moves only by a fast-forward, only
 // when it is the project's source folder, on the delivered branch, clean, and not diverged. Otherwise nothing changes.
 const dirs: string[] = [];
 afterEach(() => {
@@ -47,7 +47,7 @@ const bring = async (s: ReturnType<typeof setup>, o: { sha?: string; branch?: st
   return r;
 };
 
-describe("bringToFolder (D-538)", () => {
+describe("bringToFolder (D-540)", () => {
   it("a clean folder on main fast-forwards to the delivered commit; an ignored file stays as it was", async () => {
     const s = setup();
     mkdirSync(path.join(s.folder, "dist"));

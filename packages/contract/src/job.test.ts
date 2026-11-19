@@ -34,7 +34,7 @@ describe("job contracts (D-535)", () => {
     expect(t).toContain("[u1] done: 10% rule");
     expect(t).toContain("Keep unchanged: no discount under 50");
     expect(t).toContain("HANDOFF:");
-    // D-538: the handoff is the last step, after the checks ran (writers reported "tests not run" before running them)
+    // D-540: the handoff is the last step, after the checks ran (writers reported "tests not run" before running them)
     expect(t).toContain("Run the project's tests first");
     expect(t.indexOf("Run the project's tests first")).toBeLessThan(t.indexOf("HANDOFF:"));
     expect(t.indexOf("AC-2")).toBeLessThan(t.indexOf("AC-1"));
