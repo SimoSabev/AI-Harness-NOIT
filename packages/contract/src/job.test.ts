@@ -34,6 +34,9 @@ describe("job contracts (D-535)", () => {
     expect(t).toContain("[u1] done: 10% rule");
     expect(t).toContain("Keep unchanged: no discount under 50");
     expect(t).toContain("HANDOFF:");
+    // D-538: the handoff is the last step, after the checks ran (writers reported "tests not run" before running them)
+    expect(t).toContain("Run the project's tests first");
+    expect(t.indexOf("Run the project's tests first")).toBeLessThan(t.indexOf("HANDOFF:"));
     expect(t.indexOf("AC-2")).toBeLessThan(t.indexOf("AC-1"));
     const long = unitTaskText({ ...spec, goal: "g".repeat(600) }, { id: "u1", title: "t", criteria: ["AC-1"] }, Array.from({ length: 30 }, (_, n) => ({ unit_id: `u${n}`, done: "d".repeat(1500), deviations: [], risks: [] })));
     expect(long.length).toBeLessThanOrEqual(JOB_TEXT_MAX);

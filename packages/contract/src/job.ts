@@ -63,7 +63,8 @@ export function plannerUser(s: Spec, problems: readonly PlanProblem[]): string {
  * file, outside the work tree, so never in the diff; CANARY-checked and redacted like the MEMORY notes, D-400).
  */
 export const HANDOFF_PREFIX = "HANDOFF:";
-export const HANDOFF_HINT = 'When you finish, write ONE line into /m/out/notes.txt: HANDOFF: {"done":"what you built","deviations":["..."],"risks":["..."]}';
+// D-538: the checks first, the handoff last — a handoff written before the tests ran said "tests not run"
+export const HANDOFF_HINT = "Run the project's tests first (change files with the edit tools; a refused shell call does not mean the tests are refused). As your last step, write ONE line into /m/out/notes.txt: HANDOFF: {\"done\":\"what you built\",\"deviations\":[\"...\"],\"risks\":[\"...\"]}";
 
 /** the last valid HANDOFF line of the notes for this unit (zod-checked), or null */
 export function parseHandoff(notes: string, unitId: string): Handoff | null {
