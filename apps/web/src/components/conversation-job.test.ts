@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { ConversationRow, JobView } from "../lib/conversation-types";
 import type { Chat } from "./conversation";
+import type { T } from "../i18n/t";
+import type { JobActions } from "./job-card";
 
 // D-535: the job card in the thread — the plan with each unit's criteria, status and verdict, the current unit, a
 // parked question, the seal (checked / not checked) and the approve-merge button only on a sealed job for a person
@@ -57,9 +59,9 @@ describe("the job in the thread (D-535)", () => {
 // D-540: "Bring into my folder" on a delivered job — only for a person who may approve; the result says what happened
 // or exactly why not, with the command the person can run themselves
 describe("bring into my folder (D-540)", () => {
-  const t = Object.assign((k: string, p?: Record<string, string | number>) => (p ? `${k}(${Object.values(p).join("|")})` : k), { lang: "en" }) as unknown as import("../i18n/t").T;
+  const t = Object.assign((k: string, p?: Record<string, string | number>) => (p ? `${k}(${Object.values(p).join("|")})` : k), { lang: "en" }) as unknown as T;
   const delivered = job({ status: "delivered", current: null, merged_sha: "c".repeat(40) });
-  const card = async (a: Partial<import("./job-card").JobActions>) => {
+  const card = async (a: Partial<JobActions>) => {
     const { JobCard } = await import("./job-card");
     return renderToStaticMarkup(createElement(JobCard, { job: delivered, t, a: { canApprove: true, busy: false, onApprove: () => undefined, onBring: () => undefined, brought: null, ...a } }));
   };
