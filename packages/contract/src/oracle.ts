@@ -22,7 +22,7 @@ export const unchangedId = (n: number): string => `U-${n + 1}`;
 
 /** the oracle agent's task text: tests only, one tag per test, only in __hidden__ folders the runner finds (≤ 4000 chars) */
 export function oracleTaskText(s: Spec): string {
-  const head = [
+  const head: string[] = [
     "Write hidden acceptance tests for the spec below. Do not implement anything.",
     `Write only new test files (*.spec.ts or *.test.ts) and put them in a ${HIDDEN_SEGMENT} folder inside a directory the project's test runner already discovers: look at the test config (e.g. vitest.workspace / vitest.config / jest config / the package test scripts); in a monorepo that is usually inside a package, e.g. packages/<name>/test/${HIDDEN_SEGMENT}/. Do not change any other file.`,
     "For each acceptance criterion write at least one test whose name starts with its id, e.g. it(\"AC-1: ...\").",
@@ -31,12 +31,18 @@ export function oracleTaskText(s: Spec): string {
     "These tests must PASS on the current code: they pin what must stay as it is.",
     "Every test name starts with exactly one id; import the code under test by relative paths from your test file.",
     `Goal: ${s.goal}`,
-    "Acceptance criteria:",
-    ...s.criteria.map((c) => `${c.id}: WHEN ${c.when.trim()} THE SYSTEM SHALL ${c.shall.trim()} (proof: ${c.proof})`),
-    "Unchanged behavior:",
-    ...(s.unchanged.length > 0 ? s.unchanged.map((u, n) => `${unchangedId(n)}: ${u}`) : ["-"]),
-  ].join("\n");
-  return head.slice(0, CHAT_TEXT_MAX);
+  ];
+  const crit = s.criteria.map((c) => ({ id: c.id, text: `WHEN ${c.when.trim()} THE SYSTEM SHALL ${c.shall.trim()} (proof: ${c.proof})` }));
+  const unch = s.unchanged.map((u, n) => ({ id: unchangedId(n), text: u.trim() }));
+  const render = (cut: number | null): string => {
+    const line = (x: { id: string; text: string }) => `${x.id}: ${cut !== null && x.text.length > cut ? `${x.text.slice(0, cut)}…` : x.text}`;
+    return [...head, "Acceptance criteria:", ...crit.map(line), "Unchanged behavior:", ...(unch.length > 0 ? unch.map(line) : ["-"])].join("\n");
+  };
+  // live test 20.11: a long spec was cut at its end, so the last unchanged behaviors never reached the agent; now every
+  // line keeps its id and long lines are shortened evenly until the whole text fits the task
+  let text = render(null);
+  for (let cut = 400; text.length > CHAT_TEXT_MAX && cut >= 20; cut -= 10) text = render(cut);
+  return text.slice(0, CHAT_TEXT_MAX);
 }
 
 /** building → the oracle agent runs; not_ready → the result lists why; ready → a person may approve; failed → no output */

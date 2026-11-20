@@ -66,3 +66,19 @@ describe("the oracle contract (D-534)", () => {
     expect(Contract.shape.oracle_hash.safeParse(undefined).success).toBe(true);
   });
 });
+
+describe("a long spec still reaches the oracle agent whole (live test 20.11)", () => {
+  it("every criterion and every unchanged behavior keeps its id and the text fits the task; short specs stay as they were", () => {
+    const long = (n: number) => `${"a detailed rule about loyalty points and gift cards ".repeat(6)}${n}`;
+    const big = {
+      ...spec,
+      criteria: Array.from({ length: 12 }, (_, k) => ({ id: `AC-${k + 1}`, when: long(k), shall: long(k + 100), proof: "tests" as const })),
+      unchanged: Array.from({ length: 9 }, (_, k) => long(k + 200)),
+    };
+    const t = oracleTaskText(big);
+    expect(t.length).toBeLessThanOrEqual(4000);
+    for (let k = 1; k <= 12; k++) expect(t).toContain(`\nAC-${k}: `);
+    for (let k = 1; k <= 9; k++) expect(t).toContain(`\nU-${k}: `);
+    expect(oracleTaskText(spec)).not.toContain("…");
+  });
+});
