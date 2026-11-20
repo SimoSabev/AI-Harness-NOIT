@@ -19,7 +19,10 @@ import type { RepoReader, ToolOut } from "./repo-tools.js";
 // Nothing here writes to the project, runs its code, reaches the network or approves.
 
 /** model calls per message: reading the project and checking a spec take a few calls before the answer */
-export const MAX_STEPS = 8;
+// live test 20.11: reading a real project took the 8 steps and the answer ended with no question; the last step now
+// also says so (LAST_STEP), so the person always gets a question or a proposal
+export const MAX_STEPS = 12;
+const LAST_STEP = "\n<state>\nThis is the last step of this answer: no more reading. Ask the person what you need (ask_user) or propose what you have.\n</state>";
 const NOBODY = "00000000-0000-4000-8000-000000000000";
 
 type ToolName = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec" | "propose_project";
@@ -308,7 +311,7 @@ export async function answerTurn(o: {
   for (let step = 0; step < MAX_STEPS; step++) {
     const before = stopped();
     if (before) return { turns: out, usd, stop: before, error: null };
-    const first = await ask("");
+    const first = await ask(step === MAX_STEPS - 1 ? LAST_STEP : "");
     if ("stop" in first) return { turns: out, usd, stop: first.stop, error: first.error };
     let parsed = parseReply(first.text);
     // one correction round for an answer that could not be read; it does not use up a step, so its call still runs

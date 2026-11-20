@@ -459,3 +459,16 @@ describe("the interview of a whole project (D-557)", () => {
     await db.end();
   });
 });
+
+describe("the last step of an answer (live test 20.11, demo 4.12)", () => {
+  it("there is room to read a project and still ask; the last step tells the model to stop reading and ask or propose", async () => {
+    expect(MAX_STEPS).toBeGreaterThanOrEqual(12);
+    const asked: string[] = [];
+    const repo = { ...unavailableReader, readFile: async () => ({ ok: true as const, text: "x", note: "1 lines" }) };
+    const client = fakeModel(ch, (q) => (asked.push(q.user), say({ say: "reading", call: { tool: "read_file", path: "a.ts" } })));
+    await answerTurn({ ...base, client, turns: [human("look")], repo });
+    expect(asked).toHaveLength(MAX_STEPS);
+    expect(asked.at(-1)).toContain("This is the last step of this answer");
+    expect(asked.slice(0, -1).some((u) => u.includes("This is the last step"))).toBe(false);
+  });
+});
