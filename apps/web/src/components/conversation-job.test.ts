@@ -11,15 +11,20 @@ import type { JobActions } from "./job-card";
 // who may approve. Never a test's name or content (the view has none).
 vi.mock("../i18n/client", () => ({ useT: () => Object.assign((k: string, p?: Record<string, string>) => (p ? `${k}(${Object.values(p).join("|")})` : k), { lang: "en" }) }));
 
-const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "work", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, profile: "feature", unknown_axes: [], spec_hash: null, spec_ready: true, approved_spec_hash: null };
-const job = (o: Partial<JobView>): JobView => ({
-  id: "j_x", status: "running", question: null, current: "u2", final_task_id: null, seal: null, merged_sha: null,
-  units: [
+const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "work", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, profile: "feature", unknown_axes: [], spec_hash: null, spec_ready: true, approved_spec_hash: null, purpose: "task", project_approved: false };
+type UnitIn = Omit<JobView["units"][number], "wave" | "pilot" | "copy"> & Partial<Pick<JobView["units"][number], "wave" | "pilot" | "copy">>;
+const strategy: JobView["strategy"] = { profile: "feature", mode: "single", waves: 1, pilot: null, roles: [{ role: "planner", agent: "claude", model: null }, { role: "writer", agent: "claude", model: null }, { role: "advisor", agent: "claude", model: null }], reasons: ["job.why.single", "job.why.fresh"] };
+const job = (o: Omit<Partial<JobView>, "units"> & { units?: UnitIn[] }): JobView => {
+  const units: UnitIn[] = o.units ?? [
     { id: "u1", title: "the 10% rule", criteria: ["AC-1"], status: "passed", result: "VERIFIED", failing: [], task_id: "t_a" },
     { id: "u2", title: "coupons", criteria: ["AC-2", "AC-3"], status: "failed", result: "FAILED", failing: ["AC-3"], task_id: "t_b" },
-  ],
-  ...o,
-});
+  ];
+  return {
+    id: "j_x", status: "running", question: null, current: "u2", final_task_id: null, seal: null, merged_sha: null, strategy, gates: [{ id: "D5.hidden", status: "pending" }],
+    ...o,
+    units: units.map((u) => ({ wave: 0, pilot: false, copy: null, ...u })),
+  };
+};
 
 async function render(chat: Partial<Chat>, canApprove = true): Promise<string> {
   const { ChatThread } = await import("./conversation");
@@ -82,5 +87,9 @@ describe("bring into my folder (D-540)", () => {
     expect(html).toContain("chat.job.bring.no.dirty(/home/s/shop|2)");
     expect(html).toContain("chat.job.bring.yourself");
     expect(html).toContain("pull --ff-only");
+  });
+  it("the strategy, the roles and why; each unit's wave, pilot and own copy; the gates of the final check (D-558)", async () => {
+    const html = await render({ job: job({ strategy: { ...strategy, mode: "waves", waves: 2, pilot: { units: 1, state: "running" } }, units: [{ id: "u1", title: "a", criteria: ["AC-1"], status: "running", result: null, failing: [], task_id: "t_a", wave: 1, pilot: true, copy: { task: "t_a", attempt: 2, state: "RUNNING" } }] }) });
+    for (const k of ["job.strategy.waves(2)", "job.strategy.pilotRunning(1)", "job.role.planner", "job.why.single", "job.unit.wave(2)", "job.unit.pilot", "job.unit.copy(t_a|2|RUNNING)", "job.gates.title", "job.gate.D5.hidden", "job.gateStatus.pending"]) expect(html).toContain(k);
   });
 });

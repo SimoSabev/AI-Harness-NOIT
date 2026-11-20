@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import type { Spec} from "@mandat/contract";
-import { BringBody, JobApproveBody, JobStatus, SessionSeal, hashJcs, jcs, sha256Tag } from "@mandat/contract";
+import { BringBody, JobApproveBody, JobRoles, JobStatus, SessionSeal, TaskAxes, TaskProfileId, hashJcs, jcs, roleRoute, sha256Tag } from "@mandat/contract";
+import { unitWaves } from "@mandat/core";
+import { gateRows, strategyReasons } from "../job-strategy";
 import { canAct } from "./actions";
 import { hasCap } from "./roles";
 import type { Result } from "./actions";
@@ -34,16 +36,20 @@ export async function createJob(db: Db, o: { uid: string; org: string; conversat
   return { status: 201, body: { job: id, state: "planning" } };
 }
 
-interface JobDbRow { id: string; status: string; question: string | null; seal: unknown; seal_hash: string | null; merged_sha: string | null; final_task_id: string | null }
-interface UnitDbRow { unit_id: string; title: string; criteria: unknown; status: string; result: string | null; failing: unknown; task_id: string | null }
+interface JobDbRow { id: string; status: string; question: string | null; seal: unknown; seal_hash: string | null; merged_sha: string | null; final_task_id: string | null; mode: string; pilot_state: string; roles: unknown; agent: string; model: string | null; oracle_hash: string | null; axes: unknown; profile: string | null }
+interface UnitDbRow { unit_id: string; title: string; criteria: unknown; status: string; result: string | null; failing: unknown; task_id: string | null; depends_on: unknown; pilot: boolean; task_state: string | null; attempt: number | null }
 const ids = (x: unknown): string[] => (Array.isArray(x) ? x.filter((v): v is string => typeof v === "string").slice(0, 200) : []);
 
 /** the job of the conversation as the page sees it (statuses, ids and counts; never a test) */
 export async function jobView(sql: Sql, conversation: string, spec: Spec | null): Promise<JobView | null> {
-  const j = (await sql.query<JobDbRow>("select id, status, question, seal, seal_hash, merged_sha, final_task_id from public.jobs where conversation_id = $1 order by created_at desc limit 1", [conversation])).rows[0];
+  const j = (await sql.query<JobDbRow>("select j.id, j.status, j.question, j.seal, j.seal_hash, j.merged_sha, j.final_task_id, j.mode, j.pilot_state, j.roles, j.agent, j.model, j.oracle_hash, c.axes, c.profile from public.jobs j left join public.conversations c on c.id = j.conversation_id where j.conversation_id = $1 order by j.created_at desc limit 1", [conversation])).rows[0];
   if (!j) return null;
-  const units = (await sql.query<UnitDbRow>("select unit_id, title, criteria, status, result, failing, task_id from public.job_units where job_id = $1 order by ord", [j.id])).rows.map((u) => ({
+  const rows = (await sql.query<UnitDbRow>("select u.unit_id, u.title, u.criteria, u.status, u.result, u.failing, u.task_id, u.depends_on, u.pilot, t.state as task_state, t.attempt from public.job_units u left join public.tasks t on t.id = u.task_id where u.job_id = $1 order by u.ord", [j.id])).rows;
+  // D-558: the wave of each unit (units of one wave run at once in waves mode)
+  const wave = unitWaves(rows.map((u) => ({ id: u.unit_id, depends_on: ids(u.depends_on) })));
+  const units = rows.map((u) => ({
     id: u.unit_id, title: u.title, criteria: ids(u.criteria), status: u.status, result: u.result, failing: ids(u.failing), task_id: u.task_id,
+    wave: wave[u.unit_id] ?? 0, pilot: u.pilot, copy: u.task_id && u.task_state ? { task: u.task_id, attempt: u.attempt ?? 1, state: u.task_state } : null,
   }));
   const seal = SessionSeal.safeParse(j.seal);
   const all = spec ? spec.criteria.map((c) => c.id) : [];
@@ -54,7 +60,32 @@ export async function jobView(sql: Sql, conversation: string, spec: Spec | null)
     final_task_id: j.final_task_id,
     seal: seal.success && j.seal_hash ? { hash: j.seal_hash, verdict: seal.data.verdict, result_ref: seal.data.result_ref, checked: all.filter((c) => !unchecked.some((u) => u.startsWith(`${c}:`))), unchecked } : null,
     merged_sha: j.merged_sha,
+    strategy: strategyOf(j, units),
+    gates: gateRows(await finalEvidence(sql, j.final_task_id)),
   };
+}
+
+function strategyOf(j: JobDbRow, units: { wave: number; pilot: boolean }[]): JobView["strategy"] {
+  const mode = j.mode === "waves" ? "waves" : "single";
+  const axes = TaskAxes.safeParse(j.axes);
+  const roles = JobRoles.safeParse(j.roles);
+  const route = (role: "planner" | "writer" | "advisor") => ({ role, ...roleRoute({ agent: j.agent, model: j.model }, roles.success ? roles.data : null, role) });
+  const pilot = units.filter((u) => u.pilot).length;
+  const profile = TaskProfileId.safeParse(j.profile);
+  return {
+    profile: profile.success ? profile.data : null, mode, waves: units.length === 0 ? 0 : Math.max(...units.map((u) => u.wave)) + 1,
+    pilot: pilot > 0 ? { units: pilot, state: j.pilot_state } : null,
+    roles: [route("planner"), route("writer"), route("advisor")],
+    reasons: strategyReasons({ axes: axes.success ? axes.data : null, mode, pilot, oracle: j.oracle_hash !== null }),
+  };
+}
+
+/** the evidence of the final check's latest verdict (detector and status only) */
+async function finalEvidence(sql: Sql, task: string | null): Promise<{ detector: string; status: string }[] | null> {
+  if (!task) return null;
+  const v = (await sql.query<{ id: string }>("select id::text as id from public.verdicts where task_id = $1 order by created_at desc limit 1", [task])).rows[0];
+  if (!v) return null;
+  return (await sql.query<{ detector: string; status: string }>("select detector, status from public.evidence where verdict_id = $1::uuid", [v.id])).rows;
 }
 
 /** D-535: a person approves the sealed job (the seal's hash they saw); the worker then merges its branch into main */

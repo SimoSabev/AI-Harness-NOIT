@@ -1,3 +1,5 @@
+import type { Key } from "../i18n/t";
+import type { GateRow } from "./job-strategy";
 import type { AxisName, ChatTurn, ConversationStatus, JobStatus, OracleProblem, OracleStatus, SessionPhase, TaskProfileId, VerdictResult } from "@mandat/contract";
 
 // D-531: the shapes the conversation shares between the server (lib/server/conversation.ts) and the task box.
@@ -33,7 +35,20 @@ export interface OracleView {
   tests: number;
 }
 /** D-535: the job of the conversation (plan, unit statuses and verdicts, a parked question, the seal; never a test) */
-export interface JobUnitView { id: string; title: string; criteria: string[]; status: string; result: string | null; failing: string[]; task_id: string | null }
+export interface JobUnitView {
+  id: string; title: string; criteria: string[]; status: string; result: string | null; failing: string[]; task_id: string | null;
+  /** D-558: its wave (units of one wave run at once), whether it is in the pilot, and its own copy: the task, attempt and state */
+  wave: number; pilot: boolean; copy: { task: string; attempt: number; state: string } | null;
+}
+/** D-558: how the job was planned and who does what (fixed sentences chosen from the axes; never a model's text) */
+export interface JobStrategyView {
+  profile: TaskProfileId | null;
+  mode: "single" | "waves";
+  waves: number;
+  pilot: { units: number; state: string } | null;
+  roles: { role: "planner" | "writer" | "advisor"; agent: string; model: string | null }[];
+  reasons: Key[];
+}
 export interface JobView {
   id: string;
   status: JobStatus;
@@ -43,6 +58,9 @@ export interface JobView {
   final_task_id: string | null;
   seal: { hash: string; verdict: VerdictResult; result_ref: string; checked: string[]; unchecked: string[] } | null;
   merged_sha: string | null;
+  strategy: JobStrategyView;
+  /** D-558: the gates of the final check and their status (pending until it ran) */
+  gates: GateRow[];
 }
 export interface ConversationFeed {
   conversation: ConversationRow;

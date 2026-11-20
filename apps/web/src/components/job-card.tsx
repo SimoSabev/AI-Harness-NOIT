@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Key, T } from "../i18n/t";
 import type { BringReply } from "@mandat/contract";
 import type { JobView } from "../lib/conversation-types";
+import { JobGates, JobStrategy } from "./job-strategy";
 import { btn } from "./ui";
 
 // D-535 (M1 X6/X7 minimum): the job under the approved spec and oracle — the plan (units with their criteria and
@@ -22,21 +23,26 @@ export function JobCard({ job, t, a }: { job: JobView; t: T; a: JobActions }) {
     <section aria-label={t("chat.job")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
       <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.job")}</p>
       <p className={s === "parked" || s === "failed" ? "mt-1 text-warn" : s === "delivered" ? "mt-1 font-medium text-ok" : "mt-1"}>{t(`chat.job.status.${s}` as Key)}</p>
+      <JobStrategy job={job} t={t} />
       {job.units.length > 0 && (
         <ol className="mt-2 space-y-1">
           {job.units.map((u) => (
             <li key={u.id} className="flex flex-wrap items-baseline gap-x-2" aria-current={job.current === u.id ? "step" : undefined}>
+              {job.strategy.mode === "waves" && <span className="font-mono text-xs text-mute">{t("job.unit.wave", { n: String(u.wave + 1) })}</span>}
               <span className="font-mono text-xs text-mute">{u.id}</span>
+              {u.pilot && <span className="rounded bg-raised px-1.5 text-[11px] text-mute">{t("job.unit.pilot")}</span>}
               <span className="min-w-0 flex-1">{u.title}</span>
               <span className="font-mono text-xs text-mute">{u.criteria.join(", ")}</span>
               <span className={`text-xs ${UNIT_TONE[unitStatus(u.status)] ?? ""}`}>{t(`chat.job.unit.${unitStatus(u.status)}` as Key)}</span>
               {u.result && <span className="font-mono text-xs">{u.result}</span>}
+              {u.copy && <span className="w-full font-mono text-[11px] text-mute">{t("job.unit.copy", { task: u.copy.task, attempt: String(u.copy.attempt), state: u.copy.state })}</span>}
               {u.failing.length > 0 && <span className="w-full text-xs text-warn">{t("chat.job.failing", { ids: u.failing.join(", ") })}</span>}
               {u.task_id && job.current === u.id && <Link href={`/?task=${u.task_id}`} className="text-xs text-accent underline-offset-4 hover:underline">{t("chat.job.openUnit")}</Link>}
             </li>
           ))}
         </ol>
       )}
+      <JobGates job={job} t={t} />
       {job.question && (
         <div role="alert" className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-warn">
           <p className="text-xs font-medium">{t("chat.job.question")}</p>
