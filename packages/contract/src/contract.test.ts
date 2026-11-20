@@ -97,6 +97,7 @@ describe("contract", () => {
         "- tests/cart.spec.ts > cart > applies 10% over 50",
         "Limits: file <= 5 MB, diff <= 50 MB, <= 500 files.",
         "Commands: dependencies are already installed (npm ci --ignore-scripts). Run tests with: npx vitest run",
+        "To look at the project use the Read, Glob and Grep tools; the shell may be limited to the commands above, and a refused shell command is not a reason to stop.",
         "You have no network except the model. Nobody can answer questions during the run.",
         "Changing test configuration, CI files, package.json scripts or agent instruction files makes the verdict UNKNOWN.",
         "When you are done, stop. Mandat decides the verdict, not you.",

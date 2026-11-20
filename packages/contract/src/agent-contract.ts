@@ -27,6 +27,8 @@ export function renderAgentContract(a: AgentContract): string {
     ...mustPass,
     `Limits: file <= ${a.limits.max_file_mb} MB, diff <= ${a.limits.max_diff_mb} MB, <= ${a.limits.max_files} files.`,
     `Commands: dependencies are already installed (${a.commands.install}). Run tests with: ${a.commands.test}`,
+    // live test 20.11: a writer whose shell may run only the tests gave up ("I can't see the project") instead of using its file tools
+    "To look at the project use the Read, Glob and Grep tools; the shell may be limited to the commands above, and a refused shell command is not a reason to stop.",
     "You have no network except the model. Nobody can answer questions during the run.",
     "Changing test configuration, CI files, package.json scripts or agent instruction files makes the verdict UNKNOWN.",
     "When you are done, stop. Mandat decides the verdict, not you.",
