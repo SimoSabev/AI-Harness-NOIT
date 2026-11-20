@@ -15,7 +15,7 @@ import type { VoiceDeps } from "../lib/voice-tools";
 type Phase = "idle" | "connecting" | "listening" | "speaking" | "error";
 interface Session { endSession(): Promise<void> }
 
-const ERRORS = new Set(["voice_not_configured", "voice_no_agent", "voice_key_rejected"]);
+const ERRORS = new Set(["voice_not_configured", "voice_no_agent", "voice_key_rejected", "proxy_not_running"]);
 const SCREEN_TEXT_MAX = 6000;
 
 async function getJson(url: string): Promise<{ status: number; body: Record<string, unknown> }> {

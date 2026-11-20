@@ -1745,6 +1745,7 @@ export const en = {
   "voice.err.voice_not_configured": "Add the voice key in Settings → Voice first.",
   "voice.err.voice_no_agent": "Create Jarvis in Settings → Voice first.",
   "voice.err.voice_key_rejected": "ElevenLabs refused the key. Check it in Settings → Voice.",
+  "voice.err.proxy_not_running": "The proxy is not running. Add the voice key in Settings → Voice; that starts it.",
   "voice.err.mic": "The microphone is blocked. Allow it for this page.",
   "voice.err.generic": "The voice could not start. Try again.",
   "voice.settings.title": "Voice",

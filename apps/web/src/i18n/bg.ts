@@ -1721,6 +1721,7 @@ export const bg: Record<Key, string> = {
   "voice.err.voice_not_configured": "Първо добави ключа за глас в Настройки → Глас.",
   "voice.err.voice_no_agent": "Първо създай Jarvis в Настройки → Глас.",
   "voice.err.voice_key_rejected": "ElevenLabs отказа ключа. Провери го в Настройки → Глас.",
+  "voice.err.proxy_not_running": "Проксито не върви. Добави ключа за глас в Настройки → Глас; така то тръгва.",
   "voice.err.mic": "Микрофонът е спрян. Разреши го за тази страница.",
   "voice.err.generic": "Гласът не можа да тръгне. Опитай пак.",
   "voice.settings.title": "Глас",
