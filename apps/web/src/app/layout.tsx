@@ -6,6 +6,7 @@ import { getLang, getT } from "../i18n/server";
 import { DesktopCommands } from "../components/desktop-commands";
 import { LocalCsrf } from "../components/local-csrf";
 import { SecondFactorProvider } from "../components/second-factor";
+import { VoiceButton } from "../components/voice-button";
 import { FAVICON, HARNESS } from "../lib/brand";
 import { parseTheme } from "../lib/prefs";
 import { authMode } from "../lib/server/auth";
@@ -28,6 +29,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {authMode() === "local" && <LocalCsrf />}
           <DesktopCommands />
           <SecondFactorProvider needsCode={authMode() !== "local"}>{children}</SecondFactorProvider>
+          {/* D-556: Jarvis — here, not in a page, so a conversation survives moving between screens */}
+          {authMode() === "local" && <VoiceButton />}
         </LangProvider>
       </body>
     </html>

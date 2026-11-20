@@ -51,6 +51,8 @@ export default async function SettingsPage() {
           <Link href="/settings/subscriptions" className={link}>{t("settings.subsLink")}</Link>
           <Link href="/settings/models" className={link}>{t("conn.title")}</Link>
           <Link href="/settings/api-keys" className={link}>{t("settings.keysLink")}</Link>
+          {/* D-556: Jarvis */}
+          <Link href="/settings/voice" className={link}>{t("voice.settings.title")}</Link>
         </p>
         {/* D-475: one row for every AI service's API keys */}
         <p className="mt-4 border-t border-line pt-4">
