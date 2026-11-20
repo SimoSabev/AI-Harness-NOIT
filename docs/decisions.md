@@ -4718,3 +4718,32 @@ H3 (`b36-test-env`) излезе FAILED вместо очакваното UNKNOW
 Граница: планерът на работата още не чете описанието; командите от него още не влизат в профила на харнеса.
 Тестове: contract project-brief.test.ts (3), worker conversation.test.ts (+4), web project-interview.test.ts (2).
 Не е проверено на живо. Статус: решено от кодера.
+
+## D-556 Jarvis: глас, който слуша, говори на български и действа през харнеса (демо 4.12, 20.11.2026)
+Симо (20.11): за демото на 4.12 харнесът има глас, който се представя, води по екраните и агентите и „изпълнява“; гласът е
+функция на продукта, не само на демото. Българският език, „да говори много добре“, слуша и действа; ElevenLabs по избор.
+Сега:
+- договорът (packages/contract/src/voice.ts) има един списък с 9 инструмента за всеки двигател: open_screen, whats_waiting,
+  list_projects, task_status, start_conversation, send_message, start_work, steer_agent, describe_screen; zod за
+  аргументите им; личността на Jarvis на български. Няма инструмент за одобрение, сливане или подпис (тест го пази);
+- ключът на ElevenLabs върви като ключа на Exa: запечатан (voice:elevenlabs) → проксито при старт (boot „voice“) → само в
+  паметта на проксито (AGENTS.md правило 2). Браузърът никога не го вижда;
+- проксито прави агента на човека: създава 9-те client tools и агента (език bg, глас Eleven v4 turbo, слушане Scribe,
+  частен агент), пази id-то му до usage log-а (не е тайна), при смяна на настройките го обновява на място, при изтрит агент
+  го прави наново. За сесия дава signed URL (wss, само хост *.elevenlabs.io), валиден 15 минути;
+- `mandat local` → локалният контрол: /keys/voice, /voice/agent, /voice/session; уебът: /api/keys/voice и /api/voice/agent
+  (собственик), /api/voice/session (всеки член) — пътят добавя агента и модела по подразбиране за нови разговори;
+- бутонът „Jarvis“ е в root layout-а (разговорът оцелява при смяна на екраните) само при `mandat local`; инструментите се
+  изпълняват в браузъра през същото API като екраните (същите права и CSRF); отговорът към модела е в <данни>;
+- Настройки → Глас: ключ и „Създай Jarvis“ с ID на глас от библиотеката на ElevenLabs.
+Защо: гласът е още един вход в харнеса, не нови правомощия; ключът остава като другите ключове; всеки човек си вкарва свой
+ключ, а харнесът сам прави агента му — никой не настройва нищо в ElevenLabs на ръка.
+Факти (elevenlabs.io/docs/eleven-agents, прочетено 20.11.2026): POST /v1/convai/tools; POST /v1/convai/agents/create;
+GET|PATCH /v1/convai/agents/{id}; GET /v1/convai/conversation/get-signed-url (15 мин); заглавка xi-api-key; client tool =
+{type:"client", name, description, expects_response, parameters (JSON schema)}, закачен с prompt.tool_ids; tts.model_id
+eleven_v4_turbo (bg в езиците на v4); asr.provider scribe_realtime (Scribe има български); @elevenlabs/client 1.36.1 (MIT).
+[НП] до живия рън с ключа: дали agent.language приема „bg“ (страницата на агентите казва „31 езика“, без списък), качеството
+на гласа и разпознаването на български, LLM-ът по подразбиране claude-haiku-5-5 (идентификаторът е в enum-а на документа).
+Резерви, ако „bg“ не мине: OpenAI Realtime или езикът „всички“ + български промпт.
+Тестове: contract voice.test.ts (5), llm-proxy voice-upstream.test.ts (6) и proxy-voice.test.ts (5), cli local-control (1),
+web voice-api.test.ts (3) и voice-tools.test.ts (7). Не е проверено на живо. Статус: решено от кодера по одобрен от Симо дизайн.
