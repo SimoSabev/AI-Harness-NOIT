@@ -280,3 +280,39 @@ describe("mandat local control: the research search key (D-440)", () => {
     }
   });
 });
+
+// D-556: Jarvis — the ElevenLabs key goes sealed to the proxy like the Exa key; the web asks for the agent and for a
+// session's signed URL through here; the key never comes back.
+describe("the voice through the control (D-556)", () => {
+  it("POST /keys/voice seals and restarts; DELETE removes; /voice/agent and /voice/session answer from the proxy", async () => {
+    const xi = ["xi", "k".repeat(36)].join("_");
+    const got: (string | null)[] = [];
+    const asked: string[] = [];
+    let providers: string[] | null = ["anthropic"];
+    const c = await startControl({
+      start: async () => true, stop: async () => undefined, providers: async () => providers, accounts: async () => [], ...base(),
+      voice: {
+        set: async (k) => (got.push(k.elevenlabs), (providers = ["anthropic", "elevenlabs"]), true),
+        clear: async () => (got.push(null), (providers = ["anthropic"]), true),
+        agent: async (voiceId) => (asked.push(voiceId), { status: 200, body: { agent_id: "agent_j" } }),
+        session: async () => ({ status: 200, body: { signed_url: "wss://api.elevenlabs.io/x" } }),
+      },
+    });
+    const call = (p: string, method: string, body?: unknown) => fetch(`${c.url}${p}`, { method, headers: { authorization: `Bearer ${c.token}` }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+    try {
+      expect((await call("/keys/voice", "POST", { elevenlabs: "short" })).status).toBe(400);
+      const r = await call("/keys/voice", "POST", { elevenlabs: xi });
+      const text = await r.text();
+      expect([r.status, text.includes(xi)]).toEqual([200, false]);
+      expect(JSON.parse(text)).toEqual({ proxy: "running", providers: ["anthropic", "elevenlabs"] });
+      expect((await call("/voice/agent", "POST", { voice_id: "../x" })).status).toBe(400);
+      expect(await (await call("/voice/agent", "POST", { voice_id: "voice_1" })).json()).toEqual({ agent_id: "agent_j" });
+      expect(await (await call("/voice/session", "POST", {})).json()).toEqual({ signed_url: "wss://api.elevenlabs.io/x" });
+      expect((await call("/voice/session", "GET")).status).toBe(405);
+      expect(await (await call("/keys/voice", "DELETE")).json()).toEqual({ proxy: "running", providers: ["anthropic"] });
+      expect([got, asked]).toEqual([[xi, null], ["voice_1"]]);
+    } finally {
+      await c.close();
+    }
+  });
+});

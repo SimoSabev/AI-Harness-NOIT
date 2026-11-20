@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ConnectionStore, FileKeyStore, loadKek, mintBootToken } from "@mandat/llm-proxy";
+import { ConnectionStore, FileKeyStore, adminBearer, loadKek, mintBootToken } from "@mandat/llm-proxy";
 import { buildProxyRunArgs, dockerText, ensureUpstreamNetwork, imageTags } from "@mandat/sandbox";
 import { infraUserFor } from "@mandat/worker";
 import type { HostConfig } from "@mandat/worker";
@@ -50,12 +50,13 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   // E9г (D-411): the research search key (Exa) lives with the model keys, sealed, and reaches only the proxy
   if (io.env.EXA_API_KEY) store.put("research:exa", io.env.EXA_API_KEY);
   const exa = store.get("research:exa");
+  const eleven = store.get("voice:elevenlabs"); // D-556: Jarvis's voice
   const key = store.get("anthropic");
   // D-393: the saved connections (DeepSeek, Kimi, Ollama…) are upstreams of their own; any one of them is enough
   const upstreams = new ConnectionStore(o.mandatHome, kek).upstreams();
   // D-422: local model servers named in this command's env (MANDAT_UPSTREAM_LOCAL_<label>[_MODELS|_WIRE]; addresses, not secrets)
   const localEnv = Object.fromEntries(Object.entries(io.env).filter((e): e is [string, string] => /^MANDAT_UPSTREAM_LOCAL_[A-Z0-9][A-Z0-9_]*$/.test(e[0]) && typeof e[1] === "string" && e[1] !== ""));
-  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0 && Object.keys(localEnv).length === 0 && exa === null) {
+  if (key === null && store.get("openai") === null && Object.keys(upstreams).length === 0 && Object.keys(localEnv).length === 0 && exa === null && eleven === null) {
     io.stderr("няма ключ: въведи го в „Ключове“ в UI или веднъж: ANTHROPIC_API_KEY=… pnpm mandat proxy start\n");
     return 3;
   }
@@ -76,7 +77,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
   Object.assign(publicEnv, localEnv);
   const openai = store.get("openai");
   // D-293: which providers have a key — names only, never values (read back by proxyProviders)
-  publicEnv.MANDAT_PROXY_PROVIDERS = [key ? "anthropic" : null, openai ? "openai" : null, exa ? "exa" : null].filter(Boolean).join(",");
+  publicEnv.MANDAT_PROXY_PROVIDERS = [key ? "anthropic" : null, openai ? "openai" : null, exa ? "exa" : null, eleven ? "elevenlabs" : null].filter(Boolean).join(",");
   if (o.host.extraCa !== undefined) publicEnv.NODE_EXTRA_CA_CERTS = "/etc/mandat-ca.pem";
   const args = buildProxyRunArgs({
     name: NAME, image: tags.proxy, user, mandatHome: o.mandatHome, publishAdminPort: port, publishInferencePort: o.host.proxyInferencePort,
@@ -94,7 +95,7 @@ export async function proxyStart(io: Io, deps: CliDeps, o: { mandatHome: string;
     io.stderr("llm-proxy: healthz did not answer within 10 s\n");
     return 3;
   }
-  if (!(await deps.bootProxy(port, boot, { ...(key ? { anthropic: key } : {}), ...(openai ? { openai } : {}), ...(Object.keys(upstreams).length > 0 ? { upstreams } : {}), ...(exa ? { search: { exa } } : {}) }))) {
+  if (!(await deps.bootProxy(port, boot, { ...(key ? { anthropic: key } : {}), ...(openai ? { openai } : {}), ...(Object.keys(upstreams).length > 0 ? { upstreams } : {}), ...(exa ? { search: { exa } } : {}), ...(eleven ? { voice: { elevenlabs: eleven } } : {}) }))) {
     await dockerText(deps.docker, ["rm", "-f", NAME], 60_000);
     io.stderr("llm-proxy: the boot exchange failed\n");
     return 3;
@@ -116,7 +117,7 @@ export async function proxyProviders(deps: CliDeps): Promise<string[] | null> {
   if (r.exitCode !== 0) return null;
   const line = r.stdout.split("\n").find((l) => l.startsWith("MANDAT_PROXY_PROVIDERS="));
   if (!line) return r.stdout.trim() === "" ? null : [];
-  return line.slice("MANDAT_PROXY_PROVIDERS=".length).split(",").filter((x) => x === "anthropic" || x === "openai" || x === "exa");
+  return line.slice("MANDAT_PROXY_PROVIDERS=".length).split(",").filter((x) => x === "anthropic" || x === "openai" || x === "exa" || x === "elevenlabs");
 }
 
 /**
@@ -127,6 +128,26 @@ export function setSearchKey(o: { mandatHome: string; env: Record<string, string
   const store = new FileKeyStore(o.mandatHome, loadKek({ env: o.env, mandatHome: o.mandatHome }));
   if (key === null) store.delete(`research:${provider}`);
   else store.put(`research:${provider}`, key);
+}
+
+/** D-556: the voice key from Settings → Voice — sealed as voice:elevenlabs (null removes it); read at the next proxy start */
+export function setVoiceKey(o: { mandatHome: string; env: Record<string, string | undefined> }, key: string | null): void {
+  const store = new FileKeyStore(o.mandatHome, loadKek({ env: o.env, mandatHome: o.mandatHome }));
+  if (key === null) store.delete("voice:elevenlabs");
+  else store.put("voice:elevenlabs", key);
+}
+
+/** D-556: ask the running proxy's admin port for the person's Jarvis agent or a session's signed URL */
+export async function proxyVoice(o: { mandatHome: string; port: number; fetch?: typeof fetch }, op: "agent" | "session", body: unknown): Promise<{ status: number; body: Record<string, string> }> {
+  try {
+    const bearer = adminBearer(readFileSync(path.join(o.mandatHome, "proxy", "secret")));
+    const r = await (o.fetch ?? fetch)(`http://127.0.0.1:${o.port}/admin/voice/${op}`, { method: "POST", headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
+    const v = (await r.json()) as unknown;
+    const ok = typeof v === "object" && v !== null && Object.values(v).every((x) => typeof x === "string");
+    return ok ? { status: r.status, body: v as Record<string, string> } : { status: 502, body: { error: "voice_unreachable" } };
+  } catch {
+    return { status: 503, body: { error: "proxy_not_running" } };
+  }
 }
 
 export async function proxyStop(io: Io, deps: CliDeps, o: { json: boolean; port: number }): Promise<number> {

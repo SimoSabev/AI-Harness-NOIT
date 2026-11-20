@@ -15,7 +15,7 @@ import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
-import { proxyProviders, proxyStart, proxyStop, setSearchKey } from "./proxy.js";
+import { proxyProviders, proxyStart, proxyStop, proxyVoice, setSearchKey, setVoiceKey } from "./proxy.js";
 import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
 import { listAccounts, loginDeps, logoutProfile, sharedWhileRunning } from "./accounts.js";
 import { Connections } from "./connections.js";
@@ -347,6 +347,18 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
         await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort });
         return true;
       },
+    },
+    // D-556: Jarvis — the ElevenLabs key sealed (voice:elevenlabs) and the proxy restarted; agent and session ask the proxy
+    voice: {
+      set: async (k) => (setVoiceKey({ mandatHome: o.home, env: io.env }, k.elevenlabs), restartProxy()),
+      clear: async () => {
+        setVoiceKey({ mandatHome: o.home, env: io.env }, null);
+        if (await restartProxy()) return true;
+        await proxyStop({ ...io, stdout: () => undefined }, deps, { json: true, port: host.proxyAdminPort });
+        return true;
+      },
+      agent: (voiceId) => proxyVoice({ mandatHome: o.home, port: host.proxyAdminPort }, "agent", { voice_id: voiceId }),
+      session: () => proxyVoice({ mandatHome: o.home, port: host.proxyAdminPort }, "session", {}),
     },
     accounts,
     login: new LoginSessions(loginDeps(deps)),

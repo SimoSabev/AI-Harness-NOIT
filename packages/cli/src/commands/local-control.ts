@@ -13,6 +13,10 @@ export const KeysBody = z.object({ anthropic: Key, openai: Key.optional() }).str
 export type Keys = z.infer<typeof KeysBody>;
 /** D-440: the research search key (Exa) — the same shape as a model key */
 export const ResearchKeyBody = z.object({ exa: Key }).strict();
+/** D-556: Jarvis's voice key (ElevenLabs) and the agent's voice */
+export const VoiceKeyBody = z.object({ elevenlabs: Key }).strict();
+export const VoiceAgentBody = z.object({ voice_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) }).strict();
+export interface VoiceReply { status: number; body: Record<string, string> }
 
 export interface ControlDeps {
   start(k: Keys): Promise<boolean>;
@@ -33,6 +37,8 @@ export interface ControlDeps {
   folders?: { list(path: string | undefined): Promise<FolderListing | null>; found(): Promise<FoundProjects> };
   /** D-440: the research search key — sealed by `mandat local` and the proxy restarted with it */
   research?: { set(k: z.infer<typeof ResearchKeyBody>): Promise<boolean>; clear(): Promise<boolean> };
+  /** D-556: the voice key (sealed, the proxy restarted with it), the person's Jarvis agent and a session's signed URL */
+  voice?: { set(k: z.infer<typeof VoiceKeyBody>): Promise<boolean>; clear(): Promise<boolean>; agent(voiceId: string): Promise<VoiceReply>; session(): Promise<VoiceReply> };
   /** D-393: saved connections, local model discovery, the task box defaults (connections.ts) */
   connections?: {
     list(): Promise<ConnectionsReply>;
@@ -199,6 +205,29 @@ export async function startControl(d: ControlDeps): Promise<{ url: string; token
         const b = ResearchKeyBody.safeParse(await readJson(req));
         if (!b.success) return send(400, { error: "bad_keys" });
         return (await r.set(b.data)) ? send(200, await status()) : send(502, { error: "proxy_start_failed" });
+      })().catch(() => send(500, { error: "internal" }));
+      return;
+    }
+    if (req.url === "/keys/voice" || req.url === "/voice/agent" || req.url === "/voice/session") {
+      const v = d.voice;
+      if (!v) return send(404, { error: "not_found" });
+      const url = req.url;
+      if (req.method !== "POST" && !(url === "/keys/voice" && req.method === "DELETE")) return send(405, { error: "method" });
+      void (async () => {
+        if (url === "/voice/session") {
+          const r = await v.session();
+          return send(r.status, r.body);
+        }
+        if (url === "/voice/agent") {
+          const b = VoiceAgentBody.safeParse(await readJson(req));
+          if (!b.success) return send(400, { error: "bad_body" });
+          const r = await v.agent(b.data.voice_id);
+          return send(r.status, r.body);
+        }
+        if (req.method === "DELETE") return (await v.clear()) ? send(200, await status()) : send(502, { error: "proxy_start_failed" });
+        const b = VoiceKeyBody.safeParse(await readJson(req));
+        if (!b.success) return send(400, { error: "bad_keys" });
+        return (await v.set(b.data)) ? send(200, await status()) : send(502, { error: "proxy_start_failed" });
       })().catch(() => send(500, { error: "internal" }));
       return;
     }
