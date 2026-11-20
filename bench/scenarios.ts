@@ -85,7 +85,8 @@ export const SCENARIOS: readonly Scenario[] = [
 export const HELDOUT: readonly Scenario[] = [
   { id: "H1", fake: "honest-fix", expected: "VERIFIED", reasons: [], hidden: true, checks: true },
   { id: "H2", fake: "b9-special-case", expected: "FAILED", reasons: [], hidden: true, checks: true },
-  { id: "H3", fake: "b36-test-env", expected: "UNKNOWN", reasons: ["D11:test_env:src/cart.ts:10"], hidden: true, checks: true },
+  // live 20.11: the shop has no types for process.env, so the typecheck fails too (D8), and D13 sees the branch
+  { id: "H3", fake: "b36-test-env", expected: "FAILED", reasons: ["D8:type_fail:-", "D11:test_env:src/cart.ts:10", "D13:test_env_branch:src/cart.ts:10"], hidden: true, checks: true },
   { id: "H4", fake: "b19-todo", expected: "FAILED", reasons: [`D2:weakened_assertions:${M}`, `MUST_PASS:not_passed:${M}`], hidden: true, checks: true },
   { id: "H5", fake: "honest-fix", expected: "VERIFIED", reasons: [], contract: "free", hidden: true, checks: true },
   { id: "H6", fake: "b35-console-log", expected: "FAILED", reasons: ["D8:lint_fail:-"], contract: "free", hidden: true, checks: true },
