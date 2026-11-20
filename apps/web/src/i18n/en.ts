@@ -1010,6 +1010,7 @@ export const en = {
   "task.title.unit": "Unit {unit}",
   "task.title.unitBare": "Unit",
   "task.title.final": "Final check",
+  "task.job.merged": "Merged",
   "ws.new": "New task",
   "ws.tasks": "Tasks",
   "ws.noTasks": "No tasks yet.",

@@ -58,8 +58,9 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     const x = it.kind === "job" ? it.newest : it.row;
     const s = statusOf(x, t.lang);
     const job = it.kind === "job";
+    const merged = it.kind === "job" && it.merged;
     return { id: job ? it.conversation_id : x.id, href: job ? `/?chat=${it.conversation_id}` : `/?task=${x.id}`,
-      text: job && x.spec_goal ? x.spec_goal : taskTitle(x, t), tone: s.tone, label: s.label, ago: ago(x.updated_at, now, t.lang) };
+      text: job && x.spec_goal ? x.spec_goal : taskTitle(x, t), tone: merged ? "green" as const : s.tone, label: merged ? t("task.job.merged") : s.label, ago: ago(x.updated_at, now, t.lang) };
   });
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];

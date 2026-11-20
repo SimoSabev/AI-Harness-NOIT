@@ -986,6 +986,7 @@ export const bg: Record<Key, string> = {
   "task.title.unit": "Единица {unit}",
   "task.title.unitBare": "Единица",
   "task.title.final": "Финална проверка",
+  "task.job.merged": "Слята",
   "ws.new": "Нова задача",
   "ws.tasks": "Задачи",
   "ws.noTasks": "Още няма задачи.",
