@@ -4,7 +4,7 @@ import { runVoiceTool } from "./voice-tools";
 import type { VoiceDeps } from "./voice-tools";
 
 // D-556: Jarvis acts through the same API as the screens. Each tool → one call; the answer is short text for the model,
-// framed as data; a bad call is refused before anything is sent.
+// framed as data (English to the model, Bulgarian to the person); a bad call is refused before anything is sent.
 function deps(over: Partial<VoiceDeps> = {}) {
   const sent: { method: string; url: string; body?: unknown }[] = [];
   const went: string[] = [];
@@ -37,7 +37,7 @@ describe("Jarvis's tools in the browser (D-556)", () => {
 
   it("whats_waiting reads the inbox as data", async () => {
     const r = await runVoiceTool("whats_waiting", {}, deps().d);
-    expect(r).toMatch(/^<данни>/);
+    expect(r).toMatch(/^<data>/);
     expect(r).toContain("Поправи отстъпката");
   });
 
@@ -60,14 +60,14 @@ describe("Jarvis's tools in the browser (D-556)", () => {
 
   it("describe_screen reads the visible page, cut and framed as data", async () => {
     const r = await runVoiceTool("describe_screen", {}, deps({ screenText: () => "x".repeat(10_000) }).d);
-    expect(r.startsWith("<данни>")).toBe(true);
+    expect(r.startsWith("<data>")).toBe(true);
     expect(r.length).toBeLessThan(4_200);
   });
 
   it("a bad call is refused with a reason, nothing is sent; an error from the API is said by name", async () => {
     const x = deps({ post: async () => ({ status: 403, body: { error: "not_an_approver" } }) });
-    expect(await runVoiceTool("approve_change", {}, x.d)).toMatch(/непознат инструмент/);
-    expect(await runVoiceTool("steer_agent", { task_id: "../x", text: "a" }, x.d)).toMatch(/грешни аргументи/);
+    expect(await runVoiceTool("approve_change", {}, x.d)).toMatch(/unknown tool/);
+    expect(await runVoiceTool("steer_agent", { task_id: "../x", text: "a" }, x.d)).toMatch(/bad arguments/);
     expect(x.sent).toEqual([]);
     expect(await runVoiceTool("start_work", { conversation_id: "c_new" }, x.d)).toMatch(/not_an_approver/);
   });
