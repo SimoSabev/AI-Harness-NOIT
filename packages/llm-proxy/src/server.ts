@@ -1,4 +1,6 @@
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import https from "node:https";
 import { ConnectionId, ProxyUpstream } from "@mandat/contract";
 import { ALLOWED_MODELS, ESTIMATE, costUsd, costUsdFlat, costUsdOpenAi } from "./pricing.js";
@@ -12,6 +14,8 @@ import { BootGate } from "./boot.js";
 import { SEARCH_ROUTES, SEARCH_UPSTREAM, forwardSearch } from "./search-upstream.js";
 import type { SearchProviderId } from "./search-upstream.js";
 import type { BootOptions } from "./boot.js";
+import { VoiceError, ensureVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
+import type { VoiceAgentState } from "./voice-upstream.js";
 
 export const PROXY_VERSION = "0.1.0";
 const INFERENCE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens", "/v1/responses"]);
@@ -95,6 +99,8 @@ export interface ProxyServerOptions {
   searchKeys?: Partial<Record<SearchProviderId, string>>;
   /** E9в (D-422): local model servers from MANDAT_UPSTREAM_LOCAL_* (localUpstreamsFromEnv); kept across the boot */
   localUpstreams?: Record<string, LocalUpstream>;
+  /** tests only: the fetch the voice provider is called with (D-556) */
+  voiceFetch?: (url: string, init?: RequestInit) => Promise<Response>;
   /** tests only: another base URL per search provider */
   searchUpstream?: Partial<Record<SearchProviderId, URL>>;
   /** stdout log line (never bodies, headers or token values; 8.1). */
@@ -105,12 +111,16 @@ export interface ProxyServerOptions {
 const KEY = /^[\x21-\x7e]{20,512}$/;
 /** D-392: a saved connection as the proxy holds it (memory only). */
 interface Upstream { wire: "anthropic" | "openai" | "gemini"; url: URL; auth: "x-api-key" | "bearer" | "x-goog-api-key" | "api-key" | "none"; key: string; models: string[]; prices: Record<string, FlatRate>; /** D-422: a model on this computer — $0, watched for replies without a tool */ local: boolean }
-type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream>; search: Partial<Record<SearchProviderId, string>> };
+type BootKeys = { anthropic: string; openai: string; upstreams: Map<string, Upstream>; search: Partial<Record<SearchProviderId, string>>; voice: { elevenlabs?: string } };
 /** `allowEmpty`: the environment already names local upstreams (D-422), so a payload with nothing else is fine. */
 function parseBootKeys(body: Buffer | null, allowHttp: boolean, allowEmpty = false): BootKeys | null {
   try {
     const v = JSON.parse(body?.toString("utf8") ?? "") as Record<string, unknown>;
-    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai" || k === "upstreams" || k === "search");
+    const keysOk = Object.keys(v).every((k) => k === "anthropic" || k === "openai" || k === "upstreams" || k === "search" || k === "voice");
+    // D-556: {"voice": {"elevenlabs": "<key>"}} — Jarvis's voice provider, the same rules as search
+    const vr = v.voice ?? {};
+    if (typeof vr !== "object" || vr === null || Array.isArray(vr) || Object.entries(vr).some(([k, x]) => k !== "elevenlabs" || typeof x !== "string" || !KEY.test(x))) return null;
+    const voice = vr as { elevenlabs?: string };
     // E9г (D-411): {"search": {"exa": "<key>"}} — only known providers, only key-shaped values
     const sr = v.search ?? {};
     if (typeof sr !== "object" || sr === null || Array.isArray(sr) || Object.entries(sr).some(([k, x]) => k !== "exa" || typeof x !== "string" || !KEY.test(x))) return null;
@@ -127,8 +137,8 @@ function parseBootKeys(body: Buffer | null, allowHttp: boolean, allowEmpty = fal
       if (!ConnectionId.safeParse(id).success || !p.success || (p.data.auth !== "none" && !KEY.test(p.data.key))) return null;
       upstreams.set(id, { ...p.data, url: new URL((u as { url: string }).url), local: p.data.local === true });
     }
-    if (!allowEmpty && typeof v.anthropic !== "string" && typeof v.openai !== "string" && upstreams.size === 0 && Object.keys(search).length === 0) return null;
-    return { anthropic: typeof v.anthropic === "string" ? v.anthropic : "", openai: typeof v.openai === "string" ? v.openai : "", upstreams, search };
+    if (!allowEmpty && typeof v.anthropic !== "string" && typeof v.openai !== "string" && upstreams.size === 0 && Object.keys(search).length === 0 && voice.elevenlabs === undefined) return null;
+    return { anthropic: typeof v.anthropic === "string" ? v.anthropic : "", openai: typeof v.openai === "string" ? v.openai : "", upstreams, search, voice };
   } catch {
     return null;
   }
@@ -152,9 +162,13 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
   const envLocal = new Map<string, Upstream>(Object.entries(o.localUpstreams ?? {}).map(([id, l]) => [id, { wire: l.wire, url: new URL(l.url), auth: "none", key: "", models: [...l.models], prices: Object.fromEntries(l.models.map((m) => [m, FREE])), local: true }]));
   let upstreams = new Map<string, Upstream>(envLocal);
   const searchKeys: Partial<Record<SearchProviderId, string>> = { ...o.searchKeys };
+  // D-556: Jarvis — the voice key (memory only) and the person's agent (its id is not a secret; kept next to the usage log)
+  const voiceKeys: { elevenlabs?: string } = {};
+  const voiceFile = path.join(path.dirname(o.usageLogPath), "voice-agent.json");
+  const voiceFetch = o.voiceFetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
   const boot = o.boot ? new BootGate(o.boot) : null;
   let locked = boot !== null;
-  const providers = (): string[] => [...(["anthropic", "openai"] as const).filter((p) => keys[p] !== ""), ...(searchKeys.exa ? ["exa"] : [])];
+  const providers = (): string[] => [...(["anthropic", "openai"] as const).filter((p) => keys[p] !== ""), ...(searchKeys.exa ? ["exa"] : []), ...(voiceKeys.elevenlabs ? ["elevenlabs"] : [])];
 
   const record = (l: Omit<RequestLine, "kind" | "ts">): void => {
     const line: RequestLine = { kind: "request", ts: new Date(now()).toISOString(), ...l };
@@ -402,6 +416,37 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
     })();
   });
 
+  /** D-556: make the person's Jarvis agent / one signed URL for a session; the key never leaves this process */
+  const voiceAdmin = async (op: "agent" | "session", body: Buffer | null): Promise<{ status: number; body: Record<string, string> }> => {
+    const key = voiceKeys.elevenlabs;
+    if (!key) return { status: 409, body: { error: "voice_not_configured" } };
+    let prev: VoiceAgentState | null = null;
+    try {
+      prev = existsSync(voiceFile) ? (JSON.parse(readFileSync(voiceFile, "utf8")) as VoiceAgentState) : null;
+    } catch {
+      prev = null;
+    }
+    try {
+      if (op === "session") {
+        if (!prev) return { status: 409, body: { error: "voice_no_agent" } };
+        return { status: 200, body: { signed_url: await voiceSignedUrl({ fetch: voiceFetch, key, agentId: prev.agent_id }) } };
+      }
+      let req: unknown;
+      try {
+        req = JSON.parse(body?.toString("utf8") ?? "");
+      } catch {
+        req = null;
+      }
+      const v = req as { voice_id?: unknown; llm?: unknown } | null;
+      if (!v || typeof v.voice_id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(v.voice_id) || (v.llm !== undefined && (typeof v.llm !== "string" || !/^[a-z0-9.-]{1,60}$/.test(v.llm)))) return { status: 400, body: { error: "bad_request" } };
+      const next = await ensureVoiceAgent({ fetch: voiceFetch, key, voiceId: v.voice_id, ...(typeof v.llm === "string" ? { llm: v.llm } : {}), prev });
+      writeFileSync(voiceFile, JSON.stringify(next), { mode: 0o600 });
+      return { status: 200, body: { agent_id: next.agent_id } };
+    } catch (e) {
+      return { status: 502, body: { error: e instanceof VoiceError ? e.code : "voice_unreachable" } };
+    }
+  };
+
   const adminServer = http.createServer((req, res) => {
     void (async () => {
       const url = new URL(req.url ?? "/", "http://admin");
@@ -427,6 +472,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         keys.anthropic = parsed.anthropic;
         keys.openai = parsed.openai;
         Object.assign(searchKeys, parsed.search);
+        Object.assign(voiceKeys, parsed.voice);
         upstreams = new Map([...envLocal, ...parsed.upstreams]);
         locked = false;
         res.writeHead(204).end();
@@ -452,6 +498,12 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
         }
         state.revoke(runId);
         res.writeHead(204).end();
+        return;
+      }
+      if (req.method === "POST" && (url.pathname === "/admin/voice/agent" || url.pathname === "/admin/voice/session")) {
+        const body = await readBody(req);
+        const r = await voiceAdmin(url.pathname === "/admin/voice/agent" ? "agent" : "session", body);
+        res.writeHead(r.status, { "content-type": "application/json" }).end(JSON.stringify(r.body));
         return;
       }
       if (req.method === "GET" && url.pathname === "/admin/usage") {
