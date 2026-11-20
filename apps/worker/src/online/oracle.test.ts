@@ -179,3 +179,14 @@ describe("the writer's task with an approved oracle (D-534)", () => {
     expect((await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_wr_4'")).rows[0]).toEqual({ state: "BLOCKED", wait_reason: "oracle_unapproved" });
   });
 });
+
+describe("an oracle task that stops before it runs (live test 20.11)", () => {
+  it("the project's agent profile is not approved yet → the task stops and the oracle fails with the reason (no endless building)", async () => {
+    const s = await setup(ok("failed", "passed"));
+    await s.db.query("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash, status) values ($1::uuid, $2::uuid, 99, '{}'::jsonb, '{}'::jsonb, $3, 'proposed')", [DEMO_ORG_ID, DEMO_REPO_ID, `sha256:${"e".repeat(64)}`]);
+    await s.db.query("update public.repos set profile_id = null where id = $1::uuid", [DEMO_REPO_ID]);
+    await runDaemonOnce(s.deps);
+    expect(s.runs).toHaveLength(0);
+    expect((await oracleRow(s.db))).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "harness_unapproved" }] });
+  });
+});

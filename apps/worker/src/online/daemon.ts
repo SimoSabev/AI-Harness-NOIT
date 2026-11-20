@@ -130,6 +130,12 @@ async function setState(tx: SqlClient, t: TaskRow, state: string, extra: Record<
   const cols = Object.keys(extra);
   const sets = cols.map((c, k) => `${c} = $${k + 3}`).join(", ");
   const r = await tx.query<{ seq: string }>(`update public.tasks set state = $2, state_entered_at = now(), state_deadline_at = null, updated_at = now(), seq = seq + 1${sets ? `, ${sets}` : ""} where id = $1 returning seq`, [t.id, state, ...cols.map((c) => extra[c])]);
+  // live test 20.11: an oracle task that stops before it runs (no approved profile, a stale harness, …) fails its oracle
+  // with the reason, so the page offers "Build again" instead of "being written" forever
+  if (state === "BLOCKED" && t.kind === "oracle") {
+    const why = typeof extra.wait_reason === "string" ? extra.wait_reason.slice(0, 100) : "stopped";
+    await tx.query("update public.oracles set status = 'failed', problems = $2::jsonb, updated_at = now() where task_id = $1 and status = 'building'", [t.id, JSON.stringify([{ kind: "not_run", id: why }])]);
+  }
   return Number(r.rows[0]?.seq ?? 0);
 }
 
