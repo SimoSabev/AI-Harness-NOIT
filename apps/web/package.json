@@ -13,6 +13,7 @@
     "test:sentinel": "node scripts/sentinel.mjs"
   },
   "dependencies": {
+    "@elevenlabs/client": "1.36.1",
     "@mandat/channels": "workspace:*",
     "@mandat/contract": "workspace:*",
     "@mandat/core": "workspace:*",
