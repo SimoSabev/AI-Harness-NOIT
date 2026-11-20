@@ -47,16 +47,16 @@ const GOOD_PLAN = JSON.stringify({ units: [{ id: "u1", title: "the 10% rule", cr
 
 type Ev = { detector: string; phase: 1 | 2; status: "pass" | "fail" | "unknown" | "n/a"; summary: string; data: Record<string, unknown>; source: string; agent_visible: boolean };
 const ev = (detector: string, status: Ev["status"], data: Record<string, unknown> = {}): Ev => ({ detector, phase: 2, status, summary: detector, data, source: "sandbox:verify", agent_visible: false });
-const verdict = (o: { base: string; task: string; attempt: number; result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[] }) =>
+const verdict = (o: { base: string; task: string; attempt: number; result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; reasons?: string[] }) =>
   Verdict.parse({
-    run_id: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", task_id: o.task, attempt: o.attempt, agent: "fake:honest-fix", result: o.result, reasons: o.result === "FAILED" ? ["D5:hidden_fail:h00000000"] : [],
+    run_id: "r_01JABCDEFGHJKMNPQRSTVWXYZ0", task_id: o.task, attempt: o.attempt, agent: "fake:honest-fix", result: o.result, reasons: o.reasons ?? (o.result === "FAILED" ? ["D5:hidden_fail:h00000000"] : []),
     evidence: [ev("D1.base_tests", "pass"), ...(o.evidence ?? [])],
     contract_hash: `sha256:${"a".repeat(64)}`, base_sha: o.base, tree_sha: "b".repeat(40), diff_hash: `sha256:${"c".repeat(64)}`, integrity: "ok",
     usage: { usd: 0.1, input_tokens: 1, output_tokens: 1, requests: 1 }, timings_ms: { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 }, created_at: "2026-11-17T00:00:00.000Z",
   });
 const patchFor = (name: string, body = name) => `diff --git a/${name} b/${name}\nnew file mode 100644\n--- /dev/null\n+++ b/${name}\n@@ -0,0 +1 @@\n+${body}\n`;
 type Contract = { task_id: string; base_commit: string; text: string; attempt?: number; oracle_hash?: string };
-type Outcome = { result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; notes?: string; patch?: string; body?: string };
+type Outcome = { result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; notes?: string; patch?: string; body?: string; reasons?: string[] };
 
 async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome; divisible?: "yes" | "no"; size?: "m" | "l"; during?: (n: number) => Promise<void> }) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-job-"));
@@ -100,7 +100,7 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
       if (o.during) await o.during(n);
       if (out.notes) writeFileSync(path.join(runDir, "notes.txt"), out.notes);
       const attempt = Number(/-a(\d+)\.json$/.exec(i.contractPath)?.[1] ?? 1);
-      return { verdict: verdict({ base: c.base_commit, task: c.task_id, attempt, result: out.result, ...(out.evidence ? { evidence: out.evidence } : {}) }), exit: 0, runDir, ledger: { from: 1, to: 3 }, agentExit: 0 };
+      return { verdict: verdict({ base: c.base_commit, task: c.task_id, attempt, result: out.result, ...(out.evidence ? { evidence: out.evidence } : {}), ...(out.reasons ? { reasons: out.reasons } : {}) }), exit: 0, runDir, ledger: { from: 1, to: 3 }, agentExit: 0 };
     },
   };
   const git = (...a: string[]) => execFileSync("git", ["--git-dir", fx.mirror, ...a], { encoding: "utf8" }).trim();
@@ -534,5 +534,21 @@ describe("migration sites (D-546)", () => {
     await jobTick(s.jd);
     expect(s.asked[1]).toContain("missing_sites");
     expect(s.asked[2]).toContain("bad_sites");
+  });
+});
+
+describe("a unit unsure only about what the final check decides lands (live test 20.11)", () => {
+  it("UNKNOWN only for a surviving mutant or a slower test → the unit lands; any other UNKNOWN still parks it", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (_c, n) => (n === 1 ? { result: "UNKNOWN", reasons: ["D11:survived:src/giftcards/store.ts:3", "D14:slower:tests/a.spec.ts > a"] } : { result: "UNKNOWN", reasons: ["D3:protected_path:src/payments/**"] }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    let us = await s.units();
+    expect(us[0]).toMatchObject({ status: "passed" });
+    expect(s.git("rev-parse", `refs/heads/${jobBranch("j_t1")}`)).not.toBe(s.fx.sha);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    us = await s.units();
+    expect(us[1]?.status).not.toBe("passed");
   });
 });

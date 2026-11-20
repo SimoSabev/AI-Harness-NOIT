@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
+import { failingCriteria, fileTags, unitLands, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -147,5 +147,15 @@ describe("sites for a person in the seal (D-546)", () => {
     const s = sealFor({ spec, specHash: `sha256:${"a".repeat(64)}`, oracleHash: `sha256:${"b".repeat(64)}`, verdict: "VERIFIED", head: "c".repeat(40), evidence: [], ledgerHead: null, sites: [{ file: "src/a.ts", category: "unit", unit: "u1" }, { file: "src/money.ts", category: "human" }] });
     expect(s.unchecked).toContain("src/money.ts: a migration site for a person");
     expect(s.unchecked.join(" ")).not.toContain("src/a.ts");
+  });
+});
+
+describe("what a unit may leave to the final check (live test 20.11)", () => {
+  it("VERIFIED lands; UNKNOWN only for surviving mutants or slower tests lands; anything else does not", () => {
+    expect(unitLands("VERIFIED", [])).toBe(true);
+    expect(unitLands("UNKNOWN", ["D11:survived:src/a.ts:3", "D14:slower:t"])).toBe(true);
+    expect(unitLands("UNKNOWN", ["D11:survived:src/a.ts:3", "D3:protected_path:src/payments/**"])).toBe(false);
+    expect(unitLands("UNKNOWN", [])).toBe(false);
+    expect(unitLands("FAILED", ["D11:survived:src/a.ts:3"])).toBe(false);
   });
 });

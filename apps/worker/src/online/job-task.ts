@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Handoff, Spec, hashJcs, jobBranch, jobMapFiles, parseHandoff } from "@mandat/contract";
 import type { Verdict } from "@mandat/contract";
-import { failingCriteria, oracleFilesFor } from "@mandat/core";
+import { failingCriteria, oracleFilesFor, unitLands } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
 import type { HiddenTests } from "@mandat/verify";
@@ -75,7 +75,7 @@ export async function finishJobTask(db: Db, t: JobTaskRef, o: { mirror: string; 
   const won = unit?.status === "passed";
   if (t.job_role === "unit" && won) [state, wait] = ["CLOSED", "another_try_won"];
   else if (t.job_role === "unit") {
-    if (v.result === "VERIFIED" && o.diffPatch.length > 0 && job) {
+    if (unitLands(v.result, v.reasons) && o.diffPatch.length > 0 && job) {
       const head = await jobHead({ mirror: o.mirror, ref: jobBranch(job.id) });
       // D-541: in waves another unit may have landed meanwhile; the patch goes onto the new head with a 3-way apply
       // (the final check verifies the whole branch). A conflict blocks the unit and the job builds it again.

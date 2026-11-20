@@ -226,3 +226,14 @@ export function siteTable(found: readonly string[], units: readonly Pick<PlanUni
   for (const k of skip) if (!rows.has(k.file)) rows.set(k.file, { file: k.file, category: k.why });
   return [...rows.values()].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
 }
+
+// live test 20.11 (demo 4.12): a unit is checked against only the oracle files of its own criteria, so a mutant that
+// survives them, or a test that got slower, is a question the final check answers anyway: it grades the mutants
+// against the whole hidden oracle (D11.oracle) and runs D14 on the whole branch. Such a unit lands; any other UNKNOWN
+// still parks it for a person.
+const DEFERRED_TO_FINAL = ["D11:survived:", "D14:slower:"];
+
+export function unitLands(result: VerdictResult, reasons: readonly string[]): boolean {
+  if (result === "VERIFIED") return true;
+  return result === "UNKNOWN" && reasons.length > 0 && reasons.every((r) => DEFERRED_TO_FINAL.some((p) => r.startsWith(p)));
+}
