@@ -17,6 +17,10 @@ export interface ConversationRow {
   spec_hash: string | null;
   spec_ready: boolean;
   approved_spec_hash: string | null;
+  /** D-557: a task conversation, or the interview of the whole project */
+  purpose: "task" | "project";
+  /** D-557: whether the project brief of this interview is approved on the repo */
+  project_approved: boolean;
 }
 /** D-534: the latest oracle of the approved spec (counts and criterion ids only; never a test's name or content) */
 export interface OracleView {

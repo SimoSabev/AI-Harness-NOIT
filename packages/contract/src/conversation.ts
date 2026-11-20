@@ -3,6 +3,7 @@ import { AgentRefString, ModelId } from "./connections.js";
 import { Sha256 } from "./schemas.js";
 import { AXIS_NAMES, TaskAxes, TaskProfileId } from "./task-profile.js";
 import { CriterionId, Spec } from "./task-spec.js";
+import { ProjectBrief } from "./project-brief.js";
 
 // E10а ф. 1 (D-531): a conversation before work. The model answers and asks; it cannot change files, run commands or
 // reach the network. A brief or a spec is only shown: work starts from a person's action ("Start work"), never from
@@ -75,6 +76,8 @@ export const ChatToolCall = z.discriminatedUnion("tool", [
   z.object({ tool: z.literal("propose_axes"), axes: z.unknown(), hint: z.string().max(40).optional() }).strict(),
   z.object({ tool: z.literal("propose_spec"), spec: z.unknown() }).strict(),
   z.object({ tool: z.literal("propose_brief"), brief: Brief }).strict(),
+  // D-557: the brief of the whole project (a project interview); the server checks it like the spec
+  z.object({ tool: z.literal("propose_project"), brief: z.unknown() }).strict(),
 ]);
 export type ChatToolCall = z.infer<typeof ChatToolCall>;
 
@@ -110,8 +113,10 @@ export const ChatTurn = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ ...head, kind: z.literal("memory"), query: z.string().max(200), hits: z.array(z.object({ id: z.string().max(40), text: z.string().max(600) }).strict()).max(8) }).strict(),
   // D-533: what a tool did — never what a file holds (the contents live only inside one answer)
-  z.object({ ...head, kind: z.literal("tool"), tool: z.enum(["list_dir", "read_file", "grep", "propose_axes", "propose_spec"]), target: z.string().max(300), ok: z.boolean(), note: z.string().max(300) }).strict(),
+  z.object({ ...head, kind: z.literal("tool"), tool: z.enum(["list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_project"]), target: z.string().max(300), ok: z.boolean(), note: z.string().max(300) }).strict(),
   z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), /** D-552: a saved Other profile for these axes */ saved: z.string().trim().min(1).max(80).optional() }).strict(),
+  // D-557: the project brief the model proposed, with its hash and what it still lacks
+  z.object({ ...head, kind: z.literal("project"), brief: ProjectBrief, hash: Sha256, ready: z.boolean(), missing: z.array(z.string().max(40)).max(10) }).strict(),
   z.object({ ...head, kind: z.literal("spec"), spec: Spec, hash: Sha256, ready: z.boolean(), unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), untestable: z.array(CriterionId).max(200) }).strict(),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurn>;
@@ -124,6 +129,8 @@ export const ChatMessageBody = z
     agent: AgentRefString,
     model: ModelId.optional(),
     repo: z.string().uuid().optional(),
+    /** D-557: a new conversation about the whole project (needs repo); default: a task */
+    purpose: z.enum(["task", "project"]).optional(),
   })
   .strict();
 export type ChatMessageBody = z.infer<typeof ChatMessageBody>;

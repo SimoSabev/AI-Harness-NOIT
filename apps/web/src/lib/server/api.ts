@@ -26,6 +26,7 @@ import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWe
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
 import { approveOracle, approveSpec, buildOracle, conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
+import { approveProject } from "./project-interview";
 import { approveJob, bringJob } from "./job";
 import { isFollowing } from "../conversation-types";
 import { sseCursor, sseResponse } from "./sse";
@@ -711,6 +712,13 @@ export async function postConversationApprove(req: Request, d: ApiDeps, id: stri
   const p = await post(req, d);
   if (p instanceof Response) return p;
   return done(await approveSpec(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
+}
+/** D-557: a person approves the project brief of an interview (its hash in the body) */
+export async function postConversationApproveProject(req: Request, d: ApiDeps, id: string): Promise<Response> {
+  if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  return done(await approveProject(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
 }
 /** D-534: "Build oracle" on the approved spec (a person who may start tasks; rate limited like a new task) */
 export async function postConversationOracle(req: Request, d: ApiDeps, id: string): Promise<Response> {

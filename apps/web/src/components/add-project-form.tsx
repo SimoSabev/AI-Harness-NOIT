@@ -24,12 +24,15 @@ const ERR: Record<string, Key> = {
 // navigator (folder-picker.tsx), or its full path typed; `mandat local` makes its own mirror of it, adds the project and
 // starts the rules scan. With `path` (the desktop app, after the folder was granted)
 // it registers that folder at once.
-export function AddProjectForm({ path: given }: { path?: string }) {
+/** D-557: the agent (and model) the project interview runs on */
+export interface Interview { agent: string; model: string | null }
+
+export function AddProjectForm({ path: given, interview = null }: { path?: string; interview?: Interview | null }) {
   const t = useT();
   const router = useRouter();
   const [path, setPath] = useState(given ?? "");
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState<{ name: string; created: boolean } | null>(null);
+  const [done, setDone] = useState<{ name: string; created: boolean; repo: string } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const add = async (p: string) => {
     setBusy(true);
@@ -38,12 +41,25 @@ export function AddProjectForm({ path: given }: { path?: string }) {
     setBusy(false);
     const reply = AddProjectReply.safeParse(r.body);
     if (r.status === 200 && reply.success && reply.data.ok) {
-      setDone({ name: reply.data.full_name, created: reply.data.created });
+      setDone({ name: reply.data.full_name, created: reply.data.created, repo: reply.data.repo_id });
       router.refresh();
       return;
     }
     const code = reply.success && !reply.data.ok ? reply.data.error : typeof r.body.error === "string" ? r.body.error : "failed";
     setErr(t(ERR[code] ?? "add.err.failed"));
+  };
+  // D-557: before any task, the harness gets to know the whole project in an interview
+  const startInterview = async (repo: string) => {
+    if (!interview) return;
+    setBusy(true);
+    setErr(null);
+    const r = await postJson("/api/conversations", { text: t("project.interview.first"), agent: interview.agent, ...(interview.model ? { model: interview.model } : {}), repo, purpose: "project" });
+    setBusy(false);
+    if (r.status === 201 && typeof r.body.id === "string") {
+      router.push(`/?chat=${r.body.id}`);
+      return;
+    }
+    setErr(t("project.interview.failed"));
   };
   const once = useRef(false);
   useEffect(() => {
@@ -71,7 +87,11 @@ export function AddProjectForm({ path: given }: { path?: string }) {
       {done && (
         <div role="status" className="space-y-2 text-sm">
           <p className="text-ok">{t(done.created ? "add.done" : "add.exists", { name: done.name })}</p>
-          <Link href="/harness" className={btn.secondary}>{t("add.openProjects")}</Link>
+          <p className="text-mute">{t("project.interview.why")}</p>
+          <div className="flex flex-wrap gap-3">
+            {interview && <button type="button" className={btn.primary} disabled={busy} onClick={() => void startInterview(done.repo)}>{t("project.interview.start")}</button>}
+            <Link href="/harness" className={btn.secondary}>{t("add.openProjects")}</Link>
+          </div>
         </div>
       )}
       {err && <p role="alert" className="mt-3 text-sm text-bad">{err}</p>}

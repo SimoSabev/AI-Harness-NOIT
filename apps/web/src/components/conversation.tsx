@@ -7,6 +7,7 @@ import { isAnswering, isFollowing } from "../lib/conversation-types";
 import type { ConversationFeed, ConversationRow, JobView, OracleView } from "../lib/conversation-types";
 import type { BringReply } from "@mandat/contract";
 import { JobCard } from "./job-card";
+import { postJson } from "../lib/client/api";
 import { Markdown } from "./markdown";
 import { btn } from "./ui";
 
@@ -187,6 +188,48 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
   );
 }
 
+/** D-557: the brief of the whole project the model proposed; an approver approves it by its hash */
+function ProjectCard({ turn, t, a }: { turn: Extract<ChatTurn, { kind: "project" }>; t: T; a: SpecActions }) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "error">(a.row.project_approved ? "done" : "idle");
+  const b = turn.brief;
+  const list = (xs: readonly string[]) => (xs.length > 0 ? xs.join(" · ") : "—");
+  const approve = async () => {
+    setState("busy");
+    const r = await postJson(`/api/conversations/${a.row.id}/approve-project`, { brief_hash: turn.hash });
+    setState(r.status === 200 ? "done" : "error");
+  };
+  const rows: [Key, string][] = [
+    ["project.brief.product", b.product],
+    ["project.brief.users", list(b.users)],
+    ["project.brief.works", list(b.works_today)],
+    ["project.brief.keep", list(b.must_not_break)],
+    ["project.brief.tests", b.commands.test ?? "—"],
+    ["project.brief.stack", list(b.stack)],
+    ["project.brief.approver", `${b.approver} · ${b.budget_usd} USD`],
+  ];
+  return (
+    <section aria-label={t("project.brief.title")} className="max-w-[46rem] rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
+      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("project.brief.title")}</p>
+      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-mute">{t(k)}</dt>
+            <dd className="whitespace-pre-wrap">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {!turn.ready && <p className="mt-2 text-warn">{t("project.brief.missing", { what: turn.missing.join(", ") })}</p>}
+      {turn.ready && state === "done" && <p className="mt-2 font-medium text-ok">{t("project.brief.approved")}</p>}
+      {turn.ready && state !== "done" && a.canApprove && (
+        <div className="mt-2 flex items-center gap-3">
+          <button type="button" className={btn.primary} disabled={state === "busy" || a.busy} onClick={() => void approve()}>{t("project.brief.approve")}</button>
+          {state === "error" && <span role="alert" className="text-bad">{t("project.brief.failed")}</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   if (turn.kind === "human") {
     return (
@@ -200,6 +243,7 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   if (turn.kind === "tool") return <ToolLine turn={turn} t={t} />;
   if (turn.kind === "axes") return <AxesCard turn={turn} t={t} />;
   if (turn.kind === "spec") return <SpecCard turn={turn} t={t} a={a} />;
+  if (turn.kind === "project") return <ProjectCard turn={turn} t={t} a={a} />;
   return (
     <div className="max-w-[46rem] space-y-3">
       <p className="text-[11px] font-medium text-mute">{t("chat.assistant")}</p>

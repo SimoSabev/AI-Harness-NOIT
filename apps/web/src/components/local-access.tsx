@@ -12,6 +12,7 @@ import { HostTerminal } from "./host-terminal";
 import { btn, card, input } from "./ui";
 import { Select } from "./select";
 import { AddProjectForm } from "./add-project-form";
+import type { Interview } from "./add-project-form";
 
 // E9g A3 (AC-12.6, D-373): the web half of local access. Everything here runs only in the desktop window (the bridge);
 // in a browser or the PWA these components render nothing. Grants live in the desktop app's main process; main checks
@@ -142,7 +143,7 @@ export function LocalAccessPanel() {
 }
 
 /** "Add project" (AC-12.6): a folder from the drop / "Open with" / the dialog, the suggestion, the rights, then grant. */
-export function AddProject({ initialPath }: { initialPath: string | null }) {
+export function AddProject({ initialPath, interview = null }: { initialPath: string | null; interview?: Interview | null }) {
   const t = useT();
   const b = useDesktop();
   const [path, setPath] = useState<string | null>(initialPath);
@@ -155,7 +156,7 @@ export function AddProject({ initialPath }: { initialPath: string | null }) {
   }, [initialPath]);
   if (b === undefined) return null;
   // D-388: in a browser the folder is typed; the desktop picks it, grants the rights, then adds it the same way
-  if (!b) return <AddProjectForm />;
+  if (!b) return <AddProjectForm interview={interview} />;
   const pick = async () => {
     const r = await b.call("pickFolder", {});
     if (r.ok && r.value.path) {
@@ -205,7 +206,7 @@ export function AddProject({ initialPath }: { initialPath: string | null }) {
       {granted && (
         <div className="mt-4 text-sm">
           <p role="status" className="text-ok">{t("add.granted", { path: granted })}</p>
-          <AddProjectForm path={granted} />
+          <AddProjectForm path={granted} interview={interview} />
         </div>
       )}
       {m.node}

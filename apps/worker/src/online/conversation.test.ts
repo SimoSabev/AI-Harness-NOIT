@@ -10,7 +10,7 @@ import { fakeModel } from "@mandat/research";
 import type { ModelClient, ModelRequest, RouterChannel } from "@mandat/research";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_OWNER_ID, DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { CHAT_SYSTEM, MAX_STEPS, answerTurn, checkAxes, checkSpec, claimConversation, loadTurns, parseReply, processConversation, readReply, reapStaleConversations, runConversationOnce } from "./conversation.js";
+import { CHAT_SYSTEM, MAX_STEPS, PROJECT_SYSTEM, answerTurn, checkAxes, checkSpec, claimConversation, loadTurns, parseReply, processConversation, readReply, reapStaleConversations, runConversationOnce } from "./conversation.js";
 import { unavailableReader } from "./repo-tools.js";
 import type { RepoReader } from "./repo-tools.js";
 import type { ChatDeps, NewTurn } from "./conversation.js";
@@ -409,5 +409,53 @@ describe("a saved Other profile is offered again (D-552)", () => {
     const r2 = await answerTurn({ ...base, client: m2.client, turns: [human("x")], saved });
     expect(r2.turns[0]).not.toHaveProperty("saved");
     expect(keys).toHaveLength(before);
+  });
+});
+
+describe("the interview of a whole project (D-557)", () => {
+  const project = { product: "An online shop", users: ["customers"], works_today: ["checkout"], must_not_break: ["no discount at 50"], commands: { test: "pnpm test" }, stack: ["TypeScript"], approver: "Simo", budget_usd: 5, notes: [] };
+  it("a project conversation has its own instructions; a brief the server reads ends the answer; a bad one goes back", async () => {
+    expect(PROJECT_SYSTEM).toContain('"tool": "propose_project"');
+    expect(PROJECT_SYSTEM).not.toContain('"tool": "propose_spec"');
+    const m = script({ say: "", call: { tool: "propose_project", brief: { product: "" } } }, { say: "Here is what I understood", call: { tool: "propose_project", brief: project } }, { say: "never", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("get to know the project")], purpose: "project" });
+    expect(m.asked[0]?.system).toBe(PROJECT_SYSTEM);
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "project", "assistant"]);
+    expect(r.turns[0]).toMatchObject({ kind: "tool", tool: "propose_project", ok: false });
+    expect(r.turns[1]).toMatchObject({ kind: "project", ready: true, missing: [], brief: { product: "An online shop" } });
+    expect(m.asked[1]?.user).toContain("Project brief: not proposed yet");
+    expect(m.asked).toHaveLength(2);
+  });
+  it("a brief that lacks a test command is not ready; the model is told what is missing", async () => {
+    const m = script({ say: "", call: { tool: "propose_project", brief: { ...project, commands: {} } } }, { say: "What runs the tests?", call: { tool: "ask_user", questions: ["Which command runs the tests?"] } });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("x")], purpose: "project" });
+    expect(r.turns[0]).toMatchObject({ kind: "project", ready: false, missing: ["commands.test"] });
+    expect(m.asked[1]?.user).toContain("Project brief: not ready (missing: commands.test)");
+  });
+  it("a task conversation of a project with an approved brief starts from it, as data", async () => {
+    const m = script({ say: "ok", call: null });
+    await answerTurn({ ...base, client: m.client, turns: [human("add coupons")], project: "Product: An online shop" });
+    expect(m.asked[0]?.system).toBe(CHAT_SYSTEM);
+    expect(m.asked[0]?.user).toContain("<project>\nProduct: An online shop\n</project>");
+  });
+  it("the queue: a project conversation keeps the proposed brief on the conversation; a task one reads the repo's approved brief", async () => {
+    const db = await pgliteDb();
+    await seedMinimal(db, { remoteUrl: "file:///tmp/x.git" });
+    const deps = (client: ModelClient): ChatDeps => ({ db, modelFor: () => ({ ok: true, client }) });
+    await db.query("insert into public.conversations (id, org_id, repo_id, created_by, agent, model, budget_usd, expires_at, purpose) values ('c_proj', $1::uuid, $2::uuid, $3::uuid, 'claude', 'm-1', 0.5, now() + interval '2 hours', 'project')", [DEMO_ORG_ID, DEMO_REPO_ID, DEMO_OWNER_ID]);
+    await db.query("insert into public.conversation_turns (org_id, conversation_id, seq, kind, data) values ($1::uuid, 'c_proj', 0, 'human', $2::jsonb)", [DEMO_ORG_ID, JSON.stringify({ text: "get to know it" })]);
+    await runConversationOnce(deps(fakeModel(ch, () => say({ say: "Here", call: { tool: "propose_project", brief: project } }))));
+    expect((await loadTurns(db, "c_proj")).map((t) => t.kind)).toEqual(["human", "project", "assistant"]);
+    const c = (await db.query<{ project_brief: unknown; project_brief_hash: string; project_ready: boolean }>("select project_brief, project_brief_hash, project_ready from public.conversations where id = 'c_proj'")).rows[0];
+    expect(c).toMatchObject({ project_brief: project, project_ready: true });
+    expect(c?.project_brief_hash).toMatch(/^sha256:/);
+    // a person approved it: the repo keeps it; a new task conversation of the repo sees it
+    await db.query("update public.repos set brief = $2::jsonb, brief_hash = $3, brief_approved_at = now() where id = $1::uuid", [DEMO_REPO_ID, JSON.stringify(project), c?.project_brief_hash]);
+    await db.query("insert into public.conversations (id, org_id, repo_id, created_by, agent, model, budget_usd, expires_at) values ('c_task', $1::uuid, $2::uuid, $3::uuid, 'claude', 'm-1', 0.5, now() + interval '2 hours')", [DEMO_ORG_ID, DEMO_REPO_ID, DEMO_OWNER_ID]);
+    await db.query("insert into public.conversation_turns (org_id, conversation_id, seq, kind, data) values ($1::uuid, 'c_task', 0, 'human', $2::jsonb)", [DEMO_ORG_ID, JSON.stringify({ text: "add coupons" })]);
+    const users: string[] = [];
+    await runConversationOnce(deps(fakeModel(ch, (q) => (users.push(q.user), say({ say: "ok", call: null })))));
+    expect(users[0]).toContain("Product: An online shop");
+    await db.end();
   });
 });

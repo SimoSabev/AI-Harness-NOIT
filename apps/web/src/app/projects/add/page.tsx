@@ -5,6 +5,7 @@ import { Shell } from "../../../components/shell";
 import { getT } from "../../../i18n/server";
 import { pageName } from "../../../lib/brand";
 import { pageCtx } from "../../../lib/server/page";
+import { agentsView } from "../../../lib/server/connections";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
@@ -18,11 +19,15 @@ export default async function AddProjectPage({ searchParams }: { searchParams: P
   const t = await getT();
   const raw = (await searchParams).path;
   const p = LocalPath.safeParse(typeof raw === "string" ? raw : undefined);
+  // D-557: the interview of the new project runs on the agent the task box would pick first
+  const v = await agentsView(t.lang).catch(() => null);
+  const first = v?.agents[0];
+  const interview = first ? { agent: first.id, model: v?.prefs.defaultAgent === first.id ? v.prefs.defaultModel : (first.defaultModel ?? null) } : null;
   return (
     <Shell current="harness" waiting={c.waiting}>
       <h1 className="font-display text-2xl font-semibold tracking-tight">{t("add.title")}</h1>
       <p className="mt-1 max-w-2xl text-sm text-mute">{t("add.intro")}</p>
-      <AddProject initialPath={p.success ? p.data : null} />
+      <AddProject initialPath={p.success ? p.data : null} interview={interview} />
     </Shell>
   );
 }
