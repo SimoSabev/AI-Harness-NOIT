@@ -52,12 +52,26 @@ export interface KeysClient {
   /** D-440: seal the Exa key and restart the proxy with it; null = the control endpoint did not take it */
   setResearch(k: { exa: string }): Promise<KeysStatus | null>;
   clearResearch(): Promise<KeysStatus | null>;
+  /** D-556: Jarvis — seal the ElevenLabs key and restart the proxy with it; make the agent; one session's signed URL */
+  setVoice?: (k: { elevenlabs: string }) => Promise<KeysStatus | null>;
+  clearVoice?: () => Promise<KeysStatus | null>;
+  voiceAgent?: (voiceId: string) => Promise<VoiceReply>;
+  voiceSession?: () => Promise<VoiceReply>;
 }
+/** D-556: what the proxy answered for the voice — an id, a signed URL or an error name; never a key */
+export type VoiceReply = { agent_id: string } | { signed_url: string } | { error: string };
+export const VoiceKeyBody = z.object({ elevenlabs: z.string().regex(/^[!-~]{20,512}$/) }).strict();
+export const VoiceAgentBody = z.object({ voice_id: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) }).strict();
+const VoiceAnswer = z.union([
+  z.object({ agent_id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/) }).strict(),
+  z.object({ signed_url: z.string().url().startsWith("wss://") }).strict(),
+  z.object({ error: z.string().regex(/^[a-z_]{1,40}$/) }).strict(),
+]);
 
 const Accounts = z.object({
   accounts: z.array(z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{0,31}$/), agent: z.string(), loggedIn: z.boolean(), email: z.string().max(320).nullable(), plan: z.string().max(100).nullable(), cli: SubscriptionId.default("claude") })).max(50),
 });
-const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai", "exa"])) });
+const Status = z.object({ proxy: z.enum(["running", "stopped"]), providers: z.array(z.enum(["anthropic", "openai", "exa", "elevenlabs"])) });
 
 export function controlKeys(env: Record<string, string | undefined>): KeysClient | null {
   const url = env.MANDAT_LOCAL_CONTROL_URL;
@@ -128,6 +142,12 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     const j = AddProjectReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
     return j.success ? j.data : null;
   };
+  // D-556: making the agent talks to ElevenLabs (tools + agent): up to a minute
+  const voice = async (path: string, body: unknown): Promise<VoiceReply> => {
+    const r = await send("POST", path, body, 90_000).catch(() => null);
+    const j = VoiceAnswer.safeParse(r ? await r.json().catch(() => null) : null);
+    return j.success ? j.data : { error: "control_unavailable" };
+  };
   const bring = async (b: BringBody): Promise<BringReply | null> => {
     const r = await send("POST", "/projects/bring", b).catch(() => null);
     const j = BringReply.safeParse(r?.ok ? await r.json().catch(() => null) : null);
@@ -168,5 +188,9 @@ export function controlKeys(env: Record<string, string | undefined>): KeysClient
     clear: async () => (await call("DELETE").catch(() => null)) ?? down,
     setResearch: (k) => call("POST", k, "/keys/research").catch(() => null),
     clearResearch: () => call("DELETE", undefined, "/keys/research").catch(() => null),
+    setVoice: (k) => call("POST", k, "/keys/voice").catch(() => null),
+    clearVoice: () => call("DELETE", undefined, "/keys/voice").catch(() => null),
+    voiceAgent: (voiceId) => voice("/voice/agent", { voice_id: voiceId }),
+    voiceSession: () => voice("/voice/session", {}),
   };
 }

@@ -5,7 +5,8 @@ import type { RateLimiter } from "./guard";
 import { SwitchBody, listChannels, switchChannel } from "./channels";
 import { SubscribeBody, subscribePush } from "./push";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
-import { KeysBody, ResearchKeyBody } from "./keys";
+import { KeysBody, ResearchKeyBody, VoiceAgentBody, VoiceKeyBody } from "./keys";
+import type { VoiceReply } from "./keys";
 import type { KeysClient, LoginReply } from "./keys";
 import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
@@ -324,6 +325,48 @@ export async function deleteResearchKey(req: Request, d: ApiDeps): Promise<Respo
   if (!d.keys) return json(503, { error: "keys_unavailable" });
   const s = await d.keys.clearResearch();
   return s ? json(200, s) : json(502, { error: "proxy_start_failed" });
+}
+
+// D-556: Jarvis — the voice key (keys.manage, to the proxy only, never echoed); the agent (keys.manage); a session for any
+// member: a signed URL for ElevenLabs, valid 15 minutes. The voice acts through the same API as the screens.
+const VOICE_ERR: Record<string, number> = { voice_not_configured: 409, voice_no_agent: 409, voice_key_rejected: 401, proxy_not_running: 503, control_unavailable: 503 };
+const voiceAnswer = (r: VoiceReply): Response => ("error" in r ? json(VOICE_ERR[r.error] ?? 502, { error: r.error }) : json(200, r));
+
+export async function postVoiceKey(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!d.keys?.setVoice) return json(503, { error: "keys_unavailable" });
+  const b = VoiceKeyBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_keys" });
+  const s = await d.keys.setVoice({ elevenlabs: b.data.elevenlabs });
+  return s ? json(200, s) : json(502, { error: "proxy_start_failed" });
+}
+
+export async function deleteVoiceKey(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!d.keys?.clearVoice) return json(503, { error: "keys_unavailable" });
+  const s = await d.keys.clearVoice();
+  return s ? json(200, s) : json(502, { error: "proxy_start_failed" });
+}
+
+export async function postVoiceAgent(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!(await hasCap(d.db, p.uid, p.org, "keys.manage"))) return json(403, { error: "not_an_owner" });
+  if (!d.keys?.voiceAgent) return json(503, { error: "keys_unavailable" });
+  const b = VoiceAgentBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return voiceAnswer(await d.keys.voiceAgent(b.data.voice_id));
+}
+
+export async function postVoiceSession(req: Request, d: ApiDeps): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  if (!d.keys?.voiceSession) return json(503, { error: "keys_unavailable" });
+  return voiceAnswer(await d.keys.voiceSession());
 }
 
 // D-369: the subscription login from the web (owner with keys.manage). The pasted code goes on to the control endpoint
