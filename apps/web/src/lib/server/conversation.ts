@@ -22,7 +22,7 @@ export type { ConversationFeed, ConversationRow, OracleView };
 
 const err = (status: number, error: string): Result => ({ status, body: { error } });
 const TS = (c: string) => `to_char(${c} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
-const COLS = "c.id, c.agent, c.model, c.phase, c.status, c.usd::float8 as usd, c.budget_usd::float8 as budget_usd, c.error, c.task_id, c.profile, c.unknown_axes, c.spec_hash, c.spec_ready, c.approved_spec_hash, c.purpose, (c.purpose = 'project' and c.project_brief_hash is not null and exists (select 1 from public.repos r where r.id = c.repo_id and r.brief_hash = c.project_brief_hash and r.brief_approved_at is not null)) as project_approved";
+const COLS = "c.id, c.agent, c.model, c.phase, c.status, c.usd::float8 as usd, c.budget_usd::float8 as budget_usd, c.error, c.task_id, c.repo_id::text as repo, c.profile, c.unknown_axes, c.spec_hash, c.spec_ready, c.approved_spec_hash, c.purpose, (c.purpose = 'project' and c.project_brief_hash is not null and exists (select 1 from public.repos r where r.id = c.repo_id and r.brief_hash = c.project_brief_hash and r.brief_approved_at is not null)) as project_approved";
 /** a stop the person cannot send past: a new conversation starts instead */
 const ENDED = ["budget", "expired"];
 

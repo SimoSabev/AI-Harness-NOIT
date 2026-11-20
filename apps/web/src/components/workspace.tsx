@@ -9,6 +9,7 @@ import { Hex, btn } from "./ui";
 import { Select } from "./select";
 import { ChatThread, useConversation } from "./conversation";
 import { taskTypeFor } from "../lib/agents";
+import { boxRepo, sendsOnEnter } from "../lib/chat";
 import { isAnswering } from "../lib/conversation-types";
 import type { ConversationFeed } from "../lib/conversation-types";
 import { BringReply } from "@mandat/contract";
@@ -66,7 +67,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     setAgent(id);
     setModel(agents.find((a) => a.id === id)?.defaultModel ?? null);
   };
-  const [repo, setRepo] = useState(projects[0]?.id ?? "");
+  const [repo, setRepo] = useState(() => boxRepo(projects, initialChat?.conversation.repo));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<TaskMode>(taskMode);
@@ -199,7 +200,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       {modes}
       <div className="rounded-2xl border border-line-strong bg-panel p-3 focus-within:border-accent-text">
         <textarea value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
-          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
+          onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
           className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-mute" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {agents.length > 1 ? (

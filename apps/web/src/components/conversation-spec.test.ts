@@ -19,7 +19,7 @@ const spec: Spec = {
 };
 const hash = specHash(spec);
 const at = "2026-11-17T10:00:00.000Z";
-const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "conversation", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, profile: "feature", unknown_axes: [], spec_hash: hash, spec_ready: true, approved_spec_hash: null };
+const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "conversation", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, repo: null, profile: "feature", unknown_axes: [], spec_hash: hash, spec_ready: true, approved_spec_hash: null };
 const turns: ChatTurn[] = [
   { seq: 0, at, kind: "human", text: "round" },
   { seq: 1, at, kind: "tool", tool: "read_file", target: "src/cart.ts", ok: true, note: "lines 1-40 of 600" },

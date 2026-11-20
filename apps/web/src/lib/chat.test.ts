@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chatItems, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
+import { boxRepo, chatItems, sendsOnEnter, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -136,5 +136,21 @@ describe("showChat (live test 18.11): a conversation that became a job stays on 
     expect(showChat({ conversation: { phase: "work" }, job: { id: "j1" } })).not.toBeNull();
     expect(showChat({ conversation: { phase: "work" } })).toBeNull();
     expect(showChat(null)).toBeNull();
+  });
+});
+
+describe("the task box: project and Enter (live run 20.11)", () => {
+  const P = [{ id: "r1", full_name: "local/a" }, { id: "r2", full_name: "local/bakery" }];
+  it("an open conversation shows its own project, not the first one", () => {
+    expect(boxRepo(P, "r2")).toBe("r2");
+    expect(boxRepo(P, null)).toBe("r1");
+    expect(boxRepo(P, "gone")).toBe("r1");
+    expect(boxRepo([], null)).toBe("");
+  });
+  it("Enter sends; Shift+Enter is a new line; typing in an IME is not a send", () => {
+    expect(sendsOnEnter({ key: "Enter", shiftKey: false, isComposing: false })).toBe(true);
+    expect(sendsOnEnter({ key: "Enter", shiftKey: true, isComposing: false })).toBe(false);
+    expect(sendsOnEnter({ key: "Enter", shiftKey: false, isComposing: true })).toBe(false);
+    expect(sendsOnEnter({ key: "a", shiftKey: false, isComposing: false })).toBe(false);
   });
 });

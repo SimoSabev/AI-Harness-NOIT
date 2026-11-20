@@ -13,7 +13,7 @@ vi.mock("../i18n/client", () => ({ useT: () => Object.assign((k: string, p?: Rec
 const spec: Spec = { goal: "Round half up", product: "", criteria: [{ id: "AC-1", when: "a discount ends in .5", shall: "round it up", proof: "tests" }, { id: "AC-2", when: "x", shall: "y", proof: "tests" }], unchanged: [], out_of_scope: [], profile: "feature" };
 const hash = specHash(spec);
 const at = "2026-11-17T10:00:00.000Z";
-const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "conversation", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, profile: "feature", unknown_axes: [], spec_hash: hash, spec_ready: true, approved_spec_hash: hash };
+const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "conversation", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, repo: null, profile: "feature", unknown_axes: [], spec_hash: hash, spec_ready: true, approved_spec_hash: hash };
 const turns: ChatTurn[] = [{ seq: 0, at, kind: "spec", spec, hash, ready: true, unknown: [], untestable: [] }];
 const OH = `sha256:${"e".repeat(64)}`;
 const oracle = (o: Partial<OracleView>): OracleView => ({ id: "o_x", status: "building", spec_hash: hash, oracle_hash: null, problems: [], red_on_base: [], tests: 0, ...o });

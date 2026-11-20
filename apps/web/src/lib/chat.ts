@@ -169,3 +169,12 @@ export function showChat<C extends { conversation: { phase: string }; job?: unkn
   if (!chat) return null;
   return chat.conversation.phase === "conversation" || chat.job ? chat : null;
 }
+
+/** The project the task box shows: an open conversation's own project (live run 20.11), else the first one. */
+export function boxRepo(projects: readonly { id: string }[], chatRepo: string | null | undefined): string {
+  return chatRepo && projects.some((p) => p.id === chatRepo) ? chatRepo : (projects[0]?.id ?? "");
+}
+/** Enter sends the message; Shift+Enter makes a new line; Enter while an IME composes a word is not a send. */
+export function sendsOnEnter(e: { key: string; shiftKey: boolean; isComposing: boolean }): boolean {
+  return e.key === "Enter" && !e.shiftKey && !e.isComposing;
+}

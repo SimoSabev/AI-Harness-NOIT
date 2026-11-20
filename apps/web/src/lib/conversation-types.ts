@@ -13,6 +13,8 @@ export interface ConversationRow {
   budget_usd: number;
   error: string | null;
   task_id: string | null;
+  /** the project the conversation is about (null: none chosen) */
+  repo: string | null;
   /** D-533: the derived profile, the axes still unknown, the proposed spec's hash and the approved one */
   profile: TaskProfileId | null;
   unknown_axes: AxisName[] | null;

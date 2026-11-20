@@ -11,7 +11,7 @@ import type { JobActions } from "./job-card";
 // who may approve. Never a test's name or content (the view has none).
 vi.mock("../i18n/client", () => ({ useT: () => Object.assign((k: string, p?: Record<string, string>) => (p ? `${k}(${Object.values(p).join("|")})` : k), { lang: "en" }) }));
 
-const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "work", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, profile: "feature", unknown_axes: [], spec_hash: null, spec_ready: true, approved_spec_hash: null, purpose: "task", project_approved: false };
+const row: ConversationRow = { id: "c_x", agent: "claude", model: null, phase: "work", status: "idle", usd: 0, budget_usd: 0.5, error: null, task_id: null, repo: null, profile: "feature", unknown_axes: [], spec_hash: null, spec_ready: true, approved_spec_hash: null, purpose: "task", project_approved: false };
 type UnitIn = Omit<JobView["units"][number], "wave" | "pilot" | "copy"> & Partial<Pick<JobView["units"][number], "wave" | "pilot" | "copy">>;
 const strategy: JobView["strategy"] = { profile: "feature", mode: "single", waves: 1, pilot: null, roles: [{ role: "planner", agent: "claude", model: null }, { role: "writer", agent: "claude", model: null }, { role: "advisor", agent: "claude", model: null }], reasons: ["job.why.single", "job.why.fresh"] };
 const job = (o: Omit<Partial<JobView>, "units"> & { units?: UnitIn[] }): JobView => {
