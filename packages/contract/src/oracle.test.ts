@@ -80,6 +80,10 @@ describe("a long spec still reaches the oracle agent whole (live test 20.11)", (
     for (let k = 1; k <= 12; k++) expect(t).toContain(`\nAC-${k}: `);
     for (let k = 1; k <= 9; k++) expect(t).toContain(`\nU-${k}: `);
     expect(oracleTaskText(spec)).not.toContain("…");
+    // D-571: a rebuild note takes room; a smaller limit still keeps every id (live test 21.11 lost U-7 and U-8)
+    const small = oracleTaskText(big, 3200);
+    expect(small.length).toBeLessThanOrEqual(3200);
+    for (let k = 1; k <= 9; k++) expect(small).toContain(`\nU-${k}: `);
   });
 });
 

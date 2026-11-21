@@ -40,7 +40,7 @@ export function withApi(text: string, api: readonly string[], max: number = CHAT
 }
 
 /** the oracle agent's task text: tests only, one tag per test, only in __hidden__ folders the runner finds (≤ 4000 chars) */
-export function oracleTaskText(s: Spec): string {
+export function oracleTaskText(s: Spec, max: number = CHAT_TEXT_MAX): string {
   const head: string[] = [
     "Write hidden acceptance tests for the spec below. Do not implement anything.",
     `Write only new test files (*.spec.ts or *.test.ts) and put them in a ${HIDDEN_SEGMENT} folder inside a directory the project's test runner already discovers: look at the test config (e.g. vitest.workspace / vitest.config / jest config / the package test scripts); in a monorepo that is usually inside a package, e.g. packages/<name>/test/${HIDDEN_SEGMENT}/. Do not change any other file.`,
@@ -62,8 +62,8 @@ export function oracleTaskText(s: Spec): string {
   // live test 20.11: a long spec was cut at its end, so the last unchanged behaviors never reached the agent; now every
   // line keeps its id and long lines are shortened evenly until the whole text fits the task
   let text = render(null);
-  for (let cut = 400; text.length > CHAT_TEXT_MAX && cut >= 20; cut -= 10) text = render(cut);
-  return text.slice(0, CHAT_TEXT_MAX);
+  for (let cut = 400; text.length > max && cut >= 20; cut -= 10) text = render(cut);
+  return text.slice(0, max);
 }
 
 /** building → the oracle agent runs; not_ready → the result lists why; ready → a person may approve; failed → no output */
