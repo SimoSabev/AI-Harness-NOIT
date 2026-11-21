@@ -552,3 +552,19 @@ describe("a unit unsure only about what the final check decides lands (live test
     expect(us[1]?.status).not.toBe("passed");
   });
 });
+
+describe("a unit cut off by the machine is built again, not parked (live test 21.11)", () => {
+  it("a unit task stopped as runner_offline or infra:* starts again as a fresh task; the job keeps going", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    const first = (await s.units())[0]!;
+    await s.db.query("update public.tasks set state = 'BLOCKED', wait_reason = 'runner_offline' where id = $1", [first.task_id]);
+    await s.db.query("update public.job_units set status = 'blocked' where job_id = 'j_t1' and unit_id = 'u1'");
+    await jobTick(s.jd);
+    const u = (await s.units())[0]!;
+    expect(u).toMatchObject({ status: "running", relands: 1 });
+    expect(u.task_id).not.toBe(first.task_id);
+    expect((await s.job()).status).toBe("running");
+  });
+});

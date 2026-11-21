@@ -1610,6 +1610,7 @@ export const en = {
   "project.brief.approved": "Approved: every task of this project starts from it.",
   "project.brief.failed": "Not approved. Look again.",
   "job.strategy.profile": "Profile",
+  "job.strategy.planning": "The planner is splitting the work into units and choosing one writer or a team…",
   "job.strategy.mode": "Team",
   "job.strategy.single": "One writer, unit by unit",
   "job.strategy.waves": "Writers in parallel, {n} wave(s)",

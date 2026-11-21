@@ -11,6 +11,8 @@ const GATE_TONE: Record<GateStatus, string> = { pass: "text-ok", fail: "text-bad
 
 export function JobStrategy({ job, t }: { job: JobView; t: T }) {
   const s = job.strategy;
+  // live test 20.11: before the planner is done the plan is not known yet; say so instead of a default "one writer"
+  if (job.status === "planning") return <p className="mt-2 text-xs text-mute">{t("job.strategy.planning")}</p>;
   return (
     <div className="mt-2 space-y-2">
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">

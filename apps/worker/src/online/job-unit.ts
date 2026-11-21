@@ -72,6 +72,9 @@ export async function settleUnit(d: JobDeps, j: JobRow, spec: Spec, mode: JobMod
   if (!tasks) return u;
   const last = tasks.find((t) => t.id === u.task_id) ?? tasks[0];
   if (mode === "waves" && ids.length === 1 && last?.state === "BLOCKED" && (last.wait_reason ?? "").startsWith("job_branch_") && u.relands < RELAND_MAX) return reland(d.db, j, u, last.wait_reason ?? "");
+  // live test 21.11: a unit cut off by the machine (the worker restarted, the sandbox failed) did not fail; build it again
+  const cutOff = (w: string) => w === "runner_offline" || w.startsWith("infra:");
+  if (ids.length === 1 && last?.state === "BLOCKED" && cutOff(last.wait_reason ?? "") && u.relands < RELAND_MAX + 2) return reland(d.db, j, u, last.wait_reason ?? "");
   if (u.rescues < RESCUE_MAX && tasks.some((t) => t.last_result === "FAILED")) {
     const r = await rescue(d, j, spec, u, units);
     if (r) return r;

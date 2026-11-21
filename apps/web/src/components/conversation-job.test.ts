@@ -92,4 +92,9 @@ describe("bring into my folder (D-540)", () => {
     const html = await render({ job: job({ strategy: { ...strategy, mode: "waves", waves: 2, pilot: { units: 1, state: "running" } }, units: [{ id: "u1", title: "a", criteria: ["AC-1"], status: "running", result: null, failing: [], task_id: "t_a", wave: 1, pilot: true, copy: { task: "t_a", attempt: 2, state: "RUNNING" } }] }) });
     for (const k of ["job.strategy.waves(2)", "job.strategy.pilotRunning(1)", "job.role.planner", "job.why.single", "job.unit.wave(2)", "job.unit.pilot", "job.unit.copy(t_a|2|RUNNING)", "job.gates.title", "job.gate.D5.hidden", "job.gateStatus.pending"]) expect(html).toContain(k);
   });
+  it("while the planner works the card says so, not a default team (live test 20.11)", async () => {
+    const html = await render({ job: job({ status: "planning", units: [] }) });
+    expect(html).toContain("job.strategy.planning");
+    expect(html).not.toContain("job.strategy.single");
+  });
 });

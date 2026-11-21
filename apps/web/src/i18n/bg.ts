@@ -1586,6 +1586,7 @@ export const bg: Record<Key, string> = {
   "project.brief.approved": "Одобрено: всяка задача на проекта тръгва от това.",
   "project.brief.failed": "Не е одобрено. Погледни пак.",
   "job.strategy.profile": "Профил",
+  "job.strategy.planning": "Планерът разделя работата на единици и избира един писател или екип…",
   "job.strategy.mode": "Екип",
   "job.strategy.single": "Един писател, единица по единица",
   "job.strategy.waves": "Писатели паралелно, {n} вълни",
