@@ -20,7 +20,7 @@ import type { Ask } from "@mandat/profile";
 import { NPM_PREFIX_ROUTE, installMcp, mcpNames, sidecarStatus, startResearchSidecar, startSidecar, stopSidecars } from "./mcp-sidecar.js";
 import { cheatEvidence } from "./cheat.js";
 import { seedFiles, seedHarness } from "./harness-seed.js";
-import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, subscriptionAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario } from "@mandat/agents";
+import { claudeAdapter, codexAdapter, fakeAdapter, geminiAdapter, subscriptionAdapter, fakeCodexAdapter, isFakeCodexScenario, isFakeScenario, subscriptionLimit } from "@mandat/agents";
 import type { AgentAdapter, FakeCodexScenario, FakeScenario } from "@mandat/agents";
 import { channelFor } from "@mandat/channels";
 import type { Channel, TaskUsage } from "@mandat/channels";
@@ -328,6 +328,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let gate: RunGate | undefined;
     let channel: Channel | undefined;
     let usage: TaskUsage = ZERO_USAGE;
+    let streamLimit: TaskUsage["limit"] = null;
     let agentExit: number | null = null;
     let exportResult: ChangesetExport | null = null;
     let diffPatch: Buffer | null = null;
@@ -608,6 +609,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
               try {
                 const j: unknown = JSON.parse(line);
                 row = j !== null && typeof j === "object" ? (j as object) : { raw: line };
+                // D-567: a subscription's own limit (rate_limit_event rejected) is a limit, not an empty change
+                streamLimit = subscriptionLimit(row, new Date().toISOString()) ?? streamLimit;
               } catch {
                 row = { raw: line };
               }
@@ -637,6 +640,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           if (usage.noTools && agentStop === null) agentStop = "no_tools";
         }
         if (loginProblem) usage = { ...usage, authFailed: true }; // D-295 → the task says "sign in again"
+        if (streamLimit && !usage.limit) usage = { ...usage, limit: streamLimit };
         w.raw("agent-exit.json", JSON.stringify({ exit: agentExit, timedOut: agentStop === "timeout" }) + "\n");
         // SH2-CX (D-312): Codex runs from a writable copy (CODEX_HOME); a changed config after the run = config_change → UNKNOWN
         const tampered: string[] = [];

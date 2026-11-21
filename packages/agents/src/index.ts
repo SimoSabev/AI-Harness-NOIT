@@ -4,6 +4,8 @@ export type { ClaudeArgvOptions, ClaudeControl } from "./claude/argv.js";
 export { HOOKS_DIR, sh2Settings } from "./claude/control-layer.js";
 export type { ClaudeSettings } from "./claude/control-layer.js";
 export { parseStreamLine } from "./claude/stream.js";
+export { subscriptionLimit } from "./claude/rate-limit.js";
+export type { StreamLimit } from "./claude/rate-limit.js";
 export { claudeAdapter } from "./claude/adapter.js";
 export { fakeAdapter } from "./fake/adapter.js";
 export { CODEX_HOME, buildCodexArgv } from "./codex/argv.js";
