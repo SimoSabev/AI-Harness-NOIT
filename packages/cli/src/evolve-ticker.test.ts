@@ -5,7 +5,7 @@ import { evolveTicker } from "./commands/worker.js";
 // D-530: profile evolution runs beside the worker's other ticks but never blocks them (a bench takes minutes): the tick
 // starts in the background, never twice at once, at most every 30 min; after an error it waits 6 hours; MANDAT_EVOLVE=0
 // turns it off.
-const empty: EvolveTick = { proposed: [], accepted: [], refused: [], rolledBack: [] };
+const empty: EvolveTick = { proposed: [], accepted: [], refused: [], rolledBack: [], ablated: [] };
 
 describe("evolve ticker (D-530)", () => {
   it("runs in the background, never overlapping, logs what changed, and waits after an error", async () => {

@@ -144,7 +144,7 @@ describe("migration sites (D-546)", () => {
 
 describe("sites for a person in the seal (D-546)", () => {
   it("each site a person must migrate is listed as not checked", () => {
-    const s = sealFor({ spec, specHash: `sha256:${"a".repeat(64)}`, oracleHash: `sha256:${"b".repeat(64)}`, verdict: "VERIFIED", head: "c".repeat(40), evidence: [], ledgerHead: null, sites: [{ file: "src/a.ts", category: "unit", unit: "u1" }, { file: "src/money.ts", category: "human" }] });
+    const s = sealFor({ spec, specHash: `sha256:${"a".repeat(64)}`, oracleHash: `sha256:${"b".repeat(64)}`, verdict: "VERIFIED", head: "c".repeat(40), evidence: [], ledgerHead: null, sites: [{ file: "src/a.ts", category: "unit" }, { file: "src/money.ts", category: "human" }] });
     expect(s.unchecked).toContain("src/money.ts: a migration site for a person");
     expect(s.unchecked.join(" ")).not.toContain("src/a.ts");
   });
