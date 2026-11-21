@@ -205,4 +205,13 @@ describe("the oracle's public API (D-566)", () => {
     await runDaemonOnce(s2.deps);
     expect(await oracleRow(s2.db)).toMatchObject({ status: "not_ready", problems: [{ kind: "no_api", id: "API.md" }] });
   });
+
+  it("D-571: a test that calls a new module's member API.md leaves out keeps the oracle not ready, one problem per name", async () => {
+    const o = ok("failed", "passed");
+    if (!o || !o.ok) throw new Error("fixture");
+    const gap = Buffer.from(`const C = () => import("../../src/cart");\nit("AC-1: x", async () => { const m = await C(); expect(m.discountCents(1)).toBe(0); m.applyCoupon(); });\n`);
+    const s = await setup({ ...o, tests: [{ path: "tests/__hidden__/cart.spec.ts", data: gap }, ...o.tests.slice(1)] });
+    await runDaemonOnce(s.deps);
+    expect(await oracleRow(s.db)).toMatchObject({ status: "not_ready", problems: [{ kind: "no_api", id: "applyCoupon" }] });
+  });
 });
