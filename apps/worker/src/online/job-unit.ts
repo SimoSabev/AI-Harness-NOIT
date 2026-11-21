@@ -6,6 +6,7 @@ import { appendLedgerOnline } from "@mandat/ledger";
 import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import type { JobDeps } from "./job.js";
+import { oracleApi } from "./job.js";
 import { selfMoveOf } from "./self-finish.js";
 
 // D-541/D-542 (М2 Х6): one unit of a running job, settled on each tick. A unit whose tasks still work waits; one that
@@ -115,7 +116,9 @@ async function rescue(d: JobDeps, j: JobRow, spec: Spec, u: UnitRow, units: read
   const base = u.pilot ? text : withPlaybook(text, j.playbook);
   const ids = Array.from({ length: RESCUE_TRIES }, (_, n) => taskIdOf(j.id, `${u.ord}x${rescues}${String.fromCharCode(97 + n)}`));
   // one attempt each: the tries are the retries now (self-finish does not multiply them)
-  for (const [n, id] of ids.entries()) await insertTask(d.db, j, { id, text: rescueTaskText(base, advice, n), unit: u.unit_id, role: "unit", attemptsMax: 1 });
+  // D-571: a rescue try writes to the same API the first attempt had (the oracle's API.md)
+  const api = await oracleApi(d.db, j.oracle_hash);
+  for (const [n, id] of ids.entries()) await insertTask(d.db, j, { id, text: rescueTaskText(base, advice, n, api), unit: u.unit_id, role: "unit", attemptsMax: 1 });
   await inTransaction(d.db, async (tx) => {
     await tx.query("update public.job_units set status = 'running', task_id = $3, tries = $4::jsonb, rescues = $5, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, ids[0], JSON.stringify(ids), rescues]);
     // ids and counts only: never the advice (model text) or a criterion's words

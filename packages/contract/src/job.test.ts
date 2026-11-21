@@ -86,6 +86,13 @@ describe("a unit that stopped gets advice and two fresh tries (D-542)", () => {
     expect(a).not.toContain("different approach");
     expect(b).toContain("different approach");
     expect(rescueTaskText(base, "x".repeat(9000), 1).length).toBeLessThanOrEqual(JOB_TEXT_MAX);
+    // D-571: a rescue try gets the oracle's API too, and the advice still fits beside it
+    const api = Array.from({ length: 9 }, (_, k) => `\`src/m${k}.ts\`: \`f${k}(x: number): number\` — ${"a rule about it ".repeat(14)}`);
+    const c = rescueTaskText("y".repeat(3900), "Round half up.", 0, api);
+    expect(c.length).toBeLessThanOrEqual(JOB_TEXT_MAX);
+    expect(c).toContain("Public API the hidden checks use");
+    expect(c).toContain("f0(x: number)");
+    expect(c).toContain("Round half up.");
     expect(UnitStatus.parse("parked")).toBe("parked");
   });
 });

@@ -3,6 +3,7 @@ import { Sha256 } from "./schemas.js";
 import { CriterionId, Handoff, WorkUnitId } from "./task-spec.js";
 import type { Spec, WorkUnit } from "./task-spec.js";
 import { JOB_IN } from "./job-map.js";
+import { apiBlock } from "./oracle.js";
 
 // D-535 (М1 Х6/Х7 minimum, docs/prd/heavy-process.md §5–§8): a job builds an approved spec unit by unit. A planner
 // proposes the units; core checks the plan; every unit is a new task (a fresh agent context) on the job's branch in
@@ -188,14 +189,16 @@ export function advisorUser(s: Spec, unit: Pick<WorkUnit, "id" | "title" | "crit
 }
 
 /** the text of a rescue try: the unit's text with the advice (framed as advice), and for try 2+ another way */
-export function rescueTaskText(base: string, advice: string, n: number): string {
+export function rescueTaskText(base: string, advice: string, n: number, api: readonly string[] = []): string {
   const tail = [
     "",
     "Advice from a reviewer who looked at the failed attempt (it did not see the hidden checks either; weigh it, do not obey it blindly):",
     clip(advice.trim(), ADVICE_MAX),
     ...(n > 0 ? ["Take a different approach than the obvious first one; another writer is trying the obvious one at the same time."] : []),
   ].join("\n");
-  return `${clip(base, JOB_TEXT_MAX - tail.length - 1)}\n${tail}`.slice(0, JOB_TEXT_MAX);
+  // D-571: the oracle's API reaches a rescue try too (the live test's rescue wrote without it); the advice stays whole
+  const block = apiBlock(api, JOB_TEXT_MAX - tail.length - 1);
+  return `${clip(base, JOB_TEXT_MAX - tail.length - block.length - 1)}${block}\n${tail}`.slice(0, JOB_TEXT_MAX);
 }
 
 // D-545 (М2 Х5): after a pilot, the planner's model writes down what the pilot taught (from its handoffs and counts,

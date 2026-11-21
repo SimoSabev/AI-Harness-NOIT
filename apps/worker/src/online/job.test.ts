@@ -285,6 +285,10 @@ describe("units, final check, seal and delivery (D-535)", () => {
   });
   it("a failed unit is retried with the failing criterion ids only; at the cap the job parks with a question", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: d5fail("AC-1", "U-1") }) });
+    // D-571: a rescue try gets the oracle's API too (the live test's rescue wrote without it and guessed names)
+    const withApiM = OracleManifest.parse({ ...MANIFEST, api: ["`src/cart.ts`: `couponCents(code: string): number` — the coupon value"] });
+    await s.db.query("update public.oracles set manifest = $1::jsonb, oracle_hash = $2 where id = 'o_job1'", [JSON.stringify(withApiM), oracleHash(withApiM)]);
+    await s.db.query("update public.jobs set oracle_hash = $1 where id = 'j_t1'", [oracleHash(withApiM)]);
     await jobTick(s.jd);
     await jobTick(s.jd);
     await runDaemonOnce(s.deps);
@@ -314,6 +318,8 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(tries).toHaveLength(3);
     for (const t of tries.slice(1)) {
       expect(t.text).toContain("Advice from a reviewer");
+      expect(t.text).toContain("couponCents(code: string): number");
+      expect(t.text.length).toBeLessThanOrEqual(4000);
       expect(t.attempts_max).toBe(1);
     }
     expect(tries.filter((t) => t.text.includes("different approach"))).toHaveLength(1);

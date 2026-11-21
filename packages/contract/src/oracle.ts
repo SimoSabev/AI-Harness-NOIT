@@ -43,10 +43,23 @@ export function parseOracleApi(md: string): string[] {
 
 /** D-566: a writer's text with the API the hidden checks use, as a requirement (the tests themselves stay hidden) */
 export function withApi(text: string, api: readonly string[], max: number = CHAT_TEXT_MAX): string {
-  if (api.length === 0) return text;
+  const block = apiBlock(api, max);
+  if (block === "") return text;
   // the API always fits: the end of the text (the list of other criteria) gives way to it
-  const block = `\nPublic API the hidden checks use (provide exactly these exports):\n${api.map((a) => `- ${a}`).join("\n")}`.slice(0, Math.floor(max / 2));
   return `${text.slice(0, max - block.length)}${block}`;
+}
+
+/** D-571: the API block takes up to 3/4 of a text of `max` chars; it keeps whole items and says how many did not fit
+ *  (half the text cut the live test's 2349-char API in the middle of its fourth item) */
+export function apiBlock(api: readonly string[], max: number): string {
+  if (api.length === 0) return "";
+  const cap = Math.floor((max * 3) / 4);
+  const lines = api.map((a) => `- ${a}`);
+  const render = (k: number): string =>
+    ["\nPublic API the hidden checks use (provide exactly these exports):", ...lines.slice(0, k), ...(k < lines.length ? [`- … ${lines.length - k} more item(s) did not fit`] : [])].join("\n");
+  let k = lines.length;
+  while (k > 0 && render(k).length > cap) k--;
+  return render(k).slice(0, cap);
 }
 
 /** the oracle agent's task text: tests only, one tag per test, only in __hidden__ folders the runner finds (≤ 4000 chars) */

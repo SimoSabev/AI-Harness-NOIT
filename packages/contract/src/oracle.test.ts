@@ -132,4 +132,17 @@ describe("withApi fits the task (D-566)", () => {
     expect(t.length).toBeLessThanOrEqual(4000);
     expect(t).toContain("- `src/a.ts`: `f(): void`");
   });
+  it("D-571: an API of 2349 chars (the live test) fits whole; a longer one keeps whole items and says how many did not fit", () => {
+    const item = (k: number, n: number) => `\`src/m${k}.ts\`: \`f${k}()\` ${"r".repeat(n)}`;
+    const live = Array.from({ length: 9 }, (_, k) => item(k, 240));
+    const t = withApi("x".repeat(3990), live);
+    expect(t.length).toBeLessThanOrEqual(4000);
+    for (let k = 0; k < 9; k++) expect(t).toContain(`f${k}()`);
+    const big = Array.from({ length: 20 }, (_, k) => item(k, 300));
+    const u = withApi("x".repeat(3990), big);
+    expect(u.length).toBeLessThanOrEqual(4000);
+    expect(u).toMatch(/- … \d+ more item\(s\) did not fit/);
+    const kept = u.split("\n").filter((l) => l.startsWith("- `src/"));
+    for (const l of kept) expect(l.endsWith("r")).toBe(true);
+  });
 });
