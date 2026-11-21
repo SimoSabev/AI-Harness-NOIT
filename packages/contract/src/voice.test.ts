@@ -6,7 +6,7 @@ import { VOICE_TOOLS, VoiceProviderId, VoiceToolCall, voiceToolNames } from "./v
 describe("the voice's tools (D-556)", () => {
   it("has the actions Simo asked for: screens, what waits, projects, tasks, conversations, steering a running agent", () => {
     expect(voiceToolNames()).toEqual([
-      "open_screen", "whats_waiting", "list_projects", "task_status", "start_conversation", "send_message", "start_work", "steer_agent", "describe_screen",
+      "open_screen", "whats_waiting", "list_projects", "task_status", "start_conversation", "start_project_interview", "send_message", "start_work", "steer_agent", "describe_screen",
     ]);
   });
 

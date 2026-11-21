@@ -53,6 +53,14 @@ export async function runVoiceTool(tool: string, args: unknown, d: VoiceDeps): P
       d.go(`/?chat=${id}`);
       return `Started conversation ${id}. The harness asks its questions on the screen.`;
     }
+    case "start_project_interview": {
+      // D-564: the interview of the whole project (D-557); Jarvis starts it, the brief is approved by the person on the screen
+      const r = await d.post("/api/conversations", { ...chat(call.args.text), repo: call.args.project_id, purpose: "project" });
+      const id = typeof r.body.id === "string" ? r.body.id : null;
+      if (failed(r) || !id) return failed(r) ?? "Failed: no conversation.";
+      d.go(`/?chat=${id}`);
+      return `Started the project interview ${id}. The harness asks about the project on the screen; the person approves the brief there.`;
+    }
     case "send_message": {
       const r = await d.post("/api/conversations", chat(call.args.text, call.args.conversation_id));
       return failed(r) ?? "Sent the answer.";

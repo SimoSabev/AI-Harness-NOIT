@@ -58,6 +58,15 @@ describe("Jarvis's tools in the browser (D-556)", () => {
     expect(x.sent[0]?.body).toEqual({ conversation: "c_new", text: "Да, само за админи", agent: "claude", model: "claude-sonnet-5-5" });
   });
 
+  it("start_project_interview opens the interview of the project (purpose project); approving its brief stays with the person", async () => {
+    const x = deps();
+    const r = await runVoiceTool("start_project_interview", { project_id: "d0000000-0000-4000-8000-0000000000c1", text: "Пекарна с онлайн поръчки" }, x.d);
+    expect(x.sent).toEqual([{ method: "POST", url: "/api/conversations", body: { text: "Пекарна с онлайн поръчки", agent: "claude", model: "claude-sonnet-5-5", repo: "d0000000-0000-4000-8000-0000000000c1", purpose: "project" } }]);
+    expect(x.went).toEqual(["/?chat=c_new"]);
+    expect(r).toMatch(/c_new/);
+    expect(await runVoiceTool("start_project_interview", { text: "без проект" }, deps().d)).toMatch(/bad arguments/);
+  });
+
   it("describe_screen reads the visible page, cut and framed as data", async () => {
     const r = await runVoiceTool("describe_screen", {}, deps({ screenText: () => "x".repeat(10_000) }).d);
     expect(r.startsWith("<data>")).toBe(true);
