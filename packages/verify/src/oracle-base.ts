@@ -70,7 +70,7 @@ export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { dif
   let tests: { path: string; data: Buffer }[];
   let problems: OracleProblem[];
   let api: string | undefined;
-  let baseFiles: string[] = [];
+  let baseFiles: string[];
   try {
     if (i.diffPatch.length > 0) {
       const ap = await head.git.run(["apply", "--index", "--binary", "--whitespace=nowarn", "-"], { cwd: head.dir, input: i.diffPatch });
