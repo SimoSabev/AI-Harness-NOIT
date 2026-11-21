@@ -88,6 +88,8 @@ describe("the oracle fixes the public API of the new code (D-566, live test 21.1
     const t = oracleTaskText(spec);
     expect(t).toContain("API.md");
     expect(t).toMatch(/never discover names/i);
+    // live test 21.11: a top-level import of a module that does not exist yet fails the whole file on the current code
+    expect(t).toContain("await import(");
   });
   it("API.md lines become the manifest's api: only '- ' lines, trimmed, bounded", () => {
     const md = "# API\n- `src/giftcards/store.ts`: `createGiftCard(code: string, balanceCents: number): void` — adds a card\nnot a line\n-   `src/loyalty/store.ts`: `pointsBalance(phone: string): number`  \n" + Array.from({ length: 80 }, (_, k) => `- line ${k}`).join("\n");
