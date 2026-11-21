@@ -227,6 +227,18 @@ describe("the oracle in the web (D-534)", () => {
     expect(f.oracle_required).toBe(true);
     expect(f.oracle).toMatchObject({ id: b.body.id, status: "building", spec_hash: hash, oracle_hash: null, tests: 0 });
   });
+  it("D-571: building again after a not-ready oracle tells the agent which names its last API.md left out", async () => {
+    const id = await proposed(known);
+    const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
+    await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
+    const first = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    await asService(db, (sql) => sql.query("update public.oracles set status = 'not_ready', problems = $2::jsonb where id = $1", [first.body.id, JSON.stringify([{ kind: "no_api", id: "checkoutOrder" }, { kind: "no_api", id: "placeOrderRedeeming" }, { kind: "green_on_base", id: "AC-1" }])]));
+    const again = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    const text = (await asService(db, (sql) => sql.query<{ text: string }>("select text from public.tasks where id = $1", [again.body.task_id]))).rows[0]!.text;
+    expect(text).toContain("checkoutOrder, placeOrderRedeeming");
+    expect(text).toContain("green_on_base: AC-1");
+    expect(text.length).toBeLessThanOrEqual(4000);
+  });
   it("Start work is blocked without an approved oracle when the plan has hidden tests (also while it is only ready)", async () => {
     const { id, hash } = await approvedSpec();
     const before = await tasks();

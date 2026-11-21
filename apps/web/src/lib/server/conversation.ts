@@ -132,6 +132,21 @@ async function latestOracle(db: Db, id: string, hash: string): Promise<OracleDbR
   return (await asService(db, (sql) => sql.query<OracleDbRow>(LATEST_ORACLE, [id, hash]))).rows[0] ?? null;
 }
 
+/** D-571: a rebuild after a not-ready oracle names what was wrong last time; the note always fits, the text gives way */
+function withLastProblems(text: string, problems: unknown): string {
+  const p = OracleProblem.array().safeParse(problems);
+  if (!p.success || p.data.length === 0) return text;
+  const names = p.data.filter((x) => x.kind === "no_api" && x.id !== "API.md").map((x) => x.id);
+  const other = p.data.filter((x) => x.kind !== "no_api" || x.id === "API.md").map((x) => `${x.kind}: ${x.id}`);
+  const lines = [
+    "Your last attempt was not accepted.",
+    ...(names.length > 0 ? [`Its tests used names API.md did not list: ${names.join(", ")}. List every one of them in API.md this time.`] : []),
+    ...(other.length > 0 ? [`Other problems: ${other.join("; ")}.`] : []),
+  ];
+  const note = `\n\n${lines.join("\n")}`.slice(0, 1200);
+  return `${text.slice(0, CHAT_TEXT_MAX - note.length)}${note}`;
+}
+
 /** D-534: "Build oracle": a person starts a separate agent task that writes the hidden acceptance tests of the approved spec */
 export async function buildOracle(db: Db, o: { uid: string; org: string; id: string }): Promise<Result> {
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
@@ -144,7 +159,7 @@ export async function buildOracle(db: Db, o: { uid: string; org: string; id: str
   if (last?.status === "building") return err(409, "oracle_building");
   if (last?.status === "approved") return err(409, "oracle_approved");
   const hash = c.spec.hash;
-  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTaskText(c.spec.spec), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
+  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: withLastProblems(oracleTaskText(c.spec.spec), last?.status === "not_ready" ? last.problems : null), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
   if (r.status !== 201) return r;
   const oid = `o_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
   await asService(db, (sql) => sql.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, task_id, created_by) select $1, $2::uuid, t.repo_id, $3, $4, t.id, $6::uuid from public.tasks t where t.id = $5", [oid, o.org, o.id, hash, r.body.id, o.uid]));
