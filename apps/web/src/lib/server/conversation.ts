@@ -132,6 +132,11 @@ async function latestOracle(db: Db, id: string, hash: string): Promise<OracleDbR
   return (await asService(db, (sql) => sql.query<OracleDbRow>(LATEST_ORACLE, [id, hash]))).rows[0] ?? null;
 }
 
+/** D-571: the problems of the latest not-ready oracle of this spec (a failed attempt after it does not hide them) */
+async function lastNotReadyProblems(db: Db, id: string, hash: string): Promise<unknown> {
+  return (await asService(db, (sql) => sql.query<{ problems: unknown }>("select problems from public.oracles where conversation_id = $1 and spec_hash = $2 and status = 'not_ready' order by created_at desc, id desc limit 1", [id, hash]))).rows[0]?.problems ?? null;
+}
+
 /** D-571: a rebuild after a not-ready oracle names what was wrong last time; the note always fits, the text gives way */
 function withLastProblems(text: string, problems: unknown): string {
   const p = OracleProblem.array().safeParse(problems);
@@ -159,7 +164,7 @@ export async function buildOracle(db: Db, o: { uid: string; org: string; id: str
   if (last?.status === "building") return err(409, "oracle_building");
   if (last?.status === "approved") return err(409, "oracle_approved");
   const hash = c.spec.hash;
-  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: withLastProblems(oracleTaskText(c.spec.spec), last?.status === "not_ready" ? last.problems : null), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
+  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: withLastProblems(oracleTaskText(c.spec.spec), await lastNotReadyProblems(db, o.id, hash)), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
   if (r.status !== 201) return r;
   const oid = `o_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
   await asService(db, (sql) => sql.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, task_id, created_by) select $1, $2::uuid, t.repo_id, $3, $4, t.id, $6::uuid from public.tasks t where t.id = $5", [oid, o.org, o.id, hash, r.body.id, o.uid]));

@@ -233,8 +233,11 @@ describe("the oracle in the web (D-534)", () => {
     await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
     const first = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
     await asService(db, (sql) => sql.query("update public.oracles set status = 'not_ready', problems = $2::jsonb where id = $1", [first.body.id, JSON.stringify([{ kind: "no_api", id: "checkoutOrder" }, { kind: "no_api", id: "placeOrderRedeeming" }, { kind: "green_on_base", id: "AC-1" }])]));
+    // an attempt that failed in between (the agent stopped) does not lose the note
+    const failed = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    await asService(db, (sql) => sql.query("update public.oracles set status = 'failed', problems = $2::jsonb where id = $1", [failed.body.id, JSON.stringify([{ kind: "not_run", id: "agent_exit_1" }])]));
     const again = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
-    const text = (await asService(db, (sql) => sql.query<{ text: string }>("select text from public.tasks where id = $1", [again.body.task_id]))).rows[0]!.text;
+    const text =(await asService(db, (sql) => sql.query<{ text: string }>("select text from public.tasks where id = $1", [again.body.task_id]))).rows[0]!.text;
     expect(text).toContain("checkoutOrder, placeOrderRedeeming");
     expect(text).toContain("green_on_base: AC-1");
     expect(text.length).toBeLessThanOrEqual(4000);
