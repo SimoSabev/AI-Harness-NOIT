@@ -17,6 +17,15 @@ import type { BootOptions } from "./boot.js";
 import { VoiceError, ensureVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
 import type { VoiceAgentState } from "./voice-upstream.js";
 
+/** D-556: the agent made for the person's key (no key inside); a missing or broken file is no agent yet */
+function readVoiceState(file: string): VoiceAgentState | null {
+  try {
+    return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as VoiceAgentState) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const PROXY_VERSION = "0.1.0";
 const INFERENCE_PATHS = new Set(["/v1/messages", "/v1/messages/count_tokens", "/v1/responses"]);
 /** D-424: the Gemini API methods Gemini CLI calls; the model is in the path, the only query is alt=sse */
@@ -420,12 +429,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
   const voiceAdmin = async (op: "agent" | "session", body: Buffer | null): Promise<{ status: number; body: Record<string, string> }> => {
     const key = voiceKeys.elevenlabs;
     if (!key) return { status: 409, body: { error: "voice_not_configured" } };
-    let prev: VoiceAgentState | null = null;
-    try {
-      prev = existsSync(voiceFile) ? (JSON.parse(readFileSync(voiceFile, "utf8")) as VoiceAgentState) : null;
-    } catch {
-      prev = null;
-    }
+    const prev = readVoiceState(voiceFile);
     try {
       if (op === "session") {
         if (!prev) return { status: 409, body: { error: "voice_no_agent" } };
