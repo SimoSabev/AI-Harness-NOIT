@@ -136,12 +136,12 @@ export async function restackJobBranch(o: { mirror: string; ref: string; base: s
         // the commit goes into the mirror under a scratch ref, then the branch moves from its old head only
         const tmpRef = `refs/mandat/restack/${o.ref.slice("mandat/".length)}`;
         if ((await git.run(["push", "-q", "--force", "origin", `HEAD:${tmpRef}`], { cwd: w })).code !== 0) throw new Error("restackJobBranch: push failed");
-        const moved = await git.run(["update-ref", "-m", "mandat: job on the new main", `refs/heads/${o.ref}`, sha, o.head], { cwd: o.mirror });
+        const moved = await git.run(["update-ref", "-m", "mandat: job on the new main", `refs/heads/${o.ref}`, sha, o.head], { cwd: o.mirror }); // T3-7: sha (ref matches REF; sha and head match SHA)
         await git.run(["update-ref", "-d", tmpRef], { cwd: o.mirror });
         return moved.code === 0 ? { ok: true, base: main, head: sha } : { ok: false, reason: "moved" };
       }
     }
-    const moved = await git.run(["update-ref", "-m", "mandat: job on the new main", `refs/heads/${o.ref}`, sha, o.head], { cwd: o.mirror });
+    const moved = await git.run(["update-ref", "-m", "mandat: job on the new main", `refs/heads/${o.ref}`, sha, o.head], { cwd: o.mirror }); // T3-7: sha (ref matches REF; sha and head match SHA)
     return moved.code === 0 ? { ok: true, base: main, head: sha } : { ok: false, reason: "moved" };
   });
 }
