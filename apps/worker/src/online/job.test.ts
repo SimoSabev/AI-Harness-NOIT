@@ -604,6 +604,11 @@ describe("М4: the same spec by the process and by one agent (D-565)", () => {
     expect(rep?.single).toMatchObject({ verdict: "VERIFIED", hidden_passed: 3, hidden_total: 3, done: true });
     expect(rep?.process.usd).toBeGreaterThan(rep?.single.usd ?? 0);
     expect(rep?.comparison).toEqual({ winner: "single", why: "lower cost" });
+    // live test 21.11: a parked job has finished without a result; the comparison is not left pending
+    await s.db.query("update public.jobs set status = 'parked', final_task_id = null where id = 'j_t1'");
+    rep = await compareReport(s.db, { job: "j_t1" });
+    expect(rep?.process).toMatchObject({ verdict: null, hidden_passed: 0, done: true });
+    expect(rep?.comparison.winner).toBe("single");
   });
 });
 

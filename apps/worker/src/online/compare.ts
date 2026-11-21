@@ -49,7 +49,7 @@ export async function compareReport(db: Db, o: { job: string }): Promise<Compare
   // the process arm: its final check decides; its cost and time are every task of the job
   const p = await verdictOf(db, j.final_task_id);
   const pc = (await db.query<{ usd: number; minutes: number }>("select coalesce(sum(usd), 0)::float8 as usd, coalesce(sum(minutes), 0)::float8 as minutes from public.tasks where job_id = $1", [j.id])).rows[0];
-  const process: ArmResult = { verdict: p.verdict, hidden_passed: p.passed, hidden_total: p.total, usd: pc?.usd ?? 0, minutes: pc?.minutes ?? 0, done: ["sealed", "approved", "delivered", "parked"].includes(j.status) && p.verdict !== null };
+  const process: ArmResult = { verdict: p.verdict, hidden_passed: p.passed, hidden_total: p.total, usd: pc?.usd ?? 0, minutes: pc?.minutes ?? 0, done: j.status === "parked" || (["sealed", "approved", "delivered"].includes(j.status) && p.verdict !== null) }; // a parked job finished without a result (live test 21.11)
   const id = singleArmTask(j.id);
   const s = await verdictOf(db, id);
   const sc = (await db.query<{ usd: number; minutes: number }>("select coalesce(usd, 0)::float8 as usd, coalesce(minutes, 0)::float8 as minutes from public.tasks where id = $1", [id])).rows[0];
