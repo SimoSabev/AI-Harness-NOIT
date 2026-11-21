@@ -50,3 +50,4 @@ export type { CheatClass, CheatFinding } from "./d13.js";
 export { axesKey, savedProfileName } from "./saved-profile.js";
 export { compareArms, hiddenCounts } from "./compare.js";
 export type { ArmResult, Comparison } from "./compare.js";
+export { criteriaMet } from "./unit-done.js";

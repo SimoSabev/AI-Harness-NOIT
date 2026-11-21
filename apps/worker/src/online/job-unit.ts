@@ -1,6 +1,7 @@
 import { ADVISOR_SYSTEM, Handoff, JobRoles, PLAYBOOK_SYSTEM, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, playbookUser, rescueTaskText, unitTaskText, withFiles, withPlaybook } from "@mandat/contract";
 import { roleRoute } from "@mandat/contract";
 import type { JobRole, Spec } from "@mandat/contract";
+import { criteriaMet } from "@mandat/core";
 import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { inTransaction } from "./db.js";
@@ -76,11 +77,33 @@ export async function settleUnit(d: JobDeps, j: JobRow, spec: Spec, mode: JobMod
   // live test 21.11: a unit cut off by the machine (the worker restarted, the sandbox failed) did not fail; build it again
   const cutOff = (w: string) => w === "runner_offline" || w.startsWith("infra:");
   if (ids.length === 1 && last?.state === "BLOCKED" && cutOff(last.wait_reason ?? "") && u.relands < RELAND_MAX + 2) return reland(d.db, j, u, last.wait_reason ?? "");
+  const done = await alreadyDone(d.db, j, u, units);
+  if (done) return done;
   if (u.rescues < RESCUE_MAX && tasks.some((t) => t.last_result === "FAILED")) {
     const r = await rescue(d, j, spec, u, units);
     if (r) return r;
   }
   return parkUnit(d.db, j, u, last);
+}
+
+/** D-573 (live test 21.11): a unit whose agent changed nothing because an earlier unit already built it passes when the
+ *  hidden tests of the last landed unit meet all its criteria; the branch does not move, so nothing lands */
+async function alreadyDone(db: Db, j: JobRow, u: UnitRow, units: readonly UnitRow[]): Promise<UnitRow | null> {
+  const reasons = (await db.query<{ reasons: string[] }>("select reasons from public.verdicts where task_id = $1 order by created_at desc limit 1", [u.task_id])).rows[0]?.reasons ?? [];
+  if (reasons.length === 0 || !reasons.every((r) => r.startsWith("EXPORT:empty_change"))) return null;
+  const landed = units.filter((x) => x.status === "passed" && x.task_id).map((x) => x.task_id as string);
+  if (landed.length === 0) return null;
+  const d5 = (await db.query<{ status: string; data: unknown }>(
+    "select e.status, e.data from public.evidence e join public.verdicts v on v.id = e.verdict_id where v.task_id = any($1::text[]) and e.detector = 'D5.hidden' order by v.created_at desc limit 1",
+    [landed],
+  )).rows[0] ?? null;
+  if (!criteriaMet(u.criteria, d5)) return null;
+  const handoff = { done: `nothing new: ${u.criteria.join(", ")} already pass on the job branch (built by earlier units)`, deviations: [], risks: [] };
+  await inTransaction(db, async (tx) => {
+    await tx.query("update public.job_units set status = 'passed', handoff = $3::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, JSON.stringify(handoff)]);
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "unit_already_done", task_id: u.task_id, payload: { job: j.id, unit: u.unit_id, criteria: u.criteria } });
+  });
+  return { ...u, status: "passed", handoff };
 }
 
 async function reland(db: Db, j: JobRow, u: UnitRow, why: string): Promise<UnitRow> {

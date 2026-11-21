@@ -283,6 +283,35 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(j.status).toBe("parked");
     expect(j.question).toContain("main moved");
   });
+  it("D-573: a unit that changes nothing because an earlier unit already met its criteria passes; otherwise it still parks", async () => {
+    // u1 lands with every hidden test green (AC-2 too); u2's agent rightly changes nothing
+    const s = await setup({
+      plans: [GOOD_PLAN],
+      outcome: (c) => (c.task_id.endsWith("_0") ? { result: "VERIFIED", notes: handoff("did u1 and AC-2"), evidence: [ev("D5.hidden", "pass", { passed: 3, total: 3 })] } : { result: "UNKNOWN", reasons: ["EXPORT:empty_change:-"] }),
+    });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps); // u1 lands
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps); // u2: empty change
+    await jobTick(s.jd);
+    const us = await s.units();
+    expect(us[1]).toMatchObject({ status: "passed" });
+    expect((await s.job()).status).not.toBe("parked");
+    expect((await s.ledger("unit_already_done"))[0]).toMatchObject({ job: "j_t1", unit: "u2" });
+    // when the landed hidden tests still fail u2's criterion, the empty change parks as before
+    const t = await setup({
+      plans: [GOOD_PLAN],
+      outcome: (c) => (c.task_id.endsWith("_0") ? { result: "VERIFIED", notes: handoff("did u1"), evidence: d5fail("AC-2") } : { result: "UNKNOWN", reasons: ["EXPORT:empty_change:-"] }),
+    });
+    await jobTick(t.jd);
+    await jobTick(t.jd);
+    await runDaemonOnce(t.deps);
+    await jobTick(t.jd);
+    await runDaemonOnce(t.deps);
+    await jobTick(t.jd);
+    expect((await t.units())[1]?.status).toBe("parked");
+  });
   it("a failed unit is retried with the failing criterion ids only; at the cap the job parks with a question", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: d5fail("AC-1", "U-1") }) });
     // D-571: a rescue try gets the oracle's API too (the live test's rescue wrote without it and guessed names)
