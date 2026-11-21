@@ -161,7 +161,7 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
       {s === "not_ready" && oracle && (
         <div className="mt-1 text-warn">
           <p>{t("chat.oracle.notReady")}</p>
-          <ul className="list-disc pl-5 text-xs">{oracle.problems.map((p) => <li key={`${p.kind}:${p.id}`}>{t(`chat.oracle.problem.${p.kind}` as Key, { id: p.id })}</li>)}</ul>
+          <ul className="list-disc pl-5 text-xs">{oracle.problems.map((p) => <li key={`${p.kind}:${p.id}`}>{t((p.kind === "no_api" && p.id !== "API.md" ? "chat.oracle.problem.no_api_name" : `chat.oracle.problem.${p.kind}`) as Key, { id: p.id })}</li>)}</ul>
         </div>
       )}
       {s === "ready" && oracle && <p className="mt-1">{t("chat.oracle.ready", { tests: String(oracle.tests) })}</p>}

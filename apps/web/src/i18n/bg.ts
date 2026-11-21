@@ -1669,6 +1669,7 @@ export const bg: Record<Key, string> = {
   "chat.oracle.problem.not_run": "не тръгна: {id}",
   "chat.oracle.problem.not_discovered": "тестовият инструмент не намери скритите тестове; сложи ги там, където инструментът на проекта ги търси (папка __hidden__ в директория, която той вече пуска)",
   "chat.oracle.problem.no_api": "оракулът не записа публичния интерфейс, който тества (API.md до тестовете); построй го отново",
+  "chat.oracle.problem.no_api_name": "тестовете ползват {id}, но API.md го няма (писателите получават само API.md); построй го отново",
   "chat.job": "Работа",
   "chat.job.status.planning": "Разделям работата на единици…",
   "chat.job.status.running": "Строя единица по единица. Всяка е нова задача и се проверява с оракула.",
