@@ -18,6 +18,7 @@ import { demoExportRepo, demoExternalPr, demoSeed, demoSpill } from "./commands/
 import { workerCommand } from "./commands/worker.js";
 import { researchAsk, researchDemo, researchEngine } from "./commands/research.js";
 import { tuiCommand } from "./commands/tui.js";
+import { compareCommand } from "./commands/compare.js";
 import { localCommand } from "./commands/local.js";
 import { accountsCommand, loginCliOf, loginCommand, logoutCommand } from "./commands/accounts.js";
 import { realDeps } from "./deps.js";
@@ -333,6 +334,20 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       const dbPort = Number(o.dbPort);
       if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
       code = await tuiCommand(io, { dbPort, once: Boolean(o.once) });
+    });
+  // М4 (D-565): the process against one agent on the same spec and hidden oracle
+  program
+    .command("compare <op>")
+    .description("М4: start | report — the same approved spec by the process (a job) and by one agent; scored by the hidden oracle")
+    .requiredOption("--job <id>", "the job (the process arm)")
+    .option("--db-port <port>", "the local Postgres port on 127.0.0.1", "54329")
+    .option("--json", "machine output")
+    .action(async (op: string, o: { job: string; dbPort: string; json?: boolean }) => {
+      if (op !== "start" && op !== "report") throw new MandatError("E_USAGE", "compare takes start or report");
+      if (!/^j_[a-z0-9_]{1,40}$/.test(o.job)) throw new MandatError("E_USAGE", "--job is a job id (j_...)");
+      const dbPort = Number(o.dbPort);
+      if (!Number.isInteger(dbPort) || dbPort < 1024 || dbPort > 65535) throw new MandatError("E_USAGE", "--db-port must be 1024..65535");
+      code = await compareCommand(io, { op, job: o.job, dbPort, json: Boolean(o.json) });
     });
   const demo = program.command("demo", DEV).description("demo data and scenes");
   demo

@@ -48,3 +48,5 @@ export { cheatFindings, d13Cheat, toolInputs } from "./d13.js";
 export { PERF_BUDGET, d14Perf } from "./d14.js";
 export type { CheatClass, CheatFinding } from "./d13.js";
 export { axesKey, savedProfileName } from "./saved-profile.js";
+export { compareArms, hiddenCounts } from "./compare.js";
+export type { ArmResult, Comparison } from "./compare.js";

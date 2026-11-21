@@ -36,9 +36,9 @@ export function d5Hidden(o: { hidden: HiddenResult[]; files: number; reportValid
   }
   if (o.hidden.length === 0) return { evidence: quiet(ev("D5.hidden", "unknown", `${o.files} hidden test file(s) did not run`, { files: o.files }, { cls: "not_run", id: String(o.files) })), security: [] };
   const failed = o.hidden.filter((h) => h.status === "failed");
-  if (failed.length === 0) return { evidence: quiet(ev("D5.hidden", "pass", `${o.hidden.length}/${o.hidden.length} hidden test(s) passed`, { passed: o.hidden.length })), security: [] };
+  if (failed.length === 0) return { evidence: quiet(ev("D5.hidden", "pass", `${o.hidden.length}/${o.hidden.length} hidden test(s) passed`, { passed: o.hidden.length, total: o.hidden.length })), security: [] };
   return {
-    evidence: quiet(ev("D5.hidden", "fail", `${failed.length} of ${o.hidden.length} hidden test(s) failed`, { failed: failed.map((h) => h.id).slice(0, 50) }, { cls: "hidden_fail", id: hiddenId((failed[0] as HiddenResult).id) })),
+    evidence: quiet(ev("D5.hidden", "fail", `${failed.length} of ${o.hidden.length} hidden test(s) failed`, { failed: failed.map((h) => h.id).slice(0, 50), passed: o.hidden.length - failed.length, total: o.hidden.length }, { cls: "hidden_fail", id: hiddenId((failed[0] as HiddenResult).id) })),
     security: [],
   };
 }

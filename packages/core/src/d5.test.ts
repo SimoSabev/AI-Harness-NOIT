@@ -19,7 +19,7 @@ describe("D5 hidden tests (E9б)", () => {
     expect(e).toMatchObject({ detector: "D5.hidden", status: "fail", agent_visible: false, signature: `D5:hidden_fail:${hiddenId("tests/__hidden__/cart.spec.ts > hidden > rounds down")}` });
     expect(e.signature).not.toContain("rounds");
     expect(e.summary).toBe("1 of 2 hidden test(s) failed");
-    expect(e.data).toEqual({ failed: ["tests/__hidden__/cart.spec.ts > hidden > rounds down"] });
+    expect(e.data).toEqual({ failed: ["tests/__hidden__/cart.spec.ts > hidden > rounds down"], passed: 1, total: 2 });
     expect(hiddenId("x")).toMatch(/^h[0-9a-f]{8}$/);
   });
   it("all hidden tests passed → pass; no report → unknown not_run", () => {

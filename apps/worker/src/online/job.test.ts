@@ -13,6 +13,7 @@ import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
 import { runDaemonOnce } from "./daemon.js";
 import type { DaemonDeps } from "./daemon.js";
 import { jobTick } from "./job.js";
+import { compareReport, startSingleArm } from "./compare.js";
 import type { JobDeps } from "./job.js";
 import { selfFinishTick } from "./self-finish.js";
 import { pgliteDb } from "./pglite-db.test-helper.js";
@@ -566,5 +567,36 @@ describe("a unit cut off by the machine is built again, not parked (live test 21
     expect(u).toMatchObject({ status: "running", relands: 1 });
     expect(u.task_id).not.toBe(first.task_id);
     expect((await s.job()).status).toBe("running");
+  });
+});
+
+describe("М4: the same spec by the process and by one agent (D-565)", () => {
+  it("the single arm is one task with the job's spec text, spec and oracle hashes; the report compares both arms by the hidden oracle", async () => {
+    const pass = [ev("D5.hidden", "pass", { passed: 3, total: 3 })];
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`), evidence: pass }) });
+    await jobTick(s.jd);
+    for (let k = 0; k < 2; k++) {
+      await jobTick(s.jd);
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    await jobTick(s.jd);
+    expect((await s.job()).status).toBe("sealed");
+    const r = await startSingleArm(s.db, { job: "j_t1" });
+    expect(r).toMatchObject({ ok: true, task: "t_cmp_t1" });
+    expect((await startSingleArm(s.db, { job: "j_t1" })).ok).toBe(false);
+    const t = (await s.db.query<{ text: string; spec_hash: string; oracle_hash: string; job_id: string | null }>("select text, spec_hash, oracle_hash, job_id from public.tasks where id = 't_cmp_t1'")).rows[0];
+    expect(t).toMatchObject({ spec_hash: SPEC, oracle_hash: ORACLE, job_id: null });
+    expect(t?.text).toContain("AC-2: WHEN a coupon is given");
+    let rep = await compareReport(s.db, { job: "j_t1" });
+    expect(rep?.comparison.winner).toBe("pending");
+    await runDaemonOnce(s.deps);
+    expect(s.runs.at(-1)?.hidden?.files).toHaveLength(3);
+    rep = await compareReport(s.db, { job: "j_t1" });
+    expect(rep?.process).toMatchObject({ verdict: "VERIFIED", hidden_passed: 3, hidden_total: 3, done: true });
+    expect(rep?.single).toMatchObject({ verdict: "VERIFIED", hidden_passed: 3, hidden_total: 3, done: true });
+    expect(rep?.process.usd).toBeGreaterThan(rep?.single.usd ?? 0);
+    expect(rep?.comparison).toEqual({ winner: "single", why: "lower cost" });
   });
 });

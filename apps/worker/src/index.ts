@@ -42,6 +42,8 @@ export type { SelfFinishTick } from "./online/self-finish.js";
 export { twinTick } from "./online/twin.js";
 export { repoFacts } from "./online/repo-facts.js";
 export { evolveTick, profileLineage } from "./online/evolve.js";
+export { compareReport, singleArmTask, startSingleArm } from "./online/compare.js";
+export type { CompareReport } from "./online/compare.js";
 export type { BenchRunner, BenchScore, EvolveTick } from "./online/evolve.js";
 export type { TwinTick } from "./online/twin.js";
 export { mcpHandlers, recordMcpBlocked, refOf, vetMcpServer } from "./online/mcp.js";
