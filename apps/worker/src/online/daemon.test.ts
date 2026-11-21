@@ -347,6 +347,24 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     expect(c).toMatchObject({ allowed_paths: ["src/**"], may_change_tests: false, risk_cap: 3, agent: "claude" });
     expect(() => contractForTask({ id: "t_x", type: "css", text: "x", agent: "claude" }, p.policy, "a".repeat(40))).toThrow(/task type/);
   });
+  it("live test 21.11 (D-569): a task whose processing throws stops on its own (BLOCKED worker_error); the worker goes on", async () => {
+    const s = await setup(0);
+    s.deps.run = () => Promise.reject(new Error("boom in the sandbox setup"));
+    expect(await runDaemonOnce(s.deps)).toBe("t_web_1");
+    const t = (await s.db.query<{ state: string; wait_reason: string }>("select state, wait_reason from public.tasks where id = 't_web_1'")).rows[0];
+    expect(t).toEqual({ state: "BLOCKED", wait_reason: "worker_error:boom in the sandbox setup" });
+    expect(await runDaemonOnce(s.deps)).toBeNull();
+  });
+  it("live test 21.11 (D-569): a task text near the limit plus a note still makes a contract; the note stays whole", async () => {
+    const { parseMandatYml } = await import("@mandat/contract");
+    const { readFileSync } = await import("node:fs");
+    const p = parseMandatYml(readFileSync(path.join(repoRoot, "fixtures/demo-shop/.mandat.yml"), "utf8"));
+    if (!p.ok) throw new Error(p.error);
+    const note = "Note from Mandat: attempt 2, the failing criteria are AC-3, AC-7.";
+    const c = contractForTask({ id: "t_x", type: "bugfix", text: "x".repeat(4000), agent: "claude" }, p.policy, "a".repeat(40), undefined, note);
+    expect(c.text.length).toBeLessThanOrEqual(4000);
+    expect(c.text.endsWith(note)).toBe(true);
+  });
   it("D-533: the approved spec's hash is sealed into the contract; a task without one keeps the old contract", async () => {
     const { parseMandatYml, parseContract } = await import("@mandat/contract");
     const { readFileSync } = await import("node:fs");

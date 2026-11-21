@@ -23,7 +23,7 @@ import type { RunTaskInput, RunTaskOutput } from "../run.js";
 import { loadChannels, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
 import { routeOf } from "./agent-route.js";
 import { ConnectionStore } from "@mandat/llm-proxy";
-import { inTransaction } from "./db.js";
+import { inTransaction, isDbConnectionError } from "./db.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 import { mainHead, rebaseOnto } from "./rebase.js";
@@ -104,13 +104,25 @@ function nightProfile(hp: HarnessProfile, forbid: readonly string[]): HarnessPro
 const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n").filter((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---"))).length;
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
+const CONTRACT_TEXT_MAX = 4000;
+/**
+ * live test 21.11 (D-569): the task text and its notes in the contract's 4000 chars. A retry note on a task already near
+ * the limit threw in sealContract and took the whole worker down; now the notes stay whole and the task text gives way.
+ */
+export function contractText(text: string, notes: readonly (string | null)[]): string {
+  const tail = notes.filter((x): x is string => Boolean(x)).join("\n\n");
+  if (tail === "") return text.slice(0, CONTRACT_TEXT_MAX);
+  const room = Math.max(0, CONTRACT_TEXT_MAX - tail.length - 2);
+  return `${text.slice(0, room)}\n\n${tail}`.slice(-CONTRACT_TEXT_MAX);
+}
+
 export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null; spec_hash?: string | null; kind?: "work" | "oracle"; oracle_hash?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = taskTypeOf(policy, t.type); // D-360: "free" has a default scope
   if (!tt) throw new Error(`task type ${t.type} not in the policy`);
   return sealContract({
-    task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: [t.text, note, t.replay ? `[mandat-replay: ${t.replay}]` : null].filter(Boolean).join("\n\n"), base_commit: baseSha, scan_facts_hash: null,
+    task_id: t.id, type: t.type, agent: t.agent === "codex" || t.agent.startsWith("fake-codex:") ? "codex" : "claude", text: contractText(t.text, [note, t.replay ? `[mandat-replay: ${t.replay}]` : null]), base_commit: baseSha, scan_facts_hash: null,
     // D-534: the oracle agent may write only tests; D-536: in __hidden__ folders at any depth (where the runner finds them)
     allowed_paths: t.kind === "oracle" ? [ORACLE_GLOB] : tt.allowed_paths, may_change_tests: t.kind === "oracle" ? true : tt.may_change_tests, must_pass: [], hidden_tests: null, risk_cap: policy.risk_classes[tt.risk_class]?.level_cap ?? 1,
     memory_hash: memoryHash, channel, security: { max_file_mb: policy.security.max_file_mb, max_diff_mb: policy.security.max_diff_mb, max_files: policy.security.max_files },
@@ -795,6 +807,12 @@ export async function runDaemonOnce(d: DaemonDeps): Promise<string | null> {
   PROCESSING.add(id);
   try {
     await processTask(d, id);
+  } catch (e) {
+    // live test 21.11 (D-569): one task's error stops that task, not the whole worker (a lost database still throws)
+    if (isDbConnectionError(e)) throw e;
+    const msg = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, " ").slice(0, 120);
+    d.log?.(`[daemon] ${id}: worker error: ${msg}`);
+    await d.db.query("update public.tasks set state = 'BLOCKED', wait_reason = $2, state_entered_at = now(), updated_at = now(), seq = seq + 1 where id = $1 and state not in ('CLOSED', 'BLOCKED', 'HELD', 'DELIVERED', 'OUTCOME')", [id, `worker_error:${msg}`]).catch(() => undefined);
   } finally {
     PROCESSING.delete(id);
   }
