@@ -57,7 +57,7 @@ export async function runOracleOnBase(i: OracleBaseInput): Promise<OracleBaseRes
 }
 
 export type OracleChangeResult =
-  | { ok: true; tests: { path: string; data: Buffer }[]; problems: OracleProblem[]; base: { results: HiddenResult[]; timedOut: boolean } | null; /** D-566: the API.md the oracle wrote */ api?: string }
+  | { ok: true; tests: { path: string; data: Buffer }[]; problems: OracleProblem[]; base: { results: HiddenResult[]; timedOut: boolean } | null; /** D-566: the API.md the oracle wrote */ api?: string; /** D-571: the base's files, so a check knows which modules are new */ baseFiles?: string[] }
   | { ok: false; code: string };
 
 /**
@@ -70,11 +70,14 @@ export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { dif
   let tests: { path: string; data: Buffer }[];
   let problems: OracleProblem[];
   let api: string | undefined;
+  let baseFiles: string[] = [];
   try {
     if (i.diffPatch.length > 0) {
       const ap = await head.git.run(["apply", "--index", "--binary", "--whitespace=nowarn", "-"], { cwd: head.dir, input: i.diffPatch });
       if (ap.code !== 0) return { ok: false, code: "E_ORACLE_APPLY" };
     }
+    const ls = await head.git.run(["ls-tree", "-r", "--name-only", "-z", i.baseSha], { cwd: head.dir });
+    baseFiles = ls.code === 0 ? ls.stdout.toString("utf8").split("\0").filter(Boolean).slice(0, 100_000) : [];
     const names = await head.git.run(["diff", "--cached", "--name-only", "-z", "--no-renames"], { cwd: head.dir });
     const paths = names.stdout.toString("utf8").split("\0").filter(Boolean);
     const c = oracleChange({ paths });
@@ -96,7 +99,7 @@ export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { dif
   } finally {
     removeTree(head.dir);
   }
-  const withApi = api !== undefined ? { api } : {};
+  const withApi = { ...(api !== undefined ? { api } : {}), baseFiles };
   if (problems.length > 0 || tests.length === 0) return { ok: true, tests, problems, base: null, ...withApi };
   const r = await runOracleOnBase({ ...i, tests: { dir: "", files: tests } });
   if (!r.ok) return r;

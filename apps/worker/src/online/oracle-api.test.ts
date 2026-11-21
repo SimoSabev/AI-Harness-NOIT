@@ -26,6 +26,17 @@ describe("apiGaps (D-571)", () => {
     expect(apiGaps(T(src), ["`src/g.ts`: `createStore()`", "`src/g.ts`: `makeCard()`"])).toEqual(["cardBalance", "payWithCard"]);
   });
 
+  it("skips modules that already exist on the base (live test 21.11: advance in src/orders/order.ts was flagged)", () => {
+    const src = [
+      'const O = () => import("../../src/orders/order");',
+      'const S = () => import("../../src/shop/shop");',
+      "const o = await O(); o.advance(x); const s = await S(); s.createShop(); s.payWithCard();",
+      'const { firstSlot } = await import("../../src/orders/delivery.js");',
+    ].join("\n");
+    const base = ["src/orders/order.ts", "src/orders/delivery.ts", "package.json"];
+    expect(apiGaps(T(src), ["`src/shop/shop.ts`: `createShop()`"], base)).toEqual(["payWithCard"]);
+  });
+
   it("is empty when API.md covers every name, and ignores static imports and other objects", () => {
     const src = ['import { placeOrder } from "../src/order";', 'const G = () => import("../src/g");', "const m = await G(); m.createStore(); order.total();"].join("\n");
     expect(apiGaps(T(src), ["`src/g.ts`: `createStore(): Store`"])).toEqual([]);

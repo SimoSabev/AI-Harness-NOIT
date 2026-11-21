@@ -50,7 +50,7 @@ export async function finishOracle(db: Db, o: { org: string; repo: string; taskI
   // D-566: the oracle must fix the public API it tests (its API.md), so writers build to it instead of a guess
   else if (parseOracleApi(r.api ?? "").length === 0) outcome = { status: "not_ready", oracle_hash: null, problems: [{ kind: "no_api", id: "API.md" }] };
   // D-571: every member a test calls on new code must be in API.md, or no writer can build to it
-  else if (apiGaps(r.tests, parseOracleApi(r.api ?? "")).length > 0) outcome = { status: "not_ready", oracle_hash: null, problems: apiGaps(r.tests, parseOracleApi(r.api ?? "")).slice(0, 50).map((id) => ({ kind: "no_api" as const, id: id.slice(0, 300) })) };
+  else if (apiGaps(r.tests, parseOracleApi(r.api ?? ""), r.baseFiles ?? []).length > 0) outcome = { status: "not_ready", oracle_hash: null, problems: apiGaps(r.tests, parseOracleApi(r.api ?? ""), r.baseFiles ?? []).slice(0, 50).map((id) => ({ kind: "no_api" as const, id: id.slice(0, 300) })) };
   else {
     const c = classifyRedOnBase({ spec: of.spec, results: r.base.timedOut ? null : r.base.results });
     files = [...r.tests].sort((a, b) => (a.path < b.path ? -1 : 1)).map((f) => ({ path: f.path, data: f.data.toString("base64") }));
