@@ -11,15 +11,18 @@ import { ev } from "./evidence.js";
  * The oracle agent's change: test files in a `__hidden__` folder at any depth are the tests (D-536: paths kept from the
  * repo root, where the project's runner finds them); anything else is a problem.
  */
-export function oracleChange(o: { paths: readonly string[] }): { tests: string[]; problems: OracleProblem[] } {
+export function oracleChange(o: { paths: readonly string[] }): { tests: string[]; problems: OracleProblem[]; api?: string } {
   const tests: string[] = [];
   const problems: OracleProblem[] = [];
+  let api: string | undefined;
   for (const p of [...o.paths].sort()) {
     if (isHiddenPath(p) && /\.(spec|test)\.[cm]?[jt]sx?$/.test(p)) tests.push(p);
+    // D-566: the API the tests use, written next to them (one file); never a test, never a problem
+    else if (isHiddenPath(p) && /(^|\/)API\.md$/.test(p) && api === undefined) api = p;
     else problems.push({ kind: "non_test_change", id: p.slice(0, 300) });
   }
   if (tests.length === 0) problems.push({ kind: "no_tests", id: "-" });
-  return { tests, problems };
+  return { tests, problems, ...(api ? { api } : {}) };
 }
 
 export interface RedOnBase {

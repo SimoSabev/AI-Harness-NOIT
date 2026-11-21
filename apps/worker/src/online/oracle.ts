@@ -1,4 +1,4 @@
-import { OracleManifest, Spec, jcs, oracleHash, sha256Tag } from "@mandat/contract";
+import { OracleManifest, Spec, jcs, oracleHash, parseOracleApi, sha256Tag } from "@mandat/contract";
 import type { OracleProblem, Sha256 } from "@mandat/contract";
 import { classifyRedOnBase } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
@@ -46,10 +46,12 @@ export async function finishOracle(db: Db, o: { org: string; repo: string; taskI
   };
   if (!r || !r.ok) outcome = { status: "failed", oracle_hash: null, problems: [{ kind: "not_run", id: (r && !r.ok ? r.code : why()).slice(0, 100) }] };
   else if (r.problems.length > 0 || r.base === null) outcome = { status: "not_ready", oracle_hash: null, problems: r.problems };
+  // D-566: the oracle must fix the public API it tests (its API.md), so writers build to it instead of a guess
+  else if (parseOracleApi(r.api ?? "").length === 0) outcome = { status: "not_ready", oracle_hash: null, problems: [{ kind: "no_api", id: "API.md" }] };
   else {
     const c = classifyRedOnBase({ spec: of.spec, results: r.base.timedOut ? null : r.base.results });
     files = [...r.tests].sort((a, b) => (a.path < b.path ? -1 : 1)).map((f) => ({ path: f.path, data: f.data.toString("base64") }));
-    manifest = OracleManifest.parse({ spec_hash: of.oracle.spec_hash, hidden_tests: [...r.tests].sort((a, b) => (a.path < b.path ? -1 : 1)).map((f) => ({ path: f.path, sha256: sha256Tag(f.data) })), red_on_base: c.red_on_base });
+    manifest = OracleManifest.parse({ spec_hash: of.oracle.spec_hash, api: parseOracleApi(r.api ?? ""), hidden_tests: [...r.tests].sort((a, b) => (a.path < b.path ? -1 : 1)).map((f) => ({ path: f.path, sha256: sha256Tag(f.data) })), red_on_base: c.red_on_base });
     outcome = { status: c.ready ? "ready" : "not_ready", oracle_hash: oracleHash(manifest), problems: c.problems };
   }
   await inTransaction(db, async (tx: SqlClient) => {

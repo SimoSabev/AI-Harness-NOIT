@@ -62,6 +62,8 @@ export const OracleManifest = z
     hidden_tests: z.array(z.object({ path: OraclePath, sha256: Sha256 }).strict()).max(500),
     differential: z.object({ reference: z.string().trim().min(1).max(500), command: z.string().trim().min(1).max(500) }).strict().optional(),
     e2e: z.array(Line).max(100).optional(),
+    /** D-566: the public API the hidden tests use (the oracle's API.md); the writers get it, never the tests */
+    api: z.array(z.string().trim().min(1).max(300)).max(60).optional(),
     red_on_base: z.array(z.object({ criterion_id: CriterionId, red: z.boolean() }).strict()).max(200),
     approved: z.object({ by: z.string().trim().min(1).max(100), at: Instant }).strict().optional(),
   })

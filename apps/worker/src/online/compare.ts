@@ -1,4 +1,5 @@
-import { Spec, specText } from "@mandat/contract";
+import { Spec, specText, withApi } from "@mandat/contract";
+import { oracleApi } from "./job.js";
 import { compareArms, hiddenCounts } from "@mandat/core";
 import type { ArmResult, Comparison } from "@mandat/core";
 import type { VerdictResult } from "@mandat/contract";
@@ -23,7 +24,7 @@ export async function startSingleArm(db: Db, o: { job: string }): Promise<{ ok: 
   const id = singleArmTask(j.id);
   const ins = await db.query(
     "insert into public.tasks (id, org_id, repo_id, type, agent, model, text, created_by, spec_hash, oracle_hash, attempts_max) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10, 3) on conflict (id) do nothing returning id",
-    [id, j.org_id, j.repo_id, j.type, j.agent, j.model, specText(spec.data), j.created_by, j.spec_hash, j.oracle_hash],
+    [id, j.org_id, j.repo_id, j.type, j.agent, j.model, withApi(specText(spec.data), await oracleApi(db, j.oracle_hash)).slice(0, 4000), j.created_by, j.spec_hash, j.oracle_hash],
   );
   return ins.rows.length > 0 ? { ok: true, task: id } : { ok: false, reason: "exists" };
 }

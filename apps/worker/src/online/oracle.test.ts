@@ -35,8 +35,9 @@ const verdict = (base: string) =>
     contract_hash: `sha256:${"a".repeat(64)}`, base_sha: base, tree_sha: "b".repeat(40), diff_hash: `sha256:${"c".repeat(64)}`, integrity: "ok",
     usage: { usd: 0.2, input_tokens: 1, output_tokens: 1, requests: 1 }, timings_ms: { provision: 0, install: 0, agent: 0, export: 0, verify: 0, verdict: 0, total: 0 }, created_at: "2026-11-17T00:00:00.000Z",
   });
+const API_MD = "# API\n- `src/cart.ts`: `discountCents(subtotal: number): number` — the discount in cents\n";
 const ok = (statusA: "failed" | "passed", statusU: "failed" | "passed"): RunTaskOutput["oracle"] => ({
-  ok: true, tests: [{ path: "tests/__hidden__/cart.spec.ts", data: TEST_A }, { path: "src/__hidden__/u.spec.ts", data: TEST_U }], problems: [],
+  ok: true, tests: [{ path: "tests/__hidden__/cart.spec.ts", data: TEST_A }, { path: "src/__hidden__/u.spec.ts", data: TEST_U }], problems: [], api: API_MD,
   base: { timedOut: false, results: [{ id: `tests/__hidden__/cart.spec.ts > AC-1: applies 10% over 50`, status: statusA }, { id: `src/__hidden__/u.spec.ts > U-1: none under 50`, status: statusU }] },
 });
 
@@ -86,7 +87,7 @@ describe("the oracle task (D-534)", () => {
     const o = await oracleRow(s.db);
     expect(o.status).toBe("ready");
     const m = OracleManifest.parse(o.manifest);
-    expect(m).toEqual({ spec_hash: SPEC, hidden_tests: [{ path: "src/__hidden__/u.spec.ts", sha256: sha256Tag(TEST_U) }, { path: "tests/__hidden__/cart.spec.ts", sha256: sha256Tag(TEST_A) }], red_on_base: [{ criterion_id: "AC-1", red: true }] });
+    expect(m).toEqual({ spec_hash: SPEC, api: ["`src/cart.ts`: `discountCents(subtotal: number): number` — the discount in cents"], hidden_tests: [{ path: "src/__hidden__/u.spec.ts", sha256: sha256Tag(TEST_U) }, { path: "tests/__hidden__/cart.spec.ts", sha256: sha256Tag(TEST_A) }], red_on_base: [{ criterion_id: "AC-1", red: true }] });
     expect(o.oracle_hash).toBe(oracleHash(m));
     const stored = (await s.db.query<{ spec_hash: string; files: { path: string; data: string }[] }>("select spec_hash, files from private.hidden_tests where repo_id = $1 and version = $2", [DEMO_REPO_ID, o.hidden_version])).rows[0];
     expect(stored?.spec_hash).toBe(SPEC);
@@ -188,5 +189,20 @@ describe("an oracle task that stops before it runs (live test 20.11)", () => {
     await runDaemonOnce(s.deps);
     expect(s.runs).toHaveLength(0);
     expect((await oracleRow(s.db))).toMatchObject({ status: "failed", problems: [{ kind: "not_run", id: "harness_unapproved" }] });
+  });
+});
+
+describe("the oracle's public API (D-566)", () => {
+  it("a ready oracle keeps its API.md lines in the manifest (under the approved hash); without an API.md it is not ready", async () => {
+    const s = await setup(ok("failed", "passed"));
+    await runDaemonOnce(s.deps);
+    const r = await oracleRow(s.db);
+    expect(r.status).toBe("ready");
+    expect((r.manifest as { api?: string[] }).api).toEqual(["`src/cart.ts`: `discountCents(subtotal: number): number` — the discount in cents"]);
+    const bare = ok("failed", "passed");
+    if (bare && bare.ok) delete (bare as { api?: string }).api;
+    const s2 = await setup(bare);
+    await runDaemonOnce(s2.deps);
+    expect(await oracleRow(s2.db)).toMatchObject({ status: "not_ready", problems: [{ kind: "no_api", id: "API.md" }] });
   });
 });

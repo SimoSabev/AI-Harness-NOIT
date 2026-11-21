@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
+import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withApi, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
 import { axesKey, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, sealFor, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
 import type { JobMode, SiteRow } from "@mandat/core";
@@ -136,12 +136,14 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
   // D-545: the pilot passed → its lessons become the playbook of the rest, then the rest may start
   if (j.pilot_state === "running" && units.filter((u) => u.pilot).every((u) => u.status === "passed")) await tunePilot(d, j, spec, units);
   const start = unitsToStart(units, mode, JOB_PARALLEL_MAX, { pilotOnly: j.pilot_state === "running" });
+  const api = start.length > 0 ? await oracleApi(d.db, j.oracle_hash) : [];
   for (const unitId of start) {
     const next = units.find((u) => u.unit_id === unitId);
     if (!next) continue;
     // a new task = a fresh agent context; it gets the spec, its unit and the earlier units' handoffs (the progress)
     const id = taskIdOf(j.id, next.relands > 0 ? `${next.ord}r${next.relands}` : String(next.ord));
-    const text = withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files);
+    // D-566: the public API the approved oracle fixed, as a requirement (never a test)
+    const text = withApi(withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files), api);
     await insertTask(d.db, j, { id, text: next.pilot ? text : withPlaybook(text, j.playbook), unit: next.unit_id, role: "unit" });
     await d.db.query("update public.job_units set status = 'running', task_id = $3, tries = '[]'::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, next.unit_id, id]);
   }
@@ -153,6 +155,13 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
   if (live || parked.length === 0) return "waiting";
   await park(d.db, j, parked.map((u) => u.question ?? `Unit ${u.unit_id} waits for you.`).join(" ").slice(0, 2000), { why: "unit_stopped", units: parked.map((u) => u.unit_id) });
   return "parked";
+}
+
+/** D-566: the public API lines of the job's approved oracle (its manifest), or none */
+export async function oracleApi(db: Db, oracleHash: string): Promise<string[]> {
+  const m = (await db.query<{ manifest: unknown }>("select manifest from public.oracles where oracle_hash = $1 and status = 'approved' order by approved_at desc limit 1", [oracleHash])).rows[0];
+  const api = (m?.manifest as { api?: unknown } | undefined)?.api;
+  return Array.isArray(api) ? api.filter((x): x is string => typeof x === "string").slice(0, 60) : [];
 }
 
 /** the stored site table (D-546), only well-formed rows */

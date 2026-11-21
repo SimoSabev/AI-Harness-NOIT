@@ -20,11 +20,32 @@ export function oracleTag(testId: string): string | null {
 }
 export const unchangedId = (n: number): string => `U-${n + 1}`;
 
+/** D-566: the public API the oracle fixed (its API.md): the "- " lines, trimmed, at most 60 of at most 300 chars */
+export const ORACLE_API_MAX = 60;
+export function parseOracleApi(md: string): string[] {
+  return md
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith("- "))
+    .map((l) => l.slice(2).trim())
+    .filter((l) => l !== "" && l.length <= 300)
+    .slice(0, ORACLE_API_MAX);
+}
+
+/** D-566: a writer's text with the API the hidden checks use, as a requirement (the tests themselves stay hidden) */
+export function withApi(text: string, api: readonly string[], max: number = CHAT_TEXT_MAX): string {
+  if (api.length === 0) return text;
+  // the API always fits: the end of the text (the list of other criteria) gives way to it
+  const block = `\nPublic API the hidden checks use (provide exactly these exports):\n${api.map((a) => `- ${a}`).join("\n")}`.slice(0, Math.floor(max / 2));
+  return `${text.slice(0, max - block.length)}${block}`;
+}
+
 /** the oracle agent's task text: tests only, one tag per test, only in __hidden__ folders the runner finds (≤ 4000 chars) */
 export function oracleTaskText(s: Spec): string {
   const head: string[] = [
     "Write hidden acceptance tests for the spec below. Do not implement anything.",
     `Write only new test files (*.spec.ts or *.test.ts) and put them in a ${HIDDEN_SEGMENT} folder inside a directory the project's test runner already discovers: look at the test config (e.g. vitest.workspace / vitest.config / jest config / the package test scripts); in a monorepo that is usually inside a package, e.g. packages/<name>/test/${HIDDEN_SEGMENT}/. Do not change any other file.`,
+    // D-566 (live test 21.11): tests that guessed new names by regex could not pass whatever the writers built
+    `Decide the public API of the new code yourself and import it by exact paths and names; never discover names with import.meta.glob, regular expressions or try/catch. Write that API into ${HIDDEN_SEGMENT}/API.md next to your tests, one export per line: - \`path\`: \`name(args): result\` — what it does. The writers get this list (never your tests).`,
     "For each acceptance criterion write at least one test whose name starts with its id, e.g. it(\"AC-1: ...\").",
     "These tests must FAIL on the current code: they describe behavior that does not exist yet.",
     "For each unchanged behavior write at least one test whose name starts with its id, e.g. it(\"U-1: ...\").",
@@ -49,7 +70,7 @@ export function oracleTaskText(s: Spec): string {
 export const OracleStatus = z.enum(["building", "not_ready", "ready", "approved", "failed"]);
 export type OracleStatus = z.infer<typeof OracleStatus>;
 
-export const OracleProblemKind = z.enum(["no_tests", "non_test_change", "untagged_test", "unknown_tag", "untagged_criterion", "green_on_base", "unchanged_untagged", "unchanged_red", "not_run", "not_discovered"]);
+export const OracleProblemKind = z.enum(["no_tests", "non_test_change", "untagged_test", "unknown_tag", "untagged_criterion", "green_on_base", "unchanged_untagged", "unchanged_red", "not_run", "not_discovered", "no_api"]);
 export const OracleProblem = z.object({ kind: OracleProblemKind, id: z.string().max(300) }).strict();
 export type OracleProblem = z.infer<typeof OracleProblem>;
 

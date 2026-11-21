@@ -98,3 +98,11 @@ describe("the oracle graded with the writer's mutants (D-534)", () => {
     expect(d11Oracle({ sites: [], runs: [], hiddenOf, hiddenOnB: onB, threshold: 0.6 }).evidence.status).toBe("n/a");
   });
 });
+
+describe("the oracle's public API (D-566, live test 21.11)", () => {
+  it("an API.md next to the tests is the API, not a problem; any other non-test file still is", () => {
+    const c = oracleChange({ paths: ["tests/__hidden__/a.spec.ts", "tests/__hidden__/API.md"] });
+    expect(c).toEqual({ tests: ["tests/__hidden__/a.spec.ts"], problems: [], api: "tests/__hidden__/API.md" });
+    expect(oracleChange({ paths: ["tests/__hidden__/a.spec.ts", "tests/__hidden__/notes.md"] }).problems).toEqual([{ kind: "non_test_change", id: "tests/__hidden__/notes.md" }]);
+  });
+});

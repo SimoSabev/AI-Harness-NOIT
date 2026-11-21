@@ -57,7 +57,7 @@ export async function runOracleOnBase(i: OracleBaseInput): Promise<OracleBaseRes
 }
 
 export type OracleChangeResult =
-  | { ok: true; tests: { path: string; data: Buffer }[]; problems: OracleProblem[]; base: { results: HiddenResult[]; timedOut: boolean } | null }
+  | { ok: true; tests: { path: string; data: Buffer }[]; problems: OracleProblem[]; base: { results: HiddenResult[]; timedOut: boolean } | null; /** D-566: the API.md the oracle wrote */ api?: string }
   | { ok: false; code: string };
 
 /**
@@ -69,6 +69,7 @@ export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { dif
   const head = await cleanClone({ mirrorPath: i.mirrorPath, baseSha: i.baseSha, tmpRoot: i.tmpRoot, name: "oracle-head" });
   let tests: { path: string; data: Buffer }[];
   let problems: OracleProblem[];
+  let api: string | undefined;
   try {
     if (i.diffPatch.length > 0) {
       const ap = await head.git.run(["apply", "--index", "--binary", "--whitespace=nowarn", "-"], { cwd: head.dir, input: i.diffPatch });
@@ -78,6 +79,13 @@ export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { dif
     const paths = names.stdout.toString("utf8").split("\0").filter(Boolean);
     const c = oracleChange({ paths });
     problems = c.problems;
+    if (c.api) {
+      try {
+        api = readFileSync(path.join(head.dir, ...c.api.split("/")), "utf8").slice(0, 32_000);
+      } catch {
+        api = undefined;
+      }
+    }
     tests = c.tests.flatMap((p) => {
       try {
         return [{ path: p, data: readFileSync(path.join(head.dir, ...p.split("/"))) }];
@@ -88,8 +96,9 @@ export async function oracleFromChange(i: Omit<OracleBaseInput, "tests"> & { dif
   } finally {
     removeTree(head.dir);
   }
-  if (problems.length > 0 || tests.length === 0) return { ok: true, tests, problems, base: null };
+  const withApi = api !== undefined ? { api } : {};
+  if (problems.length > 0 || tests.length === 0) return { ok: true, tests, problems, base: null, ...withApi };
   const r = await runOracleOnBase({ ...i, tests: { dir: "", files: tests } });
   if (!r.ok) return r;
-  return { ok: true, tests, problems, base: { results: r.results, timedOut: r.timedOut } };
+  return { ok: true, tests, problems, base: { results: r.results, timedOut: r.timedOut }, ...withApi };
 }

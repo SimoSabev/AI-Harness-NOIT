@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_TEXT_MAX } from "./conversation.js";
-import { HIDDEN_SEGMENT, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText } from "./oracle.js";
+import { HIDDEN_SEGMENT, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, withApi } from "./oracle.js";
 import { Contract, DetectorId, LedgerKind } from "./schemas.js";
 import type { Spec } from "./task-spec.js";
 
@@ -80,5 +80,32 @@ describe("a long spec still reaches the oracle agent whole (live test 20.11)", (
     for (let k = 1; k <= 12; k++) expect(t).toContain(`\nAC-${k}: `);
     for (let k = 1; k <= 9; k++) expect(t).toContain(`\nU-${k}: `);
     expect(oracleTaskText(spec)).not.toContain("…");
+  });
+});
+
+describe("the oracle fixes the public API of the new code (D-566, live test 21.11)", () => {
+  it("the task asks for exact imports and an API.md, never names guessed by glob or regex", () => {
+    const t = oracleTaskText(spec);
+    expect(t).toContain("API.md");
+    expect(t).toMatch(/never discover names/i);
+  });
+  it("API.md lines become the manifest's api: only '- ' lines, trimmed, bounded", () => {
+    const md = "# API\n- `src/giftcards/store.ts`: `createGiftCard(code: string, balanceCents: number): void` — adds a card\nnot a line\n-   `src/loyalty/store.ts`: `pointsBalance(phone: string): number`  \n" + Array.from({ length: 80 }, (_, k) => `- line ${k}`).join("\n");
+    const api = parseOracleApi(md);
+    expect(api[0]).toBe("`src/giftcards/store.ts`: `createGiftCard(code: string, balanceCents: number): void` — adds a card");
+    expect(api[1]).toBe("`src/loyalty/store.ts`: `pointsBalance(phone: string): number`");
+    expect(api).toHaveLength(60);
+    expect(parseOracleApi("x".repeat(500))).toEqual([]);
+  });
+  it("a writer's text gets the API as a requirement; without one it is unchanged", () => {
+    expect(withApi("base", ["`src/a.ts`: `f(): void`"])).toBe("base\nPublic API the hidden checks use (provide exactly these exports):\n- `src/a.ts`: `f(): void`");
+    expect(withApi("base", [])).toBe("base");
+  });
+});
+describe("withApi fits the task (D-566)", () => {
+  it("a long text gives way at its end so the API always fits in 4000 chars", () => {
+    const t = withApi("x".repeat(3990), ["`src/a.ts`: `f(): void`"]);
+    expect(t.length).toBeLessThanOrEqual(4000);
+    expect(t).toContain("- `src/a.ts`: `f(): void`");
   });
 });

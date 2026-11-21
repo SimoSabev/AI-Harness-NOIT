@@ -600,3 +600,23 @@ describe("М4: the same spec by the process and by one agent (D-565)", () => {
     expect(rep?.comparison).toEqual({ winner: "single", why: "lower cost" });
   });
 });
+
+describe("writers get the public API the oracle fixed (D-566)", () => {
+  it("each unit's text and the single-agent arm's text carry the API lines; never a test", async () => {
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    // the API is part of the approved manifest, so its hash changes with it (the job carries the new hash)
+    const withApiM = OracleManifest.parse({ ...MANIFEST, api: ["`src/cart.ts`: `couponCents(code: string): number` — the coupon value"] });
+    const h = oracleHash(withApiM);
+    await s.db.query("update public.oracles set manifest = $1::jsonb, oracle_hash = $2 where id = 'o_job1'", [JSON.stringify(withApiM), h]);
+    await s.db.query("update public.jobs set oracle_hash = $1 where id = 'j_t1'", [h]);
+    const logs: string[] = [];
+    s.jd.log = (l) => logs.push(l);
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    expect(logs).toEqual([]);
+    expect(s.contracts[0]?.text).toContain("Public API the hidden checks use");
+    expect(s.contracts[0]?.text).toContain("couponCents(code: string): number");
+    expect(s.contracts[0]?.text).not.toContain(SECRET_NAME);
+  });
+});
