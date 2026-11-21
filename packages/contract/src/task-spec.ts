@@ -63,7 +63,7 @@ export const OracleManifest = z
     differential: z.object({ reference: z.string().trim().min(1).max(500), command: z.string().trim().min(1).max(500) }).strict().optional(),
     e2e: z.array(Line).max(100).optional(),
     /** D-566: the public API the hidden tests use (the oracle's API.md); the writers get it, never the tests */
-    api: z.array(z.string().trim().min(1).max(300)).max(60).optional(),
+    api: z.array(z.string().trim().min(1).max(1000)).max(60).optional(), // D-571: ORACLE_API_ITEM_MAX
     red_on_base: z.array(z.object({ criterion_id: CriterionId, red: z.boolean() }).strict()).max(200),
     approved: z.object({ by: z.string().trim().min(1).max(100), at: Instant }).strict().optional(),
   })

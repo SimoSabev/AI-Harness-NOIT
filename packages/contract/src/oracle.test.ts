@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_TEXT_MAX } from "./conversation.js";
-import { HIDDEN_SEGMENT, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, withApi } from "./oracle.js";
+import { HIDDEN_SEGMENT, ORACLE_API_ITEM_MAX, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, withApi } from "./oracle.js";
 import { Contract, DetectorId, LedgerKind } from "./schemas.js";
 import type { Spec } from "./task-spec.js";
 
@@ -102,6 +102,24 @@ describe("the oracle fixes the public API of the new code (D-566, live test 21.1
     expect(api[1]).toBe("`src/loyalty/store.ts`: `pointsBalance(phone: string): number`");
     expect(api).toHaveLength(60);
     expect(parseOracleApi("x".repeat(500))).toEqual([]);
+  });
+  it("D-571: an item keeps the lines under it (live test 21.11 lost the rules that named redemptionCents)", () => {
+    const md = [
+      "# API",
+      "- `src/checkout/checkout.ts`: `Checkout.placeOrder(...)`: Order — like placeOrder. Rules:",
+      "  - with redeem and ≥ 100 points, `order.redemptionCents` is 500",
+      "    and the points drop by 100",
+      "",
+      "- `src/giftcards/giftcards.ts`: `createGiftCardStore()`",
+      "## Fields",
+      "plain text under a heading is not an item",
+    ].join("\n");
+    expect(parseOracleApi(md)).toEqual([
+      "`src/checkout/checkout.ts`: `Checkout.placeOrder(...)`: Order — like placeOrder. Rules: - with redeem and ≥ 100 points, `order.redemptionCents` is 500 and the points drop by 100",
+      "`src/giftcards/giftcards.ts`: `createGiftCardStore()`",
+    ]);
+    const long = parseOracleApi(`- \`a.ts\`: \`f()\` ${"rule ".repeat(400)}`);
+    expect(long[0]?.length).toBe(ORACLE_API_ITEM_MAX);
   });
   it("a writer's text gets the API as a requirement; without one it is unchanged", () => {
     expect(withApi("base", ["`src/a.ts`: `f(): void`"])).toBe("base\nPublic API the hidden checks use (provide exactly these exports):\n- `src/a.ts`: `f(): void`");

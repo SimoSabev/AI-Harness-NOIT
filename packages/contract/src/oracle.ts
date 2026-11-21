@@ -20,14 +20,24 @@ export function oracleTag(testId: string): string | null {
 }
 export const unchangedId = (n: number): string => `U-${n + 1}`;
 
-/** D-566: the public API the oracle fixed (its API.md): the "- " lines, trimmed, at most 60 of at most 300 chars */
+/** D-566: the public API the oracle fixed (its API.md): one item per top-level "- " line, at most 60 */
 export const ORACLE_API_MAX = 60;
+/** D-571: an item keeps the lines under it (its rules, nested points), joined, up to this many chars */
+export const ORACLE_API_ITEM_MAX = 1000;
 export function parseOracleApi(md: string): string[] {
-  return md
-    .split(/\r?\n/)
-    .filter((l) => l.startsWith("- "))
-    .map((l) => l.slice(2).trim())
-    .filter((l) => l !== "" && l.length <= 300)
+  const items: string[][] = [];
+  let open = false;
+  for (const line of md.split(/\r?\n/)) {
+    if (line.startsWith("- ")) {
+      items.push([line.slice(2).trim()]);
+      open = true;
+    } else if (line.trim() === "" || line.startsWith("#")) open = line.trim() === "" && open;
+    else if (open && /^\s/.test(line)) items[items.length - 1]?.push(line.trim());
+    else open = false;
+  }
+  return items
+    .map((parts) => parts.filter((p) => p !== "").join(" ").slice(0, ORACLE_API_ITEM_MAX))
+    .filter((l) => l !== "")
     .slice(0, ORACLE_API_MAX);
 }
 
