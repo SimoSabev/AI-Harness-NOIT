@@ -132,6 +132,12 @@ async function latestOracle(db: Db, id: string, hash: string): Promise<OracleDbR
   return (await asService(db, (sql) => sql.query<OracleDbRow>(LATEST_ORACLE, [id, hash]))).rows[0] ?? null;
 }
 
+/** D-572: the conversation's latest job, when it is parked */
+async function parkedJobOf(db: Db, id: string): Promise<string | null> {
+  const j = (await asService(db, (sql) => sql.query<{ id: string; status: string }>("select id, status from public.jobs where conversation_id = $1 order by created_at desc, id desc limit 1", [id]))).rows[0];
+  return j?.status === "parked" ? j.id : null;
+}
+
 /** D-571: the problems of the latest not-ready oracle of this spec (a failed attempt after it does not hide them) */
 async function lastNotReadyProblems(db: Db, id: string, hash: string): Promise<unknown> {
   return (await asService(db, (sql) => sql.query<{ problems: unknown }>("select problems from public.oracles where conversation_id = $1 and spec_hash = $2 and status = 'not_ready' order by created_at desc, id desc limit 1", [id, hash]))).rows[0]?.problems ?? null;
@@ -162,15 +168,22 @@ export async function buildOracle(db: Db, o: { uid: string; org: string; id: str
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
   const c = await approvedOf(db, o.id, o.org);
   if (!c) return err(404, "unknown_conversation");
-  if (c.row.phase !== "conversation") return err(409, "work_started");
+  // D-572: a parked job may have stopped on a wrong oracle; a person may build it again (the job is superseded)
+  const parked = c.row.phase === "conversation" ? null : await parkedJobOf(db, o.id);
+  if (c.row.phase !== "conversation" && !parked) return err(409, "work_started");
   if (!c.spec) return err(409, "spec_not_approved");
   if (!oracleRequired(c.row.axes, c.spec.spec)) return err(409, "oracle_not_needed");
   const last = await latestOracle(db, o.id, c.spec.hash);
   if (last?.status === "building") return err(409, "oracle_building");
-  if (last?.status === "approved") return err(409, "oracle_approved");
+  if (last?.status === "approved" && !parked) return err(409, "oracle_approved");
   const hash = c.spec.hash;
   const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTextWithNote(c.spec.spec, await lastNotReadyProblems(db, o.id, hash)), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
   if (r.status !== 201) return r;
+  if (parked)
+    await asService(db, async (sql) => {
+      await sql.query("update public.jobs set question = 'oracle_superseded: a person builds the oracle again (D-572)', updated_at = now() where id = $1 and status = 'parked'", [parked]);
+      await sql.query("update public.conversations set phase = 'conversation', updated_at = now() where id = $1", [o.id]);
+    });
   const oid = `o_${Date.now().toString(36)}${randomBytes(4).toString("hex")}`;
   await asService(db, (sql) => sql.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, task_id, created_by) select $1, $2::uuid, t.repo_id, $3, $4, t.id, $6::uuid from public.tasks t where t.id = $5", [oid, o.org, o.id, hash, r.body.id, o.uid]));
   return { status: 201, body: { id: oid, task_id: r.body.id, spec_hash: hash }, ...(r.broadcast ? { broadcast: r.broadcast } : {}) };

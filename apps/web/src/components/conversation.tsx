@@ -147,11 +147,12 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
   );
 }
 
-export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: () => void; onApprove: (hash: string) => void }
+export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: () => void; onApprove: (hash: string) => void; jobParked?: boolean }
 
 function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: OracleActions }) {
   const s = oracle?.status ?? null;
-  const canBuild = a.canApprove && (s === null || s === "not_ready" || s === "failed");
+  // D-572: after a parked job a person may build an approved oracle again
+  const canBuild = a.canApprove && (s === null || s === "not_ready" || s === "failed" || (s === "approved" && a.jobParked === true));
   return (
     <section aria-label={t("chat.oracle")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
       <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.oracle")}</p>
@@ -179,7 +180,7 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
       )}
       {(canBuild || (s === "ready" && a.canApprove)) && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          {canBuild && <p className="min-w-0 flex-1 text-xs text-mute">{t("chat.oracle.needed")}</p>}
+          {canBuild && <p className="min-w-0 flex-1 text-xs text-mute">{t(s === "approved" ? "chat.oracle.parked" : "chat.oracle.needed")}</p>}
           {canBuild && <button type="button" className={btn.secondary} disabled={a.busy} onClick={a.onBuild}>{t(s === null ? "chat.oracle.build" : "chat.oracle.rebuild")}</button>}
           {s === "ready" && oracle?.oracle_hash && <button type="button" className={btn.primary} disabled={a.busy} onClick={() => a.onApprove(oracle.oracle_hash as string)}>{t("chat.oracle.approve")}</button>}
         </div>
@@ -273,7 +274,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
-      {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle }} />}
+      {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle, jobParked: chat.job?.status === "parked" }} />}
       {chat.job && <JobCard job={chat.job} t={t} a={{ canApprove, busy, onApprove: onApproveJob, brought, ...(onBring ? { onBring } : {}) }} />}
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">

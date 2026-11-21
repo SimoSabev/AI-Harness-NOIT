@@ -1658,6 +1658,7 @@ export const bg: Record<Key, string> = {
   "chat.oracle.red": "червен (както трябва)",
   "chat.oracle.green": "не е червен",
   "chat.oracle.needed": "Одобри оракула преди „Започвай“.",
+  "chat.oracle.parked": "Работата спря. Ако скритите проверки са грешни, построй оракула отново; спрялата работа остава както е.",
   "chat.oracle.problem.no_tests": "не са написани тестове",
   "chat.oracle.problem.non_test_change": "променен е файл, който не е тест: {id}",
   "chat.oracle.problem.untagged_test": "{id} теста без номер на критерий",

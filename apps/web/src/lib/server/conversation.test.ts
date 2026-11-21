@@ -168,6 +168,24 @@ describe("the spec in the web (D-533)", () => {
     if (!p.ok) throw new Error(p.error);
     expect(contractForTask(t, p.policy, "a".repeat(40)).spec_hash).toBe(hash);
   });
+  it("D-572: a parked job lets a person build the oracle again; the job is superseded and the conversation is open again", async () => {
+    const id = await proposed(known);
+    const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
+    await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
+    await approvedOracle(id, hash);
+    const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    // while the job runs, the approved oracle stays as it is
+    expect((await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "work_started" });
+    await asService(db, (sql) => sql.query("update public.jobs set status = 'parked' where id = $1", [s.body.job]));
+    expect((await buildOracle(db, { uid: U.viewer, org: DEMO_ORG_ID, id })).status).toBe(403);
+    const b = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    expect(b.status).toBe(201);
+    const j = (await asService(db, (sql) => sql.query<{ status: string; question: string }>("select status, question from public.jobs where id = $1", [s.body.job]))).rows[0];
+    expect(j?.status).toBe("parked");
+    expect(j?.question).toMatch(/^oracle_superseded/);
+    const c = (await asService(db, (sql) => sql.query<{ phase: string }>("select phase from public.conversations where id = $1", [id]))).rows[0];
+    expect(c?.phase).toBe("conversation");
+  });
   it("Start work without an approved spec keeps D-531: a proposed but unapproved spec does not reach the task", async () => {
     const id = await proposed(known);
     const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });

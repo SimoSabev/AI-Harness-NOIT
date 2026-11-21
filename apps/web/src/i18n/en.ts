@@ -1682,6 +1682,7 @@ export const en = {
   "chat.oracle.red": "red (as it should be)",
   "chat.oracle.green": "not red",
   "chat.oracle.needed": "Approve the oracle before Start work.",
+  "chat.oracle.parked": "The job stopped. If the hidden checks were wrong, build the oracle again; the stopped job stays as it is.",
   "chat.oracle.problem.no_tests": "no tests were written",
   "chat.oracle.problem.non_test_change": "a file that is not a test was changed: {id}",
   "chat.oracle.problem.untagged_test": "{id} test(s) without a criterion id",
