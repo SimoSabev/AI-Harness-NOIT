@@ -8,8 +8,8 @@ describe("argv", () => {
   it("argv по подразбиране (6.7)", () => {
     expect(buildClaudeArgv({ ...base, memory: { enabled: false }, steering: { enabled: false } })).toEqual([
       "claude", "--bare", "-p", "Fix the cart discount", "--output-format", "stream-json", "--verbose", "--model", "claude-sonnet-5-5",
-      "--permission-mode", "dontAsk", "--permission-prompts", "none", "--tools", "Bash,Read,Edit,Write",
-      "--allowedTools", "Read,Edit,Write,Bash(npx vitest *)", "--disallowedTools", "mcp__*", "--setting-sources", "user",
+      "--permission-mode", "dontAsk", "--permission-prompts", "none", "--tools", "Bash,Read,Edit,Write,Glob,Grep",
+      "--allowedTools", "Read,Glob,Grep,Edit,Write,Bash(npx vitest *)", "--disallowedTools", "mcp__*", "--setting-sources", "user",
       "--append-system-prompt-file", "/m/in/contract.txt", "--max-budget-usd", "2.00", "--no-session-persistence",
     ]);
   });
@@ -37,7 +37,7 @@ describe("argv", () => {
     expect(a.join("\u0000")).toContain(["--mcp-config", "/m/in/mcp.json", "--strict-mcp-config"].join("\u0000"));
     expect(a).not.toContain("mcp__*");
     expect(a).not.toContain("--disallowedTools");
-    expect(a[a.indexOf("--allowedTools") + 1]).toBe("Read,Edit,Write,Bash(npx vitest *),mcp__mandat_memory__memory");
+    expect(a[a.indexOf("--allowedTools") + 1]).toBe("Read,Glob,Grep,Edit,Write,Bash(npx vitest *),mcp__mandat_memory__memory");
   });
 });
 

@@ -21,7 +21,9 @@ export interface ClaudeControl {
 export const CLAUDE_HARNESS_DIR = "/m/in/harness/claude";
 export const CLAUDE_HARNESS_SETTINGS = `${CLAUDE_HARNESS_DIR}/settings.json`;
 
-const ALLOWED = ["Read", "Edit", "Write", "Bash(npx vitest *)"];
+// live test 21.11 (D-568): Glob and Grep only read, like Read; without them a writer whose shell runs only the tests
+// could not find a file it did not already know the path of
+const ALLOWED = ["Read", "Glob", "Grep", "Edit", "Write", "Bash(npx vitest *)"];
 
 /** 6.7 (D-021, D-023, D-024): one argv element per comma list; the task text right after -p. */
 export function buildClaudeArgv(o: ClaudeArgvOptions): string[] {
@@ -34,7 +36,7 @@ export function buildClaudeArgv(o: ClaudeArgvOptions): string[] {
     "--model", o.model,
     "--permission-mode", "dontAsk",
     "--permission-prompts", "none",
-    "--tools", "Bash,Read,Edit,Write",
+    "--tools", "Bash,Read,Edit,Write,Glob,Grep",
     "--allowedTools", allowed,
   );
   const mcp = o.memory.enabled ? o.memory.mcpConfigPath : (o.control?.mcpConfigFile ?? null);
