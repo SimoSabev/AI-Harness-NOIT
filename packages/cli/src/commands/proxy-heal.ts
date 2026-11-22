@@ -17,3 +17,11 @@ export async function proxyLocked(port: number): Promise<boolean> {
     return true;
   }
 }
+
+/**
+ * D-587: a healthy proxy from an older image (the app or `pnpm local` was updated, the container kept running) is stale:
+ * it must be recreated from the stored keys, or the new proxy code (Jarvis's tools, D-582…D-586) never runs.
+ */
+export function proxyStale(cur: { running: boolean; image: string | null }, expected: string): boolean {
+  return cur.running && cur.image !== null && cur.image !== expected;
+}

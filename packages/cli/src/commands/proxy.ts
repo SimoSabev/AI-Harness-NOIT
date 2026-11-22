@@ -12,7 +12,7 @@ import { repoRoot } from "../paths.js";
 
 const NAME = "mandat-llm-proxy";
 
-async function containerImage(deps: CliDeps): Promise<{ running: boolean; image: string | null }> {
+export async function containerImage(deps: CliDeps): Promise<{ running: boolean; image: string | null }> {
   const r = await dockerText(deps.docker, ["inspect", "-f", "{{.State.Running}} {{.Config.Image}}", NAME]);
   if (r.exitCode !== 0) return { running: false, image: null };
   const [running, image] = r.stdout.trim().split(" ");

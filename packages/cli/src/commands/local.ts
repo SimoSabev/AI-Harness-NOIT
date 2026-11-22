@@ -15,8 +15,8 @@ import type { Io } from "../output.js";
 import { repoRoot } from "../paths.js";
 import { startControl } from "./local-control.js";
 import type { Keys } from "./local-control.js";
-import { proxyProviders, proxyStart, proxyStop, proxyVoice, setSearchKey, setVoiceKey } from "./proxy.js";
-import { hasSealedKeys, proxyLocked } from "./proxy-heal.js";
+import { containerImage, proxyProviders, proxyStart, proxyStop, proxyVoice, setSearchKey, setVoiceKey } from "./proxy.js";
+import { hasSealedKeys, proxyLocked, proxyStale } from "./proxy-heal.js";
 import { listAccounts, loginDeps, logoutProfile, sharedWhileRunning } from "./accounts.js";
 import { Connections } from "./connections.js";
 import { findProjects, listFolder } from "./folders.js";
@@ -326,7 +326,9 @@ export async function localCommand(io: Io, o: { home: string; dbPort: number; si
   const accounts = sharedWhileRunning(() => listAccounts(deps));
   const connections = new Connections({ store: connStore, fetch, restartProxy, accounts: async () => (await accounts()).map((a) => ({ name: a.name, cli: a.cli })) });
   const fromStore = async () => {
-    if (!(hasSealedKeys(o.home) || hasUpstreams()) || !(await proxyLocked(host.proxyAdminPort))) return;
+    if (!(hasSealedKeys(o.home) || hasUpstreams())) return;
+    // D-587: also a healthy proxy from an older image (after an update), or the new proxy code never runs
+    if (!(await proxyLocked(host.proxyAdminPort)) && !proxyStale(await containerImage(deps), (await imageTags(repoRoot)).proxy)) return;
     io.stderr(`${tt(lang, "local.proxy.saved")}\n`);
     await proxyStart({ ...io, stdout: () => undefined, env: clean }, deps, { mandatHome: o.home, host, json: true, force: true });
   };

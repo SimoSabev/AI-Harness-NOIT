@@ -4,7 +4,7 @@ import type net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { hasSealedKeys, proxyLocked } from "./commands/proxy-heal.js";
+import { hasSealedKeys, proxyLocked, proxyStale } from "./commands/proxy-heal.js";
 
 async function serve(status: number, body: unknown): Promise<{ port: number; close(): void }> {
   const s = http.createServer((_q, r) => r.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body)));
@@ -28,6 +28,15 @@ describe("proxy heal (E7в, AC-3.8)", () => {
     expect(hasSealedKeys(h)).toBe(false);
     writeFileSync(path.join(h, "keys.sealed.json"), "{}");
     expect(hasSealedKeys(h)).toBe(true);
+  });
+});
+
+describe("a proxy from an older image is replaced at start (D-587)", () => {
+  it("running on the image this code builds → keep; running on another image → replace; nothing running → not stale (the lock check starts it)", () => {
+    expect(proxyStale({ running: true, image: "mandat-llm-proxy:v0.1.0-new" }, "mandat-llm-proxy:v0.1.0-new")).toBe(false);
+    expect(proxyStale({ running: true, image: "mandat-llm-proxy:v0.1.0-old" }, "mandat-llm-proxy:v0.1.0-new")).toBe(true);
+    expect(proxyStale({ running: false, image: "mandat-llm-proxy:v0.1.0-old" }, "mandat-llm-proxy:v0.1.0-new")).toBe(false);
+    expect(proxyStale({ running: false, image: null }, "mandat-llm-proxy:v0.1.0-new")).toBe(false);
   });
 });
 
