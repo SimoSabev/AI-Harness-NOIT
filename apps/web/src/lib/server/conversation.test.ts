@@ -9,7 +9,7 @@ import { HIDDEN_SEGMENT, OracleManifest, hashJcs, oracleHash, oracleTaskText, pa
 import { contractForTask } from "../../../../worker/src/online/daemon";
 import { postConversation, postConversationApprove, postConversationJobApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
 import type { ApiDeps } from "./api";
-import { approveOracle, approveSpec, buildOracle, conversationFeed, retryConversation, sendMessage, startWork, workText } from "./conversation";
+import { approveOracle, approveSpec, buildOracle, conversationFeed, openConversations, retryConversation, sendMessage, startWork, workText } from "./conversation";
 import { RateLimiter } from "./guard";
 import { approveJob } from "./job";
 import { asService } from "./sql";
@@ -372,3 +372,14 @@ describe("the oracle in the web (D-534)", () => {
     expect((await postConversationOracleApprove(post(`/api/conversations/${id}/oracle/approve`, { oracle_hash: h }), deps, id)).status).toBe(200);
   });
 });
+
+describe("open conversations for the task list (D-583)", () => {
+  it("a conversation without a project and without a task is listed with the person's first words; another org sees nothing", async () => {
+    const r = await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { text: "Research the best universities", agent: "fake:honest-fix" } });
+    const id = String(r.body.id);
+    const list = await openConversations(db, U.viewer, DEMO_ORG_ID);
+    expect(list.find((c) => c.id === id)).toMatchObject({ id, text: "Research the best universities", purpose: "task", phase: "conversation", job_id: null, task_id: null });
+    expect(await openConversations(db, U.viewer, "00000000-0000-4000-8000-000000000999")).toEqual([]);
+  });
+});
+

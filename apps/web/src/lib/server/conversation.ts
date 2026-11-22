@@ -10,6 +10,7 @@ import type { Db } from "./sql";
 import { taskTypeFor } from "../agents";
 import type { ConversationFeed, ConversationRow, OracleView } from "../conversation-types";
 import { createJob, jobView } from "./job";
+import type { OpenConversation } from "../task-list";
 
 export type { ConversationFeed, ConversationRow, OracleView };
 
@@ -254,6 +255,16 @@ const parseTurns = (rows: readonly TurnRow[]): ChatTurn[] =>
   });
 
 /** the conversation and its turns after `after`, read as the person (RLS) */
+/** D-583: the conversations that are not a task or a job yet, for the task list (newest 50; the first human words as title) */
+export async function openConversations(db: Db, uid: string, org: string): Promise<OpenConversation[]> {
+  return asUser(db, uid, async (sql) => (await sql.query<OpenConversation>(
+    `select c.id, c.purpose, c.status, c.phase, to_json(c.updated_at)#>>'{}' as updated_at, c.job_id, c.task_id,
+       coalesce((select left(t.data->>'text', 200) from public.conversation_turns t where t.conversation_id = c.id and t.kind = 'human' order by t.seq limit 1), '') as text
+     from public.conversations c where c.org_id = $1::uuid and c.job_id is null and c.task_id is null order by c.updated_at desc limit 50`,
+    [org],
+  )).rows);
+}
+
 export async function conversationFeed(db: Db, uid: string, org: string, id: string, after: number): Promise<ConversationFeed | null> {
   return asUser(db, uid, async (sql) => {
     const conversation = (await sql.query<ConversationRow>(`select ${COLS} from public.conversations c where c.id = $1 and c.org_id = $2::uuid`, [id, org])).rows[0];

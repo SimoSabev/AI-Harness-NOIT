@@ -25,3 +25,16 @@ export function foldJobs<T extends FoldSource>(rows: readonly T[]): ListItem<T>[
   }
   return out.map((x) => (x.kind === "job" ? (jobs.get(x.conversation_id) ?? x) : x));
 }
+
+/** D-583: a conversation of "Ask first" as the task list needs it (the person's first words are its title) */
+export interface OpenConversation { id: string; text: string; purpose: string; status: string; phase: string; updated_at: string; job_id: string | null; task_id: string | null }
+
+/** the conversations to list: not a task or a job yet, and not already shown as a job row; newest first */
+export function openConversationsToList(convs: readonly OpenConversation[], shown: ReadonlySet<string>): OpenConversation[] {
+  return convs.filter((c) => c.job_id === null && c.task_id === null && !shown.has(c.id)).sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1));
+}
+
+/** two lists by time, newest first */
+export function mergeByTime<T extends { at: string }>(a: readonly T[], b: readonly T[]): T[] {
+  return [...a, ...b].sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
+}

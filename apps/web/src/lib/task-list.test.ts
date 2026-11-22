@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { foldJobs } from "./task-list";
+import { foldJobs, mergeByTime, openConversationsToList } from "./task-list";
+import type { OpenConversation } from "./task-list";
 
 // D-554 (screens 19.11.2026): a job's internal tasks (oracle, units, final check) crowded the task list, one row each;
 // they fold into one row for their conversation, placed where the newest of them is.
@@ -36,3 +37,25 @@ describe("folding a job's internal tasks into one row (screens 19.11.2026, D-554
     expect(r).toEqual([expect.objectContaining({ kind: "job", merged: true, count: 2 })]);
   });
 });
+
+// D-583 (live 22.11.2026): a conversation of "Ask first" that has not become a task or a job yet was nowhere in the list,
+// so after leaving it the person thought it was not saved. It is listed now, by time, until it becomes a task or a job.
+const conv = (id: string, at: string, o: Partial<OpenConversation> = {}): OpenConversation => ({ id, text: "Research universities", purpose: "task", status: "idle", phase: "conversation", updated_at: at, job_id: null, task_id: null, ...o });
+
+describe("open conversations in the task list (D-583)", () => {
+  it("lists the conversations that are neither a task nor a job yet, newest first", () => {
+    const r = openConversationsToList([conv("c_1", "1"), conv("c_2", "3"), conv("c_job", "5", { job_id: "j_1" }), conv("c_task", "4", { task_id: "t_1" })], new Set());
+    expect(r.map((c) => c.id)).toEqual(["c_2", "c_1"]);
+  });
+
+  it("a conversation already shown as a job row is not listed twice", () => {
+    expect(openConversationsToList([conv("c_1", "1")], new Set(["c_1"]))).toEqual([]);
+  });
+
+  it("merges two lists newest first (ISO times)", () => {
+    const a = [{ at: "2026-11-22T14:00:00Z", id: "t_a" }, { at: "2026-11-22T10:00:00Z", id: "t_b" }];
+    const b = [{ at: "2026-11-22T12:00:00Z", id: "c_1" }];
+    expect(mergeByTime(a, b).map((x) => x.id)).toEqual(["t_a", "c_1", "t_b"]);
+  });
+});
+
