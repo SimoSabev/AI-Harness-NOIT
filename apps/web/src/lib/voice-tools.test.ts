@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { VOICE_TOOLS } from "@mandat/contract";
 import { runVoiceTool } from "./voice-tools";
-import type { VoiceDeps } from "./voice-tools";
+import type { VoiceDeps, VoiceUi } from "./voice-tools";
+import type { RawControl } from "./voice-controls";
 
 // D-556: Jarvis acts through the same API as the screens. Each tool → one call; the answer is short text for the model,
 // framed as data (English to the model, Bulgarian to the person); a bad call is refused before anything is sent.
+function fakeUi(controls: RawControl[]) {
+  const did: string[] = [];
+  const ui: VoiceUi = {
+    scan: () => controls,
+    type: async (id, text, mode) => (did.push(`type ${id} ${mode} ${text}`), true),
+    press: (id) => (did.push(`press ${id}`), true),
+    choose: (id, option) => (did.push(`choose ${id} ${option}`), true),
+  };
+  return { ui, did };
+}
+const ctl = (id: string, over: Partial<RawControl> = {}): RawControl => ({ id, tag: "button", label: "Start the work", disabled: false, voice: null, inTotpForm: false, ...over });
+
 function deps(over: Partial<VoiceDeps> = {}) {
   const sent: { method: string; url: string; body?: unknown }[] = [];
   const went: string[] = [];
@@ -17,6 +30,7 @@ function deps(over: Partial<VoiceDeps> = {}) {
     go: (path) => void went.push(path),
     screenText: () => "Tasks\nПоправи отстъпката · VERIFIED",
     defaults: { agent: "claude", model: "claude-sonnet-5-5" },
+    ui: fakeUi([]).ui,
     ...over,
   };
   return { d, sent, went };
@@ -80,4 +94,39 @@ describe("Jarvis's tools in the browser (D-556)", () => {
     expect(x.sent).toEqual([]);
     expect(await runVoiceTool("start_work", { conversation_id: "c_new" }, x.d)).toMatch(/not_an_approver/);
   });
+
+  it("D-582 list_controls: what can be used, as data; approve and key controls are not even listed", async () => {
+    const { ui } = fakeUi([ctl("v1"), ctl("v2", { label: "Approve and merge" }), ctl("v3", { tag: "select", label: "Model", value: "a", options: ["a", "b"] }), ctl("v4", { tag: "input", inputType: "password", label: "Key" })]);
+    const r = await runVoiceTool("list_controls", {}, deps({ ui }).d);
+    expect(r).toMatch(/^<data>/);
+    expect(r).toContain("Start the work");
+    expect(r).toContain("Model");
+    expect(r).not.toMatch(/Approve|Key/);
+  });
+
+  it("D-582 write_prompt types into the prompt field and does not send; press sends when the person says so", async () => {
+    const { ui, did } = fakeUi([ctl("v1", { tag: "textarea", label: "Describe the task", voice: "prompt" }), ctl("v2", { label: "Send" })]);
+    const d = deps({ ui }).d;
+    expect(await runVoiceTool("write_prompt", { text: "Добави програма за лоялност" }, d)).toMatch(/not sent/);
+    expect(did).toEqual(["type v1 replace Добави програма за лоялност"]);
+    await runVoiceTool("press", { control: "v2" }, d);
+    expect(did.at(-1)).toBe("press v2");
+  });
+
+  it("D-582 type_text and choose act on an allowed control; a blocked or unknown one is refused and nothing happens", async () => {
+    const { ui, did } = fakeUi([ctl("v1", { tag: "input", label: "Budget" }), ctl("v2", { label: "Одобри" }), ctl("v3", { tag: "select", label: "Model", options: ["a", "b"] }), ctl("v4", { label: "Confirm", inTotpForm: true })]);
+    const d = deps({ ui }).d;
+    await runVoiceTool("type_text", { control: "v1", text: "0.5", mode: "append" }, d);
+    await runVoiceTool("choose", { control: "v3", option: "b" }, d);
+    expect(await runVoiceTool("press", { control: "v2" }, d)).toMatch(/Refused: .*person/);
+    expect(await runVoiceTool("press", { control: "v4" }, d)).toMatch(/Refused: .*person/);
+    expect(await runVoiceTool("type_text", { control: "v9", text: "x" }, d)).toMatch(/no such control/);
+    expect(await runVoiceTool("choose", { control: "v3", option: "zzz" }, d)).toMatch(/no such option/);
+    expect(did).toEqual(["type v1 append 0.5", "choose v3 b"]);
+  });
+
+  it("D-582 write_prompt with no prompt field on this screen says so", async () => {
+    expect(await runVoiceTool("write_prompt", { text: "x" }, deps({ ui: fakeUi([ctl("v1")]).ui }).d)).toMatch(/no prompt field/);
+  });
 });
+

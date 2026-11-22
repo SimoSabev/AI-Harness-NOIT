@@ -8,6 +8,7 @@ import type { Key } from "../i18n/t";
 import { postJson } from "../lib/client/api";
 import { runVoiceTool } from "../lib/voice-tools";
 import type { VoiceDeps } from "../lib/voice-tools";
+import { domUi } from "../lib/voice-dom";
 
 // D-556: Jarvis — the voice of the harness. One button on every page (in the root layout, so a conversation survives
 // moving between screens). The session goes straight to ElevenLabs with a signed URL from the proxy; the tools run here,
@@ -57,6 +58,7 @@ export function VoiceButton() {
       go: (path) => router.push(path),
       screenText: () => (document.querySelector("main")?.innerText ?? document.body.innerText).slice(0, SCREEN_TEXT_MAX),
       defaults: { agent: typeof def?.agent === "string" ? def.agent : "claude", model: typeof def?.model === "string" ? def.model : null },
+      ui: domUi(),
     };
     const clientTools = Object.fromEntries(VOICE_TOOLS.map((tool) => [tool.name, (params: unknown) => runVoiceTool(tool.name, params, deps)]));
     try {
@@ -88,7 +90,7 @@ export function VoiceButton() {
   const live = phase === "listening" || phase === "speaking" || phase === "connecting";
   const label = phase === "connecting" ? t("voice.connecting") : phase === "listening" ? t("voice.listening") : phase === "speaking" ? t("voice.speaking") : t("voice.button");
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+    <div data-voice="never" className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
       {error && <p role="alert" className="max-w-xs rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{t(error)}</p>}
       <button type="button" onClick={() => void (live ? stop() : start())} aria-pressed={live} aria-label={live ? t("voice.stop") : t("voice.talk")}
         className="flex items-center gap-2 rounded-full border border-line bg-panel px-4 py-2.5 font-display text-sm font-medium tracking-wide text-ink shadow-lg transition hover:bg-raised aria-pressed:border-accent aria-pressed:bg-accent-soft aria-pressed:text-accent-text">

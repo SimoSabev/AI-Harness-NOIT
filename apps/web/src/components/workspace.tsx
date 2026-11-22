@@ -199,7 +199,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       )}
       {modes}
       <div className="rounded-2xl border border-line-strong bg-panel p-3 focus-within:border-accent-text">
-        <textarea value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
+        <textarea data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
           onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
           className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-mute" />
         <div className="mt-2 flex flex-wrap items-center gap-2">
