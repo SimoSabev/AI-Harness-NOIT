@@ -628,8 +628,14 @@ describe("М4: the same spec by the process and by one agent (D-565)", () => {
     expect(t?.text).toContain("AC-2: WHEN a coupon is given");
     let rep = await compareReport(s.db, { job: "j_t1" });
     expect(rep?.comparison.winner).toBe("pending");
+    const mainBefore = s.git("rev-parse", "main");
     await runDaemonOnce(s.deps);
     expect(s.runs.at(-1)?.hidden?.files).toHaveLength(3);
+    // D-575 (live test 22.11): the single arm is judged, never delivered; run 1's arm landed in main and spoiled runs 2–4
+    const arm = (await s.db.query<{ kind: string; state: string }>("select kind, state from public.tasks where id = 't_cmp_t1'")).rows[0];
+    expect(arm).toEqual({ kind: "compare", state: "CLOSED" });
+    expect(s.git("rev-parse", "main")).toBe(mainBefore);
+    expect((await s.db.query("select 1 from public.deliveries d join public.changesets c on c.id = d.changeset_id where c.task_id = 't_cmp_t1'")).rows).toEqual([]);
     rep = await compareReport(s.db, { job: "j_t1" });
     expect(rep?.process).toMatchObject({ verdict: "VERIFIED", hidden_passed: 3, hidden_total: 3, done: true });
     expect(rep?.single).toMatchObject({ verdict: "VERIFIED", hidden_passed: 3, hidden_total: 3, done: true });

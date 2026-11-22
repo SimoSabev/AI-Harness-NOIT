@@ -85,7 +85,7 @@ interface TaskRow {
   /** D-533: the hash of the spec a person approved in the conversation that made this task (null: none) */
   spec_hash: string | null;
   /** D-534: "oracle" = the agent writes the hidden acceptance tests of an approved spec (never delivered) */
-  kind: "work" | "oracle";
+  kind: "work" | "oracle" | "compare";
   /** D-534: the hash of the oracle a person approved for this task's spec (null: none) */
   oracle_hash: string | null;
   /** D-535: a task of a job: one unit (fresh context, on the job branch) or the job's final check */
@@ -116,7 +116,7 @@ export function contractText(text: string, notes: readonly (string | null)[]): s
   return `${text.slice(0, room)}\n\n${tail}`.slice(-CONTRACT_TEXT_MAX);
 }
 
-export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null; spec_hash?: string | null; kind?: "work" | "oracle"; oracle_hash?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
+export function contractForTask(t: { id: string; type: TaskType; text: string; agent: string; replay?: string | null; spec_hash?: string | null; kind?: "work" | "oracle" | "compare"; oracle_hash?: string | null }, policy: MandatPolicy, baseSha: string, channel: ChannelRef = { label: "anthropic-key-main", kind: "api_key", model: "claude-sonnet-5-5" }, note: string | null = null, memoryHash: Sha256 | null = null): Contract {
   const rc = repoConfigFromPolicy(policy);
   if (!rc.ok) throw new Error(`unsupported runner ${rc.detail}`);
   const tt = taskTypeOf(policy, t.type); // D-360: "free" has a default scope
@@ -652,6 +652,13 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   if (notify) await enqueueOutbox(d.db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:${t.id}:${t.attempt}:${notify}`, payload: { task_id: t.id, kind: notify } });
   await bc(after?.state ?? "?", seq, { result: v.result, level: lvl.level, wait_reason: after?.wait_reason ?? null, usd, minutes });
   log(`[daemon] ${t.id}: ${v.result} · level ${lvl.level} · ${action.kind}`);
+  // D-575 (live test 22.11): the M4 single arm ends with its verdict; it is never rebased, branched, merged or delivered
+  if (t.kind === "compare") {
+    if (v.result === "FAILED") return { state: after?.state ?? "BLOCKED", verdict: v };
+    seq = await inTransaction(d.db, async (tx) => setState(tx, t, "CLOSED", { wait_reason: null, usd, minutes, outcome_decided: true }));
+    await bc("CLOSED", seq, { result: v.result, usd, minutes });
+    return { state: "CLOSED", verdict: v };
+  }
   // E8f (D-355, AC-4.5): the base moved while the task ran → never deliver onto the old base; rebase 3-way on the host
   if (v.result !== "FAILED" && diffPatch.length > 0) {
     const head = await mainHead(mirror);

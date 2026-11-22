@@ -23,7 +23,8 @@ export async function startSingleArm(db: Db, o: { job: string }): Promise<{ ok: 
   if (!spec.success || c?.approved_spec_hash !== j.spec_hash) return { ok: false, reason: "no_spec" };
   const id = singleArmTask(j.id);
   const ins = await db.query(
-    "insert into public.tasks (id, org_id, repo_id, type, agent, model, text, created_by, spec_hash, oracle_hash, attempts_max) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10, 3) on conflict (id) do nothing returning id",
+    // D-575: kind 'compare' is judged like any task and never delivered (run 1's arm landed in the project's main)
+    "insert into public.tasks (id, org_id, repo_id, type, agent, model, text, created_by, spec_hash, oracle_hash, attempts_max, kind) values ($1, $2::uuid, $3::uuid, $4, $5, $6, $7, $8::uuid, $9, $10, 3, 'compare') on conflict (id) do nothing returning id",
     [id, j.org_id, j.repo_id, j.type, j.agent, j.model, withApi(specText(spec.data), await oracleApi(db, j.oracle_hash)).slice(0, 4000), j.created_by, j.spec_hash, j.oracle_hash],
   );
   return ins.rows.length > 0 ? { ok: true, task: id } : { ok: false, reason: "exists" };
