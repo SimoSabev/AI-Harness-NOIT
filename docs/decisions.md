@@ -4982,3 +4982,14 @@ Electron. Самият файл казва, че е чист и без внос 
 На новия Mac първото пускане на dmg-а от `pnpm site:mac` спря точно там. Новият пакет, пуснат с Node-а на Electron,
 отговаря на /login с 200 и с заглавките от config-а.
 Тестове: desktop bundle-plan.test.ts (+1: config-ът е чист JS, със същите стойности и заглавки). Статус: решено от кодера.
+
+## D-578 Docker тестът на Gemini не бърка метриките на CLI-я с пропуснат файл (macOS, 22.11.2026)
+Решение: проверката от D-431 в `gemini.docker.test.ts` търси само предупреждението за пропуснат файл:
+`/insecure|Skipping [^\n]*(settings|polic)/i` вместо `/insecure|Skipping/i`.
+Защо: на новия Mac тестът падаше и пуснат сам (151 s), макар че агентът е VERIFIED и харнесът е дал всичко. В stderr на
+Gemini CLI имаше само `[STARTUP] Phase 'cleanup_ops' was started but never ended. Skipping metrics.` Това е телеметрията на
+CLI-я при бавен старт, а не пропуснати настройки или политики. Новият израз пак хваща съобщението от D-431
+(„Skipping system settings file … is insecure“) и „Skipping policy file …“.
+Също от прогона на macOS (`pnpm test:docker`, 64/66 под товар): `conflict-wait.docker.test.ts` падна само докато вървеше
+строежът на dmg-а. Пуснат сам, минава.
+Тестове: worker gemini.docker.test.ts (2/2 в Docker). Статус: решено от кодера.

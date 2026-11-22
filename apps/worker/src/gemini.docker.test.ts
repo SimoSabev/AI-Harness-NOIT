@@ -108,9 +108,10 @@ describe("Gemini CLI end to end with a fake Gemini endpoint (D-430, docker)", ()
     expect({ result: t?.last_result, daemon: lines.slice(-8) }).toMatchObject({ result: "VERIFIED" });
     expect(harness.map((h) => h.target)).toContain("gemini");
     expect(harness.find((h) => h.target === "gemini")?.unsupported.map((u) => u.rule)).toContain("hooks");
-    // D-431: the CLI loaded every file the harness gave it (it warns and skips an insecure settings or policy path)
+    // D-431: the CLI loaded every file the harness gave it (it warns and skips an insecure settings or policy path).
+    // D-578: only that warning counts; "[STARTUP] Phase … never ended. Skipping metrics." is the CLI's own telemetry on a slow start.
     const gr = runs.find((x) => (JSON.parse(readFileSync(path.join(x, "harness.json"), "utf8")) as { target: string }).target === "gemini") ?? "";
-    expect(readFileSync(path.join(gr, "agent-stderr.txt"), "utf8")).not.toMatch(/insecure|Skipping/i);
+    expect(readFileSync(path.join(gr, "agent-stderr.txt"), "utf8")).not.toMatch(/insecure|Skipping [^\n]*(settings|polic)/i);
     await db.end();
   }, 600_000);
 });
