@@ -1,3 +1,5 @@
+import { VOICE_PERSON_ONLY as PERSON_ONLY, VOICE_SECRET_NAME as SECRET_NAME } from "@mandat/contract";
+
 // D-582 (Simo 22.11.2026): Jarvis controls the screens like a person — every field, button, link and choice — except what
 // stays with the person: approving, merging, signing, keys, deleting, logging out. Pure: the browser adapter (voice-dom.ts)
 // describes the page as RawControl, these rules decide; a blocked control is never shown to the model and refused if named.
@@ -21,9 +23,6 @@ export interface RawControl {
 
 export interface ControlView { id: string; kind: "button" | "link" | "field" | "choice" | "checkbox"; label: string; value?: string; options?: string[] }
 
-/** English and Bulgarian words of what stays with the person (labels are short UI text, so words, not sentences) */
-const PERSON_ONLY = /approv|merge|\bsign|delete|remove|revoke|log ?out|sign ?out|\bkeys?\b|token|secret|password|totp|одобр|слей|слива|подпи[сш]|изтрий|изтриван|премахни|махни|отнеми|излез|ключ|токен|парол|тайн/i;
-const SECRET_NAME = /key|token|secret|password|totp|ключ/i;
 const VALUE_MAX = 200;
 
 /** null when Jarvis may use it, else why not (for the refusal) */

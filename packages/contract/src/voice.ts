@@ -21,6 +21,13 @@ export interface VoiceTool { name: string; description: string; params: VoicePar
 
 const p = (name: string, description: string, required = true, extra: Partial<VoiceParam> = {}): VoiceParam => ({ name, type: "string", description, required, ...extra });
 
+/**
+ * D-582: the labels of controls that stay with the person (English and Bulgarian words; labels are short UI text) and the
+ * names of secret fields. The browser hides such controls from Jarvis and refuses them if named (apps/web voice-controls.ts).
+ */
+export const VOICE_PERSON_ONLY = /approv|merge|\bsign|delete|remove|revoke|log ?out|sign ?out|\bkeys?\b|token|secret|password|totp|одобр|слей|слива|подпи[сш]|изтрий|изтриван|премахни|махни|отнеми|излез|ключ|токен|парол|тайн/i;
+export const VOICE_SECRET_NAME = /key|token|secret|password|totp|ключ/i;
+
 /** The catalog every voice engine is configured with (descriptions are what the model reads, in Bulgarian). */
 export const VOICE_TOOLS: readonly VoiceTool[] = [
   { name: "open_screen", description: "Отваря екран на харнеса, за да го покажеш на човека: задачи, проекти, ресърч, памет, настройки, преглед, харнес или акаунти.", params: [p("screen", "Кой екран", true, { enum: VoiceScreen.options }), p("project_id", "Проект, ако екранът е за проект", false)] },
