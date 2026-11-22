@@ -5025,3 +5025,16 @@ CLI-я при бавен старт, а не пропуснати настрой
 `MenuTemplateItem` пасва на типа на Electron 44.
 Тестове: desktop window-guard.test.ts (+1, CSP обновен), builder-config.test.ts (+1). Статус: решено от кодера, по
 одобрение на Симо („unlock narrowly“).
+
+## D-581 Уебът позволява микрофона на Jarvis: `Permissions-Policy: microphone=(self)` (жив тест, macOS, 22.11.2026)
+Решение: в заглавките на всяка страница (`apps/web/next.config.ts`) микрофонът е позволен само за същия адрес:
+`camera=(), microphone=(self), geolocation=()`. Беше `microphone=()`.
+Защо: и след D-580, и след „Allow“ в macOS бутонът на Jarvis казваше, че микрофонът е блокиран. На живо, през
+отстраняването на грешки на приложението, се видя следното. macOS дава `granted` (`systemPreferences`). Прозорецът получава
+заявка `media` с `mediaTypes: ["audio"]` от локалната страница. Дори обработчик, който позволява всичко, пак дава
+`NotAllowedError`. Причината е заглавката от D-284: `microphone=()` спира микрофона за самата страница, в браузъра също.
+Опит в Electron 44 със същата страница: с `microphone=()` е `NotAllowedError`, с `microphone=(self)` е `ok`. Jarvis (D-556)
+не беше проверен на живо и затова това не се видя.
+Граница: камерата и местоположението остават изключени; чужд iframe не може да иска микрофона (`self`, плюс
+`X-Frame-Options: DENY` и `frame-src 'none'` на десктопа).
+Тестове: web next-config.test.ts (1, нов: всички заглавки за сигурност). Статус: решено от кодера.
