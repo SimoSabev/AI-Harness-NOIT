@@ -16,7 +16,8 @@ const TOOL_ANSWER_SECS = 20;
 const DEFAULT_LLM = "claude-haiku-5-5";
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
-export interface VoiceAgentState { agent_id: string; tool_ids: string[]; hash: string }
+/** voice_id and llm since D-588 (older files lack them; the voice is then read from the agent at ElevenLabs) */
+export interface VoiceAgentState { agent_id: string; tool_ids: string[]; hash: string; voice_id?: string; llm?: string }
 
 export class VoiceError extends Error {
   /** D-579: why ElevenLabs refused — the status and its own message, short, without the key; for the proxy's log */
@@ -94,7 +95,7 @@ export async function ensureVoiceAgent(o: { fetch: Fetch; key: string; voiceId: 
   const hash = specHash(o.voiceId, llm);
   const prev = o.prev && AGENT_ID.test(o.prev.agent_id) ? o.prev : null;
   const exists = prev !== null && (await call(o.fetch, o.key, "GET", `/v1/convai/agents/${prev.agent_id}`)).ok;
-  if (exists && prev.hash === hash) return prev;
+  if (exists && prev.hash === hash) return { ...prev, voice_id: o.voiceId, llm };
   const toolIds: string[] = [];
   for (const t of VOICE_TOOLS) {
     const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/tools", elevenToolConfig(t)), "voice_tool_create_failed", o.key)).id;
@@ -104,11 +105,31 @@ export async function ensureVoiceAgent(o: { fetch: Fetch; key: string; voiceId: 
   const body = elevenAgentBody({ voiceId: o.voiceId, toolIds, llm });
   if (exists) {
     await json(await call(o.fetch, o.key, "PATCH", `/v1/convai/agents/${prev.agent_id}`, { conversation_config: body.conversation_config, platform_settings: body.platform_settings }), "voice_agent_update_failed", o.key);
-    return { agent_id: prev.agent_id, tool_ids: toolIds, hash };
+    return { agent_id: prev.agent_id, tool_ids: toolIds, hash, voice_id: o.voiceId, llm };
   }
   const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/agents/create", body), "voice_agent_create_failed", o.key)).agent_id;
   if (typeof id !== "string" || !AGENT_ID.test(id)) throw new VoiceError("voice_agent_create_failed");
-  return { agent_id: id, tool_ids: toolIds, hash };
+  return { agent_id: id, tool_ids: toolIds, hash, voice_id: o.voiceId, llm };
+}
+
+/**
+ * D-588: at each session the agent is brought up to date with this code (its tools, prompt and settings), so a change to
+ * Jarvis reaches the voice without anyone pressing "Create Jarvis" again. The voice is the agent's own (from the state, or
+ * read once from ElevenLabs for files from before D-588). Same hash → nothing is sent but, for an old file, one GET.
+ */
+export async function syncVoiceAgent(o: { fetch: Fetch; key: string; prev: VoiceAgentState }): Promise<VoiceAgentState> {
+  const llm = o.prev.llm ?? DEFAULT_LLM;
+  let voiceId = o.prev.voice_id;
+  if (!voiceId && AGENT_ID.test(o.prev.agent_id)) {
+    const r = await call(o.fetch, o.key, "GET", `/v1/convai/agents/${o.prev.agent_id}`);
+    if (r.ok) {
+      const v = ((await r.json().catch(() => null)) as { conversation_config?: { tts?: { voice_id?: unknown } } } | null)?.conversation_config?.tts?.voice_id;
+      if (typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v)) voiceId = v;
+    }
+  }
+  if (!voiceId) return o.prev;
+  if (o.prev.voice_id && o.prev.hash === specHash(voiceId, llm)) return o.prev;
+  return ensureVoiceAgent({ fetch: o.fetch, key: o.key, voiceId, llm, prev: o.prev });
 }
 
 /** a signed URL for one session (valid 15 minutes); only wss on an ElevenLabs host is handed out */

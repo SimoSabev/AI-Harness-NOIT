@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { VOICE_TOOLS } from "@mandat/contract";
-import { ELEVEN_BASE, VoiceError, elevenAgentBody, elevenToolConfig, ensureVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
+import { ELEVEN_BASE, VoiceError, elevenAgentBody, elevenToolConfig, ensureVoiceAgent, syncVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
 
 // D-556: Jarvis on ElevenLabs Agents. The key stays in the proxy (AGENTS.md rule 2): the proxy creates the person's
 // agent and its tools, and hands out a short-lived signed URL only (docs: elevenlabs.io/docs/eleven-agents, 20.11.2026).
 const KEY = "xi_" + "k".repeat(40);
 
 interface Call { method: string; url: string; headers: Record<string, string>; body: unknown }
-function fakeEleven(o: { agentMissing?: boolean; signed?: string } = {}) {
+function fakeEleven(o: { agentMissing?: boolean; signed?: string; agentVoice?: string } = {}) {
   const calls: Call[] = [];
   let n = 0;
   const f = async (url: string | URL, init?: RequestInit): Promise<Response> => {
@@ -16,7 +16,7 @@ function fakeEleven(o: { agentMissing?: boolean; signed?: string } = {}) {
     calls.push({ method, url: u, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: init?.body ? JSON.parse(String(init.body)) : null });
     if (method === "POST" && u === `${ELEVEN_BASE}/v1/convai/tools`) return Response.json({ id: `tool_${++n}` });
     if (method === "POST" && u === `${ELEVEN_BASE}/v1/convai/agents/create`) return Response.json({ agent_id: "agent_new" });
-    if (method === "GET" && u.startsWith(`${ELEVEN_BASE}/v1/convai/agents/`)) return o.agentMissing ? new Response("{}", { status: 404 }) : Response.json({ agent_id: u.split("/").pop() });
+    if (method === "GET" && u.startsWith(`${ELEVEN_BASE}/v1/convai/agents/`)) return o.agentMissing ? new Response("{}", { status: 404 }) : Response.json({ agent_id: u.split("/").pop(), conversation_config: { tts: { voice_id: o.agentVoice ?? "voice_old" } } });
     if (method === "PATCH") return Response.json({ agent_id: u.split("/").pop() });
     if (u.startsWith(`${ELEVEN_BASE}/v1/convai/conversation/get-signed-url`)) return Response.json({ signed_url: o.signed ?? "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_new&conversation_signature=abc" });
     return new Response("{}", { status: 500 });
@@ -124,6 +124,27 @@ describe("why ElevenLabs refused (D-579)", () => {
   it("a body that is not JSON: just the status", async () => {
     const f = async (url: string | URL, init?: RequestInit): Promise<Response> => ((init?.method ?? "GET") === "POST" && String(url).endsWith("/v1/convai/tools") ? Response.json({ id: "t" }) : new Response("<html>bad gateway</html>", { status: 502 }));
     expect((await refusal(f)).detail).toBe("502");
+  });
+});
+
+describe("Jarvis keeps itself current (D-588)", () => {
+  it("an agent made with an older tool list is updated at the next session, with the voice it already has; the new state remembers the voice", async () => {
+    const { f, calls } = fakeEleven({ agentVoice: "voice_7" });
+    const stale = { agent_id: "agent_old", tool_ids: ["t1"], hash: "old-hash" };
+    const next = await syncVoiceAgent({ fetch: f, key: KEY, prev: stale });
+    expect(next.agent_id).toBe("agent_old");
+    expect(next.voice_id).toBe("voice_7");
+    expect(next.tool_ids).toHaveLength(VOICE_TOOLS.length);
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect((patch?.body as { conversation_config: { tts: { voice_id: string } } }).conversation_config.tts.voice_id).toBe("voice_7");
+  });
+
+  it("a current agent: nothing is created or changed", async () => {
+    const first = fakeEleven();
+    const made = await ensureVoiceAgent({ fetch: first.f, key: KEY, voiceId: "voice_1", prev: null });
+    const again = fakeEleven();
+    expect(await syncVoiceAgent({ fetch: again.f, key: KEY, prev: made })).toEqual(made);
+    expect(again.calls.filter((c) => c.method !== "GET")).toEqual([]);
   });
 });
 

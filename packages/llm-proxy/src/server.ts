@@ -14,7 +14,7 @@ import { BootGate } from "./boot.js";
 import { SEARCH_ROUTES, SEARCH_UPSTREAM, forwardSearch } from "./search-upstream.js";
 import type { SearchProviderId } from "./search-upstream.js";
 import type { BootOptions } from "./boot.js";
-import { VoiceError, ensureVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
+import { VoiceError, ensureVoiceAgent, syncVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
 import type { VoiceAgentState } from "./voice-upstream.js";
 
 /** D-556: the agent made for the person's key (no key inside); a missing or broken file is no agent yet */
@@ -436,7 +436,15 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
     try {
       if (op === "session") {
         if (!prev) return { status: 409, body: { error: "voice_no_agent" } };
-        return { status: 200, body: { signed_url: await voiceSignedUrl({ fetch: voiceFetch, key, agentId: prev.agent_id }) } };
+        // D-588: bring the agent up to date with this code first; a failure keeps the old agent (and is logged)
+        let agent = prev;
+        try {
+          agent = await syncVoiceAgent({ fetch: voiceFetch, key, prev });
+          if (agent !== prev) writeFileSync(voiceFile, JSON.stringify(agent), { mode: 0o600 });
+        } catch (e) {
+          if (e instanceof VoiceError) voiceLog({ voice_error: e.code, detail: e.detail || "sync" });
+        }
+        return { status: 200, body: { signed_url: await voiceSignedUrl({ fetch: voiceFetch, key, agentId: agent.agent_id }) } };
       }
       let req: unknown;
       try {

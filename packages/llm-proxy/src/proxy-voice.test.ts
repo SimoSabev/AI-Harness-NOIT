@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -44,8 +44,9 @@ function fakeEleven(o: { refuseCreate?: boolean } = {}) {
       if (o.refuseCreate) return Response.json({ detail: [{ loc: ["body", "conversation_config", "agent", "language"], msg: "bad language" }] }, { status: 422 });
       return Response.json({ agent_id: "agent_j" });
     }
-    if (m === "GET" && url.startsWith(`${ELEVEN_BASE}/v1/convai/agents/`)) return Response.json({});
+    if (m === "GET" && url.startsWith(`${ELEVEN_BASE}/v1/convai/agents/`)) return Response.json({ conversation_config: { tts: { voice_id: "voice_1" } } });
     if (url.startsWith(`${ELEVEN_BASE}/v1/convai/conversation/get-signed-url`)) return Response.json({ signed_url: "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_j&conversation_signature=s" });
+    if (m === "PATCH" && url.startsWith(`${ELEVEN_BASE}/v1/convai/agents/`)) return Response.json({ agent_id: "agent_j" });
     return new Response("{}", { status: 500 });
   };
   return { f, keys };
@@ -118,6 +119,16 @@ describe("Jarvis through the proxy (D-556)", () => {
     expect([r.status, JSON.parse(r.body)]).toEqual([502, { error: "voice_agent_create_failed" }]);
     expect(lines).toEqual([{ voice_error: "voice_agent_create_failed", detail: "422 body.conversation_config.agent.language: bad language" }]);
     expect(JSON.stringify(lines)).not.toContain(XI);
+  });
+
+  it("D-588: a session with an agent from an older tool list updates it first, then hands out the signed URL", async () => {
+    const p = await proxy({ voice: { elevenlabs: XI } });
+    writeFileSync(path.join(p.dir, "voice-agent.json"), JSON.stringify({ agent_id: "agent_j", tool_ids: ["tool_old"], hash: "old" }));
+    const s = await call(p.adm, "/admin/voice/session", { headers: auth, body: "{}" });
+    expect(s.status).toBe(200);
+    const saved = JSON.parse(readFileSync(path.join(p.dir, "voice-agent.json"), "utf8")) as { tool_ids: string[]; hash: string };
+    expect(saved.hash).not.toBe("old");
+    expect(saved.tool_ids.length).toBeGreaterThan(1);
   });
 });
 
