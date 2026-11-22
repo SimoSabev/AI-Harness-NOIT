@@ -1,5 +1,4 @@
 import type { DesktopCommand, DesktopView } from "@mandat/contract";
-import type { MenuItemConstructorOptions } from "electron";
 import { dt } from "./i18n.js";
 import type { DesktopKey, Lang } from "./i18n.js";
 import { shortcutMap } from "./shortcuts.js";
@@ -18,6 +17,22 @@ export type MenuSpec =
   | { type: "separator" }
   | { role: MenuRole; label?: string; submenu?: MenuSpec[] }
   | { label: string; accelerator?: string; command?: DesktopCommand; action?: MenuAction; type?: "checkbox"; checked?: boolean; enabled?: boolean; submenu?: MenuSpec[] };
+
+/**
+ * The part of Electron's MenuItemConstructorOptions that toTemplate fills. Declared here, not imported: Electron is
+ * installed on demand (D-303), so a fresh clone has no `electron` types and `pnpm check` must still pass (D-576).
+ * It is structurally assignable to Electron's type, which main.ts hands to Menu.buildFromTemplate.
+ */
+export interface MenuTemplateItem {
+  label?: string;
+  role?: MenuRole;
+  type?: "separator" | "checkbox";
+  accelerator?: string;
+  checked?: boolean;
+  enabled?: boolean;
+  submenu?: MenuTemplateItem[];
+  click?: () => void;
+}
 
 export interface AppMenuOptions {
   appName: string;
@@ -95,11 +110,11 @@ export function trayState(lang: Lang, count: number, platform: string): { toolti
 }
 
 /** MenuSpec → the Electron template: a command goes to the web, an action to main; roles and accelerators as they are. */
-export function toTemplate(items: readonly MenuSpec[], onCommand: (c: DesktopCommand) => void, onAction: (a: MenuAction) => void): MenuItemConstructorOptions[] {
-  return items.map((i): MenuItemConstructorOptions => {
+export function toTemplate(items: readonly MenuSpec[], onCommand: (c: DesktopCommand) => void, onAction: (a: MenuAction) => void): MenuTemplateItem[] {
+  return items.map((i): MenuTemplateItem => {
     if ("type" in i && i.type === "separator") return { type: "separator" };
     if ("role" in i) return { role: i.role, ...(i.label ? { label: i.label } : {}), ...(i.submenu ? { submenu: toTemplate(i.submenu, onCommand, onAction) } : {}) };
-    const out: MenuItemConstructorOptions = { label: i.label };
+    const out: MenuTemplateItem = { label: i.label };
     if (i.accelerator) out.accelerator = i.accelerator;
     if (i.type === "checkbox") {
       out.type = "checkbox";

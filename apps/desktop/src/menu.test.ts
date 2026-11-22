@@ -1,4 +1,5 @@
 import { DesktopCommand } from "@mandat/contract";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { appMenu, toTemplate, trayMenu, trayState } from "./menu.js";
 import type { MenuSpec } from "./menu.js";
@@ -90,5 +91,12 @@ describe("toTemplate", () => {
     (login?.click as () => void)();
     expect(sent).toEqual([{ command: "new_task" }, "toggle_login"]);
     expect(items.filter((x) => x.type === "separator").length).toBeGreaterThan(0);
+  });
+});
+
+describe("menu.ts stays pure", () => {
+  it("does not import electron, not even a type: a fresh clone has no Electron and `pnpm check` must pass (D-576)", () => {
+    const src = readFileSync(new URL("./menu.ts", import.meta.url), "utf8");
+    expect(src).not.toMatch(/from\s+["']electron["']/);
   });
 });

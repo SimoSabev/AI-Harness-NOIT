@@ -4962,3 +4962,13 @@ purpose "project" (D-557) през същия `/api/conversations`, който �
 Последствие: резултатите от рънове 2 и 3 за процеса не са чисти. Копието на проекта се връща на 2946932, а старият връх се
 пази в ref за връщане.
 Тестове: worker job.test.ts (ръката е `compare`, `CLOSED`, main не мърда, няма доставка). Статус: решено от кодера.
+
+## D-576 `pnpm check` минава на чист клон без Electron (macOS, 22.11.2026)
+Решение: `apps/desktop/src/menu.ts` вече не внася типа `MenuItemConstructorOptions` от `electron`. Вместо него има свой тип
+`MenuTemplateItem`: само полетата, които `toTemplate` попълва (label, role, type, accelerator, checked, enabled, submenu,
+click). Той е структурно съвместим с типа на Electron, който main.ts подава на `Menu.buildFromTemplate`.
+Защо: Electron се слага при нужда (D-303), затова на чист клон няма типове за `electron`. На новия Mac `pnpm check` падна на
+`tsc -p tsconfig.check.json` с TS2307 в menu.ts. На Windows не се виждаше, защото там `pnpm desktop` вече беше слагал
+Electron. Самият файл казва, че е чист и без внос от Electron.
+Граница: съвместимостта с истинския тип на Electron 44 не е проверена с инсталиран Electron (main.ts е извън check).
+Тестове: desktop menu.test.ts (+1: menu.ts не внася `electron`). Статус: решено от кодера.
