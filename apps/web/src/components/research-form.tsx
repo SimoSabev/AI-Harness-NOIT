@@ -68,7 +68,7 @@ export function ResearchForm({ channels }: { channels: ResearchChannel[] }) {
     <form onSubmit={(e) => void submit(e)} className={`${card} rise flex flex-col gap-5 p-5`}>
       <label className="block">
         <span className={label}>{t("research.form.question")}</span>
-        <textarea required maxLength={2000} rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t("research.form.placeholder")} className={`${input} mt-2 resize-y text-[15px]`} />
+        <textarea data-voice="prompt" required maxLength={2000} rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t("research.form.placeholder")} className={`${input} mt-2 resize-y text-[15px]`} />
       </label>
       <Segmented name={t("research.form.depth")} value={depth} options={DEPTHS} onChange={setDepth} text={(d) => t(`research.depth.${d}`)} hint={(d) => t(`research.depthHint.${d}`)} />
       <Segmented name={t("research.form.goal")} value={goal} options={GOALS} onChange={setGoal} text={(g) => t(`research.goal.${g}`)} hint={(g) => t(`research.goalHint.${g}`)} />

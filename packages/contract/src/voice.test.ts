@@ -73,5 +73,12 @@ describe("the voice's tools (D-556)", () => {
     expect(JARVIS_PROMPT_BG).toMatch(/критерии/);
     expect(JARVIS_FIRST_MESSAGE_BG.length).toBeLessThan(40);
   });
+
+  it("D-585: interviews before a task or research — one short question at a time — and skips it only on „направо“; writes into the screen's form", () => {
+    expect(JARVIS_PROMPT_BG).toMatch(/интервю/i);
+    expect(JARVIS_PROMPT_BG).toMatch(/по един кратък въпрос/);
+    expect(JARVIS_PROMPT_BG).toMatch(/направо/);
+    expect(JARVIS_PROMPT_BG).toMatch(/open_screen research/);
+  });
 });
 
