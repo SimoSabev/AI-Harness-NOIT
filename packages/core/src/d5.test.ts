@@ -22,6 +22,17 @@ describe("D5 hidden tests (E9б)", () => {
     expect(e.data).toEqual({ failed: ["tests/__hidden__/cart.spec.ts > hidden > rounds down"], passed: 1, total: 2 });
     expect(hiddenId("x")).toMatch(/^h[0-9a-f]{8}$/);
   });
+  it("D-574: with a scope (a job unit) only its criteria and the U- tests decide; met lists the criteria fully green anywhere", () => {
+    const h = (id: string, status: "passed" | "failed") => ({ id: `tests/__hidden__/a.spec.ts > g > ${id}: x`, status });
+    const hidden = [h("AC-1", "passed"), h("AC-3", "passed"), h("AC-3", "passed"), h("AC-5", "failed"), h("U-1", "passed")];
+    const e = d5Hidden({ hidden, files: 1, scope: ["AC-1"] }).evidence;
+    expect(e.status).toBe("pass");
+    expect(e.data).toEqual({ passed: 2, total: 2, met: ["AC-1", "AC-3"] });
+    const f = d5Hidden({ hidden: [...hidden, h("U-2", "failed")], files: 1, scope: ["AC-1"] }).evidence;
+    expect(f).toMatchObject({ status: "fail", data: { failed: ["tests/__hidden__/a.spec.ts > g > U-2: x"], passed: 2, total: 3, met: ["AC-1", "AC-3"] } });
+    // no test of the scope ran at all: not a silent pass
+    expect(d5Hidden({ hidden: [h("AC-5", "failed")], files: 1, scope: ["AC-1"] }).evidence).toMatchObject({ status: "unknown" });
+  });
   it("all hidden tests passed → pass; no report → unknown not_run", () => {
     expect(d5Hidden({ hidden: [{ id: "a", status: "passed" }], files: 1 }).evidence).toMatchObject({ status: "pass", summary: "1/1 hidden test(s) passed" });
     expect(d5Hidden({ hidden: [], files: 2, reportValid: false }).evidence).toMatchObject({ status: "unknown", signature: "D5:not_run:2" });

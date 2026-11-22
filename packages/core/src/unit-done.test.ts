@@ -11,6 +11,10 @@ describe("criteriaMet (D-573)", () => {
     expect(criteriaMet(["AC-3", "AC-4"], fail("AC-1", "AC-10", "U-2"))).toBe(true);
     expect(criteriaMet(["AC-3", "AC-4"], fail("AC-1", "AC-4"))).toBe(false);
   });
+  it("D-574: a scoped D5 says which criteria are met anywhere; only those count (live test 22.11)", () => {
+    expect(criteriaMet(["AC-3", "AC-7"], { status: "pass", data: { passed: 2, total: 2, met: ["AC-1", "AC-3", "AC-7"] } })).toBe(true);
+    expect(criteriaMet(["AC-3", "AC-7"], { status: "pass", data: { passed: 2, total: 2, met: ["AC-1", "AC-3"] } })).toBe(false);
+  });
   it("no evidence, no hidden tests, a capped failed list or no criteria never count as met", () => {
     expect(criteriaMet(["AC-3"], null)).toBe(false);
     expect(criteriaMet(["AC-3"], { status: "pass", data: { passed: 0, total: 0 } })).toBe(false);

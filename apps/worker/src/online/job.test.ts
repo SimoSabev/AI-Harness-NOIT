@@ -159,6 +159,8 @@ describe("units, final check, seal and delivery (D-535)", () => {
     // unit 1: base = branch head (= main now), tree B has AC-1 + U-1 only, the writer's text has no test
     expect(s.contracts[0]?.base_commit).toBe(s.fx.sha);
     expect(s.runs[0]?.hidden?.files.map((f) => f.path)).toEqual(["packages/shop/test/__hidden__/a.spec.ts", "tests/__hidden__/u.spec.ts"]);
+    // D-574: D5 decides on the unit's scope only (a file may hold later criteria too)
+    expect(s.runs[0]?.hidden?.scope).toEqual(["AC-1"]);
     expect(s.runs[0]?.applyFiles).toBeUndefined();
     expect(s.runs[0]?.oracleGrade).toBeUndefined();
     expect(s.contracts[0]?.text).toContain("AC-1: WHEN the subtotal is over 50");

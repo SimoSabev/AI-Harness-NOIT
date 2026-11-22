@@ -93,6 +93,14 @@ export function oracleFilesFor<F extends { path: string; data: Buffer }>(files: 
   return { files: keep, deferred: [...deferred].sort() };
 }
 
+/** D-574 (live test 22.11): the oracle wrote every criterion into one file, so oracleFilesFor kept it back from every
+ *  unit but the last and the units ran with no hidden tests; a unit now gets each file with a test of its scope or an
+ *  unchanged one, and D5 decides on the scope only (later criteria may fail there) */
+export function scopedOracleFiles<F extends { path: string; data: Buffer }>(files: readonly F[], scope: readonly string[]): F[] {
+  const ok = new Set(scope);
+  return files.filter((f) => fileTags(f.data.toString("utf8")).some((t) => t.startsWith("U-") || ok.has(t)));
+}
+
 const byNumber = (a: string, b: string) => Number(a.slice(3)) - Number(b.slice(3));
 
 /** the criteria whose hidden tests failed (from D5.hidden's failed test ids); ids only, never a test name */

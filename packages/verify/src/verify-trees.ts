@@ -31,7 +31,7 @@ const infra = (code: ErrorCode, message: string): never => {
 
 export interface UiCheck { paths: string[]; devCommand: string | null; image: string | null; routes: string[] }
 /** D-536: `dir` "" means the paths are from the repo root (an oracle's, in __hidden__ folders); else they join `dir` (D-362) */
-export interface HiddenTests { dir: string; files: { path: string; data: Buffer }[] }
+export interface HiddenTests { dir: string; files: { path: string; data: Buffer }[]; /** D-574: a job unit's criteria; D5 decides on them (and U-) only */ scope?: string[] }
 
 export interface VerifyTreesInput {
   docker: DockerRunner;
@@ -248,7 +248,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     });
     evidence.push(d12Ui({ uiTouched, routes: routes ?? null }).evidence);
   }
-  if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length, reportValid: bRaw.report.valid }).evidence);
+  if (hidden && split) evidence.push(bRaw.timedOut ? { ...ev("D5.hidden", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }), agent_visible: false } : d5Hidden({ hidden: split.hidden, files: hidden.files.length, reportValid: bRaw.report.valid, ...(hidden.scope ? { scope: hidden.scope } : {}) }).evidence);
   evidence.push(a.timedOut ? ev("D1.base_tests", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" }) : d1(bl, a.report, rc.tests.flaky ?? []).evidence);
   // D-548: the same base tests on the result may not get much slower (a person looks; timing is noisy)
   if (!a.timedOut) evidence.push(d14Perf({ baseline: bl, a: a.report }));

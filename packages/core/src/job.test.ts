@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, unitLands, jobMode, oracleFilesFor, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
+import { failingCriteria, fileTags, unitLands, jobMode, oracleFilesFor, scopedOracleFiles, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -46,6 +46,10 @@ describe("the oracle files of a unit (D-535)", () => {
     expect(r.files.map((x) => x.path)).toEqual(["a.spec.ts", "u.spec.ts"]);
     expect(r.deferred).toEqual(["AC-1"]);
     expect(oracleFilesFor(files, ["AC-1", "AC-2"]).files.map((x) => x.path)).toEqual(["a.spec.ts", "b.spec.ts", "u.spec.ts"]);
+  });
+  it("D-574: a unit gets every file that has a test of its scope or an unchanged one (D5 decides on the scope only)", () => {
+    expect(scopedOracleFiles(files, ["AC-1"]).map((x) => x.path)).toEqual(["a.spec.ts", "b.spec.ts", "u.spec.ts"]);
+    expect(scopedOracleFiles(files, ["AC-9"]).map((x) => x.path)).toEqual(["u.spec.ts"]);
   });  it("D-536: oracle files at any depth (paths from the repo root) are filtered by their tags the same way", () => {
     const nested = [
       f("packages/engine/test/__hidden__/vec3.spec.ts", 'it("AC-1: adds", () => {});'),

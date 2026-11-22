@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Handoff, Spec, hashJcs, jobBranch, jobMapFiles, parseHandoff } from "@mandat/contract";
 import type { Verdict } from "@mandat/contract";
-import { failingCriteria, oracleFilesFor, unitLands } from "@mandat/core";
+import { failingCriteria, scopedOracleFiles, unitLands } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
 import type { HiddenTests } from "@mandat/verify";
@@ -38,8 +38,9 @@ export async function jobInputs(db: Db, t: JobTaskRef, o: { mirror: string }): P
     return { ok: true, baseSha: job.base_sha, hidden: ot.hidden, applyFiles, grade: true, jobFiles: null, ...common };
   }
   const allowed = (await db.query<{ criteria: string[] }>("select criteria from public.job_units where job_id = $1 and (status = 'passed' or unit_id = $2)", [job.id, t.unit_id])).rows.flatMap((r) => r.criteria);
-  const files = oracleFilesFor(ot.hidden.files, allowed).files;
-  return { ok: true, baseSha: head, hidden: files.length > 0 ? { dir: ot.hidden.dir, files } : null, applyFiles: null, grade: false, jobFiles: await mapOf(db, job, t.unit_id ?? ""), ...common };
+  // D-574: every file with a test of the unit's scope; D5 decides on the scope only (one big oracle file no longer waits)
+  const files = scopedOracleFiles(ot.hidden.files, allowed);
+  return { ok: true, baseSha: head, hidden: files.length > 0 ? { dir: ot.hidden.dir, files, scope: allowed } : null, applyFiles: null, grade: false, jobFiles: await mapOf(db, job, t.unit_id ?? ""), ...common };
 }
 
 /** D-543: the job's map and feature list for a unit's writer (read only in the sandbox; passes only from passed units) */

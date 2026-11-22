@@ -310,7 +310,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   // D-534: a task with an approved oracle gets that oracle's tests (checked against its manifest); an oracle task gets
   // none (it writes them); every other task the latest repo-wide set (the oracles' sets are keyed by a spec)
   const hiddenDir = hp?.layers.g.hidden_tests_dir ?? "tests/__hidden__";
-  let hidden: { dir: string; files: { path: string; data: Buffer }[] } | null = null;
+  let hidden: { dir: string; files: { path: string; data: Buffer }[]; scope?: string[] } | null = null;
   if (job?.ok) {
     // D-535: the unit's share of the approved oracle (checked file by file in jobInputs), for tree B only
     hidden = job.hidden; // D-536: an oracle's paths are from the repo root (dir "")

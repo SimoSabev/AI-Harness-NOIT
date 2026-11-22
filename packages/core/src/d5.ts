@@ -1,4 +1,4 @@
-import { hiddenFileOf, sha256Tag } from "@mandat/contract";
+import { hiddenFileOf, oracleTag, sha256Tag } from "@mandat/contract";
 import type { ParsedReport, TestStatus } from "@mandat/contract";
 import type { Detected } from "./canary.js";
 import { ev } from "./evidence.js";
@@ -29,7 +29,35 @@ export function splitHidden(r: ParsedReport, files: readonly string[]): { visibl
 }
 
 /** D-536: a valid report without any hidden result means the runner never picked the files up (UNKNOWN, never a pass) */
-export function d5Hidden(o: { hidden: HiddenResult[]; files: number; reportValid?: boolean }): Detected {
+export function d5Hidden(o: { hidden: HiddenResult[]; files: number; reportValid?: boolean; scope?: readonly string[] }): Detected {
+  if (o.scope) return d5Scoped({ ...o, scope: o.scope });
+  return d5All(o);
+}
+
+/** D-574 (live test 22.11): a job unit runs the whole hidden files; only its scope (the criteria allowed so far and the
+ *  U- tests) decides, and `met` lists the criteria whose tests all passed anywhere (an earlier unit may have built one) */
+function d5Scoped(o: { hidden: HiddenResult[]; files: number; reportValid?: boolean; scope: readonly string[] }): Detected {
+  const inScope = new Set(o.scope);
+  const tagOf = (id: string): string | null => oracleTag(id);
+  const mine = o.hidden.filter((h) => {
+    const t = tagOf(h.id);
+    return t === null || t.startsWith("U-") || inScope.has(t);
+  });
+  const byTag = new Map<string, boolean>();
+  for (const h of o.hidden) {
+    const t = tagOf(h.id);
+    if (t?.startsWith("AC-")) byTag.set(t, (byTag.get(t) ?? true) && h.status === "passed");
+  }
+  const met = [...byTag].filter(([, ok]) => ok).map(([t]) => t).sort((a, b) => Number(a.slice(3)) - Number(b.slice(3)));
+  // no test of the scope ran: the runner missed the files (or the oracle has none for it), never a silent pass
+  if (o.hidden.length > 0 && !mine.some((h) => { const t = tagOf(h.id); return t !== null && inScope.has(t); }) && o.scope.some((s) => s.startsWith("AC-"))) {
+    return { evidence: { ...ev("D5.hidden", "unknown", "no hidden test of this unit's criteria ran", { files: o.files, met }, { cls: "not_run", id: String(o.files) }), agent_visible: false }, security: [] };
+  }
+  const r = d5All({ ...o, hidden: mine });
+  return { ...r, evidence: { ...r.evidence, data: { ...(r.evidence.data as Record<string, unknown>), met } } };
+}
+
+function d5All(o: { hidden: HiddenResult[]; files: number; reportValid?: boolean }): Detected {
   const quiet = (e: ReturnType<typeof ev>) => ({ ...e, agent_visible: false });
   if (o.hidden.length === 0 && o.reportValid === true) {
     return { evidence: quiet(ev("D5.hidden", "unknown", `the test runner did not pick up the ${o.files} hidden test file(s); put them where the project's runner finds them`, { files: o.files }, { cls: "not_discovered", id: String(o.files) })), security: [] };
