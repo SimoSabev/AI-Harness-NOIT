@@ -88,7 +88,9 @@ describe("desktop window guard (D-303, D-371)", () => {
     expect(d["frame-src"]).toEqual(["'none'"]);
     expect(d["base-uri"]).toEqual(["'self'"]);
     expect(d["form-action"]).toEqual(["'self'"]);
-    expect(d["connect-src"]).toEqual(["'self'"]);
+    // D-580: Jarvis — its websocket to ElevenLabs and its audio worklets, which its client loads from blob: URLs
+    expect(d["connect-src"]).toEqual(["'self'", "wss://api.elevenlabs.io"]);
+    expect(d["script-src"]).toEqual(["'self'", "'unsafe-inline'", "blob:"]);
     expect(DESKTOP_CSP).not.toContain("unsafe-eval");
     expect(DESKTOP_CSP).not.toMatch(/https?:|\*/);
   });
@@ -98,5 +100,16 @@ describe("desktop window guard (D-303, D-371)", () => {
     expect(allowPermission("clipboard-sanitized-write", "https://evil.example/", BASE)).toBe(false);
     for (const p of ["media", "geolocation", "notifications", "openExternal", "clipboard-read", "fileSystem", "unknown"]) expect(allowPermission(p, `${BASE}/`, BASE), p).toBe(false);
     expect(allowPermission("clipboard-sanitized-write", `${BASE}/`, null)).toBe(false);
+  });
+
+  it("D-580: the microphone for Jarvis — audio only, only from the local page; never the camera", () => {
+    expect(allowPermission("media", `${BASE}/settings/voice`, BASE, ["audio"])).toBe(true);
+    expect(allowPermission("media", `${BASE}/`, BASE, ["video"])).toBe(false);
+    expect(allowPermission("media", `${BASE}/`, BASE, ["audio", "video"])).toBe(false);
+    expect(allowPermission("media", `${BASE}/`, BASE, [])).toBe(false);
+    expect(allowPermission("media", `${BASE}/`, BASE, ["unknown"])).toBe(false);
+    expect(allowPermission("media", "https://evil.example/", BASE, ["audio"])).toBe(false);
+    expect(allowPermission("media", `${BASE}/`, null, ["audio"])).toBe(false);
+    expect(allowPermission("geolocation", `${BASE}/`, BASE, ["audio"])).toBe(false);
   });
 });

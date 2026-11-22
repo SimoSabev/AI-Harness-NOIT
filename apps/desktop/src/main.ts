@@ -75,8 +75,9 @@ function lockDown(w: BrowserWindow): void {
   w.webContents.on("did-navigate", () => terms?.closeAll());
   const ses = w.webContents.session;
   ses.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: withCsp(details.url, details.responseHeaders, base) }));
-  ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(allowPermission(permission, details.requestingUrl, base)));
-  ses.setPermissionCheckHandler((_wc, permission, origin) => allowPermission(permission, origin, base));
+  // D-580: "media" carries what is asked (audio/video); the microphone only, for Jarvis
+  ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(allowPermission(permission, details.requestingUrl, base, "mediaTypes" in details ? (details.mediaTypes ?? []) : [])));
+  ses.setPermissionCheckHandler((_wc, permission, origin, details) => allowPermission(permission, origin, base, "mediaType" in details && details.mediaType ? [details.mediaType] : []));
 }
 
 /** E9g A3 (D-373): the harness profile folder — the same MANDAT_HOME `pnpm local` uses (packages/cli/src/paths.ts). */

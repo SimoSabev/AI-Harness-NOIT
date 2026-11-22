@@ -20,11 +20,13 @@ export interface GuardTarget {
  */
 export const DESKTOP_CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  // D-580: Jarvis's client loads its audio worklets from blob: URLs, which only scripts of this page can make
+  "script-src 'self' 'unsafe-inline' blob:",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  // D-580: Jarvis's websocket (the proxy hands out a signed wss URL on an ElevenLabs host)
+  "connect-src 'self' wss://api.elevenlabs.io",
   "media-src 'self'",
   "worker-src 'self'",
   "manifest-src 'self'",
@@ -81,7 +83,12 @@ export function withCsp(url: string, headers: Record<string, string[]> | undefin
   return out;
 }
 
-/** Web permissions: the local page may write the clipboard (copy buttons); nothing else, from nowhere else. */
-export function allowPermission(permission: string, requestingUrl: string, base: string | null): boolean {
-  return base !== null && permission === "clipboard-sanitized-write" && allowedUrl(requestingUrl, base);
+/**
+ * Web permissions: the local page may write the clipboard (copy buttons) and, for Jarvis (D-580), use the microphone —
+ * audio only, never the camera; nothing else, from nowhere else.
+ */
+export function allowPermission(permission: string, requestingUrl: string, base: string | null, mediaTypes: readonly string[] = []): boolean {
+  if (base === null || !allowedUrl(requestingUrl, base)) return false;
+  if (permission === "clipboard-sanitized-write") return true;
+  return permission === "media" && mediaTypes.length > 0 && mediaTypes.every((t) => t === "audio");
 }

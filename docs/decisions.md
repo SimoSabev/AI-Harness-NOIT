@@ -5006,3 +5006,22 @@ CLI-я при бавен старт, а не пропуснати настрой
 (правило 5).
 Граница: всеки неуспешен опит оставя деветте инструмента в акаунта в ElevenLabs. Чистенето им е отделна работа.
 Тестове: llm-proxy voice-upstream.test.ts (+2), proxy-voice.test.ts (+1). Статус: решено от кодера.
+
+## D-580 Jarvis чува и в десктоп приложението (жив тест, macOS, 22.11.2026)
+Решение: прозорецът на десктопа отваря точно това, което трябва на Jarvis (D-556), и нищо повече:
+- разрешения (`allowPermission`): освен запис в клипборда, `media` само ако се иска само аудио (`mediaTypes` е само
+  „audio“) и само от локалната страница. Камера, аудио+видео, празен или непознат вид не минават;
+- CSP: `connect-src 'self' wss://api.elevenlabs.io` (websocket-ът на сесията, `connectionType: "websocket"`) и
+  `script-src … blob:` (клиентът `@elevenlabs/client` 1.36.1 зарежда AudioWorklet-ите си от blob: URL, а worklet-ите се
+  управляват от script-src). CDN-ът на libsamplerate (jsdelivr) не се отваря: трябва само на браузър без sampleRate
+  ограничение за микрофона, а Chromium го има;
+- Info.plist: `NSMicrophoneUsageDescription` (electron-builder `mac.extendInfo`), за да пита macOS. Ред за камерата няма.
+Защо: след като Jarvis беше създаден, бутонът му в приложението казваше, че микрофонът е блокиран. Прозорецът от D-371
+позволяваше само копиране, CSP-то допускаше само локалния адрес, а приложението не декларираше микрофон, затова macOS
+изобщо не питаше. В браузъра (`pnpm local`) работи, защото там тези ключалки ги няма.
+Граница: проксито пуска signed URL за всеки хост *.elevenlabs.io, а CSP-то — само за api.elevenlabs.io. Ако ElevenLabs върне
+регионален хост, връзката ще бъде спряна и тогава хостът се добавя изрично. Гласът на живо в приложението още не е проверен.
+Също: `pnpm --dir apps/desktop run build` с инсталиран Electron минава. Така е проверена и границата на D-576:
+`MenuTemplateItem` пасва на типа на Electron 44.
+Тестове: desktop window-guard.test.ts (+1, CSP обновен), builder-config.test.ts (+1). Статус: решено от кодера, по
+одобрение на Симо („unlock narrowly“).

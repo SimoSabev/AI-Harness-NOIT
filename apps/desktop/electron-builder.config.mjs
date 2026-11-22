@@ -42,6 +42,8 @@ export const config = {
     // without notarization.
     identity: "-",
     hardenedRuntime: false,
+    // D-580: Jarvis listens; without this line macOS never asks and the microphone stays silent. No camera line.
+    extendInfo: { NSMicrophoneUsageDescription: "Jarvis listens to you through the microphone while you talk to it." },
   },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
   nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },

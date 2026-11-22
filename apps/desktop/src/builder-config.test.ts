@@ -9,4 +9,10 @@ describe("electron-builder config (E9g A5, D-380)", () => {
     expect(config.mac?.identity).toBe("-");
     expect(config.mac?.hardenedRuntime).toBe(false);
   });
+  it("macOS asks for the microphone (Jarvis, D-580) and never for the camera", () => {
+    const info = (config.mac as { extendInfo?: Record<string, string> } | undefined)?.extendInfo ?? {};
+    expect(info.NSMicrophoneUsageDescription).toMatch(/Jarvis/);
+    expect(info.NSCameraUsageDescription).toBeUndefined();
+  });
 });
+
