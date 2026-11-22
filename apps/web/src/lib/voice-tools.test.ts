@@ -26,7 +26,8 @@ function deps(over: Partial<VoiceDeps> = {}) {
       ? { status: 200, body: { items: [{ id: "t_a", text: "Поправи отстъпката", state: "HELD", last_result: "VERIFIED" }], summary: {} } }
       : url === "/api/repos" ? { status: 200, body: { repos: [{ id: "d0000000-0000-4000-8000-0000000000c1", full_name: "local/luxproof" }] } }
       : { status: 200, body: { task: { id: "t_a", text: "Поправи отстъпката", state: "CLOSED", last_result: "VERIFIED", reasons: [] } } }),
-    post: async (url, body) => (sent.push({ method: "POST", url, body }), url === "/api/conversations" ? { status: 201, body: { id: "c_new" } } : { status: 200, body: {} }),
+    post: async (url, body) => (sent.push({ method: "POST", url, body }), url === "/api/conversations" ? { status: 201, body: { id: "c_new" } } : url === "/api/research" ? { status: 201, body: { id: "q_new" } } : { status: 200, body: {} }),
+    put: async (url, body) => (sent.push({ method: "PUT", url, body }), { status: 200, body: { ok: true } }),
     go: (path) => void went.push(path),
     screenText: () => "Tasks\nПоправи отстъпката · VERIFIED",
     defaults: { agent: "claude", model: "claude-sonnet-5-5" },
@@ -127,6 +128,30 @@ describe("Jarvis's tools in the browser (D-556)", () => {
 
   it("D-582 write_prompt with no prompt field on this screen says so", async () => {
     expect(await runVoiceTool("write_prompt", { text: "x" }, deps({ ui: fakeUi([ctl("v1")]).ui }).d)).toMatch(/no prompt field/);
+  });
+
+  it("D-584 start_research asks the research engine (not a code task) and opens the research screen", async () => {
+    const x = deps();
+    const r = await runVoiceTool("start_research", { question: "Най-добрите университети по софтуерно инженерство в България", depth: "deep" }, x.d);
+    expect(x.sent).toEqual([{ method: "POST", url: "/api/research", body: { question: "Най-добрите университети по софтуерно инженерство в България", depth: "deep", goal: "balanced", instructions: "" } }]);
+    expect(x.went).toEqual(["/research"]);
+    expect(r).toContain("q_new");
+  });
+
+  it("D-584 research_result reads the report as data, or says it is not ready; stop_research stops it", async () => {
+    const ready = deps({ get: async (url) => (url === "/api/research/q_new/report?format=json" ? { status: 200, body: { answer: "СУ, ТУ-София" } } : { status: 404, body: { error: "no_report" } }) });
+    expect(await runVoiceTool("research_result", { research_id: "q_new" }, ready.d)).toContain("СУ");
+    expect(await runVoiceTool("research_result", { research_id: "q_other" }, ready.d)).toMatch(/not ready/);
+    const x = deps();
+    await runVoiceTool("stop_research", { research_id: "q_new" }, x.d);
+    expect(x.sent).toEqual([{ method: "POST", url: "/api/research/q_new/stop", body: {} }]);
+  });
+
+  it("D-584 list_models reads the connections; set_defaults changes only what was said", async () => {
+    const x = deps({ get: async (url) => (url === "/api/connections" ? { status: 200, body: { connections: [{ id: "anthropic", models: ["claude-opus-5-5"] }], preferences: { defaultModel: null } } } : { status: 404, body: {} }) });
+    expect(await runVoiceTool("list_models", {}, x.d)).toContain("claude-opus-5-5");
+    await runVoiceTool("set_defaults", { model: "claude-opus-5-5", task_mode: "work_now" }, x.d);
+    expect(x.sent).toEqual([{ method: "PUT", url: "/api/preferences", body: { defaultModel: "claude-opus-5-5", taskMode: "work_now" } }]);
   });
 });
 

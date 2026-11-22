@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JARVIS_PROMPT_BG, VOICE_TOOLS, VoiceProviderId, VoiceToolCall, voiceToolNames } from "./voice.js";
+import { JARVIS_FIRST_MESSAGE_BG, JARVIS_PROMPT_BG, VOICE_TOOLS, VoiceProviderId, VoiceToolCall, voiceToolNames } from "./voice.js";
 
 // D-556 (Simo 20.11.2026): Jarvis — a voice that listens, speaks Bulgarian and acts through the same actions as the
 // screens. The tools are one list in the contract; every voice engine gets the same list.
@@ -8,6 +8,7 @@ describe("the voice's tools (D-556)", () => {
     expect(voiceToolNames()).toEqual([
       "open_screen", "whats_waiting", "list_projects", "task_status", "start_conversation", "start_project_interview", "send_message", "start_work", "steer_agent", "describe_screen",
       "list_controls", "write_prompt", "type_text", "press", "choose",
+      "start_research", "research_result", "stop_research", "list_models", "set_defaults",
     ]);
   });
 
@@ -52,6 +53,25 @@ describe("the voice's tools (D-556)", () => {
     expect(JARVIS_PROMPT_BG).toMatch(/прати/);
     expect(JARVIS_PROMPT_BG).toMatch(/Никога не одобряваш, не сливаш и не подписваш/);
     expect(JARVIS_PROMPT_BG).toMatch(/ключове/);
+  });
+
+  it("D-584: research, models and defaults by their own tools; arguments typed", () => {
+    expect(VoiceToolCall.safeParse({ tool: "start_research", args: { question: "Кои български университети са най-силни в софтуерното инженерство?", depth: "standard" } }).success).toBe(true);
+    expect(VoiceToolCall.safeParse({ tool: "start_research", args: { question: "x", depth: "infinite" } }).success).toBe(false);
+    expect(VoiceToolCall.safeParse({ tool: "research_result", args: { research_id: "q_mx1abc" } }).success).toBe(true);
+    expect(VoiceToolCall.safeParse({ tool: "research_result", args: { research_id: "../q" } }).success).toBe(false);
+    expect(VoiceToolCall.safeParse({ tool: "set_defaults", args: { model: "claude-opus-5-5", task_mode: "work_now" } }).success).toBe(true);
+    expect(VoiceToolCall.safeParse({ tool: "set_defaults", args: {} }).success).toBe(false);
+    expect(VoiceToolCall.safeParse({ tool: "set_defaults", args: { task_mode: "yolo" } }).success).toBe(false);
+  });
+
+  it("D-584: like a real assistant — short, stops when cut off, says only what a tool confirmed; research is research, not a code task", () => {
+    expect(JARVIS_PROMPT_BG).toMatch(/кратк/i);
+    expect(JARVIS_PROMPT_BG).toMatch(/прекъсне/);
+    expect(JARVIS_PROMPT_BG).toMatch(/start_research/);
+    expect(JARVIS_PROMPT_BG).toMatch(/само каквото инструментът/);
+    expect(JARVIS_PROMPT_BG).toMatch(/критерии/);
+    expect(JARVIS_FIRST_MESSAGE_BG.length).toBeLessThan(40);
   });
 });
 

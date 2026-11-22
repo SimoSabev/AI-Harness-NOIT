@@ -7,6 +7,8 @@ import type { VoiceTool } from "@mandat/contract";
 // API (elevenlabs.io/docs/eleven-agents/api-reference, read 20.11.2026): POST /v1/convai/tools, POST
 // /v1/convai/agents/create, GET|PATCH /v1/convai/agents/{id}, GET /v1/convai/conversation/get-signed-url; header xi-api-key.
 // [НП] until the live run: that agent.language accepts "bg" (the Agents page names 31 languages, not which).
+// D-584 (elevenlabs.io/docs/api-reference/agents/create, read 22.11.2026): turn.turn_eagerness patient|normal|eager,
+// turn.speculative_turn (bool), agent.disable_first_message_interruptions (bool), tts.speed (double, default 1; range [НП]).
 
 export const ELEVEN_BASE = "https://api.elevenlabs.io";
 const AGENT_ID = /^[A-Za-z0-9_-]{1,80}$/;
@@ -56,9 +58,13 @@ export function elevenAgentBody(o: { voiceId: string; toolIds: string[]; llm?: s
   return {
     name: "Mandat · Jarvis",
     conversation_config: {
-      agent: { language: "bg", first_message: JARVIS_FIRST_MESSAGE_BG, prompt: { prompt: JARVIS_PROMPT_BG, llm: o.llm ?? DEFAULT_LLM, tool_ids: o.toolIds } },
-      tts: { voice_id: o.voiceId, model_id: "eleven_v4_turbo" },
+      // D-584: the greeting can be cut off too (barge-in is on by default; this keeps it on for the first message)
+      agent: { language: "bg", first_message: JARVIS_FIRST_MESSAGE_BG, disable_first_message_interruptions: false, prompt: { prompt: JARVIS_PROMPT_BG, llm: o.llm ?? DEFAULT_LLM, tool_ids: o.toolIds } },
+      // D-584: a little faster speech
+      tts: { voice_id: o.voiceId, model_id: "eleven_v4_turbo", speed: 1.1 },
       asr: { provider: "scribe_realtime" },
+      // D-584: answer as soon as the person stops (eager) and start the reply during the pause (speculative)
+      turn: { turn_eagerness: "eager", speculative_turn: true },
     },
     // a private agent: a session starts only with a signed URL from this proxy
     platform_settings: { auth: { enable_auth: true } },

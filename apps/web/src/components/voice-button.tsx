@@ -55,6 +55,7 @@ export function VoiceButton() {
     const deps: VoiceDeps = {
       get: getJson,
       post: (u, b) => postJson(u, b),
+      put: (u, b) => postJson(u, b, "PUT"),
       go: (path) => router.push(path),
       screenText: () => (document.querySelector("main")?.innerText ?? document.body.innerText).slice(0, SCREEN_TEXT_MAX),
       defaults: { agent: typeof def?.agent === "string" ? def.agent : "claude", model: typeof def?.model === "string" ? def.model : null },

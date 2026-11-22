@@ -41,11 +41,18 @@ describe("Jarvis on ElevenLabs: the agent and its tools (D-556)", () => {
     expect(b.conversation_config.agent.language).toBe("bg");
     expect(b.conversation_config.agent.prompt.tool_ids).toEqual(["tool_1"]);
     expect(b.conversation_config.agent.prompt.llm).toBe("claude-haiku-5-5");
-    expect(b.conversation_config.tts).toEqual({ voice_id: "voice_1", model_id: "eleven_v4_turbo" });
+    expect(b.conversation_config.tts).toEqual({ voice_id: "voice_1", model_id: "eleven_v4_turbo", speed: 1.1 });
     expect(b.conversation_config.asr.provider).toBe("scribe_realtime");
     expect(b.platform_settings.auth.enable_auth).toBe(true);
     expect(b.conversation_config.agent.prompt.prompt).toMatch(/Jarvis/);
     expect(b.conversation_config.agent.prompt.prompt).toMatch(/TOTP/);
+  });
+
+  it("D-584: answers as soon as the person stops, starts thinking in the pause, can be cut off even in the greeting", () => {
+    const c = elevenAgentBody({ voiceId: "voice_1", toolIds: [] }).conversation_config;
+    expect(c.turn).toEqual({ turn_eagerness: "eager", speculative_turn: true });
+    expect(c.agent.disable_first_message_interruptions).toBe(false);
+    expect(c.agent.first_message.length).toBeLessThan(40);
   });
 
   it("first time: creates every tool, then the agent; the key goes only in xi-api-key", async () => {

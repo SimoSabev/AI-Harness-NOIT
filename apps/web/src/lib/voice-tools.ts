@@ -16,6 +16,7 @@ export interface VoiceUi {
 export interface VoiceDeps {
   get(url: string): Promise<{ status: number; body: Record<string, unknown> }>;
   post(url: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }>;
+  put(url: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }>;
   go(path: string): void;
   screenText(): string;
   /** the agent and model a new conversation starts with (the person's remembered default) */
@@ -94,6 +95,32 @@ export async function runVoiceTool(tool: string, args: unknown, d: VoiceDeps): P
     }
     case "describe_screen":
       return data(d.screenText().replace(/\n{3,}/g, "\n\n").trim());
+    case "start_research": {
+      // D-584: a question about the world goes to the research engine, never to a code task
+      const r = await d.post("/api/research", { question: call.args.question, depth: call.args.depth ?? "standard", goal: "balanced", instructions: call.args.instructions ?? "" });
+      const id = typeof r.body.id === "string" ? r.body.id : null;
+      if (failed(r) || !id) return failed(r) ?? "Failed: no research.";
+      d.go("/research");
+      return `Started research ${id}. It takes a few minutes; read it with research_result.`;
+    }
+    case "research_result": {
+      const r = await d.get(`/api/research/${call.args.research_id}/report?format=json`);
+      if (r.status === 404) return "The research is not ready yet.";
+      return failed(r) ?? data(r.body);
+    }
+    case "stop_research": {
+      const r = await d.post(`/api/research/${call.args.research_id}/stop`, {});
+      return failed(r) ?? "Stopped the research.";
+    }
+    case "list_models": {
+      const r = await d.get("/api/connections");
+      return failed(r) ?? data(r.body);
+    }
+    case "set_defaults": {
+      const b = { ...(call.args.agent ? { defaultAgent: call.args.agent } : {}), ...(call.args.model ? { defaultModel: call.args.model } : {}), ...(call.args.task_mode ? { taskMode: call.args.task_mode } : {}) };
+      const r = await d.put("/api/preferences", b);
+      return failed(r) ?? "Changed the defaults.";
+    }
     case "list_controls":
       return data(d.ui.scan().map(controlView).filter((v) => v !== null));
     case "write_prompt": {
