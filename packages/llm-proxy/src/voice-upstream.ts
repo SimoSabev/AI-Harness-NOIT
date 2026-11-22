@@ -17,9 +17,29 @@ type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 export interface VoiceAgentState { agent_id: string; tool_ids: string[]; hash: string }
 
 export class VoiceError extends Error {
-  constructor(readonly code: string) {
+  /** D-579: why ElevenLabs refused — the status and its own message, short, without the key; for the proxy's log */
+  constructor(readonly code: string, readonly detail = "") {
     super(code);
   }
+}
+
+const DETAIL_MAX = 300;
+
+/** "422 body.x.y: msg" from a validation list, "400 status: message" from an error object, else just the status */
+async function refusalDetail(r: Response, key: string): Promise<string> {
+  const v = (await r.json().catch(() => null)) as { detail?: unknown } | null;
+  const d = v?.detail;
+  let text = "";
+  if (Array.isArray(d)) {
+    text = d
+      .map((x: { loc?: unknown; msg?: unknown }) => `${Array.isArray(x.loc) ? x.loc.join(".") : ""}: ${typeof x.msg === "string" ? x.msg : ""}`)
+      .join("; ");
+  } else if (d && typeof d === "object") {
+    const o = d as { status?: unknown; message?: unknown };
+    text = [o.status, o.message].filter((x): x is string => typeof x === "string").join(": ");
+  } else if (typeof d === "string") text = d;
+  const line = `${r.status}${text ? ` ${text}` : ""}`.split(key).join("[key]").replace(/[^\x20-\x7e\u0400-\u04ff]/g, " ");
+  return line.length > DETAIL_MAX ? `${line.slice(0, DETAIL_MAX - 1)}…` : line;
 }
 
 export function elevenToolConfig(t: VoiceTool) {
@@ -55,8 +75,8 @@ async function call(f: Fetch, key: string, method: string, path: string, body?: 
   return f(`${ELEVEN_BASE}${path}`, { method, headers: { "xi-api-key": key, "content-type": "application/json", accept: "application/json" }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 }
 
-async function json(r: Response, code: string): Promise<Record<string, unknown>> {
-  if (!r.ok) throw new VoiceError(r.status === 401 ? "voice_key_rejected" : code);
+async function json(r: Response, code: string, key: string): Promise<Record<string, unknown>> {
+  if (!r.ok) throw new VoiceError(r.status === 401 ? "voice_key_rejected" : code, await refusalDetail(r, key));
   const v = (await r.json()) as unknown;
   if (typeof v !== "object" || v === null) throw new VoiceError(code);
   return v as Record<string, unknown>;
@@ -71,16 +91,16 @@ export async function ensureVoiceAgent(o: { fetch: Fetch; key: string; voiceId: 
   if (exists && prev.hash === hash) return prev;
   const toolIds: string[] = [];
   for (const t of VOICE_TOOLS) {
-    const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/tools", elevenToolConfig(t)), "voice_tool_create_failed")).id;
+    const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/tools", elevenToolConfig(t)), "voice_tool_create_failed", o.key)).id;
     if (typeof id !== "string") throw new VoiceError("voice_tool_create_failed");
     toolIds.push(id);
   }
   const body = elevenAgentBody({ voiceId: o.voiceId, toolIds, llm });
   if (exists) {
-    await json(await call(o.fetch, o.key, "PATCH", `/v1/convai/agents/${prev.agent_id}`, { conversation_config: body.conversation_config, platform_settings: body.platform_settings }), "voice_agent_update_failed");
+    await json(await call(o.fetch, o.key, "PATCH", `/v1/convai/agents/${prev.agent_id}`, { conversation_config: body.conversation_config, platform_settings: body.platform_settings }), "voice_agent_update_failed", o.key);
     return { agent_id: prev.agent_id, tool_ids: toolIds, hash };
   }
-  const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/agents/create", body), "voice_agent_create_failed")).agent_id;
+  const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/agents/create", body), "voice_agent_create_failed", o.key)).agent_id;
   if (typeof id !== "string" || !AGENT_ID.test(id)) throw new VoiceError("voice_agent_create_failed");
   return { agent_id: id, tool_ids: toolIds, hash };
 }
@@ -88,7 +108,7 @@ export async function ensureVoiceAgent(o: { fetch: Fetch; key: string; voiceId: 
 /** a signed URL for one session (valid 15 minutes); only wss on an ElevenLabs host is handed out */
 export async function voiceSignedUrl(o: { fetch: Fetch; key: string; agentId: string }): Promise<string> {
   if (!AGENT_ID.test(o.agentId)) throw new VoiceError("voice_bad_agent");
-  const v = (await json(await call(o.fetch, o.key, "GET", `/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(o.agentId)}`), "voice_signed_url_failed")).signed_url;
+  const v = (await json(await call(o.fetch, o.key, "GET", `/v1/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(o.agentId)}`), "voice_signed_url_failed", o.key)).signed_url;
   if (typeof v !== "string") throw new VoiceError("voice_bad_signed_url");
   let u: URL;
   try {

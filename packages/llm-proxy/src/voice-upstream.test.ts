@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VOICE_TOOLS } from "@mandat/contract";
-import { ELEVEN_BASE, elevenAgentBody, elevenToolConfig, ensureVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
+import { ELEVEN_BASE, VoiceError, elevenAgentBody, elevenToolConfig, ensureVoiceAgent, voiceSignedUrl } from "./voice-upstream.js";
 
 // D-556: Jarvis on ElevenLabs Agents. The key stays in the proxy (AGENTS.md rule 2): the proxy creates the person's
 // agent and its tools, and hands out a short-lived signed URL only (docs: elevenlabs.io/docs/eleven-agents, 20.11.2026).
@@ -87,3 +87,36 @@ describe("Jarvis on ElevenLabs: the agent and its tools (D-556)", () => {
     await expect(voiceSignedUrl({ fetch: fakeEleven().f, key: KEY, agentId: "../x" })).rejects.toThrow(/voice_bad_agent/);
   });
 });
+
+describe("why ElevenLabs refused (D-579)", () => {
+  const refusing = (status: number, body: unknown) => async (url: string | URL, init?: RequestInit): Promise<Response> => {
+    const u = String(url);
+    if ((init?.method ?? "GET") === "POST" && u === `${ELEVEN_BASE}/v1/convai/tools`) return Response.json({ id: "tool_1" });
+    return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  };
+  const refusal = async (f: ReturnType<typeof refusing>): Promise<VoiceError> => {
+    try {
+      await ensureVoiceAgent({ fetch: f, key: KEY, voiceId: "voice_1", prev: null });
+    } catch (e) {
+      if (e instanceof VoiceError) return e;
+    }
+    throw new Error("no VoiceError");
+  };
+
+  it("the code stays; the detail says the status and ElevenLabs' own message (a validation list or a message), short, never the key", async () => {
+    const e = await refusal(refusing(422, { detail: [{ loc: ["body", "conversation_config", "agent", "language"], msg: "Input should be 'en', 'de' or 'fr'", type: "literal_error" }] }));
+    expect(e.code).toBe("voice_agent_create_failed");
+    expect(e.detail).toBe("422 body.conversation_config.agent.language: Input should be 'en', 'de' or 'fr'");
+    const m = await refusal(refusing(400, { detail: { status: "invalid_tts_model", message: "Model eleven_v4_turbo is not available" } }));
+    expect(m.detail).toBe("400 invalid_tts_model: Model eleven_v4_turbo is not available");
+    const long = await refusal(refusing(400, { detail: { message: `${KEY} ${"x".repeat(500)}` } }));
+    expect(long.detail.length).toBeLessThanOrEqual(300);
+    expect(long.detail).not.toContain(KEY);
+  });
+
+  it("a body that is not JSON: just the status", async () => {
+    const f = async (url: string | URL, init?: RequestInit): Promise<Response> => ((init?.method ?? "GET") === "POST" && String(url).endsWith("/v1/convai/tools") ? Response.json({ id: "t" }) : new Response("<html>bad gateway</html>", { status: 502 }));
+    expect((await refusal(f)).detail).toBe("502");
+  });
+});
+

@@ -33,27 +33,31 @@ function call(base: string, p: string, o: { method?: string; headers?: Record<st
     r.end(o.body);
   });
 }
-function fakeEleven() {
+function fakeEleven(o: { refuseCreate?: boolean } = {}) {
   const keys: string[] = [];
   let n = 0;
   const f = async (url: string, init?: RequestInit): Promise<Response> => {
     keys.push(new Headers(init?.headers).get("xi-api-key") ?? "");
     const m = init?.method ?? "GET";
     if (m === "POST" && url === `${ELEVEN_BASE}/v1/convai/tools`) return Response.json({ id: `tool_${++n}` });
-    if (m === "POST" && url === `${ELEVEN_BASE}/v1/convai/agents/create`) return Response.json({ agent_id: "agent_j" });
+    if (m === "POST" && url === `${ELEVEN_BASE}/v1/convai/agents/create`) {
+      if (o.refuseCreate) return Response.json({ detail: [{ loc: ["body", "conversation_config", "agent", "language"], msg: "bad language" }] }, { status: 422 });
+      return Response.json({ agent_id: "agent_j" });
+    }
     if (m === "GET" && url.startsWith(`${ELEVEN_BASE}/v1/convai/agents/`)) return Response.json({});
     if (url.startsWith(`${ELEVEN_BASE}/v1/convai/conversation/get-signed-url`)) return Response.json({ signed_url: "wss://api.elevenlabs.io/v1/convai/conversation?agent_id=agent_j&conversation_signature=s" });
     return new Response("{}", { status: 500 });
   };
   return { f, keys };
 }
-async function proxy(bootBody: unknown) {
+async function proxy(bootBody: unknown, o: { refuseCreate?: boolean; voiceLog?: (l: { voice_error: string; detail: string }) => void } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), "voice-"));
   const t = mintBootToken();
-  const el = fakeEleven();
+  const el = fakeEleven(o);
   const p = createProxyServer({
     secret, apiKey: "", upstream: "http://127.0.0.1:9", usageLogPath: path.join(dir, "usage.jsonl"), now: () => NOW * 1000, log: () => undefined,
     boot: { tokenHash: bootTokenHash(t), expiresAtMs: (NOW + 60) * 1000, spentFile: path.join(dir, "boot-spent") }, voiceFetch: el.f,
+    ...(o.voiceLog ? { voiceLog: o.voiceLog } : {}),
   });
   const adm = await listen(p.admin);
   await listen(p.inference);
@@ -106,4 +110,14 @@ describe("Jarvis through the proxy (D-556)", () => {
     expect(r.status).toBe(400);
     expect(p.el.keys).toEqual([]);
   });
+
+  it("D-579: ElevenLabs refuses → the answer is still only the code; the proxy's log says why, never the key", async () => {
+    const lines: { voice_error: string; detail: string }[] = [];
+    const p = await proxy({ voice: { elevenlabs: XI } }, { refuseCreate: true, voiceLog: (l) => lines.push(l) });
+    const r = await call(p.adm, "/admin/voice/agent", { headers: auth, body: JSON.stringify({ voice_id: "voice_1" }) });
+    expect([r.status, JSON.parse(r.body)]).toEqual([502, { error: "voice_agent_create_failed" }]);
+    expect(lines).toEqual([{ voice_error: "voice_agent_create_failed", detail: "422 body.conversation_config.agent.language: bad language" }]);
+    expect(JSON.stringify(lines)).not.toContain(XI);
+  });
 });
+

@@ -110,6 +110,8 @@ export interface ProxyServerOptions {
   localUpstreams?: Record<string, LocalUpstream>;
   /** tests only: the fetch the voice provider is called with (D-556) */
   voiceFetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** D-579: why ElevenLabs refused (status + its message, never the key); default: one JSON line on stderr */
+  voiceLog?: (l: { voice_error: string; detail: string }) => void;
   /** tests only: another base URL per search provider */
   searchUpstream?: Partial<Record<SearchProviderId, URL>>;
   /** stdout log line (never bodies, headers or token values; 8.1). */
@@ -175,6 +177,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
   const voiceKeys: { elevenlabs?: string } = {};
   const voiceFile = path.join(path.dirname(o.usageLogPath), "voice-agent.json");
   const voiceFetch = o.voiceFetch ?? ((url: string, init?: RequestInit) => fetch(url, init));
+  const voiceLog = o.voiceLog ?? ((l: { voice_error: string; detail: string }) => process.stderr.write(JSON.stringify(l) + "\n"));
   const boot = o.boot ? new BootGate(o.boot) : null;
   let locked = boot !== null;
   const providers = (): string[] => [...(["anthropic", "openai"] as const).filter((p) => keys[p] !== ""), ...(searchKeys.exa ? ["exa"] : []), ...(voiceKeys.elevenlabs ? ["elevenlabs"] : [])];
@@ -447,6 +450,7 @@ export function createProxyServer(o: ProxyServerOptions): { inference: http.Serv
       writeFileSync(voiceFile, JSON.stringify(next), { mode: 0o600 });
       return { status: 200, body: { agent_id: next.agent_id } };
     } catch (e) {
+      if (e instanceof VoiceError && e.detail) voiceLog({ voice_error: e.code, detail: e.detail });
       return { status: 502, body: { error: e instanceof VoiceError ? e.code : "voice_unreachable" } };
     }
   };
