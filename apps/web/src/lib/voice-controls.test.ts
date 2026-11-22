@@ -39,11 +39,18 @@ describe("which controls Jarvis may use (D-582)", () => {
     expect(controlView(c({ label: "Approve" }))).toBeNull();
   });
 
-  it("the prompt field: the one marked data-voice=prompt, else the only free text area, else none", () => {
+  it("the prompt field, on every screen (D-586): marked, else focused, else the first text area, else the first text input", () => {
     const area = (id: string, over: Partial<RawControl> = {}) => c({ id, tag: "textarea", label: "x", ...over });
+    const text = (id: string, over: Partial<RawControl> = {}) => c({ id, tag: "input", inputType: "text", label: "x", ...over });
     expect(promptField([area("v1"), area("v2", { voice: "prompt" })])).toBe("v2");
-    expect(promptField([c({ id: "v1" }), area("v2")])).toBe("v2");
-    expect(promptField([area("v1"), area("v2")])).toBeNull();
-    expect(promptField([area("v1", { inTotpForm: true })])).toBeNull();
+    expect(promptField([area("v1"), text("v2", { focused: true })])).toBe("v2");
+    expect(promptField([c({ id: "v1" }), area("v2"), area("v3")])).toBe("v2");
+    expect(promptField([c({ id: "v1" }), text("v2", { inputType: "checkbox" }), text("v3", { inputType: "search" })])).toBe("v3");
+    expect(promptField([text("v1", { inputType: "password" }), area("v2", { inTotpForm: true })])).toBeNull();
+    expect(promptField([c({ id: "v1" })])).toBeNull();
+  });
+
+  it("a field inside a collapsed section is still usable; the browser opens the section (D-586)", () => {
+    expect(controlView(c({ id: "v5", tag: "textarea", label: "Instructions", collapsed: true }))).toEqual({ id: "v5", kind: "field", label: "Instructions", collapsed: true });
   });
 });

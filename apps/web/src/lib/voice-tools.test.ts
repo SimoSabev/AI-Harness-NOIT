@@ -153,5 +153,17 @@ describe("Jarvis's tools in the browser (D-556)", () => {
     await runVoiceTool("set_defaults", { model: "claude-opus-5-5", task_mode: "work_now" }, x.d);
     expect(x.sent).toEqual([{ method: "PUT", url: "/api/preferences", body: { defaultModel: "claude-opus-5-5", taskMode: "work_now" } }]);
   });
+
+  it("D-586 open_screen reaches every screen of the app, each to a page that exists", async () => {
+    const { VoiceScreen } = await import("@mandat/contract");
+    const { existsSync } = await import("node:fs");
+    for (const screen of VoiceScreen.options) {
+      const x = deps();
+      await runVoiceTool("open_screen", { screen }, x.d);
+      const p = (x.went[0] ?? "").split("#")[0] ?? "";
+      expect(existsSync(new URL(`../app${p === "/" ? "" : p}/page.tsx`, import.meta.url)), `${screen} → ${p}`).toBe(true);
+    }
+    expect(VoiceScreen.options.length).toBeGreaterThanOrEqual(24);
+  });
 });
 

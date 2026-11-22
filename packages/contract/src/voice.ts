@@ -6,7 +6,11 @@ import { z } from "zod";
 export const VoiceProviderId = z.enum(["elevenlabs", "openai_realtime", "browser"]);
 export type VoiceProviderId = z.infer<typeof VoiceProviderId>;
 
-export const VoiceScreen = z.enum(["tasks", "projects", "research", "memory", "settings", "overview", "harness", "accounts"]);
+// D-586: every screen and settings tab of the app (the web maps each to its page; a test checks the page exists)
+export const VoiceScreen = z.enum([
+  "tasks", "new_task", "projects", "harness", "add_project", "research", "memory", "night", "library", "tools", "agents", "board", "metrics", "overview", "system", "keys",
+  "settings", "settings_account", "settings_api_keys", "settings_local", "settings_models", "settings_roles", "accounts", "settings_tools", "settings_voice", "welcome", "device",
+]);
 export type VoiceScreen = z.infer<typeof VoiceScreen>;
 
 const TaskId = z.string().regex(/^t_[a-z0-9_]{1,40}$/);
@@ -32,7 +36,7 @@ export const VOICE_SECRET_NAME = /key|token|secret|password|totp|ключ/i;
 
 /** The catalog every voice engine is configured with (descriptions are what the model reads, in Bulgarian). */
 export const VOICE_TOOLS: readonly VoiceTool[] = [
-  { name: "open_screen", description: "Отваря екран на харнеса, за да го покажеш на човека: задачи, проекти, ресърч, памет, настройки, преглед, харнес или акаунти.", params: [p("screen", "Кой екран", true, { enum: VoiceScreen.options }), p("project_id", "Проект, ако екранът е за проект", false)] },
+  { name: "open_screen", description: "Отваря всеки екран или таб на харнеса: задачи, нова задача, проекти, добави проект, ресърч, памет, нощна смяна, библиотека, инструменти, агенти, табло, метрики, преглед, система и всеки таб на настройките (акаунт, API ключове, локални, модели, роли, абонаменти, инструменти, глас).", params: [p("screen", "Кой екран", true, { enum: VoiceScreen.options }), p("project_id", "Проект, ако екранът е за проект", false)] },
   { name: "whats_waiting", description: "Казва какво чака човека: задачи за решение, въпроси, провалени проверки. Ползвай го, когато те питат какво има за правене.", params: [] },
   { name: "list_projects", description: "Изброява проектите на харнеса с правилата и профила на агента им.", params: [] },
   { name: "task_status", description: "Състоянието на задача или работа: какво прави агентът, единиците, присъдата VERIFIED/FAILED и защо.", params: [p("task_id", "Задачата (t_…); без нея — последната", false)] },
@@ -95,6 +99,7 @@ export const JARVIS_PROMPT_BG = [
   "Интервю първо (D-585): преди задача или проучване разпитваш човека — по един кратък въпрос наведнъж, докато е ясно какво точно иска: за какво му трябва, обхват, какво значи „готово“ (критерии или формат на отговора), дълбочина или срок. Обикновено два до четири въпроса; не питаш за неща, които вече е казал. После казваш с едно изречение какво ще напишеш и чакаш „да“. Пропускаш интервюто само ако човекът каже „направо“.",
   "Проучване (въпрос за света: кое е най-добро, сравнения, факти) — никога start_conversation. След интервюто: open_screen research, write_prompt с въпроса, type_text за инструкциите (фокус, формат), list_controls и press на бутона за пускане чак когато човекът каже „прати“. start_research пуска направо, без формата — само ако човекът каже „направо“. Задача по код на проект → след интервюто write_prompt в полето за задача или start_conversation.",
   "Промптове: от думите на човека пишеш силен промпт, като опитен инженер. Цел в едно изречение; контекст (проект, засегнати части); критерии за готово, всеки проверим („КОГА …, СИСТЕМАТА ТРЯБВА …“); какво не бива да се променя; ограничения. Без измислени изисквания: ако липсва нещо важно, питаш с един кратък въпрос. Пишеш го с write_prompt видимо в полето, казваш го с едно изречение и пращаш с press чак когато човекът каже „прати“ (или ясно каже да го пратиш веднага). Същото качество важи и за текста на start_conversation и start_research.",
+  "Пишеш във всяко поле на всеки екран и таб (D-586): open_screen отваря екрана, write_prompt пише в главното поле, а list_controls + type_text — в което и да е друго; поле в затворена секция се отваря само.",
   "Екранът: list_controls показва полетата и бутоните; type_text пише, press натиска, choose избира. list_models и set_defaults сменят модела и агента; open_screen и describe_screen показват. Преди действие, което пуска или спира работа или сменя настройка, кажи го с няколко думи.",
   "Нов проект: start_project_interview; описанието на проекта го одобрява само човекът, на екрана.",
   "Никога не одобряваш, не сливаш и не подписваш нищо. Одобренията са само на човека, с втори фактор (TOTP). Ако нещо чака одобрение, кажи къде да натисне.",

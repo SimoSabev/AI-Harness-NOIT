@@ -19,9 +19,13 @@ export interface RawControl {
   name?: string;
   value?: string;
   options?: string[];
+  /** D-586: it has the keyboard focus */
+  focused?: boolean;
+  /** D-586: inside a closed <details>; the browser opens it before acting */
+  collapsed?: boolean;
 }
 
-export interface ControlView { id: string; kind: "button" | "link" | "field" | "choice" | "checkbox"; label: string; value?: string; options?: string[] }
+export interface ControlView { id: string; kind: "button" | "link" | "field" | "choice" | "checkbox"; label: string; value?: string; options?: string[]; collapsed?: true }
 
 const VALUE_MAX = 200;
 
@@ -50,13 +54,19 @@ export function controlView(c: RawControl): ControlView | null {
     label: short(c.label),
     ...((kind === "field" || kind === "choice" || kind === "checkbox") && c.value !== undefined ? { value: short(c.value) } : {}),
     ...(kind === "choice" && c.options ? { options: c.options.slice(0, 50).map(short) } : {}),
+    ...(c.collapsed ? { collapsed: true as const } : {}),
   };
 }
 
-/** the main prompt field of the screen: the one marked data-voice=prompt, else the only usable text area, else none */
+const TEXT_INPUTS = new Set(["text", "search", "url", "email", "number", "tel", ""]);
+const takesText = (c: RawControl): boolean => c.tag === "textarea" || (c.tag === "input" && TEXT_INPUTS.has(c.inputType ?? ""));
+
+/**
+ * The prompt field of the screen, on every screen (D-586): the one marked data-voice=prompt, else the focused text field,
+ * else the first text area, else the first text input; none only when the screen has no usable text field at all.
+ */
 export function promptField(controls: readonly RawControl[]): string | null {
-  const usable = controls.filter((c) => c.tag === "textarea" && controlBlocked(c) === null);
-  const marked = usable.find((c) => c.voice === "prompt");
-  if (marked) return marked.id;
-  return usable.length === 1 ? (usable[0]?.id ?? null) : null;
+  const usable = controls.filter((c) => takesText(c) && controlBlocked(c) === null);
+  const pick = usable.find((c) => c.voice === "prompt") ?? usable.find((c) => c.focused === true) ?? usable.find((c) => c.tag === "textarea") ?? usable[0];
+  return pick?.id ?? null;
 }

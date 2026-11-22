@@ -10,6 +10,15 @@ const TOTP_DEPTH = 6;
 let next = 0;
 
 const visible = (e: HTMLElement): boolean => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== "hidden";
+/** D-586: hidden only because a <details> above it is closed (its <summary> stays outside the hidden part) */
+const inClosedDetails = (e: HTMLElement): boolean => {
+  const d = e.closest("details");
+  return d !== null && !d.open && e.closest("summary") === null && d.getClientRects().length > 0;
+};
+/** D-586: open every closed <details> above it, so a person would see what Jarvis types or presses */
+const reveal = (e: HTMLElement): void => {
+  for (let d = e.closest("details"); d; d = d.parentElement?.closest("details") ?? null) if (!d.open) d.open = true;
+};
 const text = (s: string | null | undefined): string => (s ?? "").replace(/\s+/g, " ").trim();
 
 function labelOf(e: HTMLElement): string {
@@ -35,7 +44,10 @@ function nearTotp(e: HTMLElement): boolean {
 function describe(e: HTMLElement): RawControl {
   if (!e.dataset.voiceId) e.dataset.voiceId = `v${++next}`;
   const tag = e.tagName.toLowerCase() as RawControl["tag"];
-  const base: RawControl = { id: e.dataset.voiceId, tag, label: labelOf(e), disabled: (e as HTMLButtonElement).disabled === true, voice: e.closest("[data-voice]")?.getAttribute("data-voice") ?? null, inTotpForm: nearTotp(e) };
+  const base: RawControl = {
+    id: e.dataset.voiceId, tag, label: labelOf(e), disabled: (e as HTMLButtonElement).disabled === true, voice: e.closest("[data-voice]")?.getAttribute("data-voice") ?? null, inTotpForm: nearTotp(e),
+    ...(document.activeElement === e ? { focused: true } : {}), ...(inClosedDetails(e) ? { collapsed: true } : {}),
+  };
   if (e instanceof HTMLInputElement) return { ...base, inputType: e.type, autocomplete: e.autocomplete, name: e.name, value: e.type === "password" ? "" : e.type === "checkbox" || e.type === "radio" ? String(e.checked) : e.value };
   if (e instanceof HTMLTextAreaElement) return { ...base, name: e.name, value: e.value };
   if (e instanceof HTMLSelectElement) return { ...base, name: e.name, value: e.selectedOptions[0] ? text(e.selectedOptions[0].textContent) : "", options: [...e.options].map((o) => text(o.textContent) || o.value) };
@@ -52,10 +64,12 @@ function setNative(e: HTMLInputElement | HTMLTextAreaElement, value: string): vo
 
 export function domUi(): VoiceUi {
   return {
-    scan: () => [...document.querySelectorAll<HTMLElement>(SELECTOR)].filter(visible).map(describe),
+    scan: () => [...document.querySelectorAll<HTMLElement>(SELECTOR)].filter((e) => visible(e) || inClosedDetails(e)).map(describe),
     async type(id, value, mode) {
       const e = byId(id);
       if (!(e instanceof HTMLTextAreaElement || (e instanceof HTMLInputElement && !["checkbox", "radio", "submit", "button", "file"].includes(e.type)))) return false;
+      reveal(e);
+      e.scrollIntoView({ block: "center" });
       e.focus();
       const start = mode === "append" ? e.value : "";
       // visibly: about 30 steps, whatever the length
@@ -70,6 +84,7 @@ export function domUi(): VoiceUi {
     press(id) {
       const e = byId(id);
       if (!e) return false;
+      reveal(e);
       e.scrollIntoView({ block: "center" });
       e.click();
       return true;
@@ -77,6 +92,7 @@ export function domUi(): VoiceUi {
     choose(id, option) {
       const e = byId(id);
       if (!(e instanceof HTMLSelectElement)) return false;
+      reveal(e);
       const o = [...e.options].find((x) => (text(x.textContent) || x.value) === option || x.value === option);
       if (!o) return false;
       Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(e, o.value);

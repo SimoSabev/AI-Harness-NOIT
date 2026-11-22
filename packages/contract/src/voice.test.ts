@@ -80,5 +80,9 @@ describe("the voice's tools (D-556)", () => {
     expect(JARVIS_PROMPT_BG).toMatch(/направо/);
     expect(JARVIS_PROMPT_BG).toMatch(/open_screen research/);
   });
+
+  it("D-586: knows it can write in every field of every screen and tab", () => {
+    expect(JARVIS_PROMPT_BG).toMatch(/всяко поле на всеки екран/);
+  });
 });
 

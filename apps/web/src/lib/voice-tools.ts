@@ -25,7 +25,10 @@ export interface VoiceDeps {
 }
 
 const SCREEN_PATH: Record<VoiceScreen, string> = {
-  tasks: "/", projects: "/harness", research: "/research", memory: "/memory", settings: "/settings", overview: "/overview", harness: "/harness", accounts: "/settings/subscriptions",
+  tasks: "/", new_task: "/tasks/new", projects: "/harness", harness: "/harness", add_project: "/projects/add", research: "/research", memory: "/memory", night: "/night",
+  library: "/library", tools: "/tools", agents: "/agents", board: "/board", metrics: "/metrics", overview: "/overview", system: "/system", keys: "/keys",
+  settings: "/settings", settings_account: "/settings/account", settings_api_keys: "/settings/api-keys", settings_local: "/settings/local", settings_models: "/settings/models",
+  settings_roles: "/settings/roles", accounts: "/settings/subscriptions", settings_tools: "/settings/tools", settings_voice: "/settings/voice", welcome: "/welcome", device: "/account/device",
 };
 const DATA_MAX = 4000;
 const data = (v: unknown): string => {
