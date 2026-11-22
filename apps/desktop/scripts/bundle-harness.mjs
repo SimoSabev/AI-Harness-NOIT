@@ -9,7 +9,7 @@ import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, read
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BUNDLE_INSTALL_ARGS, bundleSourceFiles, buildOutputs, foreignNativeAddons, keepNextFile, workspaceShim } from "../dist/bundle-plan.js";
+import { BUNDLE_INSTALL_ARGS, BUNDLE_NEXT_CONFIG, bundleSourceFiles, bundledNextConfig, buildOutputs, foreignNativeAddons, keepNextFile, workspaceShim } from "../dist/bundle-plan.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../../..");
@@ -51,6 +51,11 @@ for (const f of files) {
   chmodSync(to, statSync(from).mode & 0o777);
   copied++;
 }
+
+// D-577: the web config as plain JS, since the bundle has no SWC to load next.config.ts with
+const webTs = path.join(out, "apps", "web", "next.config.ts");
+writeFileSync(path.join(out, "apps", "web", BUNDLE_NEXT_CONFIG), bundledNextConfig(readFileSync(webTs, "utf8")));
+rmSync(webTs);
 
 // 2. build outputs of every workspace package (the members are the folders with a package.json under the workspace globs)
 const members = [];

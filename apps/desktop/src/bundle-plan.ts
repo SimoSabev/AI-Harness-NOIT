@@ -1,6 +1,7 @@
 // E9g A5 (D-376): the pure part of scripts/bundle-harness.mjs — what goes into resources/harness of the installed app.
 // The bundle has the layout of the repo, so the CLI's repoRoot (three levels up from packages/cli/dist/main.js), the
 // image builds (Dockerfiles + sources + lockfile, D-078), the migrations and the demo fixture work unchanged.
+import ts from "typescript";
 
 /** Tracked paths not needed at run time: the docs, CI, agent tooling and the desktop app itself (it is the shell). */
 const EXCLUDED_PREFIXES = ["docs/", "apps/desktop/", ".github/", ".claude/"];
@@ -36,6 +37,17 @@ export const BUNDLE_INSTALL_ARGS: readonly string[] = Object.freeze([
   "--filter",
   "@mandat/web...",
 ]);
+
+/**
+ * D-577: the bundle drops Next's compiler (SWC, below), but `next start` still needs it to load next.config.ts, and
+ * without it the installed app hung on "The harness is starting…". So the bundle carries the config as plain JS
+ * (Next looks for next.config.mjs before next.config.ts) and leaves the .ts out.
+ */
+export const BUNDLE_NEXT_CONFIG = "next.config.mjs";
+
+export function bundledNextConfig(tsSource: string): string {
+  return ts.transpileModule(tsSource, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+}
 
 /** .node files other than Next's compiler (not used by `next start`) would make the bundle OS/arch specific. */
 export function foreignNativeAddons(files: readonly string[]): string[] {

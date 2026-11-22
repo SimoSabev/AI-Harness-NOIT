@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { BUNDLE_INSTALL_ARGS, bundleSourceFiles, buildOutputs, foreignNativeAddons, keepNextFile, workspaceShim } from "./bundle-plan.js";
+import { readFileSync } from "node:fs";
+import { BUNDLE_INSTALL_ARGS, BUNDLE_NEXT_CONFIG, bundleSourceFiles, bundledNextConfig, buildOutputs, foreignNativeAddons, keepNextFile, workspaceShim } from "./bundle-plan.js";
 
 // E9g A5 (D-376): what goes into resources/harness of the installed app.
 describe("the harness bundle (E9g A5, D-376)", () => {
@@ -66,5 +67,16 @@ describe("the harness bundle (E9g A5, D-376)", () => {
     expect(shim?.["index.js"]).toBe('export * from "../../../apps/worker/dist/index.js";\n');
     expect(shim?.["push.js"]).toBe('export * from "../../../apps/worker/dist/online/push.js";\n');
     expect(workspaceShim("@mandat/web", undefined, "../../../apps/web")).toBeNull();
+  });
+  it("the web config goes in as plain JS: the bundle has no SWC, and next start needs SWC only to load next.config.ts (D-577)", async () => {
+    expect(BUNDLE_NEXT_CONFIG).toBe("next.config.mjs");
+    const ts = readFileSync(new URL("../../web/next.config.ts", import.meta.url), "utf8");
+    const js = bundledNextConfig(ts);
+    expect(js).not.toMatch(/import type|: NextConfig/);
+    const mod = (await import(`data:text/javascript,${encodeURIComponent(js)}`)) as { default: { poweredByHeader?: boolean; serverExternalPackages?: string[]; headers?: () => Promise<{ headers: { key: string }[] }[]> } };
+    expect(mod.default.poweredByHeader).toBe(false);
+    expect(mod.default.serverExternalPackages).toEqual(["pg", "typescript"]);
+    const h = await mod.default.headers?.();
+    expect(h?.[0]?.headers.map((x) => x.key)).toContain("X-Frame-Options");
   });
 });

@@ -4972,3 +4972,13 @@ click). Той е структурно съвместим с типа на Elect
 Electron. Самият файл казва, че е чист и без внос от Electron.
 Граница: съвместимостта с истинския тип на Electron 44 не е проверена с инсталиран Electron (main.ts е извън check).
 Тестове: desktop menu.test.ts (+1: menu.ts не внася `electron`). Статус: решено от кодера.
+
+## D-577 Инсталираното приложение тръгва: пакетът носи next.config като JS (macOS, 22.11.2026)
+Решение: пакетът на харнеса за десктопа (`bundle-harness.mjs`) вече слага `apps/web/next.config.mjs`, преведен от
+`next.config.ts` с TypeScript (`bundledNextConfig` в bundle-plan.ts), и маха `.ts`. Next търси `next.config.mjs` преди `.ts`.
+Защо: пакетът маха компилатора на Next (SWC), за да е еднакъв за всяка ОС и архитектура, с довода „трябва само на
+`next build`“. `next start` обаче го ползва, за да зареди `next.config.ts`. Без него Next се опитва да свали SWC с `npm`, а в
+приложението `npm` няма. Уебът слуша на :3000, но не отговаря, и прозорецът остава на „The harness is starting… 4/4“.
+На новия Mac първото пускане на dmg-а от `pnpm site:mac` спря точно там. Новият пакет, пуснат с Node-а на Electron,
+отговаря на /login с 200 и с заглавките от config-а.
+Тестове: desktop bundle-plan.test.ts (+1: config-ът е чист JS, със същите стойности и заглавки). Статус: решено от кодера.
