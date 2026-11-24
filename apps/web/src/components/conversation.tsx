@@ -4,6 +4,7 @@ import type { Brief, ChatTurn } from "@mandat/contract";
 import { ORACLE_NOTE_MAX, limitResetsAt } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import { pathOf } from "../lib/task-path";
+import { answeringLine } from "../lib/chat";
 import { TaskPath } from "./task-path";
 import { OracleGrid } from "./oracle-grid";
 import type { Key, T } from "../i18n/t";
@@ -301,7 +302,8 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">
           <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
-          {t("chat.thinking")}
+          {/* D-599: what it answers, never only "Thinking…" */}
+          {(() => { const l = answeringLine(chat.turns); return t(l.key, l.params); })()}
         </p>
       )}
       {stop && (

@@ -1867,6 +1867,8 @@ export const en = {
   "mem.threads.play": "Turn",
   "mem.time.label": "The memory by day, one lane per kind",
   "project.brief.lacking": "Still missing; Harnova will ask.",
+  "chat.answering": "Harnova is answering “{target}”",
+  "chat.answeringStart": "Harnova is reading the project and writing its first answer",
 } as const;
 
 export type Key = keyof typeof en;

@@ -1843,4 +1843,6 @@ export const bg: Record<Key, string> = {
   "mem.threads.play": "Въртене",
   "mem.time.label": "Паметта по дни, по един ред за всеки вид",
   "project.brief.lacking": "Още липсва; Harnova ще попита.",
+  "chat.answering": "Harnova отговаря на „{target}“",
+  "chat.answeringStart": "Harnova чете проекта и пише първия си отговор",
 };

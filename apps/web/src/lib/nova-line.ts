@@ -1,4 +1,5 @@
 import type { Key, Params } from "../i18n/t";
+import { clip } from "./clip";
 import { SCREEN_PATH } from "./voice-tools";
 import type { VoiceScreen } from "@mandat/contract";
 
@@ -22,13 +23,7 @@ export type NovaEvent =
 export const NOVA_START: NovaState = { phase: "idle", line: null, steps: [], lines: [] };
 const STEPS = 6;
 const LINES = 4;
-const MAX = 42;
-
-/** a target short enough for one line */
-export function clip(s: string): string {
-  const one = s.replace(/\s+/g, " ").trim();
-  return one.length > MAX ? `${one.slice(0, MAX).trimEnd()}…` : one;
-}
+export { clip } from "./clip";
 
 const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v : null);
 
