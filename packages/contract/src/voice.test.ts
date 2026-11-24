@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JARVIS_FIRST_MESSAGE_BG, JARVIS_PROMPT_BG, VOICE_TOOLS, VoiceProviderId, VoiceToolCall, voiceToolNames } from "./voice.js";
+import { NOVA_FIRST_MESSAGE_BG, NOVA_PROMPT_BG, VOICE_TOOLS, VoiceProviderId, VoiceToolCall, voiceToolNames } from "./voice.js";
 
 // D-556 (Simo 20.11.2026): Jarvis — a voice that listens, speaks Bulgarian and acts through the same actions as the
 // screens. The tools are one list in the contract; every voice engine gets the same list.
@@ -48,11 +48,17 @@ describe("the voice's tools (D-556)", () => {
     expect(VoiceToolCall.safeParse({ tool: "choose", args: { control: "v4", option: "claude-sonnet-5-5" } }).success).toBe(true);
   });
 
+  it("D-596: the voice is Nova, the assistant of Harnova; tool descriptions never name the old names", () => {
+    expect(NOVA_PROMPT_BG).toMatch(/^Ти си Nova, асистентът на Harnova/);
+    expect(NOVA_PROMPT_BG).not.toMatch(/Jarvis|Мандат|Mandat|харнес/i);
+    for (const t of VOICE_TOOLS) expect(`${t.description} ${t.params.map((p) => p.description).join(" ")}`, t.name).not.toMatch(/Jarvis|Мандат|харнес/i);
+  });
+
   it("D-582: the prompt says what stays with the person, whatever the screen shows", () => {
-    expect(JARVIS_PROMPT_BG).toMatch(/write_prompt/);
-    expect(JARVIS_PROMPT_BG).toMatch(/прати/);
-    expect(JARVIS_PROMPT_BG).toMatch(/Никога не одобряваш, не сливаш и не подписваш/);
-    expect(JARVIS_PROMPT_BG).toMatch(/ключове/);
+    expect(NOVA_PROMPT_BG).toMatch(/write_prompt/);
+    expect(NOVA_PROMPT_BG).toMatch(/прати/);
+    expect(NOVA_PROMPT_BG).toMatch(/Никога не одобряваш, не сливаш и не подписваш/);
+    expect(NOVA_PROMPT_BG).toMatch(/ключове/);
   });
 
   it("D-584: research, models and defaults by their own tools; arguments typed", () => {
@@ -66,23 +72,23 @@ describe("the voice's tools (D-556)", () => {
   });
 
   it("D-584: like a real assistant — short, stops when cut off, says only what a tool confirmed; research is research, not a code task", () => {
-    expect(JARVIS_PROMPT_BG).toMatch(/кратк/i);
-    expect(JARVIS_PROMPT_BG).toMatch(/прекъсне/);
-    expect(JARVIS_PROMPT_BG).toMatch(/start_research/);
-    expect(JARVIS_PROMPT_BG).toMatch(/само каквото инструментът/);
-    expect(JARVIS_PROMPT_BG).toMatch(/критерии/);
-    expect(JARVIS_FIRST_MESSAGE_BG.length).toBeLessThan(40);
+    expect(NOVA_PROMPT_BG).toMatch(/кратк/i);
+    expect(NOVA_PROMPT_BG).toMatch(/прекъсне/);
+    expect(NOVA_PROMPT_BG).toMatch(/start_research/);
+    expect(NOVA_PROMPT_BG).toMatch(/само каквото инструментът/);
+    expect(NOVA_PROMPT_BG).toMatch(/критерии/);
+    expect(NOVA_FIRST_MESSAGE_BG.length).toBeLessThan(40);
   });
 
   it("D-585: interviews before a task or research — one short question at a time — and skips it only on „направо“; writes into the screen's form", () => {
-    expect(JARVIS_PROMPT_BG).toMatch(/интервю/i);
-    expect(JARVIS_PROMPT_BG).toMatch(/по един кратък въпрос/);
-    expect(JARVIS_PROMPT_BG).toMatch(/направо/);
-    expect(JARVIS_PROMPT_BG).toMatch(/open_screen research/);
+    expect(NOVA_PROMPT_BG).toMatch(/интервю/i);
+    expect(NOVA_PROMPT_BG).toMatch(/по един кратък въпрос/);
+    expect(NOVA_PROMPT_BG).toMatch(/направо/);
+    expect(NOVA_PROMPT_BG).toMatch(/open_screen research/);
   });
 
   it("D-586: knows it can write in every field of every screen and tab", () => {
-    expect(JARVIS_PROMPT_BG).toMatch(/всяко поле на всеки екран/);
+    expect(NOVA_PROMPT_BG).toMatch(/всяко поле на всеки екран/);
   });
 });
 

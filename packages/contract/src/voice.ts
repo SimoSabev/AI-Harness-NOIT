@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// D-556 (Simo 20.11.2026): Jarvis — the voice of the harness. It listens, speaks Bulgarian and acts through the same
+// D-556 (Simo 20.11.2026): the voice of the product (D-596: Nova, the voice of Harnova). It listens, speaks Bulgarian and acts through the same
 // actions as the screens. One tool list for every engine; nothing here approves, merges or signs (the person + TOTP).
 
 export const VoiceProviderId = z.enum(["elevenlabs", "openai_realtime", "browser"]);
@@ -29,19 +29,19 @@ const p = (name: string, description: string, required = true, extra: Partial<Vo
 
 /**
  * D-582: the labels of controls that stay with the person (English and Bulgarian words; labels are short UI text) and the
- * names of secret fields. The browser hides such controls from Jarvis and refuses them if named (apps/web voice-controls.ts).
+ * names of secret fields. The browser hides such controls from the voice and refuses them if named (apps/web voice-controls.ts).
  */
 export const VOICE_PERSON_ONLY = /approv|merge|\bsign|delete|remove|revoke|log ?out|sign ?out|\bkeys?\b|token|secret|password|totp|одобр|слей|слива|подпи[сш]|изтрий|изтриван|премахни|махни|отнеми|излез|ключ|токен|парол|тайн/i;
 export const VOICE_SECRET_NAME = /key|token|secret|password|totp|ключ/i;
 
 /** The catalog every voice engine is configured with (descriptions are what the model reads, in Bulgarian). */
 export const VOICE_TOOLS: readonly VoiceTool[] = [
-  { name: "open_screen", description: "Отваря всеки екран или таб на харнеса: задачи, нова задача, проекти, добави проект, ресърч, памет, нощна смяна, библиотека, инструменти, агенти, табло, метрики, преглед, система и всеки таб на настройките (акаунт, API ключове, локални, модели, роли, абонаменти, инструменти, глас).", params: [p("screen", "Кой екран", true, { enum: VoiceScreen.options }), p("project_id", "Проект, ако екранът е за проект", false)] },
+  { name: "open_screen", description: "Отваря всеки екран или таб на Harnova: задачи, нова задача, проекти, добави проект, ресърч, памет, нощна смяна, библиотека, инструменти, агенти, табло, метрики, преглед, система и всеки таб на настройките (акаунт, API ключове, локални, модели, роли, абонаменти, инструменти, глас).", params: [p("screen", "Кой екран", true, { enum: VoiceScreen.options }), p("project_id", "Проект, ако екранът е за проект", false)] },
   { name: "whats_waiting", description: "Казва какво чака човека: задачи за решение, въпроси, провалени проверки. Ползвай го, когато те питат какво има за правене.", params: [] },
-  { name: "list_projects", description: "Изброява проектите на харнеса с правилата и профила на агента им.", params: [] },
+  { name: "list_projects", description: "Изброява проектите в Harnova с правилата и профила на агента им.", params: [] },
   { name: "task_status", description: "Състоянието на задача или работа: какво прави агентът, единиците, присъдата VERIFIED/FAILED и защо.", params: [p("task_id", "Задачата (t_…); без нея — последната", false)] },
-  { name: "start_conversation", description: "Започва нов разговор за задача с думите на човека; харнесът задава въпроси, преди да работи.", params: [p("text", "Какво иска човекът, с неговите думи"), p("project_id", "Проектът, ако е казан", false)] },
-  { name: "start_project_interview", description: "Започва интервюто за целия проект: харнесът опознава проекта, преди първата задача, и предлага описание. Описанието го потвърждава само човекът, на екрана.", params: [p("project_id", "Проектът (от list_projects)"), p("text", "Какво казва човекът за проекта, с неговите думи")] },
+  { name: "start_conversation", description: "Започва нов разговор за задача с думите на човека; Harnova задава въпроси, преди да работи.", params: [p("text", "Какво иска човекът, с неговите думи"), p("project_id", "Проектът, ако е казан", false)] },
+  { name: "start_project_interview", description: "Започва интервюто за целия проект: Harnova опознава проекта, преди първата задача, и предлага описание. Описанието го потвърждава само човекът, на екрана.", params: [p("project_id", "Проектът (от list_projects)"), p("text", "Какво казва човекът за проекта, с неговите думи")] },
   { name: "send_message", description: "Казва отговора на човека в отворения разговор за задача.", params: [p("conversation_id", "Разговорът (c_…)"), p("text", "Отговорът")] },
   { name: "start_work", description: "Пуска работата по разговора, когато човекът каже да започва.", params: [p("conversation_id", "Разговорът (c_…)")] },
   { name: "steer_agent", description: "Предава указание на агент, който работи в момента по задача.", params: [p("task_id", "Задачата (t_…)"), p("text", "Указанието")] },
@@ -86,11 +86,11 @@ export const VoiceToolCall = z.discriminatedUnion("tool", [
 ]);
 export type VoiceToolCall = z.infer<typeof VoiceToolCall>;
 
-/** D-556: who Jarvis is (Bulgarian; the demo and the product). Rules the model must keep, whatever is said to it. */
-export const JARVIS_FIRST_MESSAGE_BG = "Тук съм. Слушам.";
+/** D-556: who the voice is (Bulgarian; the demo and the product); D-596: Nova, the assistant of Harnova. Rules the model must keep, whatever is said to it. */
+export const NOVA_FIRST_MESSAGE_BG = "Тук съм. Слушам.";
 // D-584 (Simo 22.11.2026): like a real assistant — short, quick, cut off at once; strong prompts; only what a tool confirmed.
-export const JARVIS_PROMPT_BG = [
-  "Ти си Jarvis, асистентът на Мандат — харнес, в който AI агенти пишат код в пясъчник, а харнесът проверява работата им и дава присъда VERIFIED или FAILED.",
+export const NOVA_PROMPT_BG = [
+  "Ти си Nova, асистентът на Harnova — платформа, в която AI агенти пишат код в пясъчник, а Harnova проверява работата им и дава присъда VERIFIED или FAILED.",
   "Стил: говориш на български, кратко, като истински асистент. Обикновено едно изречение, до 15 думи. „Готово.“, „Пускам го.“, „Разбрах.“ Без увод, без да повтаряш казаното, без да изреждаш какво можеш, без да обясняваш как работиш, освен ако човекът попита.",
   "Ако човекът те прекъсне, спираш веднага и слушаш; не довършваш мисълта си и не се извиняваш дълго.",
   "Не разказваш какво правиш с инструментите. Действаш, после казваш резултата с няколко думи.",

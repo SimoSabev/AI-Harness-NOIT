@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { JARVIS_FIRST_MESSAGE_BG, JARVIS_PROMPT_BG, VOICE_TOOLS } from "@mandat/contract";
+import { NOVA_FIRST_MESSAGE_BG, NOVA_PROMPT_BG, VOICE_TOOLS } from "@mandat/contract";
 import type { VoiceTool } from "@mandat/contract";
 
 // D-556: Jarvis on ElevenLabs Agents. The ElevenLabs key lives only here (AGENTS.md rule 2): the proxy creates the
@@ -57,10 +57,10 @@ export function elevenToolConfig(t: VoiceTool) {
 
 export function elevenAgentBody(o: { voiceId: string; toolIds: string[]; llm?: string }) {
   return {
-    name: "Mandat · Jarvis",
+    name: "Harnova · Nova", // D-596; a changed name changes specHash, so syncVoiceAgent renames an existing agent
     conversation_config: {
       // D-584: the greeting can be cut off too (barge-in is on by default; this keeps it on for the first message)
-      agent: { language: "bg", first_message: JARVIS_FIRST_MESSAGE_BG, disable_first_message_interruptions: false, prompt: { prompt: JARVIS_PROMPT_BG, llm: o.llm ?? DEFAULT_LLM, tool_ids: o.toolIds } },
+      agent: { language: "bg", first_message: NOVA_FIRST_MESSAGE_BG, disable_first_message_interruptions: false, prompt: { prompt: NOVA_PROMPT_BG, llm: o.llm ?? DEFAULT_LLM, tool_ids: o.toolIds } },
       // D-584: a little faster speech
       tts: { voice_id: o.voiceId, model_id: "eleven_v4_turbo", speed: 1.1 },
       asr: { provider: "scribe_realtime" },
@@ -104,7 +104,7 @@ export async function ensureVoiceAgent(o: { fetch: Fetch; key: string; voiceId: 
   }
   const body = elevenAgentBody({ voiceId: o.voiceId, toolIds, llm });
   if (exists) {
-    await json(await call(o.fetch, o.key, "PATCH", `/v1/convai/agents/${prev.agent_id}`, { conversation_config: body.conversation_config, platform_settings: body.platform_settings }), "voice_agent_update_failed", o.key);
+    await json(await call(o.fetch, o.key, "PATCH", `/v1/convai/agents/${prev.agent_id}`, { name: body.name, conversation_config: body.conversation_config, platform_settings: body.platform_settings }), "voice_agent_update_failed", o.key);
     return { agent_id: prev.agent_id, tool_ids: toolIds, hash, voice_id: o.voiceId, llm };
   }
   const id = (await json(await call(o.fetch, o.key, "POST", "/v1/convai/agents/create", body), "voice_agent_create_failed", o.key)).agent_id;
@@ -114,7 +114,8 @@ export async function ensureVoiceAgent(o: { fetch: Fetch; key: string; voiceId: 
 
 /**
  * D-588: at each session the agent is brought up to date with this code (its tools, prompt and settings), so a change to
- * Jarvis reaches the voice without anyone pressing "Create Jarvis" again. The voice is the agent's own (from the state, or
+ * the voice reaches it without anyone pressing "Create Nova" again (D-596: the name too, so an agent made as Jarvis
+ * becomes Nova). The voice is the agent's own (from the state, or
  * read once from ElevenLabs for files from before D-588). Same hash → nothing is sent but, for an old file, one GET.
  */
 export async function syncVoiceAgent(o: { fetch: Fetch; key: string; prev: VoiceAgentState }): Promise<VoiceAgentState> {

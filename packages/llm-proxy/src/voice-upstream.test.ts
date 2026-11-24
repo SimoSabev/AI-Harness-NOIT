@@ -44,7 +44,10 @@ describe("Jarvis on ElevenLabs: the agent and its tools (D-556)", () => {
     expect(b.conversation_config.tts).toEqual({ voice_id: "voice_1", model_id: "eleven_v4_turbo", speed: 1.1 });
     expect(b.conversation_config.asr.provider).toBe("scribe_realtime");
     expect(b.platform_settings.auth.enable_auth).toBe(true);
-    expect(b.conversation_config.agent.prompt.prompt).toMatch(/Jarvis/);
+    // D-596: the voice is Nova, the assistant of Harnova; the old names are gone
+    expect(b.name).toBe("Harnova · Nova");
+    expect(b.conversation_config.agent.prompt.prompt).toMatch(/^Ти си Nova, асистентът на Harnova/);
+    expect(b.conversation_config.agent.prompt.prompt).not.toMatch(/Jarvis|Мандат|Mandat|харнес/i);
     expect(b.conversation_config.agent.prompt.prompt).toMatch(/TOTP/);
   });
 
@@ -137,6 +140,8 @@ describe("Jarvis keeps itself current (D-588)", () => {
     expect(next.tool_ids).toHaveLength(VOICE_TOOLS.length);
     const patch = calls.find((c) => c.method === "PATCH");
     expect((patch?.body as { conversation_config: { tts: { voice_id: string } } }).conversation_config.tts.voice_id).toBe("voice_7");
+    // D-596: an agent made before the rename (Jarvis) becomes Nova at the next session, through this same sync
+    expect((patch?.body as { name: string }).name).toBe("Harnova · Nova");
   });
 
   it("a current agent: nothing is created or changed", async () => {
