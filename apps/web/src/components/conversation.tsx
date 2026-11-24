@@ -253,6 +253,15 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   if (turn.kind === "axes") return <AxesCard turn={turn} t={t} />;
   if (turn.kind === "spec") return <SpecCard turn={turn} t={t} a={a} />;
   if (turn.kind === "project") return <ProjectCard turn={turn} t={t} a={a} />;
+  // D-599: a note of the interview — the brief beside the conversation writes it; here one quiet line says what was noted
+  if (turn.kind === "project_note") {
+    return (
+      <p className="flex items-center gap-2 font-mono text-[11px] text-mute">
+        <span aria-hidden="true" className={`size-1.5 rotate-45 ${turn.from === "code" ? "bg-info" : "bg-accent"}`} />
+        {t("project.noted", { parts: Object.keys(turn.parts).join(", ") })} · {t(turn.from === "code" ? "interview.fromCode" : "interview.fromYou")}
+      </p>
+    );
+  }
   return (
     <div className="max-w-[46rem] space-y-3">
       <p className="text-[11px] font-medium text-mute">{t("chat.assistant")}</p>

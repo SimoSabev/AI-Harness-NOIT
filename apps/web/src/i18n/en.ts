@@ -1869,6 +1869,19 @@ export const en = {
   "project.brief.lacking": "Still missing; Harnova will ask.",
   "chat.answering": "Harnova is answering “{target}”",
   "chat.answeringStart": "Harnova is reading the project and writing its first answer",
+  // D-599: the interview writes the brief live
+  "project.brief.commands": "Commands",
+  "project.brief.approverOnly": "Who approves",
+  "project.brief.budget": "Cap per job",
+  "interview.title": "Getting to know the project",
+  "interview.close": "Close",
+  "interview.brief": "The project's brief",
+  "interview.briefHint": "Written while we talk.",
+  "interview.fromCode": "from the code",
+  "interview.fromYou": "from you",
+  "interview.filled": "{n} of {of}",
+  "interview.empty": "not clear yet",
+  "project.noted": "Noted: {parts}",
 } as const;
 
 export type Key = keyof typeof en;

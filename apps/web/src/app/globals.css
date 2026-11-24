@@ -31,6 +31,10 @@ body {
   mask: conic-gradient(at 12px 12px, transparent 75%, #000 0) 0 0 / calc(100% - 12px) calc(100% - 12px);
 }
 
+/* D-599: a profile tile that a note just wrote lands with an accent flash */
+@keyframes land { 0% { transform: translateY(6px); opacity: .3; background: var(--accent-soft); } 40% { transform: none; opacity: 1; } }
+.land { animation: land 1.4s ease-out both; }
+
 /* D-599: Nova's star — the rays carry the state (brand kit: Nova star) */
 .nova-star path { transform-origin: 50% 50%; transform-box: fill-box; }
 .nova-star[data-phase="idle"] path { opacity: .75; animation: nova-breathe 4s ease-in-out infinite; }

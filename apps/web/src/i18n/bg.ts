@@ -1845,4 +1845,17 @@ export const bg: Record<Key, string> = {
   "project.brief.lacking": "Още липсва; Harnova ще попита.",
   "chat.answering": "Harnova отговаря на „{target}“",
   "chat.answeringStart": "Harnova чете проекта и пише първия си отговор",
+  // D-599: the interview writes the brief live
+  "project.brief.commands": "Команди",
+  "project.brief.approverOnly": "Кой одобрява",
+  "project.brief.budget": "Таван на работа",
+  "interview.title": "Опознаване на проекта",
+  "interview.close": "Затвори",
+  "interview.brief": "Описанието на проекта",
+  "interview.briefHint": "Пише се, докато говорим.",
+  "interview.fromCode": "от кода",
+  "interview.fromYou": "от теб",
+  "interview.filled": "{n} от {of}",
+  "interview.empty": "още не е ясно",
+  "project.noted": "Записах: {parts}",
 };

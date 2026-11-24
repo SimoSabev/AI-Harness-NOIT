@@ -8,6 +8,7 @@ import type { Tone } from "../lib/status";
 import { Hex, btn } from "./ui";
 import { Select } from "./select";
 import { ChatThread, useConversation } from "./conversation";
+import { ProjectProfile } from "./project-profile";
 import { taskTypeFor } from "../lib/agents";
 import { boxRepo, sendsOnEnter } from "../lib/chat";
 import { isAnswering } from "../lib/conversation-types";
@@ -184,8 +185,10 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     </div>
   );
   const thread = asking && chat !== null;
-  return (
-    <form onSubmit={submit} className={thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
+  // D-599: the interview of a whole project is a sheet over the app, the brief written live beside the conversation
+  const interview = thread && chat.row.purpose === "project";
+  const form = (
+    <form onSubmit={submit} className={interview ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3" : thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
       {thread ? (
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={(note) => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, note ? { note } : {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
@@ -238,5 +241,21 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       )}
       {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
+  );
+  if (!interview) return form;
+  return (
+    <div role="dialog" aria-modal="true" aria-label={t("interview.title")} className="fixed inset-0 z-30 flex items-stretch justify-center bg-scrim p-3 lg:p-8">
+      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-[16px] border border-line-strong bg-panel shadow-[0_30px_80px_rgb(0_0_0/0.5)]">
+        <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+          <span aria-hidden="true" className="logo-mark inline-block size-6" />
+          <p className="flex-1 text-[15px] font-semibold">{t("interview.title")}</p>
+          <Link href="/" className={btn.ghost}>{t("interview.close")}</Link>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-5 p-4 lg:flex-row lg:p-5">
+          {form}
+          <ProjectProfile turns={chat.turns} t={t} />
+        </div>
+      </div>
+    </div>
   );
 }
