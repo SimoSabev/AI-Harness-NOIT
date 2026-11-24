@@ -31,6 +31,20 @@ body {
   mask: conic-gradient(at 12px 12px, transparent 75%, #000 0) 0 0 / calc(100% - 12px) calc(100% - 12px);
 }
 
+/* D-599: Nova's star — the rays carry the state (brand kit: Nova star) */
+.nova-star path { transform-origin: 50% 50%; transform-box: fill-box; }
+.nova-star[data-phase="idle"] path { opacity: .75; animation: nova-breathe 4s ease-in-out infinite; }
+.nova-star[data-phase="connecting"] path { animation: nova-turn 1.6s linear infinite; opacity: .6; }
+.nova-star[data-phase="listening"] path { animation: nova-listen .9s ease-in-out infinite; }
+.nova-star[data-phase="thinking"] path { animation: nova-turn 2.4s linear infinite; }
+.nova-star[data-phase="acting"] path { animation: nova-reach 1.2s ease-in-out infinite; }
+.nova-star[data-phase="speaking"] path { animation: nova-speak .45s ease-in-out infinite; }
+@keyframes nova-breathe { 50% { transform: scale(.88); } }
+@keyframes nova-listen { 30% { transform: scale(1.18, .9); } 60% { transform: scale(.92, 1.12); } }
+@keyframes nova-turn { to { transform: rotate(90deg); } }
+@keyframes nova-reach { 50% { transform: scale(1.22) rotate(45deg); } }
+@keyframes nova-speak { 50% { transform: scale(1.14); } }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
