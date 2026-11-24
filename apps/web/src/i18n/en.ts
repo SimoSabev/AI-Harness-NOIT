@@ -1912,6 +1912,8 @@ export const en = {
   "home.harnova": "Harnova",
   "home.icons": "Other places",
   "home.meetText": "Get to know the project and interview me, so we make its brief and profile.",
+  "harness.briefOk": "Brief approved",
+  "harness.briefMissing": "No brief: tasks wait for the interview",
 } as const;
 
 export type Key = keyof typeof en;

@@ -1888,4 +1888,6 @@ export const bg: Record<Key, string> = {
   "home.harnova": "Harnova",
   "home.icons": "Други места",
   "home.meetText": "Опознай проекта и ме интервюирай, за да направим описанието и профила му.",
+  "harness.briefOk": "Описанието е одобрено",
+  "harness.briefMissing": "Без описание: задачите чакат интервюто",
 };

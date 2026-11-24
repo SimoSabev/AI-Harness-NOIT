@@ -19,6 +19,7 @@ import { profileView } from "../../lib/server/profile";
 import type { ProfileView } from "../../lib/server/profile";
 import type { Key, T } from "../../i18n/t";
 import { pageCtx } from "../../lib/server/page";
+import { projectBriefs } from "../../lib/server/conversation";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,8 @@ export default async function HarnessPage() {
   const hidden = new Map<string, Awaited<ReturnType<typeof hiddenSets>>>();
   for (const r of v.repos) hidden.set(r.id, await hiddenSets(db(), c.uid, r.id));
   const trials = await profileTrials(db(), c.uid, c.org);
+  // D-600: every project goes through its interview before its first task — say where each one is
+  const briefs = new Map((await projectBriefs(db(), c.org)).map((b) => [b.id, b.brief]));
   return (
     <Shell current="harness" waiting={c.waiting}>
       <div className="flex flex-wrap items-center gap-3">
@@ -59,6 +62,8 @@ export default async function HarnessPage() {
               <h2 id={`r-${r.id}`} className="font-mono text-base font-semibold">{r.full_name}</h2>
               {st && <StatusBadge tone={st.tone} label={st.label} />}
               {r.harness_stale && <StatusBadge tone="red" label={t("harness.stale")} />}
+              {briefs.get(r.id) ? <StatusBadge tone="green" label={t("harness.briefOk")} /> : <StatusBadge tone="amber" label={t("harness.briefMissing")} />}
+              {!briefs.get(r.id) && <Link href="/" className={`${btn.primary} ml-auto`}>{t("home.act.meet", { name: r.full_name })}</Link>}
             </div>
             <p className="mt-1 text-sm text-mute">
               {t("harness.version", { v: r.config_version })}
