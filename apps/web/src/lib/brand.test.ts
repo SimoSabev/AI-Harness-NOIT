@@ -6,11 +6,11 @@ import { APP_COLOR, APP_ICONS, FAVICON, HARNESS, JUDGE, pageName } from "./brand
 
 const web = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-describe("brand (D-296)", () => {
-  it("харнесът още няма име (празно навсякъде); съдията е Мандат", () => {
-    expect(HARNESS).toBe("");
+describe("brand (D-296, D-596)", () => {
+  it("the product is Harnova (D-596): every page title ends with it; the judge's internal name stays Mandat", () => {
+    expect(HARNESS).toBe("Harnova");
     expect(JUDGE).toBe("Mandat");
-    expect(pageName("Вход")).toBe("Вход");
+    expect(pageName("Вход")).toBe("Вход · Harnova");
   });
 
   it("the installed app (PWA) has the dark canvas and the logo icons; the tab has the logo (D-382, D-383)", () => {

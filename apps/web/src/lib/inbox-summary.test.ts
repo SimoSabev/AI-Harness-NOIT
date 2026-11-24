@@ -23,11 +23,11 @@ describe("inbox summary (т. 8.1)", () => {
     expect(summaryLine({ autoMerged: 0, failed: 0, waiting: 1 }, "bg")).toBe("0 добавени автоматично · 0 провал · 1 чака теб");
   });
 
-  it("<title> с брояча", () => {
-    expect(pageTitle(3)).toBe("3 waiting");
-    expect(pageTitle(0)).toBe("Tasks");
-    expect(pageTitle(3, "bg")).toBe("3 чакат");
-    expect(pageTitle(1, "bg")).toBe("1 чака");
-    expect(pageTitle(0, "bg")).toBe("Задачи");
+  it("<title> с брояча и името Harnova (D-596)", () => {
+    expect(pageTitle(3)).toBe("3 waiting · Harnova");
+    expect(pageTitle(0)).toBe("Tasks · Harnova");
+    expect(pageTitle(3, "bg")).toBe("3 чакат · Harnova");
+    expect(pageTitle(1, "bg")).toBe("1 чака · Harnova");
+    expect(pageTitle(0, "bg")).toBe("Задачи · Harnova");
   });
 });

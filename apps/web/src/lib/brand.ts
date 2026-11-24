@@ -1,7 +1,7 @@
-// D-296: the harness (the whole app) has no name yet (Simo, 21.10.2026: blank everywhere); Mandat is only the judge
-// (verdict D1–D4, the ladder, the ledger). When the harness gets a name, set HARNESS and every title and the logo follow.
+// D-296: the name of the whole app; Mandat is only the judge's internal name (verdict D1–D4, the ladder, the ledger).
+// D-596 (Simo 24.11.2026): the product is Harnova (its voice is Nova); every title and the installed app follow this.
 // The judge's name on screen comes from the catalog (brand.judge, E7f).
-export const HARNESS = "";
+export const HARNESS = "Harnova";
 export const JUDGE = "Mandat";
 
 export function pageName(page: string): string {
