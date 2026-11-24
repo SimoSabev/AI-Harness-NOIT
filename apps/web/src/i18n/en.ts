@@ -1827,6 +1827,13 @@ export const en = {
   "nova.act.stop_research": "Stopping the research",
   "nova.act.list_models": "Looking at the models and subscriptions",
   "nova.act.set_defaults": "Changing the defaults",
+  // D-599: the seal ring
+  "seal.waiting": "waiting for the work",
+  "seal.checking": "checking",
+  "seal.verified": "verified",
+  "seal.unknown": "unknown",
+  "seal.failed": "failed",
+  "seal.count": "{n} of {of} gates",
 } as const;
 
 export type Key = keyof typeof en;

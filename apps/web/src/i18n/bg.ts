@@ -1803,4 +1803,11 @@ export const bg: Record<Key, string> = {
   "nova.act.stop_research": "Спирам проучването",
   "nova.act.list_models": "Гледам моделите и абонаментите",
   "nova.act.set_defaults": "Сменям настройките по подразбиране",
+  // D-599: the seal ring
+  "seal.waiting": "чака работата",
+  "seal.checking": "проверявам",
+  "seal.verified": "проверено",
+  "seal.unknown": "неясно",
+  "seal.failed": "провал",
+  "seal.count": "{n} от {of} врати",
 };

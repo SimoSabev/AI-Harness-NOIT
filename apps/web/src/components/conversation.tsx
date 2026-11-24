@@ -5,6 +5,7 @@ import { ORACLE_NOTE_MAX, limitResetsAt } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import { pathOf } from "../lib/task-path";
 import { TaskPath } from "./task-path";
+import { OracleGrid } from "./oracle-grid";
 import type { Key, T } from "../i18n/t";
 import { isAnswering, isFollowing } from "../lib/conversation-types";
 import type { ConversationFeed, ConversationRow, JobView, OracleView } from "../lib/conversation-types";
@@ -173,17 +174,7 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
       )}
       {s === "ready" && oracle && <p className="mt-1">{t("chat.oracle.ready", { tests: String(oracle.tests) })}</p>}
       {s === "approved" && <p className="mt-1 font-medium text-ok">{t("chat.oracle.approved")}</p>}
-      {oracle && oracle.red_on_base.length > 0 && (s === "ready" || s === "approved" || s === "not_ready") && (
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-          <dt className="col-span-2 text-mute">{t("chat.oracle.onBase")}</dt>
-          {oracle.red_on_base.map((c) => (
-            <div key={c.criterion_id} className="contents">
-              <dt className="font-mono">{c.criterion_id}</dt>
-              <dd className={c.red ? "text-ok" : "text-warn"}>{t(c.red ? "chat.oracle.red" : "chat.oracle.green")}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      {oracle && oracle.red_on_base.length > 0 && (s === "ready" || s === "approved" || s === "not_ready") && <OracleGrid cells={oracle.red_on_base} t={t} />}
       {(canBuild || (s === "ready" && a.canApprove)) && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
           {canBuild && <p className="min-w-0 flex-1 text-xs text-mute">{t(s === "approved" ? "chat.oracle.parked" : "chat.oracle.needed")}</p>}
