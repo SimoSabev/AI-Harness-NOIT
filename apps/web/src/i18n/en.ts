@@ -1681,6 +1681,8 @@ export const en = {
   "chat.oracle.none": "Before work starts, a separate agent writes hidden acceptance tests from the criteria. The writer never sees them.",
   "chat.oracle.build": "Build oracle",
   "chat.oracle.rebuild": "Build oracle again",
+  "chat.oracle.noteLabel": "What did the last oracle get wrong? (optional, the oracle agent reads it)",
+  "chat.oracle.notePlaceholder": "e.g. AC-1: a second call for the same order adds no points",
   "chat.oracle.building": "The oracle is being written and checked on the current code…",
   "chat.oracle.failed": "The oracle could not be built.",
   "chat.oracle.notReady": "The oracle is not ready:",

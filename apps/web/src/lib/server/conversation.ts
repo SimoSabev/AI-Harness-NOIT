@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, SurvivedMutant, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, sha256Tag, specHash, specText, survivedNote } from "@mandat/contract";
+import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleBuildBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, SurvivedMutant, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, personNote, sha256Tag, specHash, specText, survivedNote } from "@mandat/contract";
 import { deriveProfile } from "@mandat/core";
 import type { Brief } from "@mandat/contract";
 import { canAct, createTask } from "./actions";
@@ -153,8 +153,8 @@ async function lastNotReadyProblems(db: Db, id: string, hash: string): Promise<u
 
 /** D-571: a rebuild after a not-ready oracle names what was wrong last time; the spec is rendered into the room left, so
  *  every criterion and unchanged id still reaches the agent (cutting its end lost U-7 and U-8 on the live test) */
-function oracleTextWithNote(spec: Spec, problems: unknown, survived: readonly SurvivedMutant[] = []): string {
-  const note = `${lastProblemsNote(problems)}${survivedNote(survived)}`;
+function oracleTextWithNote(spec: Spec, problems: unknown, survived: readonly SurvivedMutant[] = [], person?: string): string {
+  const note = `${lastProblemsNote(problems)}${survivedNote(survived)}${personNote(person)}`;
   return `${oracleTaskText(spec, CHAT_TEXT_MAX - note.length)}${note}`;
 }
 
@@ -172,7 +172,10 @@ function lastProblemsNote(problems: unknown): string {
 }
 
 /** D-534: "Build oracle": a person starts a separate agent task that writes the hidden acceptance tests of the approved spec */
-export async function buildOracle(db: Db, o: { uid: string; org: string; id: string }): Promise<Result> {
+export async function buildOracle(db: Db, o: { uid: string; org: string; id: string; body?: unknown }): Promise<Result> {
+  // D-593: an optional note of the person on what the last oracle got wrong
+  const body = OracleBuildBody.safeParse(o.body ?? {});
+  if (!body.success) return err(400, "bad_body");
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
   const c = await approvedOf(db, o.id, o.org);
   if (!c) return err(404, "unknown_conversation");
@@ -185,7 +188,7 @@ export async function buildOracle(db: Db, o: { uid: string; org: string; id: str
   if (last?.status === "building") return err(409, "oracle_building");
   if (last?.status === "approved" && !parked) return err(409, "oracle_approved");
   const hash = c.spec.hash;
-  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTextWithNote(c.spec.spec, await lastNotReadyProblems(db, o.id, hash), parked ? await survivedOfJob(db, parked) : []), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
+  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTextWithNote(c.spec.spec, await lastNotReadyProblems(db, o.id, hash), parked ? await survivedOfJob(db, parked) : [], body.data.note), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
   if (r.status !== 201) return r;
   if (parked)
     await asService(db, async (sql) => {

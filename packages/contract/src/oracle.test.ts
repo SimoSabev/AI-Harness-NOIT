@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_TEXT_MAX } from "./conversation.js";
-import { HIDDEN_SEGMENT, ORACLE_API_ITEM_MAX, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, survivedNote, withApi } from "./oracle.js";
+import { HIDDEN_SEGMENT, ORACLE_API_ITEM_MAX, ORACLE_GLOB, OracleApproveBody, OracleBuildBody, personNote, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, survivedNote, withApi } from "./oracle.js";
 import { Contract, DetectorId, LedgerKind } from "./schemas.js";
 import type { Spec } from "./task-spec.js";
 
@@ -157,5 +157,17 @@ describe("a rebuild after a parked job names the mutants the old oracle let thro
     expect(many.length).toBeLessThanOrEqual(1200);
     expect(many).toContain(":5 ");
     expect(many).not.toContain(":6 ");
+  });
+});
+
+describe("a person's note on Build oracle again (D-593, live test 24.11)", () => {
+  it("the body is empty or one trimmed note of at most 1000 chars; the note goes to the agent as the person's words", () => {
+    expect(OracleBuildBody.parse({})).toEqual({});
+    expect(OracleBuildBody.parse({ note: "  AC-1: a second call for the same order adds nothing  " })).toEqual({ note: "AC-1: a second call for the same order adds nothing" });
+    expect(OracleBuildBody.safeParse({ note: "x".repeat(1001) }).success).toBe(false);
+    expect(OracleBuildBody.safeParse({ note: "ok", other: 1 }).success).toBe(false);
+    expect(personNote("AC-1: a second call adds nothing")).toMatch(/person who read the last oracle[\s\S]*AC-1: a second call adds nothing/);
+    expect(personNote(undefined)).toBe("");
+    expect(personNote("   ")).toBe("");
   });
 });

@@ -769,7 +769,7 @@ export async function postConversationOracle(req: Request, d: ApiDeps, id: strin
   const p = await post(req, d);
   if (p instanceof Response) return p;
   if (!d.createLimiter.take(p.uid)) return json(429, { error: "rate_limited" });
-  return done(await buildOracle(d.db, { uid: p.uid, org: p.org, id }), d);
+  return done(await buildOracle(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
 }
 /** D-534: a person approves the oracle (its hash in the body); only from a person's session, CSRF and origin checked */
 export async function postConversationOracleApprove(req: Request, d: ApiDeps, id: string): Promise<Response> {

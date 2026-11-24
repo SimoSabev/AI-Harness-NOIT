@@ -118,5 +118,15 @@ export type OracleProblem = z.infer<typeof OracleProblem>;
 
 export const OracleApproveBody = z.object({ oracle_hash: Sha256 }).strict();
 
+/** D-593 (live test 24.11.2026): "Build oracle again" may carry a person's note on what the last oracle got wrong */
+export const ORACLE_NOTE_MAX = 1000;
+export const OracleBuildBody = z.object({ note: z.string().trim().max(ORACLE_NOTE_MAX).optional() }).strict();
+export type OracleBuildBody = z.infer<typeof OracleBuildBody>;
+/** the person's note as the oracle agent reads it (their words, after the spec); nothing for no note */
+export function personNote(note: string | undefined): string {
+  const n = note?.trim() ?? "";
+  return n === "" ? "" : `\n\nA person who read the last oracle says what it got wrong; follow it where it agrees with the spec:\n${n}`;
+}
+
 /** D-534: a writer's mutants must be killed by the hidden tests at least this often, or the verdict is not VERIFIED */
 export const ORACLE_MIN_KILL = 0.6;

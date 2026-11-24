@@ -63,4 +63,12 @@ describe("the oracle in the thread (D-534)", () => {
     expect(approved).toContain("chat.oracle.approved");
     expect(approved).not.toContain(">chat.oracle.approve<");
   });
+  it("D-593: Build oracle again has a note field for what the last oracle got wrong; a first build has none", async () => {
+    const strategy = { profile: "feature", mode: "single", waves: 1, pilot: null, roles: [], reasons: [] } as unknown as NonNullable<Chat["job"]>["strategy"];
+    const job = { id: "j_x", status: "parked", question: "stopped", current: null, final_task_id: null, seal: null, merged_sha: null, strategy, gates: [], units: [] } as unknown as NonNullable<Chat["job"]>;
+    const parked = await render({ oracle: oracle({ status: "approved" }), job });
+    expect(parked).toContain("chat.oracle.noteLabel");
+    expect(parked).toContain("<textarea");
+    expect(await render({})).not.toContain("chat.oracle.noteLabel");
+  });
 });

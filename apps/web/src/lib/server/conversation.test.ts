@@ -210,6 +210,20 @@ describe("the spec in the web (D-533)", () => {
     expect(text).toContain("src/giftcards/checkout.ts:16 0 → 1");
     expect(text).toContain("AC-1");
   });
+  it("D-593: a person's note on Build oracle again reaches the oracle agent; a bad body is refused", async () => {
+    const id = await proposed(known);
+    const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
+    await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
+    await approvedOracle(id, hash);
+    const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    await asService(db, (sql) => sql.query("update public.jobs set status = 'parked' where id = $1", [s.body.job]));
+    expect((await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { note: "x".repeat(1001) } })).body).toEqual({ error: "bad_body" });
+    const b = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { note: "AC-1: a second call for the same order adds no points" } });
+    expect(b.status).toBe(201);
+    const text = (await asService(db, (sql) => sql.query<{ text: string }>("select text from public.tasks where id = $1", [b.body.task_id]))).rows[0]!.text;
+    expect(text).toContain("AC-1: a second call for the same order adds no points");
+    expect(text).toContain("Acceptance criteria:");
+  });
   it("Start work without an approved spec keeps D-531: a proposed but unapproved spec does not reach the task", async () => {
     const id = await proposed(known);
     const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });

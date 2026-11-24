@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brief, ChatTurn } from "@mandat/contract";
-import { limitResetsAt } from "@mandat/contract";
+import { ORACLE_NOTE_MAX, limitResetsAt } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key, T } from "../i18n/t";
 import { isAnswering, isFollowing } from "../lib/conversation-types";
@@ -10,7 +10,7 @@ import type { BringReply } from "@mandat/contract";
 import { JobCard } from "./job-card";
 import { postJson } from "../lib/client/api";
 import { Markdown } from "./markdown";
-import { btn } from "./ui";
+import { btn, input } from "./ui";
 
 // D-531 (E10a phase 1): the conversation of "Ask first" in the task box. The turns come from the server's feed (SSE) while
 // the worker answers; the model can ask, look in memory and propose a brief — the work starts only from "Start work".
@@ -148,12 +148,15 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
   );
 }
 
-export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: () => void; onApprove: (hash: string) => void; jobParked?: boolean }
+export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: (note?: string) => void; onApprove: (hash: string) => void; jobParked?: boolean }
 
 function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: OracleActions }) {
   const s = oracle?.status ?? null;
   // D-572: after a parked job a person may build an approved oracle again
   const canBuild = a.canApprove && (s === null || s === "not_ready" || s === "failed" || (s === "approved" && a.jobParked === true));
+  // D-593: building again, the person may say what the last oracle got wrong (it reaches the oracle agent as their words)
+  const [note, setNote] = useState("");
+  const again = canBuild && s !== null;
   return (
     <section aria-label={t("chat.oracle")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
       <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.oracle")}</p>
@@ -182,7 +185,13 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
       {(canBuild || (s === "ready" && a.canApprove)) && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
           {canBuild && <p className="min-w-0 flex-1 text-xs text-mute">{t(s === "approved" ? "chat.oracle.parked" : "chat.oracle.needed")}</p>}
-          {canBuild && <button type="button" className={btn.secondary} disabled={a.busy} onClick={a.onBuild}>{t(s === null ? "chat.oracle.build" : "chat.oracle.rebuild")}</button>}
+          {again && (
+            <label className="block w-full text-xs text-mute">
+              {t("chat.oracle.noteLabel")}
+              <textarea className={`${input} mt-1 min-h-16`} rows={3} maxLength={ORACLE_NOTE_MAX} value={note} placeholder={t("chat.oracle.notePlaceholder")} onChange={(e) => setNote(e.target.value)} />
+            </label>
+          )}
+          {canBuild && <button type="button" className={btn.secondary} disabled={a.busy} onClick={() => a.onBuild(again && note.trim() !== "" ? note.trim() : undefined)}>{t(s === null ? "chat.oracle.build" : "chat.oracle.rebuild")}</button>}
           {s === "ready" && oracle?.oracle_hash && <button type="button" className={btn.primary} disabled={a.busy} onClick={() => a.onApprove(oracle.oracle_hash as string)}>{t("chat.oracle.approve")}</button>}
         </div>
       )}
@@ -272,7 +281,7 @@ export function stopText(t: T, status: ConversationRow["status"], error: string 
 }
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
-export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: () => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }) {
+export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: (note?: string) => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
   // a block body: newer Chromium returns a Promise from scrollIntoView, and React would call it as the cleanup
