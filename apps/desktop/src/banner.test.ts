@@ -11,7 +11,7 @@ describe("Windows (D-392)", () => {
 
 const BANNER = [
   "",
-  "  Харнесът работи локално (съдия: Мандат)",
+  "  Harnova работи локално (съдия: Мандат)",
   "  Отвори:  http://localhost:3000",
   "  Вход:    без вход — само от този компютър",
   "",
@@ -20,7 +20,7 @@ const BANNER = [
 describe("desktop banner (D-303, D-368)", () => {
   it("само адресът от банера на pnpm local (без вход); без адрес или с чужд адрес → null", () => {
     expect(parseBanner(BANNER)).toEqual({ url: "http://localhost:3000" });
-    expect(parseBanner("  Харнесът работи локално\n")).toBeNull();
+    expect(parseBanner("  Harnova работи локално\n")).toBeNull();
     expect(parseBanner(BANNER.replace("http://localhost:3000", "https://evil.example"))).toBeNull();
     expect(parseBanner(BANNER.replace("http://localhost:3000", "http://192.168.1.5:3000"))).toBeNull();
   });
@@ -61,6 +61,6 @@ describe("startFailed (D-387)", () => {
     expect(f.retry).toBe(0);
   });
   it("no error line → the exit code", () => {
-    expect(startFailed("", 7, "en").detail).toBe("the harness exited with 7");
+    expect(startFailed("", 7, "en").detail).toBe("Harnova exited with 7");
   });
 });

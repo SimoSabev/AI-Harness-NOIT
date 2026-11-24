@@ -63,7 +63,7 @@ export function appMenu(lang: Lang, platform: string, o: AppMenuOptions): MenuSp
   const quit: MenuSpec = { label: dt(lang, "tray.quit"), action: "quit" };
   const about: MenuSpec = { role: "about", label: dt(lang, "help.about", { name: o.appName }) };
   const appItems: MenuSpec[] = mac
-    ? [{ label: o.appName, submenu: [about, SEP, ...loginItem(lang, o.loginItem), ...(o.loginItem === null ? [] : [SEP]), { role: "hide" }, { role: "hideOthers" }, { role: "unhide" }, SEP, quit] }]
+    ? [{ label: o.appName, submenu: [about, SEP, ...loginItem(lang, o.loginItem), ...(o.loginItem === null ? [] : [SEP]), { role: "hide", label: dt(lang, "menu.hide", { name: o.appName }) }, { role: "hideOthers" }, { role: "unhide" }, SEP, quit] }]
     : [];
   return [
     ...appItems,

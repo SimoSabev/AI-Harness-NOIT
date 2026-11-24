@@ -240,6 +240,8 @@ function runAction(action: MenuAction): void {
 
 function buildMenus(): void {
   const login = loginItemOn();
+  // D-596: to Electron the app is "Harness" (its profile folder and keychain entry); the About panel names it Harnova
+  app.setAboutPanelOptions({ applicationName: t("app.name") });
   Menu.setApplicationMenu(Menu.buildFromTemplate(toTemplate(appMenu(lang, process.platform, { appName: t("app.name"), loginItem: login }), toWeb, runAction)));
   tray?.setContextMenu(Menu.buildFromTemplate(toTemplate(trayMenu(lang, { waiting, loginItem: login }), toWeb, runAction)));
 }

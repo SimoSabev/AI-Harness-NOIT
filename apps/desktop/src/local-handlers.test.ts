@@ -129,6 +129,6 @@ describe("local access over the bridge (AC-12.6, D-373)", () => {
 
   it("the confirmation text is in the chosen language", () => {
     expect(confirmText("bg", "/w/shop", ["terminal"]).detail).toContain("не в пясъчника");
-    expect(confirmText("en", "/w/shop", ["read"]).title).toBe("Give the harness access to this folder?");
+    expect(confirmText("en", "/w/shop", ["read"]).title).toBe("Give Harnova access to this folder?");
   });
 });

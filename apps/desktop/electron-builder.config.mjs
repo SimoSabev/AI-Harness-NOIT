@@ -13,12 +13,15 @@ const out = process.env.MANDAT_DESKTOP_OUT ? path.resolve(process.env.MANDAT_DES
 /** @type {import("electron-builder").Configuration} */
 export const config = {
   appId: "org.mandat.harness",
-  productName: "Harness",
-  // the installed app is "Harness" to Electron too: its own userData (~/Library/Application Support/Harness, the default
-  // MANDAT_HOME is <userData>/mandat) and its own keychain entry; dev (`pnpm desktop`) keeps the package name
+  // D-596 (Simo 24.11.2026): people see Harnova — Harnova.app, the dmg, the Dock, the menu bar (CFBundleName).
+  productName: "Harnova",
+  // ...but to Electron itself the app stays "Harness": that name picks its userData (~/Library/Application Support/Harness,
+  // the default MANDAT_HOME is <userData>/mandat: connections, sealed keys, folder grants) and its keychain entry
+  // ("Harness Safe Storage", which unlocks those keys). Renaming it would leave all of that behind, so it stays and nothing
+  // is migrated. Dev (`pnpm desktop`) keeps the package name.
   extraMetadata: { productName: "Harness" },
   copyright: "GPL-3.0-or-later",
-  artifactName: "Harness-${version}-${os}-${arch}.${ext}",
+  artifactName: "Harnova-${version}-${os}-${arch}.${ext}",
   directories: { output: path.join(out, "release"), buildResources: "build-resources" },
   files: ["dist/**/*", "package.json", "!dist/**/*.test.*", "!dist/bundle-plan.*"],
   // electron-builder always drops the top-level node_modules of a copied folder (app-builder-lib util/filter.js), so the
@@ -42,20 +45,20 @@ export const config = {
     // without notarization.
     identity: "-",
     hardenedRuntime: false,
-    // D-580: Jarvis listens; without this line macOS never asks and the microphone stays silent. No camera line.
-    extendInfo: { NSMicrophoneUsageDescription: "Jarvis listens to you through the microphone while you talk to it." },
+    // D-580, D-596: Nova (the voice) listens; without this line macOS never asks and the microphone stays silent. No camera line.
+    extendInfo: { NSMicrophoneUsageDescription: "Nova listens to you through the microphone while you talk to it." },
   },
   win: { target: [{ target: "nsis", arch: ["x64"] }] },
   nsis: { oneClick: false, perMachine: false, allowToChangeInstallationDirectory: true },
   linux: {
-    executableName: "harness",
+    executableName: "harnova",
     target: [
       { target: "AppImage", arch: ["x64"] },
       { target: "deb", arch: ["x64"] },
     ],
     category: "Development",
     maintainer: "Mandat <noreply@mandat.invalid>",
-    synopsis: "Harness: AI coding tasks in a Docker sandbox, judged by Mandat",
+    synopsis: "Harnova: AI coding tasks in a Docker sandbox, with a verdict the agent cannot write",
   },
 };
 

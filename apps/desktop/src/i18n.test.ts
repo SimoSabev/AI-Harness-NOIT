@@ -24,11 +24,17 @@ describe("desktop i18n (E7е)", () => {
     expect(desktopLang({ MANDAT_LANG: "xx" }, "")).toBe("en");
   });
   it("templates fill {params}; the loading page is in the chosen language, with <html lang>", () => {
-    expect(dt("en", "error.exit", { code: 3 })).toBe("the harness exited with 3");
-    expect(dt("bg", "error.exit", { code: 3 })).toBe("харнесът излезе с 3");
+    expect(dt("en", "error.exit", { code: 3 })).toBe("Harnova exited with 3");
+    expect(dt("bg", "error.exit", { code: 3 })).toBe("Harnova излезе с 3");
     expect(decodeURIComponent(loadingPage("en"))).toContain('<html lang="en">');
-    expect(decodeURIComponent(loadingPage("en"))).toContain("The harness is starting");
-    expect(decodeURIComponent(loadingPage("bg"))).toContain("Харнесът се пуска");
+    expect(decodeURIComponent(loadingPage("en"))).toContain("Harnova is starting");
+    expect(decodeURIComponent(loadingPage("bg"))).toContain("Harnova се пуска");
+  });
+  it("the app is Harnova in both languages; no text names it harness (D-596)", () => {
+    expect(dt("en", "app.name")).toBe("Harnova");
+    expect(dt("bg", "app.name")).toBe("Harnova");
+    const all = [...Object.entries(DESKTOP_EN), ...Object.entries(DESKTOP_BG)];
+    expect(all.filter(([, v]) => /harness|харнес|jarvis/i.test(v)).map(([k]) => k)).toEqual([]);
   });
   it("no Cyrillic outside the catalog in apps/desktop/src (the tests aside; AC-12.10)", () => {
     const dir = path.dirname(fileURLToPath(import.meta.url));

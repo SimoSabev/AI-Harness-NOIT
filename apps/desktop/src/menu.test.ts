@@ -12,13 +12,13 @@ const top = (m: readonly MenuSpec[]) => m.map(labelOf);
 
 describe("the application menu (AC-12.7)", () => {
   it("macOS: app, File, Edit, View, Window, Help; elsewhere without the app menu (no Keys menu, D-384)", () => {
-    expect(top(appMenu("en", "darwin", { appName: "Harness", loginItem: false }))).toEqual(["Harness", "File", "Edit", "View", "Window", "Help"]);
-    expect(top(appMenu("en", "linux", { appName: "Harness", loginItem: null }))).toEqual(["File", "Edit", "View", "Window", "Help"]);
-    expect(top(appMenu("bg", "win32", { appName: "Харнес", loginItem: false }))).toEqual(["Файл", "Редакция", "Изглед", "Прозорец", "Помощ"]);
+    expect(top(appMenu("en", "darwin", { appName: "Harnova", loginItem: false }))).toEqual(["Harnova", "File", "Edit", "View", "Window", "Help"]);
+    expect(top(appMenu("en", "linux", { appName: "Harnova", loginItem: null }))).toEqual(["File", "Edit", "View", "Window", "Help"]);
+    expect(top(appMenu("bg", "win32", { appName: "Harnova", loginItem: false }))).toEqual(["Файл", "Редакция", "Изглед", "Прозорец", "Помощ"]);
   });
 
   it("File has New task, Approve, Add project, Apply locally; View has the four sections (D-403)", () => {
-    const m = appMenu("en", "darwin", { appName: "Harness", loginItem: false });
+    const m = appMenu("en", "darwin", { appName: "Harnova", loginItem: false });
     const file = m.find((i) => labelOf(i) === "File");
     const cmds = (i: MenuSpec | undefined) => flat(i && "submenu" in i && i.submenu ? i.submenu : []).flatMap((x) => ("command" in x && x.command ? [x.command] : []));
     expect(cmds(file)).toEqual([{ command: "new_task" }, { command: "approve" }, { command: "add_project" }, { command: "apply_locally" }]);
@@ -26,8 +26,18 @@ describe("the application menu (AC-12.7)", () => {
     expect(cmds(view).map((c) => (c.command === "view" ? c.view : c.command))).toEqual(["tasks", "projects", "memory", "settings"]);
   });
 
+  // D-596: to Electron the app is still "Harness" (its profile folder and keychain entry), so a role's own label would
+  // say "Hide Harness"; the app menu names the app itself
+  it("the macOS app menu says Harnova, never Electron's internal name (D-596)", () => {
+    const m = appMenu("en", "darwin", { appName: "Harnova", loginItem: false });
+    const items = flat(m).filter((i) => "role" in i && (i.role === "about" || i.role === "hide"));
+    expect(items.map((i) => ("label" in i ? i.label : undefined))).toEqual(["About Harnova", "Hide Harnova"]);
+    const bg = flat(appMenu("bg", "darwin", { appName: "Harnova", loginItem: false })).filter((i) => "role" in i && i.role === "hide");
+    expect(bg.map((i) => ("label" in i ? i.label : undefined))).toEqual(["Скрий Harnova"]);
+  });
+
   it("Edit is built from roles, so copy and paste work in the window", () => {
-    const m = appMenu("en", "darwin", { appName: "Harness", loginItem: false });
+    const m = appMenu("en", "darwin", { appName: "Harnova", loginItem: false });
     const edit = m.find((i) => labelOf(i) === "Edit");
     const roles = flat(edit && "submenu" in edit && edit.submenu ? edit.submenu : []).flatMap((x) => ("role" in x ? [x.role] : []));
     for (const r of ["undo", "redo", "cut", "copy", "paste", "selectAll"]) expect(roles).toContain(r);
@@ -35,7 +45,7 @@ describe("the application menu (AC-12.7)", () => {
 
   it("each window shortcut is registered exactly once in the whole menu; Keyboard shortcuts is in Help only", () => {
     for (const platform of ["darwin", "linux", "win32"]) {
-      const m = appMenu("en", platform, { appName: "Harness", loginItem: false });
+      const m = appMenu("en", platform, { appName: "Harnova", loginItem: false });
       expect(flat(m).filter((i) => "action" in i && i.action === "show_shortcuts")).toHaveLength(1);
       const accels = flat(m).flatMap((i) => ("accelerator" in i && i.accelerator ? [i.accelerator] : []));
       for (const s of shortcutMap().filter((x) => !x.global)) expect(accels.filter((a) => a === s.accelerator), s.id).toHaveLength(1);
@@ -44,7 +54,7 @@ describe("the application menu (AC-12.7)", () => {
   });
 
   it("every command in the menus is a valid DesktopCommand; no item has both a command and an action", () => {
-    const all = [...flat(appMenu("en", "darwin", { appName: "Harness", loginItem: true })), ...flat(trayMenu("en", { waiting: 2, loginItem: true }))];
+    const all = [...flat(appMenu("en", "darwin", { appName: "Harnova", loginItem: true })), ...flat(trayMenu("en", { waiting: 2, loginItem: true }))];
     for (const i of all) {
       if ("command" in i && i.command) expect(DesktopCommand.safeParse(i.command).success).toBe(true);
       expect("command" in i && i.command && "action" in i && i.action).toBeFalsy();
@@ -53,8 +63,8 @@ describe("the application menu (AC-12.7)", () => {
 
   it("Start at login is a checkbox, shown only where the OS supports it, and reflects the setting (off by default)", () => {
     const find = (m: readonly MenuSpec[]) => flat(m).find((i) => "action" in i && i.action === "toggle_login");
-    expect(find(appMenu("en", "darwin", { appName: "Harness", loginItem: false }))).toMatchObject({ type: "checkbox", checked: false, label: "Start at login" });
-    expect(find(appMenu("en", "linux", { appName: "Harness", loginItem: null }))).toBeUndefined();
+    expect(find(appMenu("en", "darwin", { appName: "Harnova", loginItem: false }))).toMatchObject({ type: "checkbox", checked: false, label: "Start at login" });
+    expect(find(appMenu("en", "linux", { appName: "Harnova", loginItem: null }))).toBeUndefined();
     expect(find(trayMenu("en", { waiting: 0, loginItem: true }))).toMatchObject({ checked: true });
     expect(find(trayMenu("en", { waiting: 0, loginItem: null }))).toBeUndefined();
   });
@@ -70,16 +80,16 @@ describe("the tray (AC-12.5)", () => {
   });
 
   it("the tooltip and the macOS menubar title carry the count; nothing when zero", () => {
-    expect(trayState("en", 2, "darwin")).toEqual({ tooltip: "Harness — 2 waiting for you", title: "2" });
-    expect(trayState("en", 0, "darwin")).toEqual({ tooltip: "Harness", title: "" });
-    expect(trayState("bg", 5, "linux")).toEqual({ tooltip: "Харнес — 5 чакат теб", title: null });
+    expect(trayState("en", 2, "darwin")).toEqual({ tooltip: "Harnova — 2 waiting for you", title: "2" });
+    expect(trayState("en", 0, "darwin")).toEqual({ tooltip: "Harnova", title: "" });
+    expect(trayState("bg", 5, "linux")).toEqual({ tooltip: "Harnova — 5 чакат теб", title: null });
   });
 });
 
 describe("toTemplate", () => {
   it("keeps roles, accelerators and checkboxes; a click sends the command or runs the action", () => {
     const sent: unknown[] = [];
-    const t = toTemplate(appMenu("en", "darwin", { appName: "Harness", loginItem: true }), (c) => sent.push(c), (a) => sent.push(a));
+    const t = toTemplate(appMenu("en", "darwin", { appName: "Harnova", loginItem: true }), (c) => sent.push(c), (a) => sent.push(a));
     const all = (xs: typeof t): typeof t => xs.flatMap((x) => [x, ...(Array.isArray(x.submenu) ? all(x.submenu) : [])]);
     const items = all(t);
     expect(items.find((x) => x.role === "copy")).toBeDefined();
