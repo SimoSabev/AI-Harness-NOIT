@@ -9,12 +9,26 @@ body {
 }
 
 :focus-visible {
-  @apply outline-2 outline-offset-2 outline-accent-text;
+  @apply outline-2 outline-offset-2 outline-accent;
 }
 
-/* The hexagon: agents, projects, statuses. Flat-top, like the tiles. (The logo is .logo-mark in tokens.css, D-383.) */
+/* The hexagon: agents and projects. (The logo is .logo-mark in tokens.css.) */
 .hex {
   clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+}
+
+/* D-599: the signal shapes of the brand kit — a status is a shape + a word + a colour. */
+.sig-diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.sig-run { clip-path: polygon(10% 0, 100% 50%, 10% 100%); }
+.sig-tick { clip-path: polygon(0 55%, 16% 40%, 38% 62%, 84% 12%, 100% 28%, 38% 92%); }
+.sig-cross { clip-path: polygon(18% 0, 50% 32%, 82% 0, 100% 18%, 68% 50%, 100% 82%, 82% 100%, 50% 68%, 18% 100%, 0 82%, 32% 50%, 0 18%); }
+.sig-dot { border-radius: 9999px; }
+
+/* D-599: the clamp — four corner brackets in the accent around what Nova acts on (the harness holding it). */
+.clamp { position: relative; }
+.clamp::after {
+  content: ""; position: absolute; inset: -5px; pointer-events: none; border: 2px solid var(--accent); border-radius: 10px;
+  mask: conic-gradient(at 12px 12px, transparent 75%, #000 0) 0 0 / calc(100% - 12px) calc(100% - 12px);
 }
 
 @media (prefers-reduced-motion: reduce) {

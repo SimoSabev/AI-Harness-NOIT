@@ -14,6 +14,8 @@
   --font-sans: "Geologica", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-display: "Geologica", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* D-599: `tracking-wide` was for the old display face; Geologica needs none */
+  --tracking-wide: 0em;
 
   --color-canvas: var(--canvas);
   --color-panel: var(--panel);

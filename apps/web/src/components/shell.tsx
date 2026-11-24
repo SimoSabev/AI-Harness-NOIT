@@ -24,9 +24,11 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
   const account = authMode() === "local" ? await accountMenu() : "off";
   const nav = (n: (typeof NAV)[number]) => (
     <Link key={n.id} href={n.href} aria-current={active === n.id ? "page" : undefined}
-      className="flex items-center gap-2 rounded-lg px-3 py-2 font-display text-sm tracking-wide text-mute transition hover:bg-raised hover:text-ink aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent-text">
+      className="group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-mute transition hover:bg-raised hover:text-ink aria-[current=page]:bg-raised aria-[current=page]:text-ink">
+      {/* D-599: a hollow diamond; the current section's is filled with the accent */}
+      <span aria-hidden="true" className="size-1.5 shrink-0 rotate-45 border-[1.5px] border-line-strong group-aria-[current=page]:border-accent group-aria-[current=page]:bg-accent" />
       <span className="flex-1">{t(n.label)}</span>
-      {n.id === "tasks" && waiting !== null && waiting > 0 && <span className="rounded-full bg-warn-soft px-1.5 font-mono text-[11px] text-warn" aria-label={t.n("inbox.waitingYou", waiting)}>{waiting}</span>}
+      {n.id === "tasks" && waiting !== null && waiting > 0 && <span className="font-mono text-[11px] text-warn" aria-label={t.n("inbox.waitingYou", waiting)}>{waiting}</span>}
     </Link>
   );
   return (
@@ -34,10 +36,10 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
       <a className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-panel focus:px-3 focus:py-2" href="#main">{t("shell.skip")}</a>
       <div className="flex min-h-screen flex-col lg:flex-row">
         {waiting !== null && (
-          <aside className="border-b border-line bg-panel lg:sticky lg:top-0 lg:h-screen lg:w-52 lg:shrink-0 lg:border-b-0 lg:border-r">
+          <aside className="border-b border-line bg-panel lg:sticky lg:top-0 lg:h-screen lg:w-56 lg:shrink-0 lg:border-b-0 lg:border-r">
             <div className="flex h-full flex-col">
               <div className="flex items-center gap-3 px-4 py-3">
-                <Link href="/" className="flex items-center gap-2 font-display font-semibold tracking-wide">
+                <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.01em]">
                   <span aria-hidden="true" className="logo-mark inline-block size-7" />
                   {HARNESS || <span className="sr-only">{t("shell.home")}</span>}
                 </Link>
