@@ -1777,6 +1777,21 @@ export const en = {
   "voice.settings.create": "Create Nova",
   "voice.settings.created": "Nova is ready. Press the Nova button at the bottom right.",
   "voice.settings.failed": "Could not create Nova: {error}",
+  // D-599: the path of a task (the strap)
+  "path.label": "The path of the task",
+  "path.conversation": "Conversation",
+  "path.spec": "Spec",
+  "path.oracle": "Oracle",
+  "path.work": "Work",
+  "path.seal": "Seal",
+  "path.state.done": "done",
+  "path.state.run": "running",
+  "path.state.you": "waiting for you",
+  "path.state.fail": "failed",
+  "path.state.todo": "to come",
+  "path.tests": "{n} hidden",
+  "path.units": "{n}/{of} units",
+  "path.gates": "{n} gates",
 } as const;
 
 export type Key = keyof typeof en;
