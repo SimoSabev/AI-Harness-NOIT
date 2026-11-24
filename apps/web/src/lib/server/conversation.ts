@@ -68,14 +68,14 @@ export async function sendMessage(db: Db, o: { uid: string; org: string; body: u
   return { status: 201, body: { id: cid, seq } };
 }
 
-/** the same question again (after an overloaded provider or a failure), on the model the person picked */
+/** the same question again (after an overloaded provider, a spent subscription or a failure, D-591), on the model the person picked */
 export async function retryConversation(db: Db, o: { uid: string; org: string; id: string; body: unknown }): Promise<Result> {
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
   const b = ChatRetryBody.safeParse(o.body);
   if (!b.success) return err(400, "bad_body");
   const c = await owned(db, o.id, o.org);
   if (!c) return err(404, "unknown_conversation");
-  if (c.phase !== "conversation" || !["overloaded", "failed"].includes(c.status)) return err(409, "not_retryable");
+  if (c.phase !== "conversation" || !["overloaded", "failed", "limit"].includes(c.status)) return err(409, "not_retryable");
   await asService(db, (sql) => sql.query("update public.conversations set agent = $2, model = $3, status = 'queued', error = null, updated_at = now() where id = $1", [o.id, b.data.agent, b.data.model ?? null]));
   return { status: 200, body: { id: o.id } };
 }

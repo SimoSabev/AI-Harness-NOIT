@@ -5,7 +5,7 @@ import { DEMO_ORG_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { runConversationOnce } from "../../../../worker/src/online/conversation";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { HIDDEN_SEGMENT, OracleManifest, hashJcs, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText } from "@mandat/contract";
+import { HIDDEN_SEGMENT, MandatError, OracleManifest, hashJcs, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText, subscriptionLimitError } from "@mandat/contract";
 import { contractForTask } from "../../../../worker/src/online/daemon";
 import { postConversation, postConversationApprove, postConversationJobApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
 import type { ApiDeps } from "./api";
@@ -78,6 +78,12 @@ describe("the conversation in the web (D-531)", () => {
     expect((await retryConversation(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { agent: "claude" } })).body).toEqual({ error: "not_retryable" });
     await asService(db, (sql) => sql.query("update public.conversations set status = 'budget' where id = $1", [id]));
     expect((await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { ...msg, conversation: id } })).body).toEqual({ error: "budget" });
+  });
+  it("live test 24.11: a spent subscription is the limit stop with its reset, and it can be retried on another account or model", async () => {
+    const id = String((await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: msg })).body.id);
+    await answer({ channel: ch, complete: async () => Promise.reject(new MandatError("E_SUBSCRIPTION_LIMIT", subscriptionLimitError("2026-11-26T09:00:00.000Z"))) });
+    expect((await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))?.conversation).toMatchObject({ status: "limit", error: "subscription_limit resets 2026-11-26T09:00:00.000Z" });
+    expect((await retryConversation(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { agent: "claude", model: "claude-haiku-5-5" } })).status).toBe(200);
   });
   it("the routes: CSRF and origin guarded posts, an SSE feed that closes once the answer is in", async () => {
     const r = await postConversation(post("/api/conversations", msg), deps);

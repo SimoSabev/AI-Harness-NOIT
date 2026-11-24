@@ -19,7 +19,18 @@ export const SessionPhase = z.enum(["conversation", "work"]);
 export type SessionPhase = z.infer<typeof SessionPhase>;
 
 /** idle = waiting for the person; queued/running = the worker answers; the rest are stops with a clear reason */
-export const ConversationStatus = z.enum(["idle", "queued", "running", "budget", "expired", "overloaded", "failed"]);
+export const ConversationStatus = z.enum(["idle", "queued", "running", "budget", "expired", "overloaded", "failed", "limit"]);
+
+/** live test 24.11.2026: a spent subscription stops a conversation with its own status; the error keeps only when it
+ * resets (never a word of the answer, rule 5) */
+export function subscriptionLimitError(resetsAt: string | null): string {
+  return resetsAt === null ? "subscription_limit" : `subscription_limit resets ${resetsAt}`;
+}
+/** when a limit stop resets, from the conversation's error; null for any other error */
+export function limitResetsAt(error: string | null): string | null {
+  const m = error === null ? null : /^subscription_limit resets (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)$/.exec(error);
+  return m?.[1] ?? null;
+}
 export type ConversationStatus = z.infer<typeof ConversationStatus>;
 
 /** a safety limit on one message, not a cap on the interview (D-533 supersedes the cut at 3 of e10a rule 2) */

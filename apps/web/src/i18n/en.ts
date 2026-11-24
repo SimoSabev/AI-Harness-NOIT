@@ -1553,6 +1553,8 @@ export const en = {
   "chat.retry": "Try again",
   "chat.budget": "This conversation has used its budget. Start a new one, or start the work.",
   "chat.expired": "This conversation has expired. Start a new one, or start the work.",
+  "chat.limit": "The subscription limit is used up until {time}. Add another account in Settings → Accounts, or pick another agent or model below and try again.",
+  "chat.limitUnknown": "The subscription limit is used up. Add another account in Settings → Accounts, or pick another agent or model below and try again.",
   "chat.new": "New conversation",
   "chat.err.answering": "Wait for the answer first.",
   "chat.err.workStarted": "The work has already started.",

@@ -1,3 +1,4 @@
+import { MandatError } from "@mandat/contract";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -59,13 +60,24 @@ describe("model clients (D-404)", () => {
     await expect(m.complete({ system: "s", user: "u", maxTokens: 10, json: false })).rejects.toThrow(/answered 500$/);
   });
   it("a subscription: the unchanged CLI with no tools; the prompt on stdin; no $ spent", async () => {
-    expect(cliArgv("claude-sonnet-5-5", "sys")).toEqual(["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", "claude-sonnet-5-5", "--system-prompt", "sys"]);
+    expect(cliArgv("claude-sonnet-5-5", "sys")).toEqual(["claude", "-p", "--output-format", "stream-json", "--verbose", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", "claude-sonnet-5-5", "--system-prompt", "sys"]);
     let stdin = "";
     const m = cliModel({ channel: ch("max", "cli_profile"), exec: async (_argv, s) => ((stdin = s), JSON.stringify({ type: "result", is_error: false, result: "ok", total_cost_usd: 0.3, usage: { input_tokens: 10, output_tokens: 3 } })) });
     expect(await m.complete({ system: "s", user: "the question", maxTokens: 10, json: false })).toEqual({ text: "ok", inputTokens: 10, outputTokens: 3, usd: 0 });
     expect(stdin).toBe("the question");
     const bad = cliModel({ channel: ch("max", "cli_profile"), exec: async () => JSON.stringify({ is_error: true, subtype: "error_max_turns" }) });
     await expect(bad.complete({ system: "s", user: "u", maxTokens: 1, json: false })).rejects.toThrow(/error_max_turns/);
+  });
+  it("live test 24.11: the stream's last result is the answer; a rejected rate_limit_event is a limit with its reset, not 'exited 1'", async () => {
+    const lines = (...o: unknown[]) => o.map((x) => JSON.stringify(x)).join("\n");
+    const init = { type: "system", subtype: "init" };
+    const ok = cliModel({ channel: ch("max", "cli_profile"), exec: async () => lines(init, { type: "rate_limit_event", rate_limit_info: { status: "allowed_warning", resetsAt: 1795683600 } }, { type: "assistant" }, { type: "result", is_error: false, result: "hello", usage: { input_tokens: 4, output_tokens: 1 } }) });
+    expect(await ok.complete({ system: "s", user: "u", maxTokens: 10, json: false })).toEqual({ text: "hello", inputTokens: 4, outputTokens: 1, usd: 0 });
+    const out = cliModel({ channel: ch("max", "cli_profile"), exec: async () => lines(init, { type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 1795683600, rateLimitType: "seven_day" } }, { type: "result", is_error: true, subtype: "success", result: "You have hit your limit" }) });
+    const e = await out.complete({ system: "s", user: "u", maxTokens: 10, json: false }).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(MandatError);
+    expect((e as MandatError).code).toBe("E_SUBSCRIPTION_LIMIT");
+    expect((e as MandatError).message).toBe("subscription_limit resets 2026-11-26T09:00:00.000Z");
   });
 });
 

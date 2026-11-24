@@ -57,3 +57,13 @@ describe("the spec in the thread (D-533)", () => {
     expect(await render({ ...row, spec_hash: `sha256:${"0".repeat(64)}` }, true)).toContain("chat.spec.replaced");
   });
 });
+
+describe("a spent subscription in the thread (D-591, live test 24.11)", () => {
+  it("says the limit and when it resets, with Try again; an unknown reset still names the limit", async () => {
+    const html = await render({ ...row, status: "limit", error: "subscription_limit resets 2026-11-26T09:00:00.000Z" }, true);
+    expect(html).toMatch(/chat\.limit\([^)]*26/);
+    expect(html).toContain("chat.retry");
+    expect(html).not.toContain("chat.failed");
+    expect(await render({ ...row, status: "limit", error: "subscription_limit" }, true)).toContain("chat.limitUnknown");
+  });
+});

@@ -50,7 +50,7 @@ describe("the host research environment (D-409)", () => {
     const sub = e.channels.find((c) => c.kind === "cli_profile")!;
     expect((await e.clientOf(sub).complete({ system: "s", user: "u", maxTokens: 10, json: false })).text).toBe("ok");
     expect(seen).toMatchObject({ profile: "lichno", stdin: "u" });
-    expect(seen!.argv.slice(0, 6)).toEqual(["claude", "-p", "--output-format", "json", "--tools", ""]);
+    expect(seen!.argv.slice(0, 7)).toEqual(["claude", "-p", "--output-format", "stream-json", "--verbose", "--tools", ""]);
   });
   it("the mdt_ token of an API-key channel is scoped to this run and its budget", async () => {
     const seenAuth: string[] = [];

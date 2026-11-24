@@ -39,7 +39,7 @@ export type NewTurn =
   | AxesTurn
   | SpecTurn
   | ProjectTurn;
-export type ChatStop = "budget" | "expired" | "overloaded" | "failed";
+export type ChatStop = "budget" | "expired" | "overloaded" | "failed" | "limit";
 
 export const CHAT_SYSTEM = [
   "You talk with a person before any work on their code starts. You cannot change files, run commands or use the network; you can read the selected project. Only the person approves a spec and starts the work.",
@@ -306,6 +306,8 @@ export async function answerTurn(o: {
       return { text: r.text };
     } catch (e) {
       const msg = e instanceof MandatError || e instanceof Error ? e.message.slice(0, 300) : "the model did not answer";
+      // D-591: a spent subscription waits for its reset or another account; it is not a failure
+      if (e instanceof MandatError && e.code === "E_SUBSCRIPTION_LIMIT") return { stop: "limit", error: msg };
       return { stop: OVERLOADED.test(msg) ? "overloaded" : "failed", error: msg };
     }
   };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Brief, CHAT_QUESTIONS_LIMIT, CHAT_TOOLS, ChatApproveBody, ChatMessageBody, ChatModelReply, ChatTurn, ConversationId, ConversationStatus, SessionPhase, briefText, capQuestions, specHash, specText } from "./index.js";
+import { Brief, CHAT_QUESTIONS_LIMIT, CHAT_TOOLS, ChatApproveBody, ChatMessageBody, ChatModelReply, ChatTurn, ConversationId, ConversationStatus, SessionPhase, briefText, capQuestions, limitResetsAt, specHash, specText, subscriptionLimitError } from "./index.js";
 import type { Spec } from "./index.js";
 
 // E10а ф. 1 (D-531): a conversation before work — the turns, the phase of the session and the three tools.
@@ -16,8 +16,18 @@ const brief = { goal: "Fix the discount rounding", touches: ["src/cart.ts"], avo
 describe("conversation contract (D-531)", () => {
   it("the phase is conversation or work; the status names every stop", () => {
     expect(SessionPhase.options).toEqual(["conversation", "work"]);
-    for (const s of ["idle", "queued", "running", "budget", "expired", "overloaded", "failed"]) expect(ConversationStatus.parse(s)).toBe(s);
+    for (const s of ["idle", "queued", "running", "budget", "expired", "overloaded", "failed", "limit"]) expect(ConversationStatus.parse(s)).toBe(s);
     expect(() => SessionPhase.parse("sandbox")).toThrow();
+  });
+  it("live test 24.11: a subscription limit is its own stop and keeps when it resets (never the body of an answer)", () => {
+    const e = subscriptionLimitError("2026-11-26T09:00:00.000Z");
+    expect(e).toBe("subscription_limit resets 2026-11-26T09:00:00.000Z");
+    expect(e.length).toBeLessThanOrEqual(300);
+    expect(limitResetsAt(e)).toBe("2026-11-26T09:00:00.000Z");
+    expect(subscriptionLimitError(null)).toBe("subscription_limit");
+    expect(limitResetsAt("subscription_limit")).toBeNull();
+    expect(limitResetsAt("the subscription CLI exited 1")).toBeNull();
+    expect(limitResetsAt(null)).toBeNull();
   });
   it("the tools read, ask and propose; none of them writes, runs, reaches the network or approves (D-533)", () => {
     expect([...CHAT_TOOLS]).toEqual(["ask_user", "search_memory", "list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_brief"]);

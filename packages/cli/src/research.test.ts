@@ -43,6 +43,17 @@ describe("mandat research (D-409)", () => {
     expect(seen[0]?.args).toEqual(expect.arrayContaining(["-v", "mandat-profile-claude-lichno:/home/agent/.claude-profile"]));
     await expect(exec("lichno", argv, "x")).rejects.toThrow(/exited 1$/);
   });
+  it("live test 24.11: a CLI that exits 1 with a stream still hands the stream over, so a spent subscription reads as the limit", async () => {
+    const stream = `${JSON.stringify({ type: "system", subtype: "init" })}\n${JSON.stringify({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt: 1795683600 } })}\n${JSON.stringify({ type: "result", is_error: true })}\n`;
+    const docker: DockerRunner = {
+      run: async (_args, o) => {
+        o.onStdout?.(Buffer.from(stream));
+        return { exitCode: 1, timedOut: false } as Awaited<ReturnType<DockerRunner["run"]>>;
+      },
+    };
+    const argv = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", "m", "--system-prompt", "s"];
+    expect(await profilePrintExec(docker)("lichno", argv, "x")).toBe(stream);
+  });
   it("ask: queued in the database, followed while the worker runs it, the report written", async () => {
     const db = await pgliteDb();
     try {

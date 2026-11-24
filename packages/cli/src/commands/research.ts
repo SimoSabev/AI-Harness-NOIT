@@ -29,8 +29,10 @@ export function profilePrintExec(docker: DockerRunner): (profile: string, argv: 
     });
     // stderr is never read back: it may quote the prompt (AGENTS.md rule 5)
     if (r.timedOut) throw new MandatError("E_RESEARCH_MODEL", "the subscription CLI timed out");
-    if (r.exitCode !== 0) throw new MandatError("E_RESEARCH_MODEL", `the subscription CLI exited ${r.exitCode}`);
-    return Buffer.concat(out).toString("utf8");
+    const text = Buffer.concat(out).toString("utf8");
+    // D-591: an exit with a stream that ended (a result or a limit) goes to the model client, which reads the limit from it
+    if (r.exitCode !== 0 && !/"type":\s*"(result|rate_limit_event)"/.test(text)) throw new MandatError("E_RESEARCH_MODEL", `the subscription CLI exited ${r.exitCode}`);
+    return text;
   };
 }
 

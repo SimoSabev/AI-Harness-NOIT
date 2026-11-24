@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
 import type { ResearchRole, RoleAssignment } from "@mandat/contract";
-import { MandatError } from "@mandat/contract";
+import { MandatError, subscriptionLimitError } from "@mandat/contract";
 import { costUsd, costUsdOpenAi } from "@mandat/llm-proxy";
 import type { OpenAiRate } from "@mandat/llm-proxy";
 import type { RoleRoute, RouterChannel } from "./router.js";
@@ -114,9 +114,23 @@ export function localModel(o: { channel: RouterChannel; baseUrl: string }): Mode
 }
 
 /** argv of one model call through the unchanged Claude Code CLI: no tools, no MCP, no session on disk; the prompt on stdin.
- * Flags: `claude --help` of 2.1.198 (26.10.2026, D-404). */
+ * Flags: `claude --help` of 2.1.198 (26.10.2026, D-404). D-591: stream-json (with --verbose, which it needs) carries the
+ * subscription's rate_limit_event, which the plain json result does not (checked live with 2.1.302, 24.11.2026). */
 export function cliArgv(model: string, system: string): string[] {
-  return ["claude", "-p", "--output-format", "json", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", model, "--system-prompt", system];
+  return ["claude", "-p", "--output-format", "stream-json", "--verbose", "--tools", "", "--strict-mcp-config", "--no-session-persistence", "--model", model, "--system-prompt", system];
+}
+
+/** the JSON objects of a stream-json answer, one per line; lines that are not JSON are skipped */
+function streamRows(out: string): Record<string, unknown>[] {
+  return out.split("\n").flatMap((l) => {
+    const t = l.trim();
+    if (!t.startsWith("{")) return [];
+    try {
+      return [obj(JSON.parse(t))];
+    } catch {
+      return [];
+    }
+  });
 }
 /** the worker runs argv in the profile's sandbox and returns stdout */
 export type CliExec = (argv: string[], stdin: string, signal?: AbortSignal) => Promise<string>;
@@ -125,12 +139,15 @@ export function cliModel(o: { channel: RouterChannel; exec: CliExec }): ModelCli
     channel: o.channel,
     async complete(r, signal) {
       const out = await o.exec(cliArgv(o.channel.model, r.system), r.user, signal);
-      let j: Record<string, unknown>;
-      try {
-        j = obj(JSON.parse(out.trim().split("\n").at(-1) ?? ""));
-      } catch {
-        throw new MandatError("E_RESEARCH_MODEL", "the CLI answered with no JSON");
+      const rows = streamRows(out);
+      // D-591: the subscription says it is spent only in its own stream (D-567); the reset goes up, the answer's words never
+      const limit = rows.find((x) => x.type === "rate_limit_event" && obj(x.rate_limit_info).status === "rejected");
+      if (limit) {
+        const at = obj(limit.rate_limit_info).resetsAt;
+        throw new MandatError("E_SUBSCRIPTION_LIMIT", subscriptionLimitError(typeof at === "number" && Number.isFinite(at) && at > 0 ? new Date(at * 1000).toISOString() : null));
       }
+      const j = rows.findLast((x) => x.type === "result") ?? rows.at(-1);
+      if (!j) throw new MandatError("E_RESEARCH_MODEL", "the CLI answered with no JSON");
       if (j.is_error === true) throw new MandatError("E_RESEARCH_MODEL", `the CLI reported an error (${String(j.subtype ?? "error")})`);
       const u = obj(j.usage);
       // a subscription is not billed per call; total_cost_usd is the API price equivalent, shown but not spent

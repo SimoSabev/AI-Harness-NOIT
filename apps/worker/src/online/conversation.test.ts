@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { CHAT_TOOLS, ChatTurn } from "@mandat/contract";
+import { CHAT_TOOLS, ChatTurn, MandatError, subscriptionLimitError } from "@mandat/contract";
 import { fakeModel } from "@mandat/research";
 import type { ModelClient, ModelRequest, RouterChannel } from "@mandat/research";
 import { pgliteDb } from "./pglite-db.test-helper.js";
@@ -72,6 +72,10 @@ describe("one answer (D-531)", () => {
     expect(await answerTurn({ ...base, client, turns: [human("hi")] })).toMatchObject({ stop: "overloaded", error: "model endpoint answered 529" });
     const down: ModelClient = { channel: ch, complete: async () => Promise.reject(new Error("model endpoint unreachable")) };
     expect(await answerTurn({ ...base, client: down, turns: [human("hi")] })).toMatchObject({ stop: "failed" });
+  });
+  it("live test 24.11: a spent subscription is the limit stop with its reset, not a failure", async () => {
+    const client: ModelClient = { channel: ch, complete: async () => Promise.reject(new MandatError("E_SUBSCRIPTION_LIMIT", subscriptionLimitError("2026-11-26T09:00:00.000Z"))) };
+    expect(await answerTurn({ ...base, client, turns: [human("hi")] })).toMatchObject({ stop: "limit", error: "subscription_limit resets 2026-11-26T09:00:00.000Z" });
   });
 });
 

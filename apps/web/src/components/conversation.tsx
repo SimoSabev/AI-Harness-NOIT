@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brief, ChatTurn } from "@mandat/contract";
+import { limitResetsAt } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key, T } from "../i18n/t";
 import { isAnswering, isFollowing } from "../lib/conversation-types";
@@ -259,7 +260,16 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   );
 }
 
-const STOP: Partial<Record<ConversationRow["status"], "chat.overloaded" | "chat.failed" | "chat.budget" | "chat.expired">> = { overloaded: "chat.overloaded", failed: "chat.failed", budget: "chat.budget", expired: "chat.expired" };
+const STOP: Partial<Record<ConversationRow["status"], "chat.overloaded" | "chat.failed" | "chat.budget" | "chat.expired" | "chat.limit">> = { overloaded: "chat.overloaded", failed: "chat.failed", budget: "chat.budget", expired: "chat.expired", limit: "chat.limit" };
+
+/** D-591: the stop's words; a spent subscription says when it resets (local time) or that the time is unknown */
+export function stopText(t: T, status: ConversationRow["status"], error: string | null): string | null {
+  const key = STOP[status];
+  if (!key) return null;
+  if (key !== "chat.limit") return t(key);
+  const at = limitResetsAt(error);
+  return at === null ? t("chat.limitUnknown") : t("chat.limit", { time: new Date(at).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) });
+}
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
 export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: () => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }) {
@@ -269,8 +279,8 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
   useEffect(() => {
     void end.current?.scrollIntoView({ block: "end" });
   }, [chat.turns.length, chat.row.status]);
-  const stop = STOP[chat.row.status];
-  const retryable = chat.row.status === "overloaded" || chat.row.status === "failed";
+  const stop = stopText(t, chat.row.status, chat.row.error);
+  const retryable = chat.row.status === "overloaded" || chat.row.status === "failed" || chat.row.status === "limit";
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
@@ -284,7 +294,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
       )}
       {stop && (
         <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
-          <span className="min-w-0 flex-1">{t(stop)}</span>
+          <span className="min-w-0 flex-1">{stop}</span>
           {retryable ? <button type="button" className={btn.secondary} onClick={onRetry} disabled={busy}>{t("chat.retry")}</button> : <button type="button" className={btn.secondary} onClick={onNew}>{t("chat.new")}</button>}
         </div>
       )}
