@@ -15,7 +15,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
   return { title: HARNESS || t("meta.title"), description: t("meta.description"), icons: { icon: [FAVICON, { url: "/icon-192.png", sizes: "192x192", type: "image/png" }] } };
 }
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: [{ media: "(prefers-color-scheme: dark)", color: "#0c0f0d" }, { media: "(prefers-color-scheme: light)", color: "#f3f4f1" }] };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: [{ media: "(prefers-color-scheme: dark)", color: "#10161a" }, { media: "(prefers-color-scheme: light)", color: "#f3f6f7" }] };
 
 // D-305: the theme is a cookie (Settings), so the server paints the right one from the first byte.
 // E7f: so is the language (cookie `lang`, else Accept-Language, else English); <html lang> follows it.

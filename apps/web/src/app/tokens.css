@@ -1,10 +1,10 @@
-/* AC-12.4 / D-305 / E9g B (D-377): THE design tokens — fonts, colours of both themes, the logo. One file; the web
+/* AC-12.4 / D-305 / E9g B (D-377) / D-599: THE design tokens — fonts, colours of both themes, the logo. One file; the web
    (globals.css) and the download site (apps/site/src/app/site.css) import it after `@import "tailwindcss"`. Both serve
-   /fonts/ and /logo.png. */
+   /fonts/. The values are the Harnova brand kit (Claude Design, 24.11.2026): the accent (Harnova green by default) is
+   the person's move, amber (warn) waits on a person, cobalt (info) is the agents working, cyan (ok) is proven, coral
+   (bad) is failed. The tailwind names stay (canvas, panel, ok, warn…) so every screen follows without a rename. */
 
 /* Self-hosted (no request to Google at runtime). SIL OFL 1.1, see public/fonts/OFL-*.txt. */
-@font-face { font-family: "Tektur"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("/fonts/tektur-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: "Tektur"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("/fonts/tektur-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
 @font-face { font-family: "Geologica"; font-style: normal; font-weight: 300 600; font-display: swap; src: url("/fonts/geologica-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 @font-face { font-family: "Geologica"; font-style: normal; font-weight: 300 600; font-display: swap; src: url("/fonts/geologica-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
 @font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 400 500; font-display: swap; src: url("/fonts/martian-mono-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
@@ -12,7 +12,7 @@
 
 @theme inline {
   --font-sans: "Geologica", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Tektur", "Geologica", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Geologica", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --color-canvas: var(--canvas);
@@ -35,85 +35,113 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-idle: var(--idle);
+  --color-faint: var(--faint);
+  --color-scrim: var(--scrim);
+  /* the brand's own names for the four states (same values as ok/warn/info/bad) */
+  --color-proven: var(--ok);
+  --color-attention: var(--warn);
+  --color-machine: var(--info);
+  --color-broken: var(--bad);
 }
 
-/* Dark (default): muted lime on near-black; no glow, comfortable for long sessions. */
+/* Dark (default): a blue-green night, never neutral grey; the accent is Harnova green. */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --canvas: #0c0f0d;
-  --panel: #121613;
-  --raised: #181d19;
-  --line: #232a25;
-  --line-strong: #323b35;
-  --ink: #dfe6e0;
-  --mute: #98a49c;
+  --canvas: #10161a;
+  --panel: #161f24;
+  --raised: #1d282e;
+  --line: #283640;
+  --line-strong: #3a4b56;
+  --ink: #eaf0f2;
+  --mute: #9fb1b9;
+  --faint: #7d8f98;
   --accent: #a6c25e;
   --accent-ink: #121807;
   --accent-text: #b6cf7a;
-  --accent-soft: #1a2212;
-  --ok: #b6cf7a;
-  --ok-soft: #182013;
-  --warn: #d9b46a;
-  --warn-soft: #231d10;
-  --bad: #e38b81;
-  --bad-soft: #261413;
-  --info: #8fc5b5;
-  --info-soft: #12211d;
-  --idle: #6f7b73;
+  --accent-soft: #1d2614;
+  --ok: #4cc3e0;
+  --ok-soft: #0f2a33;
+  --warn: #f2c14e;
+  --warn-soft: #2c2512;
+  --bad: #ff7a66;
+  --bad-soft: #351a16;
+  --info: #7c95ff;
+  --info-soft: #1a2240;
+  --idle: #71838c;
+  --scrim: rgb(4 7 9 / 0.72);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --canvas: #f3f4f1;
+  --canvas: #f3f6f7;
   --panel: #ffffff;
-  --raised: #eceee9;
-  --line: #dde1da;
-  --line-strong: #c4cac1;
-  --ink: #1a1f1b;
-  --mute: #56615a;
+  --raised: #eaeff1;
+  --line: #d6dee2;
+  --line-strong: #9fb0b8;
+  --ink: #0f1a1f;
+  --mute: #4b5d66;
+  --faint: #5f717a;
   --accent: #4f681c;
   --accent-ink: #ffffff;
   --accent-text: #46601a;
   --accent-soft: #eaf0dc;
-  --ok: #46601a;
-  --ok-soft: #eaf0dc;
-  --warn: #7a5810;
-  --warn-soft: #f6eedb;
-  --bad: #a0362c;
-  --bad-soft: #f8e6e3;
-  --info: #2a6a5b;
-  --info-soft: #e0eeea;
-  --idle: #8a948c;
+  --ok: #0a6f86;
+  --ok-soft: #dcf1f7;
+  --warn: #7a5600;
+  --warn-soft: #fbf0d2;
+  --bad: #b8321d;
+  --bad-soft: #fbe4df;
+  --info: #3354d1;
+  --info-soft: #e4eafd;
+  --idle: #8b9aa1;
+  --scrim: rgb(15 26 31 / 0.42);
 }
 
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
     color-scheme: light;
-    --canvas: #f3f4f1;
+    --canvas: #f3f6f7;
     --panel: #ffffff;
-    --raised: #eceee9;
-    --line: #dde1da;
-    --line-strong: #c4cac1;
-    --ink: #1a1f1b;
-    --mute: #56615a;
+    --raised: #eaeff1;
+    --line: #d6dee2;
+    --line-strong: #9fb0b8;
+    --ink: #0f1a1f;
+    --mute: #4b5d66;
+    --faint: #5f717a;
     --accent: #4f681c;
     --accent-ink: #ffffff;
     --accent-text: #46601a;
     --accent-soft: #eaf0dc;
-    --ok: #46601a;
-    --ok-soft: #eaf0dc;
-    --warn: #7a5810;
-    --warn-soft: #f6eedb;
-    --bad: #a0362c;
-    --bad-soft: #f8e6e3;
-    --info: #2a6a5b;
-    --info-soft: #e0eeea;
-    --idle: #8a948c;
+    --ok: #0a6f86;
+    --ok-soft: #dcf1f7;
+    --warn: #7a5600;
+    --warn-soft: #fbf0d2;
+    --bad: #b8321d;
+    --bad-soft: #fbe4df;
+    --info: #3354d1;
+    --info-soft: #e4eafd;
+    --idle: #8b9aa1;
+    --scrim: rgb(15 26 31 / 0.42);
   }
 }
 
-/* D-383: the logo is the image Simo chose, as it is (texture and relief); scripts/brand-icons.mjs cuts /logo.png. */
+/* D-599: the mark — two straps (the harness) holding a four-point star (Nova). Straps in ink, the star in the accent,
+   so the logo follows the accent the person picks in Appearance. Drawn as two masks; no image file. */
 .logo-mark {
-  background: url("/logo.png") center / contain no-repeat;
+  position: relative;
+}
+.logo-mark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='6' y='8' width='10' height='48' rx='5'/%3E%3Crect x='48' y='8' width='10' height='48' rx='5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.logo-mark::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 13C33.3 26 37 30.7 45 32C37 33.3 33.3 38 32 51C30.7 38 27 33.3 19 32C27 30.7 30.7 26 32 13Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }

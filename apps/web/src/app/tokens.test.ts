@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -29,14 +29,32 @@ describe("one token file (AC-12.4, E9g B)", () => {
     const site = readFileSync(path.join(repo, "apps/site/src/app/site.css"), "utf8");
     expect(site).toMatch(/@import\s+"(\.\.\/)+web\/src\/app\/tokens\.css"/);
   });
-  it("the fonts are self-hosted: no external url in the token file", () => {
+  it("the fonts are self-hosted: Geologica and Martian Mono only, no external url in the token file (D-599)", () => {
     const css = readFileSync(path.join(here, "tokens.css"), "utf8");
-    expect(css).toMatch(/url\("\/fonts\/tektur-latin\.woff2"\)/);
+    expect(css).toMatch(/url\("\/fonts\/geologica-latin\.woff2"\)/);
+    expect(css).toMatch(/url\("\/fonts\/martian-mono-cyrillic\.woff2"\)/);
+    expect(css).not.toMatch(/tektur/i);
     expect(css).not.toMatch(/url\(\s*["']?(https?:)?\/\//);
+    // the display face is the text face: one family for everything a person reads
+    expect(css).toMatch(/--font-display:\s*"Geologica"/);
   });
-  it("the logo is one class of the token file: the chosen image, /logo.png, for the web and the site (D-383)", () => {
+  it("the logo is one class of the token file: the straps in ink, the star in the accent the person picked (D-599)", () => {
     const css = readFileSync(path.join(here, "tokens.css"), "utf8");
-    expect(css).toMatch(/\.logo-mark\s*\{[^}]*background:[^;}]*url\("\/logo\.png"\)/);
-    expect(existsSync(path.join(repo, "apps/web/public/logo.png"))).toBe(true);
+    const mark = /\.logo-mark::before\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    const star = /\.logo-mark::after\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(mark).toMatch(/background:\s*var\(--ink\)/);
+    expect(mark).toMatch(/mask:[^;]*url\("data:image\/svg\+xml/);
+    expect(star).toMatch(/background:\s*var\(--accent\)/);
+    expect(star).toMatch(/mask:[^;]*url\("data:image\/svg\+xml/);
+  });
+  it("the brand colours: Harnova green is the default accent, amber waits on a person, cyan is proven (D-599)", () => {
+    const css = readFileSync(path.join(here, "tokens.css"), "utf8");
+    const dark = /:root,\s*:root\[data-theme="dark"\]\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(dark).toMatch(/--accent:\s*#a6c25e/);
+    expect(dark).toMatch(/--canvas:\s*#10161a/);
+    expect(dark).toMatch(/--warn:\s*#f2c14e/);
+    expect(dark).toMatch(/--ok:\s*#4cc3e0/);
+    expect(dark).toMatch(/--info:\s*#7c95ff/);
+    expect(dark).toMatch(/--bad:\s*#ff7a66/);
   });
 });
