@@ -113,7 +113,7 @@ export const ChatTurn = z.discriminatedUnion("kind", [
     .strict(),
   z.object({ ...head, kind: z.literal("memory"), query: z.string().max(200), hits: z.array(z.object({ id: z.string().max(40), text: z.string().max(600) }).strict()).max(8) }).strict(),
   // D-533: what a tool did — never what a file holds (the contents live only inside one answer)
-  z.object({ ...head, kind: z.literal("tool"), tool: z.enum(["list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_project"]), target: z.string().max(300), ok: z.boolean(), note: z.string().max(300) }).strict(),
+  z.object({ ...head, kind: z.literal("tool"), tool: z.enum(["list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_project", "ask_user", "propose_brief"]), target: z.string().max(300), ok: z.boolean(), note: z.string().max(300) }).strict(),
   z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), /** D-552: a saved Other profile for these axes */ saved: z.string().trim().min(1).max(80).optional() }).strict(),
   // D-557: the project brief the model proposed, with its hash and what it still lacks
   z.object({ ...head, kind: z.literal("project"), brief: ProjectBrief, hash: Sha256, ready: z.boolean(), missing: z.array(z.string().max(40)).max(10) }).strict(),

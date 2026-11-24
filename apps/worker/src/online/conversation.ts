@@ -25,7 +25,7 @@ export const MAX_STEPS = 12;
 const LAST_STEP = "\n<state>\nThis is the last step of this answer: no more reading. Ask the person what you need (ask_user) or propose what you have.\n</state>";
 const NOBODY = "00000000-0000-4000-8000-000000000000";
 
-type ToolName = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec" | "propose_project";
+type ToolName = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec" | "propose_project" | "ask_user" | "propose_brief";
 type AxesTurn = { kind: "axes"; axes: TaskAxes; hint: TaskProfileId | null; profile: TaskProfileId; unknown: AxisName[]; saved?: string | undefined };
 type SpecTurn = { kind: "spec"; spec: Spec; hash: Sha256; ready: boolean; unknown: AxisName[]; untestable: string[] };
 /** D-557: the project brief the model proposed; ready when nothing it needs is missing */
@@ -162,8 +162,9 @@ export function jsonObjects(text: string): unknown[] {
 }
 
 /** a call to a listed tool whose shape is wrong: it goes back to the model with the problems (live test 18.11.2026) */
-type FixableTool = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec";
-const FIXABLE: readonly string[] = ["list_dir", "read_file", "grep", "propose_axes", "propose_spec"] satisfies readonly FixableTool[];
+// live test 24.11: ask_user and propose_brief too — a question over the limit lost every question of the answer in silence
+type FixableTool = "list_dir" | "read_file" | "grep" | "propose_axes" | "propose_spec" | "ask_user" | "propose_brief";
+const FIXABLE: readonly string[] = ["list_dir", "read_file", "grep", "propose_axes", "propose_spec", "ask_user", "propose_brief"] satisfies readonly FixableTool[];
 export type ParsedReply = { kind: "reply"; reply: ChatModelReply } | { kind: "badcall"; say: string; tool: FixableTool; note: string } | { kind: "prose"; say: string } | { kind: "garbled" };
 /** only say and call count: any other key of the reply (a "thought", a "reason") is dropped, not a reason to lose the call */
 const envelope = (o: unknown): unknown => (typeof o === "object" && o !== null && typeof (o as { say?: unknown }).say === "string" ? { say: (o as { say: string }).say, call: (o as { call?: unknown }).call ?? null } : o);

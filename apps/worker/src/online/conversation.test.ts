@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { CHAT_TOOLS } from "@mandat/contract";
+import { CHAT_TOOLS, ChatTurn } from "@mandat/contract";
 import { fakeModel } from "@mandat/research";
 import type { ModelClient, ModelRequest, RouterChannel } from "@mandat/research";
 import { pgliteDb } from "./pglite-db.test-helper.js";
@@ -225,6 +225,23 @@ describe("a reply that is not one clean JSON object (D-533, live test)", () => {
     expect(r.turns[0]).toMatchObject({ kind: "tool", tool: "propose_axes", ok: false });
     expect((r.turns[0] as { note: string }).note).toMatch(/reason/);
     expect(m.asked[1]?.user).toMatch(/propose_axes/);
+  });
+  it("live test 24.11: an ask_user with a question over the limit goes back to the model, never a silent answer without its questions", async () => {
+    const long = `Да пипаме ли src/payments/payment.ts? ${"x".repeat(300)}`;
+    const m = script({ say: "Трябва да изясня няколко неща.", call: { tool: "ask_user", questions: ["Кой одобрява?", long] } }, { say: "Трябва да изясня няколко неща.", call: { tool: "ask_user", questions: ["Кой одобрява?", "Да пипаме ли src/payments/payment.ts?"] } });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("лоялност и подаръчни карти")] });
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "assistant"]);
+    expect(r.turns[0]).toMatchObject({ kind: "tool", tool: "ask_user", ok: false });
+    expect((r.turns[0] as { note: string }).note).toMatch(/questions\.1/);
+    expect(r.turns[1]).toMatchObject({ kind: "assistant", questions: ["Кой одобрява?", "Да пипаме ли src/payments/payment.ts?"] });
+    expect(ChatTurn.safeParse({ ...r.turns[0], seq: 1, at: "2026-11-24T08:00:00Z" }).success).toBe(true);
+  });
+  it("a propose_brief in the wrong shape goes back to the model too", async () => {
+    const m = script({ say: "Here is the brief.", call: { tool: "propose_brief", brief: { goal: "x" } } }, { say: "Here is the brief.", call: { tool: "propose_brief", brief } });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("fix rounding")] });
+    expect(r.turns.map((t) => t.kind)).toEqual(["tool", "assistant"]);
+    expect(r.turns[0]).toMatchObject({ kind: "tool", tool: "propose_brief", ok: false });
+    expect(r.turns[1]).toMatchObject({ brief });
   });
   it("nothing readable even after the correction: a marked answer without the raw text", async () => {
     const m = script('<invoke name="list_dir">\n</invoke>\n{"say": broken', "</invoke> still not JSON {");
