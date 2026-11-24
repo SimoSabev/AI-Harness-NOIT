@@ -688,6 +688,40 @@ describe("runTask D12 (E9б, D-364)", () => {
   });
 });
 
+describe("a job unit's checks are not broken by later units' hidden tests (D-597, live test 24.11, run 7)", () => {
+  // the unit's hidden file also holds AC-2, which a later unit builds: its test fails and its module does not exist yet
+  const hidden = { dir: "", scope: ["AC-1"], files: [{ path: "tests/__hidden__/later.spec.ts", data: Buffer.from('it("AC-1: now", () => {});\nit("AC-2: later", async () => { await import("../../src/later"); });\n') }] };
+  const withHidden = (() => {
+    const j = JSON.parse(ALL_PASS_RAW) as { success: boolean; numFailedTests: number; testResults: unknown[] };
+    const a = (title: string, status: string) => ({ ancestorTitles: [], fullName: title, status, title, duration: 1, failureMessages: status === "failed" ? ["Cannot find module '../../src/later'"] : [], meta: {} });
+    j.testResults.push({ name: "/m/work/tests/__hidden__/later.spec.ts", status: "failed", message: "", startTime: 0, endTime: 1, assertionResults: [a("AC-1: now", "passed"), a("AC-2: later", "failed")] });
+    j.success = false;
+    j.numFailedTests = 1;
+    return JSON.stringify(j);
+  })();
+  it("D8 checks tree B without the hidden files (like base); D2 reads the exit of the visible tests; D5 decides the scope", async () => {
+    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
+    const profile = sealProfile({ version: 1, repo_id: "local", layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
+    const hiddenOnDisk = (i: TestProcedureInput) => existsSync(path.join(i.treeDir, "tests/__hidden__/later.spec.ts"));
+    const { r, testsCalls } = await go({
+      docker: new FakeDocker({ head: honest }),
+      i: { profile, hidden },
+      tests: (i) => {
+        // tsc fails whenever the hidden file is in the tree (its module does not exist yet)
+        const checks = i.checks?.map((c) => ({ name: c.name, exit: c.name === "typecheck" && hiddenOnDisk(i) ? 2 : 0 }));
+        const base = i.tree === "b" && hiddenOnDisk(i) ? ok(withHidden, 1) : ok(i.tree === "base" ? BASE_RAW : ALL_PASS_RAW);
+        return { ...(base as Extract<TestProcedureResult, { ok: true }>), ...(checks ? { checks } : {}) };
+      },
+    });
+    expect(det(r, "D8.static")?.status).toBe("pass");
+    expect(det(r, "D2.inventory")?.status).toBe("pass");
+    expect(det(r, "D5.hidden")?.status).toBe("pass");
+    expect(r.verdict?.result).toBe("VERIFIED");
+    // the checks of tree B ran on a tree without the hidden file
+    expect(testsCalls.filter((c) => c.tree === "b" && c.checks).every((c) => !c.mutants)).toBe(true);
+  });
+});
+
 describe("runTask steering (E8g, AC-8.5)", () => {
   it("a steerable agent with a steer hook: -i, the task as the first stdin line, pending steers framed; stdin ends at the result", async () => {
     const docker = new FakeDocker({ head: () => shopCopy() });

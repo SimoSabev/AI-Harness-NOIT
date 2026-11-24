@@ -209,6 +209,14 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   });
   // D5: the hidden tests go into tree B after the D11 inputs are read (they never shape a mutant or a special case)
   const hidden = i.hidden && i.hidden.files.length > 0 ? i.hidden : null;
+  // D-597 (live test 24.11, run 7): lint and typecheck judge the change's own code, on tree B without the hidden tests, as
+  // on base. A job unit's hidden file also tests later units' modules, which do not exist yet, so tsc failed on them.
+  let bChecks: CheckResult[] | null = null;
+  if (hidden && checks.length > 0) {
+    const bc = await runTests({ ...testsInput("b", bDir), testsCommand: "true", checks });
+    if (!bc.ok) infra(bc.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : bc.code, `tree B checks: ${bc.code}`);
+    bChecks = (bc as Extract<TestProcedureResult, { ok: true }>).checks ?? [];
+  }
   // D-536: at their paths from the repo root (a __hidden__ folder at any depth); only these files count for D5
   let hiddenPaths: string[] = [];
   if (hidden) {
@@ -220,7 +228,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   i.onGateLog?.("a", path.join(i.runDir, "gate", "a", "log", "events.jsonl"));
   if (!A.ok) infra(A.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : A.code, `tree A: ${A.code}`);
   const ui = uiCheck ? { ...uiCheck, baseShots } : null;
-  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}), ...(checks.length > 0 ? { checks } : {}), ...(ui ? { ui } : {}) });
+  const B = await runTests({ ...testsInput("b", bDir), ...(mutants.length > 0 ? { mutants, mutantTimeoutMs: 180_000 } : {}), ...(checks.length > 0 && bChecks === null ? { checks } : {}), ...(ui ? { ui } : {}) });
   i.onGateLog?.("b", path.join(i.runDir, "gate", "b", "log", "events.jsonl"));
   if (!B.ok) infra(B.code === "E_INSTALL_BASE" ? "E_INSTALL_TREE" : B.code, `tree B: ${B.code}`);
   const a = A as Extract<TestProcedureResult, { ok: true }>;
@@ -231,7 +239,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   await i.onReports?.({ raw: a.raw, exit: a.exit }, { raw: b.raw, exit: b.exit });
   if (checks.length > 0 || deps.length > 0) {
     const exitOf = (rs: CheckResult[], n: string) => rs.find((x) => x.name === n)?.exit ?? null;
-    evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bRaw.checks ?? [], c.name) })), deps, now: Date.now() }).evidence);
+    evidence.push(d8Static({ checks: checks.map((c) => ({ name: c.name, base: exitOf(baseChecks, c.name), b: exitOf(bChecks ?? bRaw.checks ?? [], c.name) })), deps, now: Date.now() }).evidence);
   }
   // AC-5.5: UI paths declared but not touched → D12 n/a; none declared → no D12 evidence at all
   if (!uiTouched && (i.ui?.paths.length ?? 0) > 0) evidence.push(d12Ui({ uiTouched: false, routes: null }).evidence);
@@ -256,7 +264,7 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
     b.timedOut
       ? ev("D2.inventory", "unknown", "tests timed out", {}, { cls: "timeout", id: "-" })
       : d2({
-          baseline: bl, b: b.report, exitB: b.exit ?? 1, diffPatch: i.diffPatch.toString("utf8"), mayChangeTests: i.mayChangeTests,
+          baseline: bl, b: b.report, exitB: visibleExit(b.exit, b.report, split), diffPatch: i.diffPatch.toString("utf8"), mayChangeTests: i.mayChangeTests,
           a: a.report, weakenedAssertions: wa, declaredTests: declared, external: i.external,
         }).evidence,
   );
@@ -276,4 +284,12 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const mut = evidence.find((e) => e.detector === "D11.mutation");
   i.progress?.(`[verify]    baseline${cachedBaseline ? " (cached)" : ""} · A ${cnt(a.report)} · B ${cnt(b.report)}${mut && mut.status !== "n/a" ? ` · mutants ${mut.summary}` : ""}`);
   return { evidence, cachedBaseline };
+}
+
+/** D-597: tree B's exit as D2 reads it. With hidden tests the run's exit also counts them (a job unit's later criteria
+ *  fail by design), while D2 sees only the visible report; a failed hidden test then explains a non-zero exit. */
+function visibleExit(exit: number | null, visible: ParsedReport, split: { hidden: { status: string }[] } | null): number {
+  if (exit === null) return 1;
+  if (exit !== 0 && split && visible.valid && split.hidden.some((h) => h.status === "failed")) return visible.success ? 0 : exit;
+  return exit;
 }
