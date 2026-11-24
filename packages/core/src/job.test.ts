@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, unitLands, jobMode, oracleFilesFor, scopedOracleFiles, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
+import { failingCriteria, fileTags, sealable, unitLands, jobMode, oracleFilesFor, scopedOracleFiles, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -151,6 +151,28 @@ describe("sites for a person in the seal (D-546)", () => {
     const s = sealFor({ spec, specHash: `sha256:${"a".repeat(64)}`, oracleHash: `sha256:${"b".repeat(64)}`, verdict: "VERIFIED", head: "c".repeat(40), evidence: [], ledgerHead: null, sites: [{ file: "src/a.ts", category: "unit" }, { file: "src/money.ts", category: "human" }] });
     expect(s.unchecked).toContain("src/money.ts: a migration site for a person");
     expect(s.unchecked.join(" ")).not.toContain("src/a.ts");
+  });
+});
+
+describe("a seal for a person when only mutants or timing are open (D-598, Симо 24.11)", () => {
+  it("VERIFIED seals; UNKNOWN seals only when every reason is a surviving mutant, a weak oracle grade or slower tests", () => {
+    expect(sealable("VERIFIED", [])).toBe(true);
+    expect(sealable("UNKNOWN", ["D11:survived:src/giftcards/cards.ts:3", "D11:oracle_too_weak:1/3", "D14:slower:t"])).toBe(true);
+    expect(sealable("UNKNOWN", ["D11:survived:src/a.ts:3", "D12:console_error:/"])).toBe(false);
+    expect(sealable("UNKNOWN", [])).toBe(false);
+    expect(sealable("FAILED", ["D11:survived:src/a.ts:3"])).toBe(false);
+  });
+  it("the seal names each surviving mutant and the oracle's grade, not 'not run'", () => {
+    const ev = [
+      { detector: "D11.mutation", status: "unknown" as const, data: { sites: 3, killed: 1, survived: [{ path: "src/giftcards/cards.ts", line: 3, from: "0", to: "1" }, { path: "src/giftcards/cards.ts", line: 22, from: "||", to: "&&" }] } },
+      { detector: "D11.oracle", status: "unknown" as const, data: { total: 3, killed: 1, score: 0.333, threshold: 0.6 } },
+    ];
+    expect(uncheckedOf(spec, ev)).toEqual([
+      "AC-3: proof by a person",
+      "D11.mutation: a mutant survived at src/giftcards/cards.ts:3 (0 → 1); a person decides",
+      "D11.mutation: a mutant survived at src/giftcards/cards.ts:22 (|| → &&); a person decides",
+      "D11.oracle: the hidden tests caught 1/3 mutants; a person decides",
+    ]);
   });
 });
 

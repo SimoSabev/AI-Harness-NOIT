@@ -238,4 +238,5 @@ export function withFiles(text: string, files: readonly string[]): string {
 }
 
 /** the approve body of a sealed job: the seal's hash the person saw */
-export const JobApproveBody = z.object({ seal_hash: Sha256 }).strict();
+/** D-598: an UNKNOWN seal also needs the person's fresh second factor (code; factor_id as for a task approval) */
+export const JobApproveBody = z.object({ seal_hash: Sha256, code: z.string().regex(/^\d{6}$/).optional(), factor_id: z.string().max(100).optional() }).strict();

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withApi, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { axesKey, criterionModules, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, scopedApi, sealFor, sharedModuleProblems, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
+import { axesKey, criterionModules, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, scopedApi, sealable, sealFor, sharedModuleProblems, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
 import type { JobMode, SiteRow } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
@@ -208,9 +208,10 @@ export async function convergeJob(d: JobDeps, j: JobRow): Promise<"waiting" | "s
     return "parked";
   }
   const evidence = (await d.db.query<{ detector: string; status: "pass" | "fail" | "unknown" | "n/a"; data: unknown }>("select detector, status, data from public.evidence where verdict_id = $1::uuid order by id", [v.id])).rows;
-  if (v.result === "VERIFIED" && j.head_sha) {
+  // D-598: VERIFIED, or UNKNOWN only from surviving mutants / the oracle's grade / slower tests, seals for a person
+  if (sealable(v.result, v.reasons) && j.head_sha) {
     const head = (await d.db.query<{ hash: string }>("select hash from public.ledger where org_id = $1::uuid order by seq desc limit 1", [j.org_id])).rows[0]?.hash ?? null;
-    const seal = sealFor({ spec, specHash: j.spec_hash as Sha256, oracleHash: j.oracle_hash as Sha256, verdict: "VERIFIED", head: j.head_sha, evidence, ledgerHead: (head as Sha256 | null), sites: sitesOf(j.sites), base: j.base_sha });
+    const seal = sealFor({ spec, specHash: j.spec_hash as Sha256, oracleHash: j.oracle_hash as Sha256, verdict: v.result, head: j.head_sha, evidence, ledgerHead: (head as Sha256 | null), sites: sitesOf(j.sites), base: j.base_sha });
     const sealHash = hashJcs(seal);
     await inTransaction(d.db, async (tx) => {
       await tx.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3, updated_at = now() where id = $1", [j.id, JSON.stringify(seal), sealHash]);

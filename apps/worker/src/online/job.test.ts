@@ -697,4 +697,21 @@ describe("writers get the public API the oracle fixed (D-566)", () => {
     expect(first).toContain("helper(): void");
     expect(first).not.toContain("couponCents(): number");
   });
+  it("D-598: a final check UNKNOWN only from surviving mutants seals UNKNOWN for a person; any other UNKNOWN parks", async () => {
+    const survived = [ev("D11.mutation", "unknown", { sites: 3, killed: 2, survived: [{ path: "src/cards.ts", line: 3, from: "0", to: "1" }] })];
+    const run = async (finalReasons: string[]) => {
+      const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => (c.text.startsWith("Final check") ? { result: "UNKNOWN", evidence: survived, reasons: finalReasons } : { result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+      for (let k = 0; k < 4; k++) {
+        await jobTick(s.jd);
+        await runDaemonOnce(s.deps);
+      }
+      await jobTick(s.jd);
+      return s.job();
+    };
+    const sealed = await run(["D11:survived:src/cards.ts:3"]);
+    expect(sealed.status).toBe("sealed");
+    expect(sealed.seal).toMatchObject({ verdict: "UNKNOWN", unchecked: expect.arrayContaining(["D11.mutation: a mutant survived at src/cards.ts:3 (0 → 1); a person decides"]) });
+    const parked = await run(["D11:survived:src/cards.ts:3", "D12:console_error:/"]);
+    expect(parked.status).toBe("parked");
+  });
 });

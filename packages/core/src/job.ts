@@ -120,8 +120,30 @@ export function uncheckedOf(spec: Pick<Spec, "criteria">, evidence: readonly Job
   const human = spec.criteria.filter((c) => c.proof === "human").map((c) => `${c.id}: proof by a person`);
   // D-546: a migration's sites left for a person are not done by the job
   const bySomeone = sites.filter((x) => x.category === "human").map((x) => `${x.file}: a migration site for a person`);
-  const notRun = evidence.filter((e) => e.status === "unknown" || e.status === "n/a").map((e) => `${e.detector}: not run`);
+  // D-598: a surviving mutant and the oracle's grade are named, so a person sees what they decide on
+  const notRun = evidence.filter((e) => e.status === "unknown" || e.status === "n/a").flatMap((e) => decidedBy(e) ?? [`${e.detector}: not run`]);
   return [...human, ...bySomeone, ...notRun].slice(0, 100);
+}
+
+/** D-598: what an undecided D11 leaves to a person, in words (null: the generic "not run") */
+function decidedBy(e: JobEvidence): string[] | null {
+  const d = (e.data ?? {}) as { survived?: unknown; killed?: unknown; total?: unknown };
+  if (e.detector === "D11.mutation" && e.status === "unknown" && Array.isArray(d.survived) && d.survived.length > 0) {
+    return d.survived.flatMap((m: unknown) => {
+      const x = m as { path?: unknown; line?: unknown; from?: unknown; to?: unknown };
+      return typeof x.path === "string" && typeof x.line === "number" ? [`D11.mutation: a mutant survived at ${x.path.slice(0, 120)}:${x.line} (${String(x.from ?? "").slice(0, 30)} → ${String(x.to ?? "").slice(0, 30)}); a person decides`] : [];
+    });
+  }
+  if (e.detector === "D11.oracle" && e.status === "unknown" && typeof d.killed === "number" && typeof d.total === "number") return [`D11.oracle: the hidden tests caught ${d.killed}/${d.total} mutants; a person decides`];
+  return null;
+}
+
+/** D-598 (Симо 24.11.2026): a final check seals when VERIFIED, or UNKNOWN only because of surviving mutants, the oracle's
+ *  mutant grade or slower tests (an equivalent mutant can never be killed); the seal then names them and a person decides */
+const SEALABLE_UNKNOWN = ["D11:survived:", "D11:oracle_too_weak:", "D14:slower:"];
+export function sealable(result: VerdictResult, reasons: readonly string[]): boolean {
+  if (result === "VERIFIED") return true;
+  return result === "UNKNOWN" && reasons.length > 0 && reasons.every((r) => SEALABLE_UNKNOWN.some((p) => r.startsWith(p)));
 }
 
 /** the seal of a job (SessionSeal, D-532); result_ref is the job branch head that was checked */
