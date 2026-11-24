@@ -25,12 +25,12 @@ describe("download rows (E9g B)", () => {
     for (const r of rows) expect(r.asset).toBeNull();
   });
   it("a partial release links what exists and keeps the rest coming soon", () => {
-    const rows = downloadRows({ version: "0.1.0", assets: [{ kind: "mac-arm64", file: "Harness-0.1.0-mac-arm64.dmg", sha256: sha, size: 230_686_720 }] });
+    const rows = downloadRows({ version: "0.1.0", assets: [{ kind: "mac-arm64", file: "Harnova-0.1.0-mac-arm64.dmg", sha256: sha, size: 230_686_720 }] });
     expect(rows[0]?.asset).toEqual({
-      file: "Harness-0.1.0-mac-arm64.dmg",
+      file: "Harnova-0.1.0-mac-arm64.dmg",
       sha256: sha,
       sizeMb: 220,
-      url: "https://github.com/SimoSabev/AI-Harness-NOIT/releases/download/v0.1.0/Harness-0.1.0-mac-arm64.dmg",
+      url: "https://github.com/SimoSabev/AI-Harness-NOIT/releases/download/v0.1.0/Harnova-0.1.0-mac-arm64.dmg",
     });
     expect(rows.slice(1).every((r) => r.asset === null)).toBe(true);
   });
@@ -41,7 +41,7 @@ describe("download rows (E9g B)", () => {
   it("a local build (releases.local.json, host site) wins over releases.json and links /downloads/<file>", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "site-"));
     writeFileSync(path.join(dir, "releases.json"), JSON.stringify({ version: null, assets: [] }));
-    const file = "Harness-0.1.0-mac-arm64.dmg";
+    const file = "Harnova-0.1.0-mac-arm64.dmg";
     writeFileSync(path.join(dir, "releases.local.json"), JSON.stringify({ version: "0.1.0", host: "site", assets: [{ kind: "mac-arm64", file, sha256: sha, size: 3 }] }));
     mkdirSync(path.join(dir, "public", "downloads"), { recursive: true });
     writeFileSync(path.join(dir, "public", "downloads", file), "abc");
@@ -51,7 +51,7 @@ describe("download rows (E9g B)", () => {
   });
   it("host site with a missing or different file fails the build instead of shipping a broken link", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "site-"));
-    const file = "Harness-0.1.0-mac-arm64.dmg";
+    const file = "Harnova-0.1.0-mac-arm64.dmg";
     writeFileSync(path.join(dir, "releases.local.json"), JSON.stringify({ version: "0.1.0", host: "site", assets: [{ kind: "mac-arm64", file, sha256: sha, size: 3 }] }));
     expect(() => releaseManifest(dir)).toThrow(/downloads/);
     mkdirSync(path.join(dir, "public", "downloads"), { recursive: true });

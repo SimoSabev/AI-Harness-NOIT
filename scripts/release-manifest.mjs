@@ -38,12 +38,13 @@ export function parseArgs(argv) {
  * @param {{ name: string, sha256: string, size: number }[]} files @param {string} [version]
  */
 export function buildManifest(files, version) {
-  const installers = files.filter((f) => siteAssetKind(f.name) !== null);
-  const versions = [...new Set(installers.map((f) => /^Harness-(.+)-(mac|win|linux)-[^-]+$/.exec(f.name.replace(/\.[^.]+$/, ""))?.[1] ?? ""))].sort();
+  // D-596: only the current name; installers of the old name (Harness-…) left in the output folder are skipped
+  const installers = files.filter((f) => f.name.startsWith("Harnova-") && siteAssetKind(f.name) !== null);
+  const versions = [...new Set(installers.map((f) => /^Harnova-(.+)-(mac|win|linux)-[^-]+$/.exec(f.name.replace(/\.[^.]+$/, ""))?.[1] ?? ""))].sort();
   const chosen = version ?? (versions.length > 1 ? null : versions[0]);
   if (chosen === null) throw new Error(`release-manifest: several versions: ${versions.join(", ")} (pass --version)`);
   const assets = installers
-    .filter((f) => f.name.startsWith(`Harness-${chosen}-`))
+    .filter((f) => f.name.startsWith(`Harnova-${chosen}-`))
     .map((f) => ({ kind: /** @type {import("../packages/contract/dist/index.js").SiteAssetKind} */ (siteAssetKind(f.name)), file: f.name, sha256: f.sha256, size: f.size }))
     .sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind));
   return SiteReleaseManifest.parse({ version: assets.length ? chosen : null, assets });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MandatError } from "./errors.js";
 
 // E9g B (D-377): the download site (apps/site) is static. Its list of installers is apps/site/releases.json, written by
-// scripts/release-manifest.mjs from the electron-builder output (artifactName `Harness-${version}-${os}-${arch}.${ext}`,
+// scripts/release-manifest.mjs from the electron-builder output (artifactName `Harnova-${version}-${os}-${arch}.${ext}`,
 // apps/desktop/electron-builder.config.mjs). No release yet → version null, no assets → the site says "coming soon".
 
 /** Where the installers are published (Q-054): the GitHub releases of this repo, one tag per version (D-379). */
@@ -12,7 +12,8 @@ export const SiteAssetKind = z.enum(["mac-arm64", "mac-x64", "win-x64", "linux-a
 export type SiteAssetKind = z.infer<typeof SiteAssetKind>;
 
 const SEMVER = String.raw`\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?`;
-const FILE = new RegExp(String.raw`^Harness-(${SEMVER})-(mac|win|linux)-(arm64|x64|x86_64|amd64)\.(dmg|exe|AppImage|deb)$`);
+// D-596: the installers are Harnova-…; Harness-… (built before the rename) still parse, so an older local build keeps working
+const FILE = new RegExp(String.raw`^(?:Harnova|Harness)-(${SEMVER})-(mac|win|linux)-(arm64|x64|x86_64|amd64)\.(dmg|exe|AppImage|deb)$`);
 
 /** The kind of an installer file name, or null for anything else (blockmaps, latest*.yml, zips, other arches). */
 export function siteAssetKind(file: string): SiteAssetKind | null {

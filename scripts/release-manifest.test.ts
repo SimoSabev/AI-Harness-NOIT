@@ -10,32 +10,39 @@ const sha = (c: string) => c.repeat(64);
 describe("release manifest (E9g B)", () => {
   it("keeps only the installers, sorted by kind, with hash and size", () => {
     const m = buildManifest([
-      { name: "Harness-0.1.0-linux-x64.deb", sha256: sha("e"), size: 5 },
-      { name: "Harness-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
-      { name: "Harness-0.1.0-mac-arm64.dmg.blockmap", sha256: sha("f"), size: 9 },
+      { name: "Harnova-0.1.0-linux-x64.deb", sha256: sha("e"), size: 5 },
+      { name: "Harnova-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
+      { name: "Harnova-0.1.0-mac-arm64.dmg.blockmap", sha256: sha("f"), size: 9 },
       { name: "latest-mac.yml", sha256: sha("f"), size: 9 },
       { name: "builder-debug.yml", sha256: sha("f"), size: 9 },
-      { name: "Harness-0.1.0-win-x64.exe", sha256: sha("c"), size: 3 },
+      { name: "Harnova-0.1.0-win-x64.exe", sha256: sha("c"), size: 3 },
     ]);
     expect(m).toEqual({
       version: "0.1.0",
       assets: [
-        { kind: "mac-arm64", file: "Harness-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
-        { kind: "win-x64", file: "Harness-0.1.0-win-x64.exe", sha256: sha("c"), size: 3 },
-        { kind: "linux-deb", file: "Harness-0.1.0-linux-x64.deb", sha256: sha("e"), size: 5 },
+        { kind: "mac-arm64", file: "Harnova-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
+        { kind: "win-x64", file: "Harnova-0.1.0-win-x64.exe", sha256: sha("c"), size: 3 },
+        { kind: "linux-deb", file: "Harnova-0.1.0-linux-x64.deb", sha256: sha("e"), size: 5 },
       ],
     });
+  });
+  it("D-596: installers of the old name (Harness-…) left in the output folder are not picked; only Harnova-…", () => {
+    const m = buildManifest([
+      { name: "Harness-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
+      { name: "Harnova-0.1.0-mac-arm64.dmg", sha256: sha("b"), size: 2 },
+    ]);
+    expect(m).toEqual({ version: "0.1.0", assets: [{ kind: "mac-arm64", file: "Harnova-0.1.0-mac-arm64.dmg", sha256: sha("b"), size: 2 }] });
   });
   it("no installers → the empty manifest (the site says coming soon)", () => {
     expect(buildManifest([{ name: "latest.yml", sha256: sha("a"), size: 1 }])).toEqual({ version: null, assets: [] });
   });
   it("several versions in one folder need --version", () => {
     const files = [
-      { name: "Harness-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
-      { name: "Harness-0.2.0-mac-arm64.dmg", sha256: sha("b"), size: 2 },
+      { name: "Harnova-0.1.0-mac-arm64.dmg", sha256: sha("a"), size: 1 },
+      { name: "Harnova-0.2.0-mac-arm64.dmg", sha256: sha("b"), size: 2 },
     ];
     expect(() => buildManifest(files)).toThrow(/several versions: 0\.1\.0, 0\.2\.0/);
-    expect(buildManifest(files, "0.2.0").assets).toEqual([{ kind: "mac-arm64", file: "Harness-0.2.0-mac-arm64.dmg", sha256: sha("b"), size: 2 }]);
+    expect(buildManifest(files, "0.2.0").assets).toEqual([{ kind: "mac-arm64", file: "Harnova-0.2.0-mac-arm64.dmg", sha256: sha("b"), size: 2 }]);
   });
   it("arguments and the default folder of electron-builder", () => {
     expect(parseArgs([])).toEqual({ dir: undefined, out: undefined, version: undefined });
@@ -48,13 +55,13 @@ describe("release manifest (E9g B)", () => {
   it("hashes the real files of a folder and writes the JSON", async () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "release-manifest-"));
     mkdirSync(path.join(dir, "mac-arm64"));
-    writeFileSync(path.join(dir, "Harness-0.3.0-mac-arm64.dmg"), "dmg");
-    writeFileSync(path.join(dir, "Harness-0.3.0-mac-arm64.dmg.blockmap"), "x");
+    writeFileSync(path.join(dir, "Harnova-0.3.0-mac-arm64.dmg"), "dmg");
+    writeFileSync(path.join(dir, "Harnova-0.3.0-mac-arm64.dmg.blockmap"), "x");
     const out = path.join(dir, "releases.json");
     const m = await writeReleaseManifest({ dir, out });
     expect(m.assets).toEqual([
       // sha256 of the three bytes "dmg"
-      { kind: "mac-arm64", file: "Harness-0.3.0-mac-arm64.dmg", sha256: "00cbbd0ddbda2762798f7009838ed34ca1f12b93965813c7df22943bc62166d1", size: 3 },
+      { kind: "mac-arm64", file: "Harnova-0.3.0-mac-arm64.dmg", sha256: "00cbbd0ddbda2762798f7009838ed34ca1f12b93965813c7df22943bc62166d1", size: 3 },
     ]);
     expect(JSON.parse(readFileSync(out, "utf8"))).toEqual(m);
     expect(readFileSync(out, "utf8").endsWith("}\n")).toBe(true);
@@ -62,20 +69,20 @@ describe("release manifest (E9g B)", () => {
   it("a local site build: only the chosen kinds, host site, the files copied into public/downloads", async () => {
     const release = mkdtempSync(path.join(os.tmpdir(), "release-"));
     const site = mkdtempSync(path.join(os.tmpdir(), "site-"));
-    writeFileSync(path.join(release, "Harness-0.3.0-mac-arm64.dmg"), "dmg");
-    writeFileSync(path.join(release, "Harness-0.3.0-mac-x64.dmg"), "intel");
+    writeFileSync(path.join(release, "Harnova-0.3.0-mac-arm64.dmg"), "dmg");
+    writeFileSync(path.join(release, "Harnova-0.3.0-mac-x64.dmg"), "intel");
     mkdirSync(path.join(site, "public", "downloads"), { recursive: true });
-    writeFileSync(path.join(site, "public", "downloads", "Harness-0.2.0-mac-arm64.dmg"), "old");
+    writeFileSync(path.join(site, "public", "downloads", "Harnova-0.2.0-mac-arm64.dmg"), "old");
     const m = await writeLocalSiteRelease({ releaseDir: release, siteDir: site, kinds: ["mac-arm64"] });
     expect(m).toEqual({
       version: "0.3.0",
       host: "site",
-      assets: [{ kind: "mac-arm64", file: "Harness-0.3.0-mac-arm64.dmg", sha256: "00cbbd0ddbda2762798f7009838ed34ca1f12b93965813c7df22943bc62166d1", size: 3 }],
+      assets: [{ kind: "mac-arm64", file: "Harnova-0.3.0-mac-arm64.dmg", sha256: "00cbbd0ddbda2762798f7009838ed34ca1f12b93965813c7df22943bc62166d1", size: 3 }],
     });
     expect(JSON.parse(readFileSync(path.join(site, "releases.local.json"), "utf8"))).toEqual(m);
     // the folder holds exactly the files of the manifest: an older build does not linger
-    expect(readdirSync(path.join(site, "public", "downloads"))).toEqual(["Harness-0.3.0-mac-arm64.dmg"]);
-    expect(readFileSync(path.join(site, "public", "downloads", "Harness-0.3.0-mac-arm64.dmg"), "utf8")).toBe("dmg");
+    expect(readdirSync(path.join(site, "public", "downloads"))).toEqual(["Harnova-0.3.0-mac-arm64.dmg"]);
+    expect(readFileSync(path.join(site, "public", "downloads", "Harnova-0.3.0-mac-arm64.dmg"), "utf8")).toBe("dmg");
   });
   it("a local site build with none of the chosen installers fails instead of writing an empty page", async () => {
     const release = mkdtempSync(path.join(os.tmpdir(), "release-"));
