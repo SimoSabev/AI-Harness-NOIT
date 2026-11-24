@@ -473,6 +473,13 @@ describe("the interview of a whole project (D-557)", () => {
     const rt = await answerTurn({ ...base, client: t.client, turns: [human("x")] });
     expect(rt.turns.map((x) => x.kind)).toEqual(["assistant"]);
   });
+  it("the interview asks one question at a time with answers to pick; the assistant turn keeps them (D-600)", async () => {
+    expect(PROJECT_SYSTEM).toContain('"choices"');
+    expect(PROJECT_SYSTEM).toContain("one question at a time");
+    const m = script({ say: "", call: { tool: "ask_user", questions: ["Who uses the shop?"], choices: [{ options: ["Customers", "Staff"], multi: true }] } });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("x")], purpose: "project" });
+    expect(r.turns.at(-1)).toMatchObject({ kind: "assistant", questions: ["Who uses the shop?"], choices: [{ options: ["Customers", "Staff"], multi: true }] });
+  });
   it("the queue keeps a note as its own turn (D-599)", async () => {
     const db = await pgliteDb();
     await seedMinimal(db, { remoteUrl: "file:///tmp/x.git" });

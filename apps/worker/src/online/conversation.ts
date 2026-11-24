@@ -1,3 +1,4 @@
+import type { QuestionChoices } from "@mandat/contract";
 import { AXIS_NAMES, CHAT_TOOLS, ChatModelReply, ChatToolCall, ChatTurn, MandatError, ProjectBrief, ProjectNote, Spec, TaskAxes, TaskProfileId, briefText, capQuestions, projectBriefHash, projectBriefMissing, projectBriefText, specHash, untestableCriteria } from "@mandat/contract";
 import type { AxisName, Brief, ConversationStatus, Sha256 } from "@mandat/contract";
 import { axesKey, deriveProfile, unknownAxes } from "@mandat/core";
@@ -32,7 +33,7 @@ type SpecTurn = { kind: "spec"; spec: Spec; hash: Sha256; ready: boolean; unknow
 type ProjectTurn = { kind: "project"; brief: ProjectBrief; hash: Sha256; ready: boolean; missing: string[] };
 export type NewTurn =
   | { kind: "human"; text: string }
-  | { kind: "assistant"; text: string; questions: string[]; brief: Brief | null; model: string; usd: number; unreadable?: true | undefined }
+  | { kind: "assistant"; text: string; questions: string[]; choices?: (QuestionChoices | null)[] | undefined; brief: Brief | null; model: string; usd: number; unreadable?: true | undefined }
   | { kind: "memory"; query: string; hits: { id: string; text: string }[] }
   /** content is for the model inside this answer only; it is never stored or logged */
   | { kind: "tool"; tool: ToolName; target: string; ok: boolean; note: string; content?: string }
@@ -67,7 +68,7 @@ export const PROJECT_SYSTEM = [
   "You meet a project for the first time, before any task on it. You cannot change files, run commands or use the network; you can read the project. Only the person approves what you propose.",
   'Answer with ONE JSON object and nothing else: {"say": "<your words to the person>", "call": null or one tool call}.',
   "Tools (6, at most one per answer):",
-  '- {"tool": "ask_user", "questions": ["..."]}: ask exactly what you need, as many questions as that takes. Never ask what the project itself can answer: read it first.',
+  '- {"tool": "ask_user", "questions": ["..."], "choices": [{"options": ["...", "..."], "multi": false}]}: ask the person one question at a time (the screen shows it large). Give 2 to 6 short answers to pick in "choices" (taken from what you read in the project; "multi": true when several may apply); the person can always write their own. Never ask what the project itself can answer: read it first.',
   '- {"tool": "search_memory", "query": "..."}: search what was remembered about this person and project.',
   '- {"tool": "list_dir", "path": ""}: list a folder of the project. Read only.',
   '- {"tool": "read_file", "path": "README.md", "from_line": 1, "to_line": 200}: read a file, at most 400 lines at a time. Secret files are refused.',
@@ -358,7 +359,7 @@ export async function answerTurn(o: {
     // a ready spec ends the answer (a person approves it); any other tool result goes back to the model
     const ended = result === null || (result.kind === "spec" && result.ready) || (result.kind === "project" && result.ready);
     if (!ended && step < MAX_STEPS - 1) continue;
-    out.push({ kind: "assistant", text: reply.say, questions: call?.tool === "ask_user" ? call.questions : [], brief: call?.tool === "propose_brief" ? call.brief : null, model: o.client.channel.model, usd });
+    out.push({ kind: "assistant", text: reply.say, questions: call?.tool === "ask_user" ? call.questions : [], ...(call?.tool === "ask_user" && call.choices ? { choices: call.choices } : {}), brief: call?.tool === "propose_brief" ? call.brief : null, model: o.client.channel.model, usd });
     break;
   }
   return { turns: out, usd, stop: o.spentUsd + usd >= o.budgetUsd ? "budget" : null, error: null };
