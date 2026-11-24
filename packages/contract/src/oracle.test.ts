@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CHAT_TEXT_MAX } from "./conversation.js";
-import { HIDDEN_SEGMENT, ORACLE_API_ITEM_MAX, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, withApi } from "./oracle.js";
+import { HIDDEN_SEGMENT, ORACLE_API_ITEM_MAX, ORACLE_GLOB, OracleApproveBody, OracleProblemKind, hiddenFileOf, hiddenRootPath, isHiddenPath, oracleTag, oracleTaskText, parseOracleApi, survivedNote, withApi } from "./oracle.js";
 import { Contract, DetectorId, LedgerKind } from "./schemas.js";
 import type { Spec } from "./task-spec.js";
 
@@ -144,5 +144,18 @@ describe("withApi fits the task (D-566)", () => {
     expect(u).toMatch(/- … \d+ more item\(s\) did not fit/);
     const kept = u.split("\n").filter((l) => l.startsWith("- `src/"));
     for (const l of kept) expect(l.endsWith("r")).toBe(true);
+  });
+});
+
+describe("a rebuild after a parked job names the mutants the old oracle let through (live test 24.11)", () => {
+  it("lists each surviving change and asks for exact values, also on error paths; nothing to say without one", () => {
+    const n = survivedNote([{ path: "src/giftcards/checkout.ts", line: 16, from: "0", to: "1" }]);
+    expect(n).toContain("src/giftcards/checkout.ts:16 0 → 1");
+    expect(n).toMatch(/error paths/);
+    expect(survivedNote([])).toBe("");
+    const many = survivedNote(Array.from({ length: 30 }, (_, i) => ({ path: `src/${"x".repeat(200)}.ts`, line: i + 1, from: "a".repeat(100), to: "b" })));
+    expect(many.length).toBeLessThanOrEqual(1200);
+    expect(many).toContain(":5 ");
+    expect(many).not.toContain(":6 ");
   });
 });

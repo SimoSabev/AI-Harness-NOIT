@@ -89,6 +89,25 @@ export function oracleTaskText(s: Spec, max: number = CHAT_TEXT_MAX): string {
   return text.slice(0, max);
 }
 
+/** a mutant of the work's code that every hidden test let through (D11.mutation evidence) */
+export const SurvivedMutant = z.object({ path: z.string().max(400), line: z.number().int().min(1), from: z.string().max(400), to: z.string().max(400) });
+export type SurvivedMutant = z.infer<typeof SurvivedMutant>;
+
+/** live test 24.11.2026 (D-592): an oracle built again after a parked job learns which changes to the work's code its tests
+ *  did not notice; at most 5, each part shortened, so the spec keeps its room */
+export function survivedNote(ms: readonly SurvivedMutant[]): string {
+  if (ms.length === 0) return "";
+  const cut = (x: string, n: number) => (x.length > n ? `${x.slice(0, n)}…` : x);
+  const list = ms.slice(0, 5).map((m) => `- ${cut(m.path, 120)}:${m.line} ${cut(m.from, 40)} → ${cut(m.to, 40)}`);
+  return [
+    "",
+    "",
+    "The last work on this spec passed every hidden test even with these changes to its code (surviving mutants), so the tests did not notice them:",
+    ...list,
+    "Add assertions that fail on each: check the exact values the API returns, also on error paths, not only side effects.",
+  ].join("\n");
+}
+
 /** building → the oracle agent runs; not_ready → the result lists why; ready → a person may approve; failed → no output */
 export const OracleStatus = z.enum(["building", "not_ready", "ready", "approved", "failed"]);
 export type OracleStatus = z.infer<typeof OracleStatus>;

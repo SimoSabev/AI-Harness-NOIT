@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, sha256Tag, specHash, specText } from "@mandat/contract";
+import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, SurvivedMutant, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, sha256Tag, specHash, specText, survivedNote } from "@mandat/contract";
 import { deriveProfile } from "@mandat/core";
 import type { Brief } from "@mandat/contract";
 import { canAct, createTask } from "./actions";
@@ -140,14 +140,21 @@ async function parkedJobOf(db: Db, id: string): Promise<string | null> {
 }
 
 /** D-571: the problems of the latest not-ready oracle of this spec (a failed attempt after it does not hide them) */
+/** D-592: the mutants that survived the final check of a parked job (its last D11.mutation evidence) */
+async function survivedOfJob(db: Db, job: string): Promise<SurvivedMutant[]> {
+  const row = (await asService(db, (sql) => sql.query<{ data: unknown }>("select e.data from public.evidence e join public.verdicts v on v.id = e.verdict_id join public.jobs j on j.final_task_id = v.task_id where j.id = $1 and e.detector = 'D11.mutation' order by v.created_at desc, e.id desc limit 1", [job]))).rows[0];
+  const p = SurvivedMutant.array().safeParse((row?.data as { survived?: unknown } | undefined)?.survived);
+  return p.success ? p.data : [];
+}
+
 async function lastNotReadyProblems(db: Db, id: string, hash: string): Promise<unknown> {
   return (await asService(db, (sql) => sql.query<{ problems: unknown }>("select problems from public.oracles where conversation_id = $1 and spec_hash = $2 and status = 'not_ready' order by created_at desc, id desc limit 1", [id, hash]))).rows[0]?.problems ?? null;
 }
 
 /** D-571: a rebuild after a not-ready oracle names what was wrong last time; the spec is rendered into the room left, so
  *  every criterion and unchanged id still reaches the agent (cutting its end lost U-7 and U-8 on the live test) */
-function oracleTextWithNote(spec: Spec, problems: unknown): string {
-  const note = lastProblemsNote(problems);
+function oracleTextWithNote(spec: Spec, problems: unknown, survived: readonly SurvivedMutant[] = []): string {
+  const note = `${lastProblemsNote(problems)}${survivedNote(survived)}`;
   return `${oracleTaskText(spec, CHAT_TEXT_MAX - note.length)}${note}`;
 }
 
@@ -178,7 +185,7 @@ export async function buildOracle(db: Db, o: { uid: string; org: string; id: str
   if (last?.status === "building") return err(409, "oracle_building");
   if (last?.status === "approved" && !parked) return err(409, "oracle_approved");
   const hash = c.spec.hash;
-  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTextWithNote(c.spec.spec, await lastNotReadyProblems(db, o.id, hash)), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
+  const r = await createTask(db, { uid: o.uid, org: o.org, kind: "oracle", specHash: hash, body: { type: taskTypeFor(c.row.agent), agent: c.row.agent, text: oracleTextWithNote(c.spec.spec, await lastNotReadyProblems(db, o.id, hash), parked ? await survivedOfJob(db, parked) : []), ...(c.row.model ? { model: c.row.model } : {}), ...(c.row.repo ? { repo: c.row.repo } : {}) } });
   if (r.status !== 201) return r;
   if (parked)
     await asService(db, async (sql) => {

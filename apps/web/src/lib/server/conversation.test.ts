@@ -192,6 +192,24 @@ describe("the spec in the web (D-533)", () => {
     const c = (await asService(db, (sql) => sql.query<{ phase: string }>("select phase from public.conversations where id = $1", [id]))).rows[0];
     expect(c?.phase).toBe("conversation");
   });
+  it("live test 24.11: the oracle built again after a parked job learns which mutants its tests let through", async () => {
+    const id = await proposed(known);
+    const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
+    await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
+    await approvedOracle(id, hash);
+    const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    await asService(db, async (sql) => {
+      const t = (await sql.query<{ id: string }>("select id from public.tasks order by created_at desc limit 1")).rows[0]!.id;
+      const v = (await sql.query<{ id: string }>("insert into public.verdicts (org_id, task_id, run_id, attempt, mode, agent, result, reasons, base_sha, verdict_hash) values ($1, $2, 'r_01J0000000000000000000000A', 1, 'full', 'claude', 'UNKNOWN', '[\"D11:survived:src/giftcards/checkout.ts:16\"]', $3, 'sha256:00') returning id", [DEMO_ORG_ID, t, "a".repeat(40)])).rows[0]!.id;
+      await sql.query("insert into public.evidence (org_id, verdict_id, detector, phase, status, summary, data, source) values ($1, $2, 'D11.mutation', 2, 'unknown', '1/3 mutants survived', $3, 'worker')", [DEMO_ORG_ID, v, JSON.stringify({ sites: 3, killed: 2, survived: [{ path: "src/giftcards/checkout.ts", line: 16, from: "0", to: "1" }] })]);
+      await sql.query("update public.jobs set status = 'parked', final_task_id = $2 where id = $1", [s.body.job, t]);
+    });
+    const b = await buildOracle(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    expect(b.status).toBe(201);
+    const text = (await asService(db, (sql) => sql.query<{ text: string }>("select text from public.tasks where id = $1", [b.body.task_id]))).rows[0]!.text;
+    expect(text).toContain("src/giftcards/checkout.ts:16 0 → 1");
+    expect(text).toContain("AC-1");
+  });
   it("Start work without an approved spec keeps D-531: a proposed but unapproved spec does not reach the task", async () => {
     const id = await proposed(known);
     const s = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
