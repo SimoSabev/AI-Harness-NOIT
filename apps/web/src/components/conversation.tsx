@@ -281,7 +281,7 @@ export function stopText(t: T, status: ConversationRow["status"], error: string 
 }
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
-export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: (note?: string) => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }) {
+export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: (note?: string) => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
   // a block body: newer Chromium returns a Promise from scrollIntoView, and React would call it as the cleanup

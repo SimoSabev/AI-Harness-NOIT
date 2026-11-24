@@ -189,7 +189,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       {thread ? (
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={(note) => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, note ? { note } : {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
-          onApproveJob={(h) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h }, 200)}
+          onApproveJob={(h, code) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h, ...(code ? { code } : {}) }, 200)}
           onBring={() => void bring()} brought={brought} />
       ) : (
         <>

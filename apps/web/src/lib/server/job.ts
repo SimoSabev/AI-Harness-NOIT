@@ -3,9 +3,9 @@ import type { Spec} from "@mandat/contract";
 import { BringBody, JobApproveBody, JobRoles, JobStatus, SessionSeal, TaskAxes, TaskProfileId, hashJcs, jcs, roleRoute, sha256Tag } from "@mandat/contract";
 import { unitWaves } from "@mandat/core";
 import { gateRows, strategyReasons } from "../job-strategy";
-import { canAct } from "./actions";
+import { canAct, factorAt } from "./actions";
 import { hasCap } from "./roles";
-import type { Result } from "./actions";
+import type { Result, SecondFactor } from "./actions";
 import { asService } from "./sql";
 import type { Db, Sql } from "./sql";
 import type { JobView } from "../conversation-types";
@@ -89,7 +89,7 @@ async function finalEvidence(sql: Sql, task: string | null): Promise<{ detector:
 }
 
 /** D-535: a person approves the sealed job (the seal's hash they saw); the worker then merges its branch into main */
-export async function approveJob(db: Db, o: { uid: string; org: string; id: string; body: unknown }): Promise<Result> {
+export async function approveJob(db: Db, o: { uid: string; org: string; id: string; body: unknown; secondFactor?: SecondFactor }): Promise<Result> {
   const b = JobApproveBody.safeParse(o.body);
   if (!b.success) return err(400, "bad_body");
   const j = (await asService(db, (sql) => sql.query<{ id: string; repo: string; status: string; seal: unknown; seal_hash: string | null }>("select id, repo_id::text as repo, status, seal, seal_hash from public.jobs where conversation_id = $1 and org_id = $2::uuid order by created_at desc limit 1", [o.id, o.org]))).rows[0];
@@ -97,13 +97,22 @@ export async function approveJob(db: Db, o: { uid: string; org: string; id: stri
   if (!(await hasCap(db, o.uid, o.org, "approve.level1", { repo: j.repo }))) return err(403, "not_an_approver");
   if (j.status === "approved" || j.status === "delivered") return err(409, "already_approved");
   const seal = SessionSeal.safeParse(j.seal);
-  // only a sealed VERIFIED job whose stored hash is the seal's own hash and the one the person saw
-  if (j.status !== "sealed" || !seal.success || seal.data.verdict !== "VERIFIED" || j.seal_hash !== hashJcs(seal.data)) return err(409, "job_not_sealed");
+  // only a sealed job whose stored hash is the seal's own hash and the one the person saw; D-598: VERIFIED, or UNKNOWN
+  // (only surviving mutants or slower tests are open, the worker decides that) with the person's fresh second factor
+  if (j.status !== "sealed" || !seal.success || seal.data.verdict === "FAILED" || j.seal_hash !== hashJcs(seal.data)) return err(409, "job_not_sealed");
   if (b.data.seal_hash !== j.seal_hash) return err(409, "seal_changed");
+  let method: "tap" | "totp" | "local" = "tap";
+  if (seal.data.verdict === "UNKNOWN") {
+    if (!o.secondFactor) return err(403, "second_factor_required");
+    const f = await factorAt(o.secondFactor, { uid: o.uid, code: b.data.code, factorId: b.data.factor_id });
+    if (!("at" in f)) return f;
+    method = f.method;
+  }
   const done = await asService(db, async (sql) => {
     const u = await sql.query("update public.jobs set status = 'approved', approved_by = $3::uuid, approved_at = now(), updated_at = now() where id = $1 and seal_hash = $2 and status = 'sealed' returning id", [j.id, j.seal_hash, o.uid]);
     if (u.rows.length === 0) return false;
-    const text = jcs({ conversation: o.id, job: j.id, seal_hash: j.seal_hash, result_ref: seal.data.result_ref, by: o.uid });
+    // D-598: an UNKNOWN seal's approval keeps its verdict and how the person confirmed it
+    const text = jcs({ conversation: o.id, job: j.id, seal_hash: j.seal_hash, result_ref: seal.data.result_ref, by: o.uid, ...(seal.data.verdict === "UNKNOWN" ? { verdict: "UNKNOWN", method } : {}) });
     await sql.query("select private.ledger_append($1::uuid, 'job_approved', null, $2, $3)", [o.org, text, sha256Tag(text)]);
     return true;
   });

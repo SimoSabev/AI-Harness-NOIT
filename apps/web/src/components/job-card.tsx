@@ -1,17 +1,18 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import type { Key, T } from "../i18n/t";
 import type { BringReply } from "@mandat/contract";
 import type { JobView } from "../lib/conversation-types";
 import { JobGates, JobStrategy } from "./job-strategy";
-import { btn } from "./ui";
+import { btn, input } from "./ui";
 
 // D-535 (M1 X6/X7 minimum): the job under the approved spec and oracle — the plan (units with their criteria and
 // status), the current unit, each unit's verdict, a parked question, the seal (checked / not checked) and the one
 // approval that lets Mandat take the job branch into main. Kept small: the UI will be redesigned.
 
 // D-540: "Bring into my folder" — the person's click moves their own folder forward to the merged change (or says why not)
-export interface JobActions { canApprove: boolean; busy: boolean; onApprove: (sealHash: string) => void; onBring?: () => void; brought?: BringReply | null }
+export interface JobActions { canApprove: boolean; busy: boolean; onApprove: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null }
 
 const UNIT_TONE: Record<string, string> = { passed: "text-ok", failed: "text-warn", blocked: "text-warn", parked: "text-warn", running: "text-ink", pending: "text-mute" };
 const UNIT_STATUSES = ["pending", "running", "passed", "failed", "blocked", "parked"] as const;
@@ -61,12 +62,8 @@ export function JobCard({ job, t, a }: { job: JobView; t: T; a: JobActions }) {
           <dd className={job.seal.unchecked.length > 0 ? "text-warn" : "text-mute"}>{job.seal.unchecked.length > 0 ? job.seal.unchecked.join("; ") : t("chat.job.seal.none")}</dd>
         </dl>
       )}
-      {s === "sealed" && job.seal && a.canApprove && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <p className="min-w-0 flex-1 text-xs text-mute">{t("chat.job.approveHint")}</p>
-          <button type="button" className={btn.primary} disabled={a.busy} onClick={() => a.onApprove(job.seal?.hash ?? "")}>{t("chat.job.approve")}</button>
-        </div>
-      )}
+      {s === "sealed" && job.seal?.verdict === "UNKNOWN" && <p role="note" className="mt-2 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{t("chat.job.unknownSeal")}</p>}
+      {s === "sealed" && job.seal && a.canApprove && <ApproveSeal hash={job.seal.hash} unknown={job.seal.verdict === "UNKNOWN"} t={t} a={a} />}
       {s === "delivered" && job.merged_sha && <p className="mt-2 font-mono text-xs text-mute">{t("chat.job.merged", { sha: job.merged_sha.slice(0, 12) })}</p>}
       {s === "delivered" && job.merged_sha && a.canApprove && a.onBring && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -90,6 +87,23 @@ function Brought({ r, t }: { r: BringReply; t: T }) {
           <code className="mt-0.5 block break-all font-mono text-ink">{r.command}</code>
         </>
       )}
+    </div>
+  );
+}
+
+/** D-598: Approve and merge; an UNKNOWN seal also takes the person's code (the server asks for it, on this computer it may not) */
+function ApproveSeal({ hash, unknown, t, a }: { hash: string; unknown: boolean; t: T; a: JobActions }) {
+  const [code, setCode] = useState("");
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <p className="min-w-0 flex-1 text-xs text-mute">{t("chat.job.approveHint")}</p>
+      {unknown && (
+        <label className="text-xs text-mute">
+          {t("chat.job.code")}
+          <input className={`${input} mt-1 w-28 font-mono`} inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
+        </label>
+      )}
+      <button type="button" className={btn.primary} disabled={a.busy} onClick={() => a.onApprove(hash, unknown && code.length === 6 ? code : undefined)}>{t("chat.job.approve")}</button>
     </div>
   );
 }

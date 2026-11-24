@@ -1730,6 +1730,8 @@ export const en = {
   "chat.job.seal.unchecked": "Not checked",
   "chat.job.seal.none": "nothing",
   "chat.job.approveHint": "Nothing reaches main without your approval of this seal.",
+  "chat.job.unknownSeal": "Sealed as UNKNOWN: every hidden test passed, but some checks are left to you (the list under Not checked, e.g. a mutant no test can catch). Merge only if you agree; it asks for your code.",
+  "chat.job.code": "Your code",
   "chat.job.approve": "Approve and merge into main",
   "chat.job.bring": "Bring into my folder",
   "chat.job.bringHint": "The change is in the project's copy. This fast-forwards your own folder to it, only when the folder is clean and has nothing of its own; nothing is overwritten.",

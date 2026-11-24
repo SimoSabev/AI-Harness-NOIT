@@ -63,6 +63,17 @@ describe("the job in the thread (D-535)", () => {
     expect(await render({ job: sealed }, false)).not.toContain("chat.job.approve<");
     expect(await render({ job: { ...sealed, status: "delivered", merged_sha: "c".repeat(40) } })).toContain("chat.job.merged(cccccccccccc)");
   });
+  it("D-598: an UNKNOWN seal says a person decides, lists the surviving mutants and asks for the code", async () => {
+    const unknown = job({ status: "sealed", current: null, seal: { hash: `sha256:${"a".repeat(64)}`, verdict: "UNKNOWN", result_ref: "b".repeat(40), checked: ["AC-1"], unchecked: ["D11.mutation: a mutant survived at src/a.ts:3 (0 → 1); a person decides"] } });
+    const html = await render({ job: unknown });
+    expect(html).toContain("chat.job.unknownSeal");
+    expect(html).toContain("src/a.ts:3");
+    expect(html).toContain("chat.job.code");
+    expect(html).toContain("chat.job.approve<");
+    const verified = await render({ job: job({ status: "sealed", current: null, seal: { hash: `sha256:${"a".repeat(64)}`, verdict: "VERIFIED", result_ref: "b".repeat(40), checked: ["AC-1"], unchecked: [] } }) });
+    expect(verified).not.toContain("chat.job.unknownSeal");
+    expect(verified).not.toContain("chat.job.code");
+  });
 });
 
 // D-540: "Bring into my folder" on a delivered job — only for a person who may approve; the result says what happened

@@ -783,7 +783,7 @@ export async function postConversationJobApprove(req: Request, d: ApiDeps, id: s
   if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
   const p = await post(req, d);
   if (p instanceof Response) return p;
-  return done(await approveJob(d.db, { uid: p.uid, org: p.org, id, body: p.body }), d);
+  return done(await approveJob(d.db, { uid: p.uid, org: p.org, id, body: p.body, secondFactor: d.secondFactor }), d);
 }
 /** D-540: "Bring into my folder" on a delivered job; only from a person's session, CSRF and origin checked */
 export async function postConversationJobBring(req: Request, d: ApiDeps, id: string): Promise<Response> {

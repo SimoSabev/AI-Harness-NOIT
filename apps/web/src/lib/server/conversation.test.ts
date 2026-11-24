@@ -374,6 +374,20 @@ describe("the oracle in the web (D-534)", () => {
     expect(mine.map((r) => JSON.parse(r.payload_jcs) as unknown)).toEqual([{ conversation: id, job, seal_hash: sh, result_ref: "c".repeat(40), by: U.approver }]);
     expect((await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.job?.status).toBe("approved");
   });
+  it("D-598: an UNKNOWN seal (only surviving mutants) is approved only with a fresh second factor; VERIFIED stays a tap", async () => {
+    const { id, hash } = await approvedSpec();
+    const h = await approvedOracle(id, hash);
+    const job = String((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body.job);
+    const seal = { spec_hash: hash, oracle_hash: h, profile: "feature", verdict: "UNKNOWN", result_ref: "c".repeat(40), unchecked: ["D11.mutation: a mutant survived at src/a.ts:3 (0 → 1); a person decides"] };
+    const sh = hashJcs(seal);
+    await asService(db, (sql) => sql.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3 where id = $1", [job, JSON.stringify(seal), sh]));
+    const totp = Object.assign(async (o: { code: string }) => (o.code === "123456" ? new Date() : null), {});
+    expect((await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: sh }, secondFactor: totp })).body).toEqual({ error: "second_factor_required" });
+    expect((await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: sh, code: "000000" }, secondFactor: totp })).body).toEqual({ error: "second_factor_invalid" });
+    expect(await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: sh, code: "123456" }, secondFactor: totp })).toEqual({ status: 200, body: { job, seal_hash: sh } });
+    const row = (await ledgerRows("job_approved")).map((r) => JSON.parse(r.payload_jcs) as { job: string; verdict?: string; method?: string }).find((r) => r.job === job);
+    expect(row).toMatchObject({ verdict: "UNKNOWN", method: "totp" });
+  });
   it("the job approve route: a person's session with CSRF and origin", async () => {
     const { id, hash } = await approvedSpec();
     await approvedOracle(id, hash);
