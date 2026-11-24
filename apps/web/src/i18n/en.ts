@@ -1882,6 +1882,21 @@ export const en = {
   "interview.filled": "{n} of {of}",
   "interview.empty": "not clear yet",
   "project.noted": "Noted: {parts}",
+  // D-600: the interview pop-up
+  "interview.question": "Question {n} of {of}",
+  "interview.pickOne": "Pick one answer or write your own.",
+  "interview.pickMany": "Pick one or several, or write your own.",
+  "interview.other": "Other… (write it)",
+  "interview.otherLabel": "Your answer",
+  "interview.otherPlaceholder": "In your own words",
+  "interview.back": "Back",
+  "interview.skip": "Skip",
+  "interview.next": "Next",
+  "interview.send": "Send the answers",
+  "interview.skipped": "(skipped)",
+  "interview.kickoff": "I want to work on “{task}”. First get to know the project and interview me.",
+  "interview.required": "The project's interview comes first: no task starts without an approved brief. Opening it.",
+  "interview.thinking": "Harnova is reading your answers and preparing the next question…",
 } as const;
 
 export type Key = keyof typeof en;
