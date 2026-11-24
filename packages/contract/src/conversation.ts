@@ -3,7 +3,7 @@ import { AgentRefString, ModelId } from "./connections.js";
 import { Sha256 } from "./schemas.js";
 import { AXIS_NAMES, TaskAxes, TaskProfileId } from "./task-profile.js";
 import { CriterionId, Spec } from "./task-spec.js";
-import { ProjectBrief } from "./project-brief.js";
+import { ProjectBrief, ProjectBriefParts } from "./project-brief.js";
 
 // E10а ф. 1 (D-531): a conversation before work. The model answers and asks; it cannot change files, run commands or
 // reach the network. A brief or a spec is only shown: work starts from a person's action ("Start work"), never from
@@ -93,7 +93,12 @@ export const ChatToolCall = z.discriminatedUnion("tool", [
 export type ChatToolCall = z.infer<typeof ChatToolCall>;
 
 /** what the model answers with: one JSON object, the words for the person and at most one tool call */
-export const ChatModelReply = z.object({ say: z.string().max(8000), call: ChatToolCall.nullable().default(null) }).strict();
+export const ChatModelReply = z.object({
+  say: z.string().max(8000),
+  call: ChatToolCall.nullable().default(null),
+  /** D-599: in a project interview, the parts of the brief the model just learned (the server checks them like a call) */
+  note: z.unknown().optional(),
+}).strict();
 export type ChatModelReply = z.infer<typeof ChatModelReply>;
 
 /** a model that asks more than the safety limit keeps the first CHAT_QUESTIONS_LIMIT (D-533) */
@@ -128,6 +133,8 @@ export const ChatTurn = z.discriminatedUnion("kind", [
   z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), /** D-552: a saved Other profile for these axes */ saved: z.string().trim().min(1).max(80).optional() }).strict(),
   // D-557: the project brief the model proposed, with its hash and what it still lacks
   z.object({ ...head, kind: z.literal("project"), brief: ProjectBrief, hash: Sha256, ready: z.boolean(), missing: z.array(z.string().max(40)).max(10) }).strict(),
+  // D-599: a note of the interview — parts of the brief the model just learned, and where from (the screen writes them live)
+  z.object({ ...head, kind: z.literal("project_note"), from: z.enum(["code", "person"]), parts: ProjectBriefParts }).strict(),
   z.object({ ...head, kind: z.literal("spec"), spec: Spec, hash: Sha256, ready: z.boolean(), unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), untestable: z.array(CriterionId).max(200) }).strict(),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurn>;

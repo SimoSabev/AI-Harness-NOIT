@@ -43,3 +43,22 @@ describe("the project brief (D-557)", () => {
     expect(ProjectApproveBody.safeParse({ brief_hash: `sha256:${"a".repeat(64)}` }).success).toBe(true);
   });
 });
+
+// D-599 (Simo 24.11.2026): the brief is written live while the interview asks. With any answer the model may note the
+// parts it just learned and where from (the code or the person); the screen fills the brief from these notes.
+describe("project notes (D-599)", () => {
+  it("a note carries some parts of the brief and where they came from; nothing else", async () => {
+    const { ProjectNote } = await import("./index.js");
+    expect(ProjectNote.safeParse({ from: "code", parts: { stack: ["TypeScript"], commands: { test: "pnpm test" } } }).success).toBe(true);
+    expect(ProjectNote.safeParse({ from: "person", parts: { users: ["customers"] } }).success).toBe(true);
+    expect(ProjectNote.safeParse({ from: "person", parts: {} }).success).toBe(false);
+    expect(ProjectNote.safeParse({ from: "guess", parts: { users: ["x"] } }).success).toBe(false);
+    expect(ProjectNote.safeParse({ from: "code", parts: { secrets: "x" } }).success).toBe(false);
+    expect(ProjectNote.safeParse({ from: "code", parts: { budget_usd: -1 } }).success).toBe(false);
+  });
+  it("the model's reply may carry a note next to its call; the turn keeps it", async () => {
+    const { ChatModelReply: Reply } = await import("./index.js");
+    expect(Reply.safeParse({ say: "ok", call: { tool: "ask_user", questions: ["Кой ползва магазина?"] }, note: { from: "code", parts: { product: "a bakery shop" } } }).success).toBe(true);
+    expect(ChatTurn.safeParse({ seq: 3, at: "2026-11-24T10:00:00.000Z", kind: "project_note", from: "person", parts: { users: ["customers"] } }).success).toBe(true);
+  });
+});

@@ -28,6 +28,13 @@ export type ProjectBrief = z.infer<typeof ProjectBrief>;
 
 export const projectBriefHash = (b: ProjectBrief): Sha256 => hashJcs(b);
 
+/** D-599: some parts of the brief, as the model learned them during the interview (the screen writes the brief live) */
+export const ProjectBriefParts = ProjectBrief.partial().refine((p) => Object.keys(p).length > 0, "a note names at least one part");
+export type ProjectBriefParts = z.infer<typeof ProjectBriefParts>;
+/** D-599: a note of the model: the parts it just learned and where from — the project's code or the person's answer */
+export const ProjectNote = z.object({ from: z.enum(["code", "person"]), parts: ProjectBriefParts }).strict();
+export type ProjectNote = z.infer<typeof ProjectNote>;
+
 /** what a brief still lacks before a person can approve it (deterministic; vague wording is the interview's job) */
 export function projectBriefMissing(b: ProjectBrief): string[] {
   const out: string[] = [];
