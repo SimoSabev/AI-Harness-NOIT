@@ -4,7 +4,7 @@ import type { Key } from "./en";
 // E9g B (D-377): българският превод на каталога на сайта (изворът е en.ts).
 export const bg: Record<Key, string> = {
   ...docsBg,
-  "brand.name": "Harness",
+  "brand.name": "Harnova",
   "meta.description": "Давай задачи на AI агенти в заключен пясъчник на твоя компютър и получавай присъда, която те не могат да подправят.",
   "meta.download": "Изтегляне",
   "lang.name.en": "English",
@@ -37,7 +37,7 @@ export const bg: Record<Key, string> = {
   "download.all": "Всички системи",
 
   "download.title": "Изтегляне",
-  "download.intro": "Десктоп приложението пуска целия харнес на твоя компютър: същите екрани като в уеба, плюс локални папки, твоя редактор и терминал.",
+  "download.intro": "Десктоп приложението пуска цялата Harnova на твоя компютър: същите екрани като в уеба, плюс локални папки, твоя редактор и терминал.",
   "download.version": "Версия {version}",
   "download.soon": "Скоро",
   "download.soonHint": "Още няма публикувано издание. Файловете ще се появят тук веднага щом има.",
@@ -49,9 +49,9 @@ export const bg: Record<Key, string> = {
   "download.unsigned": "Инсталаторите още не са подписани, затова macOS и Windows ще те предупредят при първото отваряне.",
   "install.mac.title": "Инсталиране на Mac",
   "install.mac.1": "Пусни Docker Desktop и изчакай да покаже, че работи.",
-  "install.mac.2": "Отвори изтегления файл Harness и плъзни Harness в Applications.",
-  "install.mac.3": "Отвори Harness от Applications. Първия път macOS казва, че не може да провери приложението, защото още не е подписано: натисни Done.",
-  "install.mac.4": "Отвори System Settings, после Privacy & Security, превърти надолу и натисни Open Anyway до Harness. Потвърди с паролата или Touch ID. Правиш това само веднъж.",
+  "install.mac.2": "Отвори изтегления файл Harnova и плъзни Harnova в Applications.",
+  "install.mac.3": "Отвори Harnova от Applications. Първия път macOS казва, че не може да провери приложението, защото още не е подписано: натисни Done.",
+  "install.mac.4": "Отвори System Settings, после Privacy & Security, превърти надолу и натисни Open Anyway до Harnova. Потвърди с паролата или Touch ID. Правиш това само веднъж.",
   "install.mac.5": "Първото пускане строи Docker образите и отнема няколко минути. След това приложението се отваря на входящата кутия.",
   "asset.mac-arm64": "macOS, Apple Silicon (M1 и по-нови)",
   "asset.mac-x64": "macOS, Intel",
@@ -65,8 +65,8 @@ export const bg: Record<Key, string> = {
   "req.cpu": "64-битов компютър (Apple Silicon или Intel на macOS, x64 на Windows и Linux).",
 
   "phone.title": "На телефона",
-  "phone.p1": "Няма приложение за телефон, което да инсталираш. Харнесът има уеб приложение (PWA) с входящите, картата на задачата, твоето решение и diff-а.",
-  "phone.p2": "Десктоп приложението слуша само на твоя компютър, затова за телефон трябва харнес, пуснат на сървър, който е твой.",
+  "phone.p1": "Няма приложение за телефон, което да инсталираш. Harnova има уеб приложение (PWA) с входящите, картата на задачата, твоето решение и diff-а.",
+  "phone.p2": "Десктоп приложението слуша само на твоя компютър, затова за телефон трябва Harnova, пусната на сървър, който е твой.",
   "phone.ios": "iPhone и iPad: отвори адреса му в Safari, натисни Сподели, после Добави към началния екран.",
   "phone.android": "Android: отвори адреса му в Chrome, отвори менюто, после Инсталирай приложението.",
 

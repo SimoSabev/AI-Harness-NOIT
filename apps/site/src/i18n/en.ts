@@ -3,7 +3,7 @@ import { docsEn } from "./docs-en";
 
 export const en = {
   ...docsEn,
-  "brand.name": "Harness",
+  "brand.name": "Harnova",
   "meta.description": "Give AI coding agents tasks in a locked sandbox on your computer and get a verdict they cannot fake.",
   "meta.download": "Download",
   "lang.name.en": "English",
@@ -36,7 +36,7 @@ export const en = {
   "download.all": "All platforms",
 
   "download.title": "Download",
-  "download.intro": "The desktop app runs the whole harness on your computer: the same screens as the web, plus local folders, your editor and a terminal.",
+  "download.intro": "The desktop app runs all of Harnova on your computer: the same screens as the web, plus local folders, your editor and a terminal.",
   "download.version": "Version {version}",
   "download.soon": "Coming soon",
   "download.soonHint": "There is no published release yet. The files appear here as soon as there is one.",
@@ -48,9 +48,9 @@ export const en = {
   "download.unsigned": "The installers are not signed yet, so macOS and Windows warn you the first time you open the app.",
   "install.mac.title": "Installing on a Mac",
   "install.mac.1": "Start Docker Desktop and wait until it says it is running.",
-  "install.mac.2": "Open the downloaded Harness file and drag Harness into Applications.",
-  "install.mac.3": "Open Harness from Applications. The first time, macOS says it cannot check the app, because it is not signed yet: press Done.",
-  "install.mac.4": "Open System Settings, then Privacy & Security, scroll down and press Open Anyway next to Harness. Confirm with your password or Touch ID. You do this only once.",
+  "install.mac.2": "Open the downloaded Harnova file and drag Harnova into Applications.",
+  "install.mac.3": "Open Harnova from Applications. The first time, macOS says it cannot check the app, because it is not signed yet: press Done.",
+  "install.mac.4": "Open System Settings, then Privacy & Security, scroll down and press Open Anyway next to Harnova. Confirm with your password or Touch ID. You do this only once.",
   "install.mac.5": "The first start builds the Docker images and takes a few minutes. After that the app opens on your Inbox.",
   "asset.mac-arm64": "macOS, Apple Silicon (M1 and newer)",
   "asset.mac-x64": "macOS, Intel",
@@ -64,8 +64,8 @@ export const en = {
   "req.cpu": "A 64-bit computer (Apple Silicon or Intel on macOS, x64 on Windows and Linux).",
 
   "phone.title": "On your phone",
-  "phone.p1": "There is no phone app to install. The harness has a web app (PWA) with the inbox, the task card, your decision and the diff.",
-  "phone.p2": "The desktop app listens only on your computer, so a phone needs a harness running on a server you control.",
+  "phone.p1": "There is no phone app to install. Harnova has a web app (PWA) with the inbox, the task card, your decision and the diff.",
+  "phone.p2": "The desktop app listens only on your computer, so a phone needs Harnova running on a server you control.",
   "phone.ios": "iPhone and iPad: open its address in Safari, tap Share, then Add to Home Screen.",
   "phone.android": "Android: open its address in Chrome, open the menu, then Install app.",
 
