@@ -5174,3 +5174,23 @@ Voice ID, а полето беше празно след преинсталир�
 `ask_user` не мина проверката, а понеже не беше поправим, `parseReply` взе само думите и тихо изпусна извикването.
 Тестове: worker conversation.test.ts (+2: дълъг въпрос се връща и следващият опит показва въпросите; грешен brief се
 връща). Статус: решено от кодера.
+
+## D-591 Изчерпан абонамент спира разговора със свой статус `limit` и казва кога се нулира (жив тест, macOS, 24.11.2026)
+Решение:
+- разговорът и ресърчът викат CLI-я на абонамента с `--output-format stream-json --verbose` (`cliArgv` в packages/research).
+  `cliModel` чете редовете: `rate_limit_event` със `status: "rejected"` е `MandatError` `E_SUBSCRIPTION_LIMIT` с текст
+  `subscription_limit resets <ISO>` (`subscriptionLimitError`/`limitResetsAt` в packages/contract); иначе отговорът е
+  последният ред `result`. Думите на отговора никога не влизат в грешката (правило 5);
+- `profilePrintExec` (cli) връща потока и при изход ≠ 0, щом в него има `result` или `rate_limit_event`; иначе както досега
+  „the subscription CLI exited N“;
+- нов статус на разговора `limit` (договор + миграция 20261124000591). Екранът казва „Лимитът на абонамента е изчерпан до
+  <час>. Добави друг акаунт… или избери друг агент или модел“ с „Опитай пак“; сървърът позволява повтор от `limit`.
+Защо: на живо, в отговорите за лоялност и подаръчни карти на „Пекарна“, седмичният лимит на `lichno` стигна 100%. Разговорът
+показа само „No answer this time“ с грешка `the subscription CLI exited 1`, без причина и без час. D-567 вече четеше лимита
+в потока на задачите (run.ts), но не и в разговора.
+Флагове: `--output-format stream-json` иска `--verbose` при `-p`; `rate_limit_event` с `rate_limit_info.status`,
+`resetsAt` (секунди), `rateLimitType` е проверен на живо с Claude Code 2.1.302 в образа на пясъчника (24.11.2026) с
+`claude -p … --output-format stream-json --verbose`; справка: https://code.claude.com/docs/en/cli-reference (24.11.2026).
+Тестове: contract conversation.test.ts (+1, статусът), research model.test.ts (+1), cli research.test.ts (+1), worker
+conversation.test.ts (+1), research-host.test.ts (обновен), web server conversation.test.ts (+1), conversation-spec.test.ts
+(+1). Статус: решено от кодера.
