@@ -16,7 +16,8 @@ import { agentsView } from "../lib/server/connections";
 import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
 import { twinView } from "../lib/server/twin";
-import { conversationFeed, openConversations } from "../lib/server/conversation";
+import { conversationFeed, openConversations, projectBriefs } from "../lib/server/conversation";
+import { homeBrief } from "../lib/home";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
 import { taskTitle } from "../lib/task-title";
@@ -42,7 +43,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
   // D-531: the open conversation of "Ask first" (?chat=c_…) survives a reload
   const chatId = !selected && typeof sp.chat === "string" && /^c_[a-z0-9_]{1,40}$/.test(sp.chat) ? sp.chat : null;
-  const [b, projects, initial, d, sess, twin, chat, convs] = await Promise.all([
+  const [b, projects, initial, d, sess, twin, chat, convs, briefs] = await Promise.all([
     board(db(), c.uid, c.org),
     repos(db(), c.uid, c.org),
     selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
@@ -51,6 +52,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     selected ? twinView(db(), c.uid, c.org, selected) : null,
     chatId ? conversationFeed(db(), c.uid, c.org, chatId, -1) : null,
     openConversations(db(), c.uid, c.org),
+    projectBriefs(db(), c.org),
   ]);
   const now = new Date();
   const rows = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1));
@@ -73,6 +75,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     ago: ago(v.updated_at, now, t.lang), at: v.updated_at,
   }));
   const tasks = mergeByTime(taskRows, convRows).slice(0, 100).map(({ at: _at, ...rest }) => rest);
+  // D-600: the start is a conversation with Harnova: the numbers on top and its first message with buttons
+  const home = homeBrief({ waiting: c.waiting ?? 0, running: tasks.filter((x) => x.tone === "blue").length, projects: briefs, firstWaiting: tasks.find((x) => x.tone === "amber")?.href ?? null });
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
   let preferredModel: string | null = null;
@@ -96,7 +100,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
-            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} />
+            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} home={home} />
           )}
         </div>
       </div>

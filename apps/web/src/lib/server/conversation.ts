@@ -35,6 +35,11 @@ async function nextSeq(db: Db, id: string): Promise<number> {
   return (await asService(db, (sql) => sql.query<{ n: number }>("select coalesce(max(seq), -1)::int + 1 as n from public.conversation_turns where conversation_id = $1", [id]))).rows[0]?.n ?? 0;
 }
 
+/** D-600: the projects of the org and whether each has its approved brief (the start page asks for the missing ones) */
+export async function projectBriefs(db: Db, org: string): Promise<{ id: string; name: string; brief: boolean }[]> {
+  return (await asService(db, (sql) => sql.query<{ id: string; name: string; brief: boolean }>("select id::text as id, full_name as name, (brief_hash is not null and brief_approved_at is not null) as brief from public.repos where org_id = $1::uuid order by created_at", [org]))).rows;
+}
+
 /** D-600: whether a project has an approved brief (its interview is done) */
 export async function briefApproved(db: Db, repo: string): Promise<boolean> {
   return (await asService(db, (sql) => sql.query("select 1 from public.repos where id = $1::uuid and brief_hash is not null and brief_approved_at is not null", [repo]))).rows.length > 0;

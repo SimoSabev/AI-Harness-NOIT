@@ -1897,6 +1897,21 @@ export const en = {
   "interview.kickoff": "I want to work on “{task}”. First get to know the project and interview me.",
   "interview.required": "The project's interview comes first: no task starts without an approved brief. Opening it.",
   "interview.thinking": "Harnova is reading your answers and preparing the next question…",
+  // D-600: the start is a conversation with Harnova
+  "home.say.noBrief": "Hello. The project {name} has no brief yet, and no task starts without one — let's get to know it first. {n} waiting for you.",
+  "home.say.waiting": "Hello. {n} waiting for you; the rest is moving.",
+  "home.say.calm": "Hello. Nothing waits for you; {n} running. What shall we do?",
+  "home.say.noProject": "Hello. There is no project yet. Add a folder and we'll get to know it together.",
+  "home.act.meet": "Get to know {name}",
+  "home.act.waiting": "To what waits",
+  "home.act.add": "Add a project",
+  "home.stat.waiting": "waiting for you",
+  "home.stat.running": "running",
+  "home.stat.projects": "projects",
+  "home.stat.noBrief": "without a brief",
+  "home.harnova": "Harnova",
+  "home.icons": "Other places",
+  "home.meetText": "Get to know the project and interview me, so we make its brief and profile.",
 } as const;
 
 export type Key = keyof typeof en;

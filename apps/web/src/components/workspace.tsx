@@ -16,6 +16,7 @@ import { boxRepo, sendsOnEnter } from "../lib/chat";
 import { isAnswering } from "../lib/conversation-types";
 import type { ConversationFeed } from "../lib/conversation-types";
 import { BringReply } from "@mandat/contract";
+import type { HomeBrief } from "../lib/home";
 
 type TaskMode = "ask_first" | "work_now";
 
@@ -58,7 +59,7 @@ const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.w
 const ENDED = ["budget", "expired"];
 const PARKED = "harnova.parkedTask";
 
-export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null }) {
+export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null; home?: HomeBrief | null }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -121,6 +122,17 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     setBusy(false);
     window.history.replaceState(null, "", `/?chat=${r.body.id}`);
     follow(r.body.id);
+  };
+  // D-600: a button of Harnova's first message opens a project's interview
+  const meet = async (repoId: string) => {
+    setBusy(true);
+    setError(null);
+    const i = await postJson("/api/conversations", { text: t("home.meetText"), agent, ...pick, repo: repoId, purpose: "project" });
+    if (i.status !== 201 || typeof i.body.id !== "string") return fail(i);
+    reset();
+    setBusy(false);
+    window.history.replaceState(null, "", `/?chat=${i.body.id}`);
+    follow(i.body.id);
   };
   // D-600: the task parked for the interview comes back to an empty box
   useEffect(() => {
@@ -230,10 +242,12 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           onApproveJob={(h, code) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h, ...(code ? { code } : {}) }, 200)}
           onBring={() => void bring()} brought={brought} />
       ) : (
-        <>
-          <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
-          <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
-        </>
+        home ? <HomeIntro home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
+          <>
+            <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
+            <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
+          </>
+        )
       )}
       {!interview && modes}
       <div className={`rounded-2xl border border-line-strong bg-panel p-3 focus-within:border-accent-text ${questions ? "hidden" : ""}`}>
@@ -289,6 +303,43 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
         <div className="flex min-h-0 flex-1 flex-col gap-5 p-4 lg:flex-row lg:p-5">
           {form}
           <ProjectProfile turns={chat.turns} t={t} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** D-600: the start is a conversation with Harnova — the numbers that matter, then its first message with buttons */
+function HomeIntro({ home, onMeet, busy }: { home: HomeBrief; onMeet: (repo: string) => void; busy: boolean }) {
+  const t = useT();
+  const stat = (n: number, label: string, tone: string) => (
+    <div className="rounded-[10px] border border-line bg-panel px-4 py-3">
+      <p className={`font-mono text-2xl ${tone}`}>{n}</p>
+      <p className="text-xs text-mute">{label}</p>
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {stat(home.stats.waiting, t("home.stat.waiting"), home.stats.waiting > 0 ? "text-warn" : "text-ink")}
+        {stat(home.stats.running, t("home.stat.running"), home.stats.running > 0 ? "text-info" : "text-ink")}
+        {stat(home.stats.projects, t("home.stat.projects"), "text-ink")}
+        {stat(home.stats.noBrief, t("home.stat.noBrief"), home.stats.noBrief > 0 ? "text-warn" : "text-ok")}
+      </div>
+      <div className="flex gap-3 rounded-[14px] border border-line bg-panel p-4">
+        <span aria-hidden="true" className="logo-mark mt-0.5 inline-block size-6 shrink-0" />
+        <div className="min-w-0 flex-1 space-y-3">
+          <p className="text-[11px] font-medium text-mute">{t("home.harnova")}</p>
+          <p className="text-[15px] leading-relaxed">{t(home.say.key, home.say.params)}</p>
+          {home.actions.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {home.actions.map((a, i) => a.kind === "interview" ? (
+                <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={i === 0 ? btn.primary : btn.secondary}>{t(a.label.key, a.label.params)}</button>
+              ) : (
+                <Link key={a.href} href={a.href} className={i === 0 ? btn.primary : btn.secondary}>{t(a.label.key, a.label.params)}</Link>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
