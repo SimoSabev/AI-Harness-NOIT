@@ -29,6 +29,11 @@ describe("desktop i18n (E7е)", () => {
     expect(decodeURIComponent(loadingPage("en"))).toContain('<html lang="en">');
     expect(decodeURIComponent(loadingPage("en"))).toContain("Harnova is starting");
     expect(decodeURIComponent(loadingPage("bg"))).toContain("Harnova се пуска");
+    // D-599: the brand kit — the night ground, the mark (straps + the star in Harnova green), the step in #s stays
+    const page = decodeURIComponent(loadingPage("en"));
+    expect(page).toContain("background:#10161a");
+    expect(page).toContain('fill="#a6c25e"');
+    expect(page).toContain('id="s"');
   });
   it("the app is Harnova in both languages; no text names it harness (D-596)", () => {
     expect(dt("en", "app.name")).toBe("Harnova");

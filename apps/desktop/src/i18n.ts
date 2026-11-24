@@ -146,9 +146,12 @@ export function dt(lang: Lang, key: DesktopKey, params?: Record<string, string |
   return params ? s.replace(/\{(\w+)\}/g, (m, name: string) => (params[name] === undefined ? m : String(params[name]))) : s;
 }
 
+/** D-599: the Harnova mark (brand kit): two straps holding the star in Harnova green */
+const MARK_SVG = '<svg width="72" height="72" viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="8" width="10" height="48" rx="5" fill="#eaf0f2"/><rect x="48" y="8" width="10" height="48" rx="5" fill="#eaf0f2"/><path d="M32 13C33.3 26 37 30.7 45 32C37 33.3 33.3 38 32 51C30.7 38 27 33.3 19 32C27 30.7 30.7 26 32 13Z" fill="#a6c25e"/></svg>';
+
 /** The page shown while `pnpm local` starts (a data: URL), in the chosen language. */
 export function loadingPage(lang: Lang): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(
-    `<!doctype html><html lang="${lang}"><meta charset="utf-8"><title>${dt(lang, "app.name")}</title><body style="font:15px system-ui;margin:0;display:grid;place-items:center;height:100vh;background:#fafafa;color:#18181b"><div><b>${dt(lang, "loading.starting")}</b><p id="s" style="color:#52525b">${dt(lang, "loading.check")}</p></div>`,
+    `<!doctype html><html lang="${lang}"><meta charset="utf-8"><title>${dt(lang, "app.name")}</title><style>@keyframes b{50%{transform:scale(.86)}}path{transform-origin:50% 50%;transform-box:fill-box;animation:b 2.4s ease-in-out infinite}@media (prefers-reduced-motion:reduce){path{animation:none}}</style><body style="font:15px system-ui;margin:0;display:grid;place-items:center;height:100vh;background:#10161a;color:#eaf0f2"><div style="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">${MARK_SVG}<b style="font-size:17px">${dt(lang, "loading.starting")}</b><p id="s" style="margin:0;color:#9fb1b9">${dt(lang, "loading.check")}</p></div>`,
   )}`;
 }
