@@ -1336,7 +1336,7 @@ export const en = {
   "mem.actor.consolidation": "tidy-up",
   "mem.graph.label": "Memory links",
   "mem.graph.you": "You",
-  "mem.graph.legend": "Dots are memories (green active, amber waiting, grey replaced or archived); squares are what they are about; hexagons are you and your projects. Click one to open it.",
+  "mem.graph.legend": "Dots are memories, coloured by kind (preference, convention, command, pitfall, fact, note, episode); a dashed dot waits for approval, a grey one was replaced or archived. Squares are what they are about; the large marks are you and your projects. Click one to open it.",
   "mem.err.memory_rule": "That is a rule or a permission, not a memory. Set it in the project's rules.",
   "mem.err.memory_secret": "It looks like a secret or a key. Memory never keeps those.",
   "mem.err.memory_injection": "It reads like an instruction to an agent, not a fact.",
