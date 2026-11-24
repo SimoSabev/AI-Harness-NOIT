@@ -49,6 +49,28 @@ describe("the new modules each criterion's tests import (D-594)", () => {
   });
 });
 
+describe("a module imported through a helper of the file (live test 24.11, oracle v3)", () => {
+  it("const x = () => import(...), an async arrow and a function returning import(...) count where the test calls them", () => {
+    const cards = file(
+      "tests/__hidden__/giftcards.spec.ts",
+      `const cards = () => import("../../src/giftcards/cards");
+const checkout = async () => import("../../src/giftcards/checkout");
+function store() { return import("../../src/giftcards/store"); }
+describe("giftcards", () => {
+  it("AC-6: a new card", async () => { const { createCard } = await cards(); createCard(); });
+  it("AC-7: pay", async () => { const c = await checkout(); const s = await store(); c.pay(s); });
+  it("AC-11: the gift card store resets", async () => { const { cardStore } = await cards(); cardStore(); });
+});
+`,
+    );
+    const loy = file("tests/__hidden__/loyalty.spec.ts", `const loy = () => import("../../src/loyalty/points");\nit("AC-11: the loyalty store resets", async () => { (await loy()).reset(); });\n`);
+    const m = criterionModules([cards, loy]);
+    expect(m.get("AC-6")).toEqual(["src/giftcards/cards"]);
+    expect(m.get("AC-7")).toEqual(["src/giftcards/checkout", "src/giftcards/store"]);
+    expect(m.get("AC-11")).toEqual(["src/giftcards/cards", "src/loyalty/points"]);
+  });
+});
+
 describe("units side by side never share a new module (D-594)", () => {
   const m = criterionModules([HIDDEN]);
   it("run 6: AC-11 in u1 and u3, which run in parallel, both need src/giftcards/store and src/loyalty/points → a problem", () => {

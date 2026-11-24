@@ -32,15 +32,31 @@ function fromRoot(testPath: string, spec: string): string | null {
   return parts.join("/").replace(/\.(?:m|c)?[jt]sx?$/, "");
 }
 
-/** per criterion (AC-n), the new modules its hidden tests import, sorted */
+// live test 24.11 (oracle v3): a file may import a new module through a helper — `const cards = () => import("…")`,
+// an async arrow, or `function cards() { return import("…") }` — and its tests only call `await cards()`
+const HELPERS = [
+  /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(\s*\)\s*=>\s*import\s*\(\s*(["'`])([^"'`]+)\2\s*\)/g,
+  /\bfunction\s+([A-Za-z_$][\w$]*)\s*\(\s*\)\s*\{\s*return\s+import\s*\(\s*(["'`])([^"'`]+)\2\s*\)/g,
+];
+function helpersOf(f: HiddenFile): Map<string, string> {
+  const text = typeof f.data === "string" ? f.data : f.data.toString("utf8");
+  const out = new Map<string, string>();
+  for (const re of HELPERS) for (const m of text.matchAll(re)) if (m[1] && m[3]) out.set(m[1], m[3]);
+  return out;
+}
+
+/** per criterion (AC-n), the new modules its hidden tests import (directly or through a helper of the file), sorted */
 export function criterionModules(files: readonly HiddenFile[]): Map<string, string[]> {
   const out = new Map<string, Set<string>>();
   for (const f of files) {
+    const helpers = helpersOf(f);
     for (const b of blocks(f)) {
       if (!b.tag.startsWith("AC-")) continue;
       const set = out.get(b.tag) ?? new Set<string>();
-      for (const m of b.body.matchAll(DYNAMIC_IMPORT)) {
-        const p = fromRoot(f.path, m[2] ?? "");
+      const specs = [...b.body.matchAll(DYNAMIC_IMPORT)].map((m) => m[2] ?? "");
+      for (const [name, spec] of helpers) if (new RegExp(`(?<![\\w$.])${name.replace(/\$/g, "\\$")}\\s*\\(`).test(b.body)) specs.push(spec);
+      for (const spec of specs) {
+        const p = fromRoot(f.path, spec);
         if (p) set.add(p);
       }
       out.set(b.tag, set);
