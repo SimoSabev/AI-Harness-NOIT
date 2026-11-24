@@ -453,6 +453,36 @@ describe("the interview of a whole project (D-557)", () => {
     expect(r.turns[0]).toMatchObject({ kind: "project", ready: false, missing: ["commands.test"] });
     expect(m.asked[1]?.user).toContain("Project brief: not ready (missing: commands.test)");
   });
+  // D-599: the brief is written live — with any answer the model notes the parts it just learned and where from
+  it("a note next to a call becomes a project_note turn before the call's result; the model is told what is noted", async () => {
+    expect(PROJECT_SYSTEM).toContain('"note"');
+    const m = script(
+      { say: "", call: { tool: "read_file", path: "package.json" }, note: { from: "code", parts: { stack: ["TypeScript", "Next.js"], commands: { test: "pnpm test" } } } },
+      { say: "Who uses the shop?", call: { tool: "ask_user", questions: ["Who uses the shop?"] }, note: { from: "code", parts: { product: "An online shop for a bakery" } } },
+    );
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("get to know the project")], purpose: "project" });
+    expect(r.turns.map((t) => t.kind)).toEqual(["project_note", "tool", "project_note", "assistant"]);
+    expect(r.turns[0]).toEqual({ kind: "project_note", from: "code", parts: { stack: ["TypeScript", "Next.js"], commands: { test: "pnpm test" } } });
+    expect(m.asked[1]?.user).toContain("[noted from the code]");
+  });
+  it("a note the server cannot read goes back to the model; a task conversation keeps no notes", async () => {
+    const m = script({ say: "", call: { tool: "list_dir", path: "" }, note: { from: "guess", parts: { users: ["x"] } } }, { say: "ok", call: null });
+    const r = await answerTurn({ ...base, client: m.client, turns: [human("x")], purpose: "project" });
+    expect(r.turns[0]).toMatchObject({ kind: "tool", tool: "propose_project", target: "note", ok: false });
+    const t = script({ say: "ok", call: null, note: { from: "code", parts: { users: ["x"] } } });
+    const rt = await answerTurn({ ...base, client: t.client, turns: [human("x")] });
+    expect(rt.turns.map((x) => x.kind)).toEqual(["assistant"]);
+  });
+  it("the queue keeps a note as its own turn (D-599)", async () => {
+    const db = await pgliteDb();
+    await seedMinimal(db, { remoteUrl: "file:///tmp/x.git" });
+    await db.query("insert into public.conversations (id, org_id, repo_id, created_by, agent, model, budget_usd, expires_at, purpose) values ('c_note', $1::uuid, $2::uuid, $3::uuid, 'claude', 'm-1', 0.5, now() + interval '2 hours', 'project')", [DEMO_ORG_ID, DEMO_REPO_ID, DEMO_OWNER_ID]);
+    await db.query("insert into public.conversation_turns (org_id, conversation_id, seq, kind, data) values ($1::uuid, 'c_note', 0, 'human', $2::jsonb)", [DEMO_ORG_ID, JSON.stringify({ text: "get to know it" })]);
+    await runConversationOnce({ db, modelFor: () => ({ ok: true, client: fakeModel(ch, () => say({ say: "Who uses it?", call: { tool: "ask_user", questions: ["Who uses it?"] }, note: { from: "code", parts: { stack: ["TypeScript"] } } })) }) });
+    const turns = await loadTurns(db, "c_note");
+    expect(turns.map((t) => t.kind)).toEqual(["human", "project_note", "assistant"]);
+    expect(turns[1]).toMatchObject({ kind: "project_note", from: "code", parts: { stack: ["TypeScript"] } });
+  });
   it("a task conversation of a project with an approved brief starts from it, as data", async () => {
     const m = script({ say: "ok", call: null });
     await answerTurn({ ...base, client: m.client, turns: [human("add coupons")], project: "Product: An online shop" });
