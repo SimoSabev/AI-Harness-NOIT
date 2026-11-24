@@ -19,6 +19,10 @@
     "./mcp": {
       "types": "./dist/mcp.d.ts",
       "default": "./dist/mcp.js"
+    },
+    "./eval": {
+      "types": "./dist/eval-entry.d.ts",
+      "default": "./dist/eval-entry.js"
     }
   },
   "scripts": {

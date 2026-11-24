@@ -42,6 +42,11 @@ function bm25(docs: readonly string[][], query: readonly string[]): number[] {
   });
 }
 
+/** D-589: search only the memories that apply everywhere (user and session scope), no project's; BM25 + entities + recency. */
+export function searchAll(items: readonly MemoryItem[], query: string, o: Omit<RecallOptions, "repoId">): Hit[] {
+  return searchMemory(items, query, { ...o, repoId: null });
+}
+
 const ranks = (scores: number[]): Map<number, number> => {
   const order = scores.map((s, i) => [s, i] as const).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
   return new Map(order.map(([, i], r) => [i, r + 1]));

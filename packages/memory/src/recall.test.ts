@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OTHER_REPO, REPO, mem } from "./items.test-helper.js";
-import { searchMemory } from "./recall.js";
+import { searchAll, searchMemory } from "./recall.js";
 
 const items = [
   mem("Тестовете на магазина се пускат с pnpm vitest", { scope: "project", repo_id: REPO, kind: "command" }),
@@ -49,3 +49,12 @@ describe("хибридно търсене (D-400)", () => {
     expect(searchMemory([a, b], "деплоя", { repoId: null, now: new Date("2026-10-26T00:00:00Z") })[0]?.item.id).toBe(b.id);
   });
 });
+
+describe("searchAll: only the memories that apply everywhere (D-589)", () => {
+  it("user and session memories are found; project memories of any repository are not", () => {
+    const r = searchAll(items, "тестовете docker кратко", {});
+    expect(r.map((h) => h.item.scope).every((s) => s === "user" || s === "session")).toBe(true);
+    expect(r.map((h) => h.item.text)).toContain("Docker върви на Colima, не на Docker Desktop");
+  });
+});
+

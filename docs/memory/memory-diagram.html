@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory System Architecture</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font, system-ui, sans-serif);
+  color: var(--foreground, #e0e0e0);
+  background: var(--accent, #0d1117);
+  padding: 24px;
+  line-height: 1.4;
+  font-size: 13px;
+}
+h1 { font-size: 22px; margin-bottom: 4px; color: var(--foreground, #e0e0e0); }
+.subtitle { color: var(--muted-foreground, #8b949e); margin-bottom: 24px; font-size: 13px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } }
+.panel {
+  border: 1px solid var(--border, #30363d);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.panel-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-header.green { background: #0d1f0d; border-bottom: 1px solid #238636; }
+.panel-header.amber { background: #1a1a0d; border-bottom: 1px solid #9e6a03; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.status-dot.green { background: #3fb950; }
+.status-dot.amber { background: #d29922; }
+.panel-body { padding: 12px 16px; }
+
+.module {
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.module:last-child { margin-bottom: 0; }
+.module-header {
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+.module-header.blue { background: #0c2d6b; border: 1px solid #0550ae; color: #58a6ff; }
+.module-header.green { background: #0d1f0d; border: 1px solid #238636; color: #3fb950; }
+.module-header.amber { background: #1a1a0d; border: 1px solid #9e6a03; color: #d29921; }
+.module-header.red { background: #2d0d0d; border: 1px solid #da3633; color: #f85149; }
+.module-header.purple { background: #1a0d2d; border: 1px solid #8957e5; color: #bc8cff; }
+.module-header.cyan { background: #0d2d2d; border: 1px solid #1f6feb; color: #39d2c0; }
+.module-body {
+  padding: 6px 10px 8px;
+  font-size: 11px;
+  color: var(--muted-foreground, #8b949e);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  background: rgba(0,0,0,0.2);
+}
+.module-body .fn { color: var(--foreground, #e0e0e0); }
+.module-body .export { color: #f0883e; }
+.module-body .import { color: #8b949e; }
+.module-body .type { color: #79c0ff; font-style: italic; }
+.module-body .comment { color: #484f58; }
+
+.flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+.flow-step {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #30363d);
+  background: rgba(255,255,255,0.05);
+  white-space: nowrap;
+}
+.flow-arrow { color: var(--muted-foreground, #8b949e); }
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: var(--foreground, #e0e0e0);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.check { color: #3fb950; }
+.warn { color: #d29921; }
+
+.consumers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 8px;
+}
+.consumer {
+  padding: 8px 10px;
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+  font-size: 11px;
+}
+.consumer-name { font-weight: 600; color: var(--foreground, #e0e0e0); margin-bottom: 2px; }
+.consumer-imports { color: var(--muted-foreground, #8b949e); font-family: ui-monospace, monospace; word-break: break-all; }
+
+.goal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border, #30363d);
+}
+.goal-item:last-child { border-bottom: none; }
+.goal-num {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #1a3a5c;
+  color: #58a6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.goal-text { font-size: 12px; line-height: 1.5; }
+.goal-text strong { color: var(--foreground, #e0e0e0); }
+.goal-text code {
+  background: rgba(255,255,255,0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 12px 0;
+  font-size: 11px;
+  color: var(--muted-foreground, #8b949e);
+}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 8px; height: 8px; border-radius: 3px; }
+.legend-dot.blue { background: #0550ae; }
+.legend-dot.green { background: #238636; }
+.legend-dot.amber { background: #9e6a03; }
+.legend-dot.red { background: #da3633; }
+.legend-dot.purple { background: #8957e5; }
+.legend-dot.cyan { background: #1f6feb; }
+
+.api-surface {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  padding: 8px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 6px;
+  border: 1px solid var(--border, #30363d);
+}
+.api-line { color: var(--muted-foreground, #8b949e); }
+.api-line .fn { color: var(--foreground, #e0e0e0); }
+.api-line .kw { color: #ff7b72; }
+.api-line .type { color: #79c0ff; }
+.api-line .str { color: #a5d6ff; }
+.api-line .ok { color: #3fb950; }
+.api-line .missing { color: #f85149; text-decoration: line-through; }
+</style>
+</head>
+<body>
+
+<h1>Memory System Architecture</h1>
+<p class="subtitle">packages/memory/src — @mandat/memory · D-400</p>
+
+<!-- CURRENT STATE -->
+<div class="panel" style="margin-bottom: 24px;">
+  <div class="panel-header green">
+    <span class="status-dot green"></span>
+    Current State — All 6 fixes done · Build passes · 64/64 tests pass
+  </div>
+  <div class="panel-body">
+
+    <!-- Data flow -->
+    <div class="section-title">Memory Lifecycle</div>
+    <div class="flow">
+      <span class="flow-step" style="border-color: #8957e5; color: #bc8cff;">human says / agent writes</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step" style="border-color: #d29921; color: #d29921;">policy.scanMemory</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step" style="border-color: #238636; color: #3fb950;">store.addMemory → SQLite</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step" style="border-color: #8957e5; color: #bc8cff;">consolidationPlan</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step" style="border-color: #da3633; color: #f85149;">applyConsolidation (merge / invalidate)</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step" style="border-color: #58a6ff; color: #58a6ff;">searchMemory (BM25 + entities)</span>
+      <span class="flow-arrow">→</span>
+      <span class="flow-step" style="border-color: #1f6feb; color: #39d2c0;">memoryBlock → core + recall → LLM prompt</span>
+    </div>
+
+    <!-- Module map -->
+    <div class="two-col">
+      <div>
+
+        <!-- Data layer -->
+        <div class="section-title">Data layer</div>
+        <div class="module">
+          <div class="module-header blue">store.js</div>
+          <div class="module-body">
+            <span class="export">export</span> <span class="fn">loadMemory</span>, <span class="fn">addMemory</span>, <span class="fn">patchMemory</span>, <span class="fn">deleteMemory</span><br>
+            <span class="fn">memoryHistory</span>, <span class="fn">recordUsage</span>, <span class="fn">markUsed</span>, <span class="fn">usageRows</span>, <span class="fn">applyConsolidation</span><br>
+            <span class="type">Actor</span>, <span class="type">AddResult</span>, <span class="type">MemoryEvent</span>, <span class="type">MemorySql</span>, <span class="type">PatchResult</span>
+          </div>
+        </div>
+
+        <div class="module">
+          <div class="module-header purple">consolidate.js</div>
+          <div class="module-body">
+            <span class="fn">conflictsWith</span> — category-based contradictions<br>
+            <span class="fn">consolidationPlan</span> — duplicates, supersede, stale suggestions<br>
+            <span class="type">ConsolidationPlan</span>
+          </div>
+        </div>
+
+        <!-- Logic layer -->
+        <div class="section-title">Logic layer</div>
+        <div class="module">
+          <div class="module-header green">policy.js</div>
+          <div class="module-body">
+            <span class="fn">scanMemory</span> — invisible / secret / injection / rule<br>
+            <span class="fn">initialStatus</span> — active vs pending by source<br>
+            <span class="fn">rememberLines</span>, <span class="fn">memoryFromNotes</span>, <span class="constant">NOTES_HINT</span><br>
+            <span class="type">ScanReason</span>, <span class="type">ScanResult</span>
+          </div>
+        </div>
+
+        <div class="module">
+          <div class="module-header cyan">recall.js</div>
+          <div class="module-body">
+            <span class="fn">searchMemory</span> — BM25 + entity RRF + recency<br>
+            <span class="fn">visible</span> — scope + repo + status filter<br>
+            <span class="fn">searchAll</span> — <span class="comment">convenience: visible + searchMemory</span><br>
+            <span class="type">Hit</span>, <span class="type">RecallOptions</span>, <span class="type">Why</span>
+          </div>
+        </div>
+
+      </div>
+      <div>
+
+        <!-- Presentation layer -->
+        <div class="module">
+          <div class="module-header blue">core.js</div>
+          <div class="module-body">
+            <span class="fn">renderCore</span> — budget-aware pinned subset<br>
+            <span class="fn">memoryBlock</span> — core + recall merged text<br>
+            <span class="fn">coreOrder</span> — pinned → kind → uses → date → id<br>
+            <span class="type">Core</span>, <span class="type">MemoryBlock</span>
+          </div>
+        </div>
+
+        <div class="module">
+          <div class="module-header green">text.js</div>
+          <div class="module-body">
+            <span class="fn">estimateTokens</span> — Latin / Cyrillic-aware<br>
+            <span class="fn">terms</span> — stem + stop-word filter<br>
+            <span class="fn">similarity</span> — Jaccard of term sets<br>
+            <span class="fn">entitiesOf</span> — paths, files, code, tools<br>
+            <span class="fn">normalizeKey</span> — exact-duplicate detection<br>
+            <span class="constant">KNOWN_TOOLS</span>
+          </div>
+        </div>
+
+        <!-- View layer -->
+        <div class="section-title">View layer</div>
+        <div class="module">
+          <div class="module-header amber">graph.js</div>
+          <div class="module-body">
+            <span class="fn">memoryGraph</span> — radial layout, shared entities<br>
+            <span class="type">GraphNode</span>, <span class="type">GraphEdge</span>, <span class="type">MemoryGraph</span>
+          </div>
+        </div>
+
+        <div class="module">
+          <div class="module-header amber">temporal.js</div>
+          <div class="module-body">
+            <span class="fn">memoryAsOf</span> — replay history to any date<br>
+            <span class="fn">staleAgainstRepo</span> — missing paths / scripts<br>
+            <span class="type">RepoFacts</span>, <span class="type">StaleMemory</span>, <span class="type">TimedEvent</span>
+          </div>
+        </div>
+
+        <div class="module">
+          <div class="module-header cyan">metrics.js</div>
+          <div class="module-body">
+            <span class="fn">memoryTokens</span> — active count / all / core<br>
+            <span class="fn">usageSummary</span> — per-task cost, savings %<br>
+            <span class="type">UsageSummary</span>
+          </div>
+        </div>
+
+        <div class="module">
+          <div class="module-header green">eval.js</div>
+          <div class="module-body">
+            <span class="constant">GOLDEN</span> — 23 seeds, 22 cases<br>
+            <span class="fn">evaluate</span> — recall@5, update, abstention<br>
+            <span class="comment">→ @mandat/memory/eval (opt-in entry point)</span><br>
+            <span class="type">EvalResult</span>, <span class="type">GoldenCase</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Public API surface -->
+    <div class="section-title">Public API (index.ts → @mandat/memory)</div>
+    <div class="api-surface">
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">searchMemory</span>, <span class="fn">visible</span>, <span class="fn">searchAll</span> <span class="kw">from</span> <span class="str">"recall"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">addMemory</span>, <span class="fn">loadMemory</span>, <span class="fn">patchMemory</span>, <span class="fn">deleteMemory</span> <span class="kw">from</span> <span class="str">"store"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">renderCore</span>, <span class="fn">memoryBlock</span>, <span class="fn">coreOrder</span> <span class="kw">from</span> <span class="str">"core"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">scanMemory</span>, <span class="fn">initialStatus</span>, <span class="fn">rememberLines</span>, <span class="constant">NOTES_HINT</span> <span class="kw">from</span> <span class="str">"policy"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">conflictsWith</span>, <span class="fn">consolidationPlan</span> <span class="kw">from</span> <span class="str">"consolidate"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">memoryGraph</span>, <span class="fn">memoryAsOf</span>, <span class="fn">staleAgainstRepo</span> <span class="kw">from</span> <span class="str">"graph", "temporal"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">memoryTokens</span>, <span class="fn">usageSummary</span> <span class="kw">from</span> <span class="str">"metrics"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export</span> <span class="fn">estimateTokens</span>, <span class="fn">terms</span>, <span class="fn">entitiesOf</span> <span class="kw">from</span> <span class="str">"text"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export type</span> <span class="type">MemoryBasis</span>, <span class="type">MemoryKind</span> <span class="kw">from</span> <span class="str">"@mandat/contract"</span></div>
+      <div class="api-line"><span class="ok">✓</span> <span class="kw">export type</span> <span class="type">Hit</span>, <span class="type">Core</span>, <span class="type">GraphEdge</span>, <span class="type">ConsolidationPlan</span></div>
+    </div>
+
+    <!-- Consumers -->
+    <div class="section-title">Consumers</div>
+    <div class="consumers">
+      <div class="consumer">
+        <div class="consumer-name">apps/worker/src/online/memory.ts</div>
+        <div class="consumer-imports">NOTES_HINT, addMemory, applyConsolidation, consolidationPlan, loadMemory, memoryBlock, memoryFromNotes, recordUsage, rememberLines, renderCore, searchMemory</div>
+      </div>
+      <div class="consumer">
+        <div class="consumer-name">apps/worker/src/online/conversation.ts</div>
+        <div class="consumer-imports">addMemory, loadMemory, rememberLines, searchMemory</div>
+      </div>
+      <div class="consumer">
+        <div class="consumer-name">apps/web/src/lib/server/memory.ts</div>
+        <div class="consumer-imports">addMemory, applyConsolidation, consolidationPlan, deleteMemory, loadMemory, memoryAsOf, memoryHistory, memoryTokens, patchMemory, renderCore, staleAgainstRepo, usageRows, usageSummary, type MemoryEvent, TimedEvent, UsageSummary</div>
+      </div>
+      <div class="consumer">
+        <div class="consumer-name">apps/web/src/lib/memory-view.ts</div>
+        <div class="consumer-imports">searchMemory</div>
+      </div>
+      <div class="consumer">
+        <div class="consumer-name">packages/memory/src/mcp.ts</div>
+        <div class="consumer-imports">memoryBlock, renderCore, searchMemory, addMemory, loadMemory, markUsed, entitiesOf</div>
+      </div>
+      <div class="consumer">
+        <div class="consumer-name">apps/worker/src/online/repo-facts.ts</div>
+        <div class="consumer-imports">type RepoFacts</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend" style="margin-top: 16px;">
+  <div class="legend-item"><div class="legend-dot blue"></div> Data layer (store, core)</div>
+  <div class="legend-item"><div class="legend-dot green"></div> Policy / ingestion</div>
+  <div class="legend-item"><div class="legend-dot amber"></div> View / analysis</div>
+  <div class="legend-item"><div class="legend-dot red"></div> Consolidation</div>
+  <div class="legend-item"><div class="legend-dot purple"></div> Logic (consolidate)</div>
+  <div class="legend-item"><div class="legend-dot cyan"></div> Search / metrics</div>
+</div>
+
+</body>
+</html>
