@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withApi, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { axesKey, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, sealFor, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
+import { axesKey, criterionModules, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, scopedApi, sealFor, sharedModuleProblems, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
 import type { JobMode, SiteRow } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
@@ -10,6 +10,8 @@ import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import { mergeLocal } from "./deliver-local.js";
 import { findSites, restackJobBranch, startJobBranch } from "./job-branch.js";
+import { oracleTestsFor } from "./oracle.js";
+import { repoFacts } from "./repo-facts.js";
 import { UNIT_COLS, doneBefore, insertTask, routeOf, settleUnit, taskIdOf, tunePilot } from "./job-unit.js";
 import type { JobRow, UnitRow } from "./job-unit.js";
 
@@ -63,6 +65,8 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
   const mode = jobMode(axes.success ? axes.data : null);
   // D-546: a migration (the approved spec's profile or the axes) finds its sites in the code
   const migration = spec.profile === "migration" || (axes.success && deriveProfile(axes.data).id === "migration");
+  // D-594: in waves, units side by side may not need one new module (read from the approved oracle's hidden tests)
+  const shared = mode === "waves" ? await sharedModuleCheck(d.db, j) : null;
   let problems: PlanProblem[] = [];
   let units: PlanUnit[] | null = null;
   let sites: SiteRow[] | null = null;
@@ -81,6 +85,7 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
       continue;
     }
     problems = validatePlan(spec, proposal.data.units);
+    if (problems.length === 0 && shared) problems = shared(proposal.data.units);
     if (problems.length === 0 && migration) {
       const p = proposal.data;
       const found = p.sites ? await findSites({ mirror: mirrorOf(j), match: p.sites.match, max: SITES_MAX }) : null;
@@ -137,13 +142,15 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
   if (j.pilot_state === "running" && units.filter((u) => u.pilot).every((u) => u.status === "passed")) await tunePilot(d, j, spec, units);
   const start = unitsToStart(units, mode, JOB_PARALLEL_MAX, { pilotOnly: j.pilot_state === "running" });
   const api = start.length > 0 ? await oracleApi(d.db, j.oracle_hash) : [];
+  const hidden = start.length > 0 && api.length > 0 ? await hiddenFilesOf(d.db, j) : [];
   for (const unitId of start) {
     const next = units.find((u) => u.unit_id === unitId);
     if (!next) continue;
     // a new task = a fresh agent context; it gets the spec, its unit and the earlier units' handoffs (the progress)
     const id = taskIdOf(j.id, next.relands > 0 ? `${next.ord}r${next.relands}` : String(next.ord));
     // D-566: the public API the approved oracle fixed, as a requirement (never a test)
-    const text = withApi(withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files), api);
+    // D-595: only the API its scope's tests call (its criteria and the landed units'), so it builds its unit, not the job
+    const text = withApi(withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files), scopedApi(api, hidden, unitScope(next, units)));
     await insertTask(d.db, j, { id, text: next.pilot ? text : withPlaybook(text, j.playbook), unit: next.unit_id, role: "unit" });
     await d.db.query("update public.job_units set status = 'running', task_id = $3, tries = '[]'::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, next.unit_id, id]);
   }
@@ -155,6 +162,28 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
   if (live || parked.length === 0) return "waiting";
   await park(d.db, j, parked.map((u) => u.question ?? `Unit ${u.unit_id} waits for you.`).join(" ").slice(0, 2000), { why: "unit_stopped", units: parked.map((u) => u.unit_id) });
   return "parked";
+}
+
+/** D-594/D-595: the approved oracle's hidden files of a job (none when they cannot be read) */
+export async function hiddenFilesOf(db: Db, j: Pick<JobRow, "repo_id" | "spec_hash" | "oracle_hash">): Promise<{ path: string; data: Buffer }[]> {
+  const o = await oracleTestsFor(db, { repo: j.repo_id, specHash: j.spec_hash, oracleHash: j.oracle_hash });
+  return o.ok ? o.hidden.files : [];
+}
+
+/** D-595: a unit's scope — its criteria and those of the units already landed */
+export function unitScope(u: Pick<UnitRow, "unit_id" | "criteria">, units: readonly Pick<UnitRow, "unit_id" | "criteria" | "status">[]): string[] {
+  return [...new Set([...u.criteria, ...units.filter((x) => x.unit_id !== u.unit_id && x.status === "passed").flatMap((x) => x.criteria)])];
+}
+
+const MODULE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", "/index.ts", "/index.js"];
+/** D-594: the plan check from the hidden tests, or null when the oracle names no new module */
+async function sharedModuleCheck(db: Db, j: JobRow): Promise<((units: readonly PlanUnit[]) => PlanProblem[]) | null> {
+  const mods = criterionModules(await hiddenFilesOf(db, j));
+  if ([...mods.values()].every((m) => m.length === 0)) return null;
+  // a module on main already is not new (an oracle may import existing code inside a test too)
+  const facts = await repoFacts(j.remote_url);
+  const exists = (m: string) => (facts ? MODULE_EXT.some((e) => facts.files.has(`${m}${e}`)) : false);
+  return (units) => sharedModuleProblems(units, mods, exists);
 }
 
 /** D-566: the public API lines of the job's approved oracle (its manifest), or none */

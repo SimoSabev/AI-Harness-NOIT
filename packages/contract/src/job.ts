@@ -44,7 +44,7 @@ export const SITES_MAX = 2000;
 export const PlanProposal = z.object({ units: z.array(PlanUnit).max(JOB_UNITS_MAX), sites: SiteQuery.optional(), skip: z.array(SiteSkip).max(SITES_MAX).optional() }).strict();
 export type PlanProposal = z.infer<typeof PlanProposal>;
 
-export const PlanProblemKind = z.enum(["no_units", "bad_schema", "duplicate_unit", "unknown_criterion", "uncovered_criterion", "unknown_dependency", "forward_dependency", "cycle", "missing_sites", "bad_sites", "uncovered_site", "site_twice", "too_many_sites"]);
+export const PlanProblemKind = z.enum(["no_units", "bad_schema", "duplicate_unit", "unknown_criterion", "uncovered_criterion", "unknown_dependency", "forward_dependency", "cycle", "missing_sites", "bad_sites", "uncovered_site", "site_twice", "too_many_sites", "shared_new_module"]);
 export const PlanProblem = z.object({ kind: PlanProblemKind, id: z.string().max(200) }).strict();
 export type PlanProblem = z.infer<typeof PlanProblem>;
 
@@ -93,6 +93,8 @@ export function plannerUser(s: Spec, problems: readonly PlanProblem[]): string {
     `Out of scope: ${s.out_of_scope.length > 0 ? s.out_of_scope.join("; ") : "-"}`,
   ];
   if (problems.length > 0) lines.push("Your last plan was refused. Fix exactly these problems:", ...problems.map((p) => `- ${p.kind}: ${p.id}`));
+  // D-594: what a shared new module means and how to fix it
+  if (problems.some((p) => p.kind === "shared_new_module")) lines.push("shared_new_module <a>+<b>:<module>: units a and b run side by side, but the hidden tests of both need that new module, so neither can pass alone. Put those criteria in one unit, or make the unit with the criterion that needs both modules depend on the units that build them.");
   if (s.product.trim() !== "") lines.push("", s.product.trim().slice(0, 6000));
   return lines.join("\n");
 }

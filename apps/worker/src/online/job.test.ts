@@ -59,7 +59,7 @@ const patchFor = (name: string, body = name) => `diff --git a/${name} b/${name}\
 type Contract = { task_id: string; base_commit: string; text: string; attempt?: number; oracle_hash?: string };
 type Outcome = { result: "VERIFIED" | "FAILED" | "UNKNOWN"; evidence?: Ev[]; notes?: string; patch?: string; body?: string; reasons?: string[] };
 
-async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome; divisible?: "yes" | "no"; size?: "m" | "l"; during?: (n: number) => Promise<void> }) {
+async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => Outcome; divisible?: "yes" | "no"; size?: "m" | "l"; during?: (n: number) => Promise<void>; files?: { path: string; data: Buffer }[]; api?: string[] }) {
   const home = mkdtempSync(path.join(os.tmpdir(), "mandat-job-"));
   const fx = buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" });
   const db = await pgliteDb();
@@ -68,10 +68,14 @@ async function setup(o: { plans: string[]; outcome: (c: Contract, n: number) => 
     "insert into public.conversations (id, org_id, repo_id, agent, budget_usd, expires_at, status, spec, spec_hash, spec_ready, approved_spec, approved_spec_hash, approved_at) values ('c_job1', $1, $2, 'fake:honest-fix', 0.5, now() + interval '1 hour', 'idle', $3::jsonb, $4, true, $3::jsonb, $4, now())",
     [DEMO_ORG_ID, DEMO_REPO_ID, JSON.stringify(spec), SPEC],
   );
-  const files = FILES.map((f) => ({ path: f.path, data: f.data.toString("base64") }));
+  // D-594/D-595: a test may bring its own hidden files and API (the manifest and its hash follow them)
+  const hidden = o.files ?? FILES;
+  const man = o.files || o.api ? OracleManifest.parse({ ...MANIFEST, hidden_tests: hidden.map((f) => ({ path: f.path, sha256: sha256Tag(f.data) })), ...(o.api ? { api: o.api } : {}) }) : MANIFEST;
+  const oh = oracleHash(man);
+  const files = hidden.map((f) => ({ path: f.path, data: f.data.toString("base64") }));
   const v = (await db.query<{ v: number }>("select private.add_oracle_tests($1::uuid, $2, $3::jsonb, $4) as v", [DEMO_REPO_ID, SPEC, JSON.stringify(files), sha256Tag(jcs(files))])).rows[0]?.v;
-  await db.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, status, manifest, oracle_hash, hidden_version, approved_at) values ('o_job1', $1, $2, 'c_job1', $3, 'approved', $4::jsonb, $5, $6, now())", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, JSON.stringify(MANIFEST), ORACLE, v]);
-  await db.query("insert into public.jobs (id, org_id, repo_id, conversation_id, spec_hash, oracle_hash, type, agent) values ('j_t1', $1, $2, 'c_job1', $3, $4, 'bugfix', 'fake:honest-fix')", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, ORACLE]);
+  await db.query("insert into public.oracles (id, org_id, repo_id, conversation_id, spec_hash, status, manifest, oracle_hash, hidden_version, approved_at) values ('o_job1', $1, $2, 'c_job1', $3, 'approved', $4::jsonb, $5, $6, now())", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, JSON.stringify(man), oh, v]);
+  await db.query("insert into public.jobs (id, org_id, repo_id, conversation_id, spec_hash, oracle_hash, type, agent) values ('j_t1', $1, $2, 'c_job1', $3, $4, 'bugfix', 'fake:honest-fix')", [DEMO_ORG_ID, DEMO_REPO_ID, SPEC, oh]);
   if (o.divisible) await db.query("update public.conversations set axes = $1::jsonb where id = 'c_job1'", [JSON.stringify({ code: "existing", reference: "none", divisible: o.divisible, proof: ["tests"], risk: { level: "low", outward: false }, size: o.size ?? "m" })]);
   const asked: string[] = [];
   const systems: string[] = [];
@@ -666,5 +670,31 @@ describe("writers get the public API the oracle fixed (D-566)", () => {
     expect(s.contracts[0]?.text).toContain("Public API the hidden checks use");
     expect(s.contracts[0]?.text).toContain("couponCents(code: string): number");
     expect(s.contracts[0]?.text).not.toContain(SECRET_NAME);
+  });
+  // D-594 / D-595 (live test 24.11, runs 5 and 6): one hidden test needing the new modules of two units side by side, and a
+  // writer that built every unit at once from the whole API
+  const SHARED = [
+    { path: "packages/shop/test/__hidden__/a.spec.ts", data: Buffer.from(`it("AC-1: ${SECRET_NAME}", async () => { const { tenPercent } = await import("../../src/promo"); tenPercent(); });\n`) },
+    { path: "packages/shop/test/__hidden__/b.spec.ts", data: Buffer.from(`it("AC-2: coupon after the ten", async () => { const { couponCents } = await import("../../src/promo"); couponCents(); });\n`) },
+    { path: "tests/__hidden__/u.spec.ts", data: Buffer.from(`it("U-1: none under fifty", () => {});\n`) },
+  ];
+  it("D-594: two units side by side that need one new module go back to the planner; the ordered plan is taken", async () => {
+    const s = await setup({ plans: [PAR_PLAN, GOOD_PLAN], divisible: "yes", files: SHARED, outcome: () => ({ result: "VERIFIED" }) });
+    await jobTick(s.jd);
+    expect(s.asked).toHaveLength(2);
+    expect(s.asked[1]).toContain("shared_new_module: u1+u2:packages/shop/src/promo");
+    expect((await s.units()).map((u) => u.unit_id)).toEqual(["u1", "u2"]);
+    expect((await s.db.query<{ status: string }>("select status from public.jobs where id = 'j_t1'")).rows[0]?.status).toBe("running");
+  });
+  it("D-595: a unit's writer gets only the API its scope's tests call (and names no test calls)", async () => {
+    const api = ["`packages/shop/src/promo.ts`: `tenPercent(): number` — 10% over 50", "`packages/shop/src/promo.ts`: `couponCents(): number` — the coupon", "`packages/shop/src/promo.ts`: `helper(): void` — unused"];
+    const s = await setup({ plans: [GOOD_PLAN], files: SHARED, api, outcome: (c) => ({ result: "VERIFIED", notes: handoff(`did ${c.task_id}`) }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    const first = s.contracts[0]?.text ?? "";
+    expect(first).toContain("tenPercent(): number");
+    expect(first).toContain("helper(): void");
+    expect(first).not.toContain("couponCents(): number");
   });
 });

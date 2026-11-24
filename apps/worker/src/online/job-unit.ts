@@ -1,13 +1,13 @@
 import { ADVISOR_SYSTEM, Handoff, JobRoles, PLAYBOOK_SYSTEM, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, playbookUser, rescueTaskText, unitTaskText, withFiles, withPlaybook } from "@mandat/contract";
 import { roleRoute } from "@mandat/contract";
 import type { JobRole, Spec } from "@mandat/contract";
-import { criteriaMet } from "@mandat/core";
+import { criteriaMet, scopedApi } from "@mandat/core";
 import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import type { JobDeps } from "./job.js";
-import { oracleApi } from "./job.js";
+import { hiddenFilesOf, oracleApi, unitScope } from "./job.js";
 import { selfMoveOf } from "./self-finish.js";
 
 // D-541/D-542 (М2 Х6): one unit of a running job, settled on each tick. A unit whose tasks still work waits; one that
@@ -140,7 +140,8 @@ async function rescue(d: JobDeps, j: JobRow, spec: Spec, u: UnitRow, units: read
   const ids = Array.from({ length: RESCUE_TRIES }, (_, n) => taskIdOf(j.id, `${u.ord}x${rescues}${String.fromCharCode(97 + n)}`));
   // one attempt each: the tries are the retries now (self-finish does not multiply them)
   // D-571: a rescue try writes to the same API the first attempt had (the oracle's API.md)
-  const api = await oracleApi(d.db, j.oracle_hash);
+  // D-595: the same scoped API the unit's first attempt had
+  const api = scopedApi(await oracleApi(d.db, j.oracle_hash), await hiddenFilesOf(d.db, j), unitScope(u, units));
   for (const [n, id] of ids.entries()) await insertTask(d.db, j, { id, text: rescueTaskText(base, advice, n, api), unit: u.unit_id, role: "unit", attemptsMax: 1 });
   await inTransaction(d.db, async (tx) => {
     await tx.query("update public.job_units set status = 'running', task_id = $3, tries = $4::jsonb, rescues = $5, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, ids[0], JSON.stringify(ids), rescues]);

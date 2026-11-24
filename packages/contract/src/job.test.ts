@@ -21,6 +21,10 @@ describe("job contracts (D-535)", () => {
     expect(PlanProposal.safeParse({ units: [{ id: "u1", title: "t", criteria: ["AC-1"], depends_on: [], status: "passed" }] }).success).toBe(false);
     expect(PlanProposal.safeParse({ units: [{ id: "U 1", title: "t", criteria: [], depends_on: [] }] }).success).toBe(false);
     expect(plannerUser(spec, [{ kind: "uncovered_criterion", id: "AC-2" }])).toContain("uncovered_criterion: AC-2");
+    // D-594: a shared new module says how to fix it
+    const shared = plannerUser(spec, [{ kind: "shared_new_module", id: "u1+u3:src/giftcards/store" }]);
+    expect(shared).toContain("shared_new_module: u1+u3:src/giftcards/store");
+    expect(shared).toMatch(/run side by side[\s\S]*depend/);
   });
   it("the handoff is the last valid HANDOFF line of the notes, for this unit; junk lines are skipped", () => {
     const notes = ["MEMORY: x", 'HANDOFF: {"done":"first"}', "HANDOFF: not json", 'HANDOFF: {"done":"the 10% rule","risks":["rounding"]}', 'HANDOFF: {"done":""}'].join("\n");
