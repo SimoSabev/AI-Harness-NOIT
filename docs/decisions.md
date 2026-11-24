@@ -5239,6 +5239,31 @@ core plan-modules.ts). Модул, който вече е в main на огле�
 критерия), затова u2…u6 нямаха работа и сравнението на процеса не беше честно.
 Тестове: core plan-modules.test.ts (+2), worker job.test.ts (+1). Статус: решено от кодера.
 
+## D-596 Продуктът се казва Harnova, гласът му — Nova (Симо 24.11.2026)
+Решение: навсякъде, където човек вижда името, продуктът е **Harnova**, а гласовият агент (досега Jarvis, D-556) е **Nova**,
+на български и на английски: десктоп приложението (Harnova.app, `Harnova-<версия>-mac-arm64.dmg`, менюто, About, Hide,
+tray, екранът при пускане, диалозите), уеб екраните (`HARNESS = "Harnova"` в apps/web/src/lib/brand.ts — заглавията на
+страниците и PWA следват; гласовите текстове), сайтът (марка, стъпки за инсталиране, документацията), банерът на
+`mandat local`, описанието на микрофона в Info.plist и гласът (името на агента в ElevenLabs „Harnova · Nova“, промптът
+„Ти си Nova, асистентът на Harnova…“, описанията на инструментите). На български Harnova не се членува и е от женски род
+(„Nova е готова“, „самата Harnova“). Тестове пазят, че никой видим текст не казва harness/харнес/Jarvis.
+Не се преименува вътрешното: пакетите `@mandat/*`, командата `mandat`, `MANDAT_*`, образите `mandat-*`, `.mandat.yml`,
+схемата, видовете в дневника, `appId` `org.mandat.harness`; съдията в документацията остава Мандат (D-296).
+Данните на десктопа: за самия Electron приложението остава „Harness“ (`extraMetadata.productName`). Това име избира
+профилната папка (`~/Library/Application Support/Harness/mandat`: връзки, запечатани ключове, права върху папки) и записа
+в keychain „Harness Safe Storage“, който отключва ключовете. Ако се смени, новото приложение не вижда нищо от това, затова
+нищо не се мести и няма миграция. Понеже ролите на менюто иначе биха казали „Hide Harness“, About и Hide получават
+изрично име (`menu.hide`, `app.setAboutPanelOptions`).
+Гласът: името влиза в хеша на спецификацията (D-588), значи `syncVoiceAgent` обновява съществуващия агент при следващата
+сесия. Досега PATCH пращаше само `conversation_config` и `platform_settings`. Сега праща и `name`, иначе старият агент
+щеше да остане „Mandat · Jarvis“. Тялото на „Update agent“ има поле `name` (string, optional),
+https://elevenlabs.io/docs/api-reference/agents/update (прочетено 24.11.2026).
+Инсталаторите: `scripts/release-manifest.mjs` взема само `Harnova-…`. Старите `Harness-…` в изходната папка се
+пропускат, но договорът (`siteAssetKind`) още ги приема, за да не счупи локален сайт, построен преди преименуването.
+Тестове: web no-brand-name.test.ts (+2), brand.test.ts; site brand-name.test.ts (нов); desktop builder-config, i18n,
+menu (+1 всеки); cli i18n.test.ts (+1); contract voice.test.ts (+1), site.test.ts; llm-proxy voice-upstream.test.ts;
+scripts release-manifest.test.ts (+1). Статус: решено от кодера.
+
 ## D-597 Проверките на единица не падат от скритите тестове на по-късни единици (жив тест, рън 7 на М4, 24.11.2026)
 Решение (packages/verify verify-trees.ts):
 - D8: когато има скрити тестове и проверки (lint, typecheck), те се пускат на дърво B **преди** скритите файлове да бъдат
