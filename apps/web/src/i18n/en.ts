@@ -1248,7 +1248,7 @@ export const en = {
   "mem.title": "Memory",
   "mem.intro": "What is remembered about you and your projects. Agents always get a small core; the rest only when a task needs it.",
   "mem.view.list": "List",
-  "mem.view.graph": "Links",
+  "mem.view.graph": "2D map",
   "mem.views": "How to show the memory",
   "mem.filter.all": "All",
   "mem.filter.mine": "About you",
@@ -1859,6 +1859,13 @@ export const en = {
   "look.nova.fuchsia": "Fuchsia",
   "look.scale": "Size of everything",
   "look.reset": "Back to the standard",
+  // D-599: more views of the memory
+  "mem.view.threads": "3D threads",
+  "mem.view.time": "Timeline",
+  "mem.view.clusters": "Clusters",
+  "mem.threads.pause": "Stop turning",
+  "mem.threads.play": "Turn",
+  "mem.time.label": "The memory by day, one lane per kind",
 } as const;
 
 export type Key = keyof typeof en;

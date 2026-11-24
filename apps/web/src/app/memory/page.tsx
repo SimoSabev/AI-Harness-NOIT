@@ -4,12 +4,14 @@ import type { MemoryItem } from "@mandat/contract";
 import { memoryGraph } from "@mandat/memory";
 import { AddMemory, MemoryEditor, TidyMemory } from "../../components/memory-actions";
 import { MemoryGraphView } from "../../components/memory-graph";
+import { MemoryThreads } from "../../components/memory-threads";
+import { MemoryClusters, MemoryTime } from "../../components/memory-views";
 import { Shell } from "../../components/shell";
 import { Hex, card, label } from "../../components/ui";
 import { getT } from "../../i18n/server";
 import type { T } from "../../i18n/t";
 import { pageName } from "../../lib/brand";
-import { MEMORY_FILTERS, memoryHref, parseMemoryQuery, visibleMemories } from "../../lib/memory-view";
+import { MEMORY_FILTERS, MEMORY_VIEWS, memoryHref, parseMemoryQuery, visibleMemories } from "../../lib/memory-view";
 import type { MemoryQuery } from "../../lib/memory-view";
 import { ago } from "../../lib/status";
 import type { Tone } from "../../lib/status";
@@ -79,8 +81,7 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
         <div className="flex min-h-0 flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <nav aria-label={t("mem.views")} className="flex gap-1">
-              <Link className={chip} href={memoryHref(q, { view: "list" })} aria-current={q.view === "list" ? "page" : undefined}>{t("mem.view.list")}</Link>
-              <Link className={chip} href={memoryHref(q, { view: "graph" })} aria-current={q.view === "graph" ? "page" : undefined}>{t("mem.view.graph")}</Link>
+              {MEMORY_VIEWS.map((v) => <Link key={v} className={chip} href={memoryHref(q, { view: v })} aria-current={q.view === v ? "page" : undefined}>{t(`mem.view.${v}`)}</Link>)}
             </nav>
             <nav aria-label={t("mem.filters")} className="flex flex-wrap gap-1">
               {MEMORY_FILTERS.map((f) => (
@@ -88,13 +89,13 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
               ))}
             </nav>
             <form action="/memory" method="get" className="min-w-48 flex-1">
-              {q.view === "graph" && <input type="hidden" name="view" value="graph" />}
+              {q.view !== "list" && <input type="hidden" name="view" value={q.view} />}
               {q.filter !== "all" && <input type="hidden" name="f" value={q.filter} />}
               {q.at && <input type="hidden" name="at" value={q.at} />}
               <input name="q" defaultValue={q.q} placeholder={t("mem.search")} aria-label={t("mem.search")} className="block w-full rounded-lg border border-line-strong bg-canvas px-3 py-1.5 text-sm" />
             </form>
             <form action="/memory" method="get" className="flex items-center gap-2 text-xs text-mute">
-              {q.view === "graph" && <input type="hidden" name="view" value="graph" />}
+              {q.view !== "list" && <input type="hidden" name="view" value={q.view} />}
               {q.filter !== "all" && <input type="hidden" name="f" value={q.filter} />}
               <label className="flex items-center gap-2">
                 {t("mem.asOf.label")}
@@ -112,6 +113,15 @@ export default async function MemoryPage({ searchParams }: { searchParams: Promi
             <p className={`${card} p-6 text-sm text-mute`}>{t("mem.empty")}</p>
           ) : shown.length === 0 ? (
             <p className="text-sm text-mute">{t("mem.none")}</p>
+          ) : q.view === "threads" ? (
+            <div className="space-y-2">
+              <MemoryThreads graph={memoryGraph(shown, o.repos)} hrefs={Object.fromEntries(shown.map((m) => [m.id, memoryHref(q, { id: m.id })]))} selected={q.id} label={t("mem.graph.label")} youLabel={t("mem.graph.you")} pauseLabel={t("mem.threads.pause")} playLabel={t("mem.threads.play")} />
+              <p className="text-xs text-mute">{t("mem.graph.legend")}</p>
+            </div>
+          ) : q.view === "time" ? (
+            <MemoryTime items={shown} href={(id) => memoryHref(q, { id })} t={t} />
+          ) : q.view === "clusters" ? (
+            <MemoryClusters items={shown} href={(id) => memoryHref(q, { id })} t={t} />
           ) : q.view === "graph" ? (
             <div className="space-y-2">
               <MemoryGraphView graph={memoryGraph(shown, o.repos)} selected={q.id} href={(id) => memoryHref(q, { id })} youLabel={t("mem.graph.you")} label={t("mem.graph.label")} />

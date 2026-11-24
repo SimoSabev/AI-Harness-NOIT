@@ -287,7 +287,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {/* D-599: the path of the task (the strap), above the conversation; not for the interview of a whole project */}
       {chat.row.purpose === "task" && (
-        <div className="sticky top-0 z-10 border-b border-line bg-canvas/95 pb-3 pt-1 backdrop-blur">
+        <div className="sticky -top-5 z-10 -mt-5 border-b border-line bg-canvas pb-3 pt-5">
           <TaskPath stops={pathOf({ conversation: chat.row, turns: chat.turns, oracle_required: chat.oracleRequired ?? false, oracle: chat.oracle ?? null, job: chat.job ?? null })} t={t} />
         </div>
       )}

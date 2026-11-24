@@ -1224,7 +1224,7 @@ export const bg: Record<Key, string> = {
   "mem.title": "Памет",
   "mem.intro": "Какво се помни за теб и за проектите ти. Агентите винаги получават малко ядро; останалото — само когато задачата има нужда.",
   "mem.view.list": "Списък",
-  "mem.view.graph": "Връзки",
+  "mem.view.graph": "2D карта",
   "mem.views": "Как да се покаже паметта",
   "mem.filter.all": "Всичко",
   "mem.filter.mine": "За теб",
@@ -1835,4 +1835,11 @@ export const bg: Record<Key, string> = {
   "look.nova.fuchsia": "Фуксия",
   "look.scale": "Размер на всичко",
   "look.reset": "Върни стандарта",
+  // D-599: more views of the memory
+  "mem.view.threads": "3D нишки",
+  "mem.view.time": "Хронология",
+  "mem.view.clusters": "Купове",
+  "mem.threads.pause": "Спри въртенето",
+  "mem.threads.play": "Въртене",
+  "mem.time.label": "Паметта по дни, по един ред за всеки вид",
 };

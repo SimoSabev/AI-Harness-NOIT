@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { MemoryGraph } from "@mandat/memory";
+import { KIND_COLOR } from "../lib/memory-space";
 
 // D-400: the "Links" view — the seeded layout of @mandat/memory drawn as SVG on the server (no client script). Memories are
 // dots (by status), what they are about are squares, you and your projects are hexagons; each memory opens on click.
@@ -35,7 +36,8 @@ export function MemoryGraphView({ graph, selected, href, youLabel, label }: { gr
           return (
             <Link key={n.id} href={href(n.id)} aria-label={n.label}>
               <title>{n.label}</title>
-              <circle cx={n.x} cy={n.y} r={on ? 11 : 8} className={`${DOT[n.status ?? "active"]} ${on ? "stroke-ink" : "stroke-canvas"}`} strokeWidth={2} />
+              {/* D-599: an active memory takes the colour of its kind; pending and archived keep their status colour */}
+              <circle cx={n.x} cy={n.y} r={on ? 11 : 8} className={`${n.status === "active" || !n.status ? "" : DOT[n.status]} ${on ? "stroke-ink" : "stroke-canvas"}`} style={n.status === "active" || !n.status ? { fill: KIND_COLOR[n.kind ?? "note"] } : undefined} strokeWidth={2} />
               {(on || near.has(n.id) || !many) && (
                 <text x={left(n.id, n.x) ? n.x - 13 : n.x + 13} y={n.y + 5} textAnchor={left(n.id, n.x) ? "end" : "start"} className="fill-ink text-[15px]">{short(n.label, on ? 60 : 26)}</text>
               )}
