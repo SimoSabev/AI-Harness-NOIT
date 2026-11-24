@@ -31,14 +31,14 @@ export function InterviewStep({ questions, t, busy, onSend }: { questions: Quest
           {questions.map((_, k) => <span key={k} className={`h-1.5 flex-1 rounded-full ${k < i ? "bg-accent" : k === i ? "bg-accent-text" : "bg-line-strong"}`} />)}
         </span>
       </div>
-      <h2 className="text-2xl font-semibold leading-tight tracking-[-0.01em] text-balance lg:text-[28px]">{q.text}</h2>
-      {!free && <p className="text-sm text-mute">{t(q.multi ? "interview.pickMany" : "interview.pickOne")}</p>}
+      <h2 className="text-[28px] font-semibold leading-tight tracking-[-0.015em] text-balance lg:text-4xl">{q.text}</h2>
+      {!free && <p className="text-base text-mute">{t(q.multi ? "interview.pickMany" : "interview.pickOne")}</p>}
       <div className="grid gap-2.5 sm:grid-cols-2">
         {q.options.map((o, k) => {
           const on = a.picked.includes(o);
           return (
             <button key={o} type="button" aria-pressed={on} onClick={() => toggle(o)}
-              className={`flex items-center gap-3 rounded-[10px] border px-4 py-3.5 text-left text-base transition ${on ? "border-2 border-accent bg-accent-soft" : "border-line-strong bg-panel hover:bg-raised"}`}>
+              className={`flex min-h-14 items-center gap-3 rounded-[10px] border px-4 py-4 text-left text-lg transition ${on ? "border-2 border-accent bg-accent-soft" : "border-line-strong bg-panel hover:bg-raised"}`}>
               <span className="font-mono text-xs text-mute">{k + 1}</span>
               <span className="flex-1">{o}</span>
               {on && <span aria-hidden="true" className="text-accent-text">✓</span>}
@@ -46,14 +46,14 @@ export function InterviewStep({ questions, t, busy, onSend }: { questions: Quest
           );
         })}
         {!free && !otherOpen && a.other === "" && (
-          <button type="button" onClick={() => setOtherOpen(true)} className="rounded-[10px] border border-dashed border-line-strong px-4 py-3.5 text-left text-base text-mute hover:bg-raised">{t("interview.other")}</button>
+          <button type="button" onClick={() => setOtherOpen(true)} className="min-h-14 rounded-[10px] border border-dashed border-line-strong px-4 py-4 text-left text-lg text-mute hover:bg-raised">{t("interview.other")}</button>
         )}
       </div>
       {(free || otherOpen || a.other !== "") && (
         <label className="block">
           <span className="sr-only">{t("interview.otherLabel")}</span>
           <textarea autoFocus={!free} rows={free ? 3 : 2} value={a.other} onChange={(e) => set({ ...a, other: e.target.value })} placeholder={t("interview.otherPlaceholder")}
-            className="w-full resize-none rounded-[10px] border border-line-strong bg-panel px-4 py-3 text-base outline-none focus:border-accent" />
+            className="w-full resize-none rounded-[10px] border border-line-strong bg-panel px-4 py-3 text-lg outline-none focus:border-accent" />
         </label>
       )}
       <div className="flex flex-wrap items-center gap-2">
