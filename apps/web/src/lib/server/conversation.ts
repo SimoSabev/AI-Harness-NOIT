@@ -35,6 +35,11 @@ async function nextSeq(db: Db, id: string): Promise<number> {
   return (await asService(db, (sql) => sql.query<{ n: number }>("select coalesce(max(seq), -1)::int + 1 as n from public.conversation_turns where conversation_id = $1", [id]))).rows[0]?.n ?? 0;
 }
 
+/** D-600: whether a project has an approved brief (its interview is done) */
+export async function briefApproved(db: Db, repo: string): Promise<boolean> {
+  return (await asService(db, (sql) => sql.query("select 1 from public.repos where id = $1::uuid and brief_hash is not null and brief_approved_at is not null", [repo]))).rows.length > 0;
+}
+
 export async function sendMessage(db: Db, o: { uid: string; org: string; body: unknown }): Promise<Result> {
   if (!(await canAct(db, o.uid, o.org))) return err(403, "not_an_approver");
   const b = ChatMessageBody.safeParse(o.body);
@@ -43,6 +48,8 @@ export async function sendMessage(db: Db, o: { uid: string; org: string; body: u
   // D-557: a project interview is about one project
   if (m.purpose === "project" && !m.conversation && !m.repo) return err(400, "project_needs_repo");
   if (m.repo && (await asService(db, (sql) => sql.query("select 1 from public.repos where id = $1::uuid and org_id = $2::uuid", [m.repo, o.org]))).rows.length === 0) return err(404, "unknown_repo");
+  // D-600: no task on a project before its interview — the brief (and from it the project's profile) is approved first
+  if (!m.conversation && (m.purpose ?? "task") === "task" && m.repo && !(await briefApproved(db, m.repo))) return { status: 409, body: { error: "project_interview_required", repo: m.repo } };
   let id = m.conversation;
   if (id) {
     const c = await owned(db, id, o.org);

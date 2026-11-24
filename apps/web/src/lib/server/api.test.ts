@@ -35,6 +35,10 @@ describe("API (т. 8.1)", () => {
     expect((await postStop(post("/api/tasks/t_seed_docs/stop", {}, { origin: "https://evil.example" }), deps, "t_seed_docs")).status).toBe(403);
     expect((await postStop(post("/api/tasks/t_seed_docs/stop", {}, { "x-mandat-csrf": "d".repeat(43) }), deps, "t_seed_docs")).status).toBe(403);
     expect((await postTask(post("/api/tasks", { type: "bugfix", agent: "claude", text: "x", extra: 1 }), deps)).status).toBe(400);
+    // D-600: "work right away" on a project without an approved brief waits for the interview
+    const gated = await postTask(post("/api/tasks", { type: "bugfix", agent: "claude", text: "x", repo: "d0000000-0000-4000-8000-0000000000b1" }), deps);
+    expect(gated.status).toBe(409);
+    expect(await gated.json()).toEqual({ error: "project_interview_required", repo: "d0000000-0000-4000-8000-0000000000b1" });
     const cs = await changesetOf(db, "t_seed_bugfix");
     expect((await postApprove(post(`/api/changesets/${cs.id}/approve`, { head_sha: "zz" }), deps, cs.id)).status).toBe(400);
     expect((await postApprove(post("/api/changesets/x/approve", {}), deps, "x")).status).toBe(404);

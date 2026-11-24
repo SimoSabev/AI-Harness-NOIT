@@ -22,6 +22,8 @@ let deps: ApiDeps;
 let who: string | null = U.approver;
 beforeAll(async () => {
   db = await webDb();
+  // D-600: a task on a project needs the project's approved brief; the demo project has one here
+  await asService(db, (sql) => sql.query("update public.repos set brief = '{}'::jsonb, brief_hash = $2, brief_approved_at = now() where id = $1::uuid", [DEMO_REPO_ID, `sha256:${"b".repeat(64)}`]));
   deps = { db, user: () => Promise.resolve(who), secondFactor: () => Promise.resolve(null), createLimiter: new RateLimiter(50, 60_000) };
 });
 afterAll(async () => db.end());
@@ -35,6 +37,17 @@ const post = (p: string, body: unknown) =>
 const get = (p: string) => new Request(`http://localhost:3000${p}`, { headers: { host: "localhost:3000" } });
 const tasks = async () => Number((await asService(db, (sql) => sql.query<{ n: number }>("select count(*)::int as n from public.tasks"))).rows[0]?.n);
 const msg = { text: "round discounts half up", agent: "fake:honest-fix", repo: DEMO_REPO_ID };
+
+describe("the interview first (D-600)", () => {
+  it("a task on a project without an approved brief is refused until the project interview; a project interview is not", async () => {
+    await asService(db, (sql) => sql.query("insert into public.repos (id, org_id, provider, full_name, remote_url) values ('d0000000-0000-4000-8000-0000000000c1', $1::uuid, 'local', 'local/new-one', 'file:///tmp/new.git') on conflict do nothing", [DEMO_ORG_ID]));
+    const fresh = { ...msg, repo: "d0000000-0000-4000-8000-0000000000c1" };
+    const r = await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: fresh });
+    expect(r).toEqual({ status: 409, body: { error: "project_interview_required", repo: "d0000000-0000-4000-8000-0000000000c1" } });
+    expect((await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { ...fresh, purpose: "project" } })).status).toBe(201);
+    expect((await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { text: "no project", agent: "fake:honest-fix" } })).status).toBe(201);
+  });
+});
 
 describe("the conversation in the web (D-531)", () => {
   it("a message opens a conversation; a viewer cannot write; a bad body or a busy conversation is refused", async () => {
