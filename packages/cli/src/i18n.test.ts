@@ -21,6 +21,11 @@ describe("cli i18n (E7е)", () => {
     expect(cliLang({ LC_MESSAGES: "bg_BG", LANG: "C" })).toBe("bg");
     expect(cliLang({ MANDAT_LANG: "de", LANG: "C.UTF-8" })).toBe("en");
   });
+  it("the banner of `mandat local` names the product Harnova (D-596); the command itself stays mandat", () => {
+    expect(tt("en", "local.banner.title")).toBe("  Harnova runs locally (judge: Mandat)");
+    expect(tt("bg", "local.banner.title")).toBe("  Harnova работи локално (съдия: Мандат)");
+    expect([...Object.values(TUI_EN), ...Object.values(TUI_BG)].filter((v) => /\bthe harness\b|харнес/i.test(v))).toEqual([]);
+  });
   it("templates fill {params}", () => {
     expect(tt("en", "tui.done24h", { n: 2 })).toBe("2 done in 24 h");
     expect(tt("bg", "tui.done24h", { n: 2 })).toBe("2 готови за 24 ч");
