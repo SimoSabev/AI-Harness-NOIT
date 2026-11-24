@@ -1866,6 +1866,7 @@ export const en = {
   "mem.threads.pause": "Stop turning",
   "mem.threads.play": "Turn",
   "mem.time.label": "The memory by day, one lane per kind",
+  "project.brief.lacking": "Still missing; Harnova will ask.",
 } as const;
 
 export type Key = keyof typeof en;

@@ -202,26 +202,30 @@ function ProjectCard({ turn, t, a }: { turn: Extract<ChatTurn, { kind: "project"
     const r = await postJson(`/api/conversations/${a.row.id}/approve-project`, { brief_hash: turn.hash });
     setState(r.status === 200 ? "done" : "error");
   };
-  const rows: [Key, string][] = [
-    ["project.brief.product", b.product],
-    ["project.brief.users", list(b.users)],
-    ["project.brief.works", list(b.works_today)],
-    ["project.brief.keep", list(b.must_not_break)],
-    ["project.brief.tests", b.commands.test ?? "—"],
-    ["project.brief.stack", list(b.stack)],
-    ["project.brief.approver", `${b.approver} · ${b.budget_usd} USD`],
+  const rows: [Key, string, string][] = [
+    ["project.brief.product", b.product, "product"],
+    ["project.brief.users", list(b.users), "users"],
+    ["project.brief.works", list(b.works_today), "works_today"],
+    ["project.brief.keep", list(b.must_not_break), "must_not_break"],
+    ["project.brief.tests", b.commands.test ?? "—", "commands.test"],
+    ["project.brief.stack", list(b.stack), "stack"],
+    ["project.brief.approver", `${b.approver} · ${b.budget_usd} USD`, "approver"],
   ];
   return (
     <section aria-label={t("project.brief.title")} className="max-w-[46rem] rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
       <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("project.brief.title")}</p>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-        {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-mute">{t(k)}</dt>
-            <dd className="whitespace-pre-wrap">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* D-599: the brief as tiles (the brand kit's profile tiles); a part the model still lacks is a dashed amber tile */}
+      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+        {rows.map(([k, v, field]) => {
+          const lacking = turn.missing.includes(field);
+          return (
+            <li key={k} className={`flex flex-col gap-1 rounded-[10px] border px-3 py-2.5 ${lacking ? "border-dashed border-warn bg-warn-soft" : "border-line bg-canvas"}`}>
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-mute">{t(k)}</span>
+              <span className={`whitespace-pre-wrap ${lacking ? "text-warn" : ""}`}>{lacking ? t("project.brief.lacking") : v}</span>
+            </li>
+          );
+        })}
+      </ul>
       {!turn.ready && <p className="mt-2 text-warn">{t("project.brief.missing", { what: turn.missing.join(", ") })}</p>}
       {turn.ready && state === "done" && <p className="mt-2 font-medium text-ok">{t("project.brief.approved")}</p>}
       {turn.ready && state !== "done" && a.canApprove && (

@@ -1842,4 +1842,5 @@ export const bg: Record<Key, string> = {
   "mem.threads.pause": "Спри въртенето",
   "mem.threads.play": "Въртене",
   "mem.time.label": "Паметта по дни, по един ред за всеки вид",
+  "project.brief.lacking": "Още липсва; Harnova ще попита.",
 };
