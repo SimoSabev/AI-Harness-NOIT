@@ -1616,7 +1616,7 @@ export const en = {
   "project.brief.approver": "Approves · cap per job",
   "project.brief.missing": "Still missing: {what}",
   "project.brief.approve": "Approve the project",
-  "project.brief.approved": "Approved: every task of this project starts from it.",
+  "project.brief.approved": "Approved: every task of this project starts from it. Harnova prepares the project profile from it; approve it in Projects.",
   "project.brief.failed": "Not approved. Look again.",
   "job.strategy.profile": "Profile",
   "job.strategy.planning": "The planner is splitting the work into units and choosing one writer or a team…",

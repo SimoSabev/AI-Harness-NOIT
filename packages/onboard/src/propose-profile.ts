@@ -1,6 +1,6 @@
 import { builtinSkillRef } from "@mandat/profile";
 import { RESEARCH_MCP_REF, sealProfile } from "@mandat/contract";
-import type { FieldSource, HarnessProfile, ProfileLayersInput } from "@mandat/contract";
+import type { FieldSource, HarnessProfile, ProfileLayersInput, ProjectBrief } from "@mandat/contract";
 import { propose } from "./propose.js";
 import type { Baseline, Source } from "./propose.js";
 import { riskProfile } from "./risk-profile.js";
@@ -26,7 +26,23 @@ function median(xs: number[]): number {
   return s.length % 2 === 1 ? (s[m] as number) : Math.round(((s[m - 1] as number) + (s[m] as number)) / 2);
 }
 
-export function proposeProfile(scan: ScanResult, o: { repoId: string; version: number; baseline?: Baseline | null; history?: GitHistory | null }): ProfileProposal {
+/** D-601: the approved brief of the project in layer B — the summary, the commands the person confirmed and what must keep working */
+function withBrief(b: ProfileLayersInput["b"], brief: ProjectBrief, sources: Record<string, FieldSource>): ProfileLayersInput["b"] {
+  const list = (xs: readonly string[]) => xs.join("; ");
+  const summary = [`Product: ${brief.product}`, brief.users.length > 0 ? `Users: ${list(brief.users)}` : "", brief.works_today.length > 0 ? `Works today: ${list(brief.works_today)}` : "", brief.stack.length > 0 ? `Stack: ${list(brief.stack)}` : ""].filter(Boolean).join("\n").slice(0, 2000);
+  sources["b.summary"] = "human";
+  const commands = { ...b.commands };
+  for (const k of ["install", "test", "dev"] as const) {
+    const c = brief.commands[k];
+    if (c) commands[k] = c.slice(0, 500);
+  }
+  if (brief.commands.install || brief.commands.test || brief.commands.dev) sources["b.commands"] = "human";
+  const keep = brief.must_not_break.map((x) => `Must keep working: ${x}`.slice(0, 300));
+  if (keep.length > 0) sources["b.boundaries"] = "human";
+  return { ...b, summary, commands, boundaries: [...keep, ...b.boundaries].slice(0, 40) };
+}
+
+export function proposeProfile(scan: ScanResult, o: { repoId: string; version: number; baseline?: Baseline | null; history?: GitHistory | null; brief?: ProjectBrief | null }): ProfileProposal {
   const p = propose(scan, { baseline: o.baseline ?? null });
   const sources: Record<string, FieldSource> = {};
   for (const [k, v] of Object.entries(p.field_sources)) sources[`a.${k}`] = fieldSource(v);
@@ -91,6 +107,7 @@ export function proposeProfile(scan: ScanResult, o: { repoId: string; version: n
     h: { budgets: p.policy.budgets, routing: [{ task_type: null, role: "lead", mode: "auto", channel: null, fallback: [] }] },
   };
   for (const k of ["e", "f", "g", "h"]) sources[k] = "rule";
+  if (o.brief) layers.b = withBrief(layers.b, o.brief, sources);
   const profile = sealProfile({ version: o.version, repo_id: o.repoId, layers, sources, approved_by: null, approved_at: null });
   return { profile, sources, warnings: p.warnings, needs_human: p.needs_human, blocked: p.blocked };
 }

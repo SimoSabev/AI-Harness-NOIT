@@ -31,6 +31,9 @@ export async function approveProject(db: Db, o: { uid: string; org: string; id: 
     await sql.query("update public.repos set brief = $2::jsonb, brief_hash = $3, brief_approved_by = $4::uuid, brief_approved_at = now() where id = $1::uuid and org_id = $5::uuid", [repo, JSON.stringify(brief.data), hash, o.uid, o.org]);
     const text = jcs({ conversation: o.id, repo, brief_hash: hash, by: o.uid });
     await sql.query("select private.ledger_append($1::uuid, 'project_approved', null, $2, $3)", [o.org, text, sha256Tag(text)]);
+    // D-601: the approved brief goes into the project's profile — the harness proposes a new version from it (a person
+    // approves that one with TOTP, like every profile)
+    await sql.query("insert into public.outbox (org_id, kind, idempotency_key, payload) values ($1::uuid, 'harness_scan', $2, $3::jsonb) on conflict (idempotency_key) do nothing", [o.org, `scan:brief:${repo}:${hash}`, JSON.stringify({ repo_id: repo })]);
   });
   return { status: 200, body: { id: o.id, brief_hash: hash } };
 }

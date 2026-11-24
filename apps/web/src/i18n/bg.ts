@@ -1592,7 +1592,7 @@ export const bg: Record<Key, string> = {
   "project.brief.approver": "Одобрява · таван на задача",
   "project.brief.missing": "Още липсва: {what}",
   "project.brief.approve": "Одобри проекта",
-  "project.brief.approved": "Одобрено: всяка задача на проекта тръгва от това.",
+  "project.brief.approved": "Одобрено: всяка задача на проекта тръгва от това. Harnova подготвя профила на проекта от него; одобри го в Проекти.",
   "project.brief.failed": "Не е одобрено. Погледни пак.",
   "job.strategy.profile": "Профил",
   "job.strategy.planning": "Планерът разделя работата на единици и избира един писател или екип…",
