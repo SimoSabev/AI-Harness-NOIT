@@ -128,6 +128,35 @@
   }
 }
 
+
+/* D-599: Settings → Appearance. The ground (data-ground; night is the default above) and a custom accent (data-accent:
+   the layout sets --user-accent and its ink). Light keeps the same idea on paper. */
+:root[data-ground="graphite"] { --canvas: #0e0f11; --panel: #15161a; --raised: #1c1d22; --line: #26272e; --line-strong: #383a44; }
+:root[data-ground="graphite"][data-theme="light"] { --canvas: #f6f6f8; --panel: #ffffff; --raised: #eeeef1; --line: #e1e1e6; --line-strong: #a5a6b0; }
+:root[data-ground="warm"] { --canvas: #12100e; --panel: #1a1714; --raised: #221e1a; --line: #2e2924; --line-strong: #463f37; }
+:root[data-ground="warm"][data-theme="light"] { --canvas: #f8f5f0; --panel: #fffdf9; --raised: #f0ebe3; --line: #e5ddd1; --line-strong: #b3a693; }
+:root[data-ground="black"] { --canvas: #000000; --panel: #0a0d0f; --raised: #13181b; --line: #1f282d; --line-strong: #34434c; }
+:root[data-ground="black"][data-theme="light"] { --canvas: #ffffff; --panel: #ffffff; --raised: #f3f3f3; --line: #e5e5e5; --line-strong: #a6a6a6; }
+:root[data-accent="custom"] {
+  --accent: var(--user-accent);
+  --accent-ink: var(--user-accent-ink);
+  --accent-text: color-mix(in oklab, var(--user-accent) 70%, white);
+  --accent-soft: color-mix(in oklab, var(--user-accent) 16%, var(--panel));
+}
+:root[data-accent="custom"][data-theme="light"] {
+  --accent-text: color-mix(in oklab, var(--user-accent) 72%, black);
+  --accent-soft: color-mix(in oklab, var(--user-accent) 12%, white);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-ground="graphite"][data-theme="system"] { --canvas: #f6f6f8; --panel: #ffffff; --raised: #eeeef1; --line: #e1e1e6; --line-strong: #a5a6b0; }
+  :root[data-ground="warm"][data-theme="system"] { --canvas: #f8f5f0; --panel: #fffdf9; --raised: #f0ebe3; --line: #e5ddd1; --line-strong: #b3a693; }
+  :root[data-ground="black"][data-theme="system"] { --canvas: #ffffff; --panel: #ffffff; --raised: #f3f3f3; --line: #e5e5e5; --line-strong: #a6a6a6; }
+  :root[data-accent="custom"][data-theme="system"] {
+    --accent-text: color-mix(in oklab, var(--user-accent) 72%, black);
+    --accent-soft: color-mix(in oklab, var(--user-accent) 12%, white);
+  }
+}
+
 /* D-599: the mark — two straps (the harness) holding a four-point star (Nova). Straps in ink, the star in the accent,
    so the logo follows the accent the person picks in Appearance. Drawn as two masks; no image file. */
 .logo-mark {

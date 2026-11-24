@@ -28,6 +28,6 @@ export function parseTheme(v: string | undefined): Theme {
 export function parseView(v: string | undefined): View {
   return VIEWS.some((x) => x.id === v) ? (v as View) : "map";
 }
-export function prefCookie(name: "theme" | "view" | "lang", value: string): string {
+export function prefCookie(name: "theme" | "view" | "lang" | "accent" | "ground" | "nova" | "scale", value: string): string {
   return `${name}=${value}; Path=/; Max-Age=31536000; SameSite=Lax`;
 }

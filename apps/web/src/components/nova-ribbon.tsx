@@ -7,7 +7,7 @@ const STAR = "M32 4C34 24 40 30 60 32C40 34 34 40 32 60C30 40 24 34 4 32C24 30 3
 
 export function NovaStar({ phase, className = "size-7" }: { phase: NovaPhase; className?: string }) {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true" data-phase={phase} className={`nova-star shrink-0 ${phase === "error" ? "text-bad" : "text-accent"} ${className}`}>
+    <svg viewBox="0 0 64 64" aria-hidden="true" data-phase={phase} className={`nova-star shrink-0 ${phase === "error" ? "text-bad" : "text-[var(--nova,var(--accent))]"} ${className}`}>
       <path d={STAR} fill="currentColor" />
     </svg>
   );
