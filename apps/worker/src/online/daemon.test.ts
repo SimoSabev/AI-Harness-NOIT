@@ -675,7 +675,7 @@ describe("daemon auto-apply (D-367)", () => {
     const main = execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "main"], { env: gitEnv, encoding: "utf8" }).trim();
     const branch = execFileSync("git", ["--git-dir", s.fx.mirror, "rev-parse", "mandat/t_web_1-a1"], { env: gitEnv, encoding: "utf8" }).trim();
     expect(main).toBe(branch);
-    expect((await s.db.query<{ kind: string }>("select kind from public.deliveries order by created_at, id")).rows.map((r) => r.kind)).toEqual(["branch_only", "merge"]);
+    expect((await s.db.query<{ kind: string }>("select kind from public.deliveries order by created_at, kind")).rows.map((r) => r.kind)).toEqual(["branch_only", "merge"]);
     expect((await s.db.query<{ input: string }>("select input from public.ladder_events")).rows).toEqual([{ input: "success" }]);
     expect((await s.db.query<{ kind: string; text: string }>("select kind, text from public.task_activities where kind in ('auto_applied', 'needs_you')")).rows).toEqual([{ kind: "auto_applied", text: `main ${s.fx.sha.slice(0, 12)} → ${main.slice(0, 12)}` }]);
     const pushes = (await s.db.query<{ payload: { kind: string } }>("select payload from public.outbox where kind = 'web_push'")).rows.map((r) => r.payload.kind);
