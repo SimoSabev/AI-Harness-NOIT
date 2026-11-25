@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Frame } from "../components/frame";
+import { btn } from "../components/ui";
 import { SiteHtml } from "../components/site-html";
 import { pagePath, translator } from "../i18n/t";
 import { SITE_ICONS } from "../views/meta";
@@ -12,10 +13,12 @@ export default function GlobalNotFound() {
   return (
     <SiteHtml lang="en">
       <Frame lang="en" page="/">
-        <h1 className="font-display text-3xl font-semibold tracking-wide">404</h1>
-        <p className="mt-4 text-mute">
-          <a className="text-accent-text underline-offset-4 hover:underline" href={pagePath("en", "/")}>{t("nav.home")}</a>
-        </p>
+        {/* D-608: the mark, the code large, the way home as a button */}
+        <div className="flex flex-col items-center py-16 text-center">
+          <span aria-hidden="true" className="logo-mark block size-12" />
+          <h1 className="mt-6 text-6xl font-semibold tracking-[-0.04em]">404</h1>
+          <a className={`${btn.secondary} mt-8`} href={pagePath("en", "/")}>{t("nav.home")}</a>
+        </div>
       </Frame>
     </SiteHtml>
   );

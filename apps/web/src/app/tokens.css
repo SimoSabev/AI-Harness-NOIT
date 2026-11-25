@@ -153,6 +153,12 @@
   }
 }
 
+/* D-608: under lang="bg" the system face (SF Pro) switches to its Bulgarian letterforms, which many read as handwriting
+   on screen; the common Cyrillic forms stay, in Bulgarian and English alike. */
+html {
+  font-feature-settings: "locl" 0;
+}
+
 /* D-599: the mark — two straps (the harness) holding a four-point star (Nova). Straps in ink, the star in the accent,
    so the logo follows the accent the person picks in Appearance. Drawn as two masks; no image file. */
 .logo-mark {
