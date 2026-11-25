@@ -41,7 +41,7 @@ translation. Add a new term here first, then to the catalog.
 | --- | --- | --- |
 | VERIFIED | ПРОВЕРЕНО | `verdict.verified` |
 | FAILED | ПРОВАЛ | `verdict.failed` |
-| UNKNOWN | НЕИЗВЕСТНО | `verdict.unknown` |
+| UNKNOWN | НЕЯСНО (D-606) | `verdict.unknown` |
 | Waiting for you | Чака теб | `group.waiting`, `board.col.4` |
 | Awaiting approval | Чака одобрение | `status.review.label` |
 | Approve the change | Одобри промяната | `actions.approve` |
