@@ -27,7 +27,7 @@ export function ProjectProfile({ turns, t }: { turns: readonly ChatTurn[]; t: T 
       <ul className="grid gap-2">
         {p.tiles.map((x) => (
           <li key={x.part} className={x.value === null ? "rounded-[10px] border border-dashed border-line-strong px-3 py-2.5" : `rounded-[10px] border bg-canvas px-3 py-2.5 ${x.fresh ? "land border-accent" : "border-line"}`}>
-            <p className="flex items-center justify-between gap-2 font-mono text-[10.5px] uppercase tracking-[0.06em] text-mute">
+            <p className="text-xs font-medium flex items-center justify-between gap-2 text-mute">
               {t(x.label)}
               {x.from && <span className={x.from === "code" ? "text-info" : "text-accent-text"}>{t(x.from === "code" ? "interview.fromCode" : "interview.fromYou")}</span>}
             </p>

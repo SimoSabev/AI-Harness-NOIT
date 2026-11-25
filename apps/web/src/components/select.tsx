@@ -149,7 +149,7 @@ export function SelectListbox({ id, labelledBy, options, selected, active, mono,
     });
     body = groups.map((g, gi) => (
       <div key={`${gi}-${g.name}`} role="group" aria-labelledby={`${id}-g-${gi}`} className={gi > 0 ? "mt-1 border-t border-line pt-1" : ""}>
-        <div id={`${id}-g-${gi}`} role="presentation" className="px-2.5 pb-1 pt-1.5 font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{g.name}</div>
+        <div id={`${id}-g-${gi}`} role="presentation" className="text-xs font-medium px-2.5 pb-1 pt-1.5 text-mute">{g.name}</div>
         {g.items.map(({ o, i }) => row(o, i))}
       </div>
     ));

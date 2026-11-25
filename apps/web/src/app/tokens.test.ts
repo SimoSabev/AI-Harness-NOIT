@@ -29,14 +29,13 @@ describe("one token file (AC-12.4, E9g B)", () => {
     const site = readFileSync(path.join(repo, "apps/site/src/app/site.css"), "utf8");
     expect(site).toMatch(/@import\s+"(\.\.\/)+web\/src\/app\/tokens\.css"/);
   });
-  it("the fonts are self-hosted: Geologica and Martian Mono only, no external url in the token file (D-599)", () => {
+  it("the fonts are the system's own (D-602): SF Pro / Segoe UI for text, the system mono for code; nothing to load", () => {
     const css = readFileSync(path.join(here, "tokens.css"), "utf8");
-    expect(css).toMatch(/url\("\/fonts\/geologica-latin\.woff2"\)/);
-    expect(css).toMatch(/url\("\/fonts\/martian-mono-cyrillic\.woff2"\)/);
-    expect(css).not.toMatch(/tektur/i);
+    expect(css).not.toMatch(/@font-face/);
     expect(css).not.toMatch(/url\(\s*["']?(https?:)?\/\//);
-    // the display face is the text face: one family for everything a person reads
-    expect(css).toMatch(/--font-display:\s*"Geologica"/);
+    expect(css).toMatch(/--font-sans:\s*ui-sans-serif,\s*-apple-system,\s*BlinkMacSystemFont,\s*"Segoe UI"/);
+    expect(css).toMatch(/--font-display:\s*ui-sans-serif/);
+    expect(css).toMatch(/--font-mono:\s*ui-monospace,\s*"SF Mono"/);
   });
   it("the logo is one class of the token file: the straps in ink, the star in the accent the person picked (D-599)", () => {
     const css = readFileSync(path.join(here, "tokens.css"), "utf8");

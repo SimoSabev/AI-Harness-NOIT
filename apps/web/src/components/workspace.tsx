@@ -28,19 +28,24 @@ export interface WsAgent { id: string; label: string; models: string[]; defaultM
 export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: string | null }) {
   const t = useT();
   return (
-    <nav aria-label={t("ws.tasks")} className="flex min-h-0 flex-col gap-2">
-      <Link href="/" className={`${btn.secondary} justify-start`} aria-current={selected === null ? "page" : undefined}>+ {t("ws.new")}</Link>
-      <p className="px-2 pt-2 font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("ws.tasks")}</p>
+    <nav aria-label={t("ws.tasks")} className="flex min-h-0 flex-col gap-1">
+      {/* D-602: a quiet list like a product's sidebar — one line per conversation, its state under it */}
+      <Link href="/" aria-current={selected === null ? "page" : undefined}
+        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-ink transition hover:bg-raised aria-[current=page]:bg-raised">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 text-mute" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+        {t("ws.new")}
+      </Link>
+      <p className="px-2 pb-1 pt-3 text-xs font-medium text-mute">{t("ws.tasks")}</p>
       {tasks.length === 0 && <p className="px-2 text-sm text-mute">{t("ws.noTasks")}</p>}
-      <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto">
+      <ul className="min-h-0 flex-1 overflow-y-auto">
         {tasks.map((x) => (
           <li key={x.id}>
-            <Link href={x.href} aria-current={selected === x.id ? "page" : undefined}
-              className="flex items-start gap-2 rounded-lg px-2 py-2 text-sm transition hover:bg-raised aria-[current=page]:bg-accent-soft">
-              <Hex tone={x.tone} className="mt-1.5 h-2 w-2.5" />
+            <Link href={x.href} aria-current={selected === x.id ? "page" : undefined} title={x.text}
+              className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-raised aria-[current=page]:bg-raised">
+              <Hex tone={x.tone} className="size-2" />
               <span className="min-w-0 flex-1">
-                <span className="line-clamp-2">{x.text}</span>
-                <span className="block text-[11px] text-mute">{x.label} · {x.ago}</span>
+                <span className="block truncate text-[13px] leading-5 text-ink">{x.text}</span>
+                <span className="block truncate text-xs leading-4 text-mute">{x.label} · {x.ago}</span>
               </span>
             </Link>
           </li>
@@ -250,7 +255,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
         )
       )}
       {!interview && modes}
-      <div className={`rounded-2xl border border-line-strong bg-panel p-3 focus-within:border-accent-text ${questions ? "hidden" : ""}`}>
+      <div className={`rounded-xl border border-line bg-panel p-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition focus-within:border-line-strong ${questions ? "hidden" : ""}`}>
         <textarea data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
           onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
           className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-mute" />
@@ -309,34 +314,35 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   );
 }
 
-/** D-600: the start is a conversation with Harnova — the numbers that matter, then its first message with buttons */
+/** D-600, D-602: the start is a conversation with Harnova — one quiet line of numbers, then its first message with buttons */
 function HomeIntro({ home, onMeet, busy }: { home: HomeBrief; onMeet: (repo: string) => void; busy: boolean }) {
   const t = useT();
   const stat = (n: number, label: string, tone: string) => (
-    <div className="rounded-[10px] border border-line bg-panel px-4 py-3">
-      <p className={`font-mono text-2xl ${tone}`}>{n}</p>
-      <p className="text-xs text-mute">{label}</p>
-    </div>
+    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+      <span className={`text-sm font-semibold tabular-nums ${n > 0 ? tone : "text-ink"}`}>{n}</span>
+      <span className="text-sm text-mute">{label}</span>
+    </span>
   );
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {stat(home.stats.waiting, t("home.stat.waiting"), home.stats.waiting > 0 ? "text-warn" : "text-ink")}
-        {stat(home.stats.running, t("home.stat.running"), home.stats.running > 0 ? "text-info" : "text-ink")}
+    <div className="flex flex-col gap-6">
+      <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+        {stat(home.stats.waiting, t("home.stat.waiting"), "text-warn")}
+        <span aria-hidden="true" className="text-line-strong">·</span>
+        {stat(home.stats.running, t("home.stat.running"), "text-info")}
+        <span aria-hidden="true" className="text-line-strong">·</span>
         {stat(home.stats.projects, t("home.stat.projects"), "text-ink")}
-        {stat(home.stats.noBrief, t("home.stat.noBrief"), home.stats.noBrief > 0 ? "text-warn" : "text-ok")}
-      </div>
-      <div className="flex gap-3 rounded-[14px] border border-line bg-panel p-4">
-        <span aria-hidden="true" className="logo-mark mt-0.5 inline-block size-6 shrink-0" />
+        {home.stats.noBrief > 0 && <><span aria-hidden="true" className="text-line-strong">·</span>{stat(home.stats.noBrief, t("home.stat.noBrief"), "text-warn")}</>}
+      </p>
+      <div className="flex gap-3">
+        <span aria-hidden="true" className="logo-mark mt-0.5 inline-block size-5 shrink-0" />
         <div className="min-w-0 flex-1 space-y-3">
-          <p className="text-[11px] font-medium text-mute">{t("home.harnova")}</p>
-          <p className="text-[15px] leading-relaxed">{t(home.say.key, home.say.params)}</p>
+          <p className="text-[15px] leading-relaxed text-ink">{t(home.say.key, home.say.params)}</p>
           {home.actions.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {home.actions.map((a, i) => a.kind === "interview" ? (
-                <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={i === 0 ? btn.primary : btn.secondary}>{t(a.label.key, a.label.params)}</button>
+                <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${i === 0 ? btn.primary : btn.secondary} py-1.5`}>{t(a.label.key, a.label.params)}</button>
               ) : (
-                <Link key={a.href} href={a.href} className={i === 0 ? btn.primary : btn.secondary}>{t(a.label.key, a.label.params)}</Link>
+                <Link key={a.href} href={a.href} className={`${i === 0 ? btn.primary : btn.secondary} py-1.5`}>{t(a.label.key, a.label.params)}</Link>
               ))}
             </div>
           )}

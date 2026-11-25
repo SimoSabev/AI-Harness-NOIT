@@ -19,7 +19,7 @@ export function NovaRibbon({ state, t, open, onToggle, live, onStar }: { state: 
     <div className="flex flex-col items-end gap-2">
       {open && (state.steps.length > 0 || state.lines.length > 0) && (
         <section aria-label={t("nova.timeline")} className="w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[14px] border border-line-strong bg-panel shadow-[0_12px_32px_rgb(0_0_0/0.35)]">
-          <p className="border-b border-line px-3.5 py-2.5 font-mono text-[10.5px] uppercase tracking-[0.08em] text-mute">{t("nova.timeline")}</p>
+          <p className="text-xs font-medium border-b border-line px-3.5 py-2.5 text-mute">{t("nova.timeline")}</p>
           {state.steps.length > 0 && (
             <ol className="space-y-1.5 border-b border-line px-3.5 py-2.5 text-[13px]">
               {state.steps.map((s, i) => (
@@ -45,7 +45,7 @@ export function NovaRibbon({ state, t, open, onToggle, live, onStar }: { state: 
           <NovaStar phase={state.phase} />
         </button>
         <button type="button" onClick={live || state.steps.length > 0 ? onToggle : onStar} aria-expanded={open} className="flex min-w-0 flex-col items-start text-left">
-          <span className={`font-mono text-[10px] uppercase leading-tight tracking-[0.08em] ${state.phase === "error" ? "text-bad" : "text-accent-text"}`}>{t(`nova.kind.${state.phase}`)}</span>
+          <span className={`text-xs font-medium ${state.phase === "error" ? "text-bad" : "text-accent-text"}`}>{t(`nova.kind.${state.phase}`)}</span>
           <span className="max-w-[18rem] truncate text-[13.5px] leading-snug text-ink" aria-live="polite">{line}</span>
         </button>
       </div>

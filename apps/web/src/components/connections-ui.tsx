@@ -210,7 +210,7 @@ export function ConnectWizard({ connections, detect, agents, accountName, startA
           <p className="mt-1 text-sm text-mute">{t("welcome.pick.hint")}</p>
           {GROUPS.map((g) => (
             <div key={g.title} className="mt-6">
-              <h3 className="mb-2 font-display text-xs font-medium uppercase tracking-[0.12em] text-mute">{t(g.title)}</h3>
+              <h3 className="text-xs font-medium mb-2 text-mute">{t(g.title)}</h3>
               <div className="grid gap-3 sm:grid-cols-2">
                 {g.ids.map((id) => <ProviderCard key={id} id={id} on={picked.has(id)} onToggle={() => toggle(id)} detected={found(id)} saved={savedIds.has(id)} />)}
               </div>

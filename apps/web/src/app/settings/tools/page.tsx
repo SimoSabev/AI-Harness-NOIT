@@ -45,7 +45,7 @@ export default async function SettingsToolsPage() {
         <Panel title={tr("tools.mcp")} aside={tr("tools.mcpAside")} className="overflow-x-auto">
           {d.mcp.length === 0 ? <p className="p-4 text-sm text-mute">{tr("tools.noMcp")}</p> : (
             <table className="w-full min-w-[760px] text-sm">
-              <thead><tr className="text-left font-display text-[11px] uppercase tracking-[0.1em] text-mute"><th scope="col" className="px-4 py-2">{tr("tools.col.server")}</th><th scope="col">{tr("tools.col.transport")}</th><th scope="col">{tr("tools.col.tools")}</th><th scope="col" className="w-40">{tr("tools.col.calls")}</th><th scope="col">{tr("tools.col.projects")}</th><th scope="col" className="px-4">{tr("tools.col.egress")}</th></tr></thead>
+              <thead><tr className="text-xs font-medium text-left text-mute"><th scope="col" className="px-4 py-2">{tr("tools.col.server")}</th><th scope="col">{tr("tools.col.transport")}</th><th scope="col">{tr("tools.col.tools")}</th><th scope="col" className="w-40">{tr("tools.col.calls")}</th><th scope="col">{tr("tools.col.projects")}</th><th scope="col" className="px-4">{tr("tools.col.egress")}</th></tr></thead>
               <tbody>
                 {d.mcp.map((m) => (
                   <tr key={m.name} className="border-t border-line">

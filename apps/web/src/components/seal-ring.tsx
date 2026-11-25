@@ -23,7 +23,7 @@ export function SealRing({ view, t }: { view: SealView; t: T }) {
       ))}
       <span aria-hidden="true" className={`absolute inset-[30px] flex flex-col items-center justify-center rounded-full border bg-panel ${c.tone}`}>
         {c.mark ? <span className="text-3xl font-semibold leading-none">{c.mark}</span> : <span className="font-mono text-xl">{view.done}/{view.of}</span>}
-        <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em]">{t(`seal.${view.center}`)}</span>
+        <span className="text-xs font-medium mt-1">{t(`seal.${view.center}`)}</span>
       </span>
     </div>
   );

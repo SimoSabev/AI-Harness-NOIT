@@ -43,7 +43,7 @@ export function TaskPath({ stops, t, compact = false }: { stops: Stop[]; t: T; c
             <span aria-hidden="true">{MARK[s.state]}</span>
           </span>
           <span className="text-[13px] font-medium leading-tight">{t(s.label)}</span>
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.06em] text-faint">
+          <span className="text-xs font-medium text-faint">
             <span className="sr-only">{t(`path.state.${s.state}`)} · </span>
             {fact(s, t) ?? (s.state === "you" ? t("path.state.you") : "")}
           </span>

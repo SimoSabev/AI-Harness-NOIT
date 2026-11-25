@@ -13,7 +13,7 @@ export const btn = {
 
 export const card = "rounded-[10px] border border-line bg-panel";
 export const input = "block w-full rounded-md border border-line-strong bg-canvas px-3 py-2 text-sm text-ink placeholder:text-faint focus:border-accent focus:ring-0";
-export const label = "font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-mute";
+export const label = "text-xs font-medium text-mute";
 export const muted = "text-mute";
 
 export const TONE: Record<Tone, { pill: string; mark: string; text: string }> = {
@@ -40,7 +40,7 @@ export function Hex({ className = "size-2.5", tone }: { className?: string; tone
 export function StatusBadge({ tone, label }: { tone: Tone; label: string }) {
   const t = TONE[tone];
   return (
-    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] ${t.pill}`}>
+    <span className={`text-xs font-medium inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-0.5 ${t.pill}`}>
       <span aria-hidden="true" className={`${SIGNAL[tone].shape} inline-block size-2.5 ${t.mark}`} />
       {label}
     </span>

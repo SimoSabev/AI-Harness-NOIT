@@ -1,20 +1,16 @@
 /* AC-12.4 / D-305 / E9g B (D-377) / D-599: THE design tokens — fonts, colours of both themes, the logo. One file; the web
-   (globals.css) and the download site (apps/site/src/app/site.css) import it after `@import "tailwindcss"`. Both serve
-   /fonts/. The values are the Harnova brand kit (Claude Design, 24.11.2026): the accent (Harnova green by default) is
+   (globals.css) and the download site (apps/site/src/app/site.css) import it after `@import "tailwindcss"`. The
+   fonts are the system's own (D-602). The values are the Harnova brand kit (Claude Design, 24.11.2026): the accent (Harnova green by default) is
    the person's move, amber (warn) waits on a person, cobalt (info) is the agents working, cyan (ok) is proven, coral
    (bad) is failed. The tailwind names stay (canvas, panel, ok, warn…) so every screen follows without a rename. */
 
-/* Self-hosted (no request to Google at runtime). SIL OFL 1.1, see public/fonts/OFL-*.txt. */
-@font-face { font-family: "Geologica"; font-style: normal; font-weight: 300 600; font-display: swap; src: url("/fonts/geologica-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: "Geologica"; font-style: normal; font-weight: 300 600; font-display: swap; src: url("/fonts/geologica-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
-@font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 400 500; font-display: swap; src: url("/fonts/martian-mono-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
-@font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 400 500; font-display: swap; src: url("/fonts/martian-mono-cyrillic.woff2") format("woff2"); unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116; }
+/* D-602: the system's own fonts (SF Pro on macOS, Segoe UI on Windows): native, nothing to load. */
 
 @theme inline {
-  --font-sans: "Geologica", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Geologica", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "Martian Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  /* D-599: `tracking-wide` was for the old display face; Geologica needs none */
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Roboto, Arial, sans-serif;
+  --font-display: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  /* D-599: `tracking-wide` was for the old display face; the system face needs none */
   --tracking-wide: 0em;
 
   --color-canvas: var(--canvas);

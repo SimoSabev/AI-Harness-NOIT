@@ -90,11 +90,16 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   }
   return (
     <Shell current="tasks" waiting={c.waiting} full>
-      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="min-h-0 lg:border-r lg:border-line lg:pr-4">
+      {/* D-602: the conversations are a column from tablet width up; on a phone they fold above the work */}
+      <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(200px,248px)_minmax(0,1fr)] md:gap-6">
+        <details className="rounded-[10px] border border-line bg-panel px-3 py-2 md:hidden">
+          <summary className="cursor-pointer text-sm font-medium">{t("ws.tasks")} · {tasks.length}</summary>
+          <div className="mt-2 max-h-[50vh] overflow-y-auto"><TaskList tasks={tasks} selected={initial ? selected : chatId} /></div>
+        </details>
+        <div className="hidden min-h-0 md:block md:border-r md:border-line md:pr-3">
           <TaskList tasks={tasks} selected={initial ? selected : chatId} />
         </div>
-        <div className="flex min-h-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           {initial && d && sess ? (
             <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)}
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}

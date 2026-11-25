@@ -26,7 +26,7 @@ export function InterviewStep({ questions, t, busy, onSend }: { questions: Quest
   return (
     <section aria-label={t("interview.question", { n: i + 1, of: questions.length })} className="flex flex-col gap-5 rounded-[14px] border border-line-strong bg-canvas p-5 lg:p-6">
       <div className="flex items-center gap-3">
-        <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-mute">{t("interview.question", { n: i + 1, of: questions.length })}</span>
+        <span className="text-xs font-medium text-mute">{t("interview.question", { n: i + 1, of: questions.length })}</span>
         <span aria-hidden="true" className="flex flex-1 gap-1">
           {questions.map((_, k) => <span key={k} className={`h-1.5 flex-1 rounded-full ${k < i ? "bg-accent" : k === i ? "bg-accent-text" : "bg-line-strong"}`} />)}
         </span>
