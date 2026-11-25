@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withApi, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
+import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, JOB_TEXT_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withApi, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
 import { axesKey, criterionModules, orderSharedModules, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, scopedApi, sealable, sealFor, sharedModuleProblems, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
 import type { JobMode, SiteRow } from "@mandat/core";
@@ -157,7 +157,7 @@ export async function advanceJob(d: JobDeps, j: JobRow): Promise<"started" | "wa
     const id = taskIdOf(j.id, next.relands > 0 ? `${next.ord}r${next.relands}` : String(next.ord));
     // D-566: the public API the approved oracle fixed, as a requirement (never a test)
     // D-595: only the API its scope's tests call (its criteria and the landed units'), so it builds its unit, not the job
-    const text = withApi(withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files), scopedApi(api, hidden, unitScope(next, units)));
+    const text = withApi(withFiles(unitTaskText(spec, { id: next.unit_id, title: next.title, criteria: next.criteria }, doneBefore(units, next.ord)), next.files), scopedApi(api, hidden, unitScope(next, units)), JOB_TEXT_MAX);
     await insertTask(d.db, j, { id, text: next.pilot ? text : withPlaybook(text, j.playbook), unit: next.unit_id, role: "unit" });
     await d.db.query("update public.job_units set status = 'running', task_id = $3, tries = '[]'::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, next.unit_id, id]);
   }

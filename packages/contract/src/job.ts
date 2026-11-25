@@ -10,8 +10,9 @@ import { apiBlock } from "./oracle.js";
 // Mandat's mirror; every unit and the whole job are verified against the approved oracle; the job ends in a seal that
 // one person approves before the branch goes into main.
 
-/** the text of a task row is ≤ 4000 characters (tasks.text) */
-export const JOB_TEXT_MAX = 4000;
+/** the text of a job's task row (a unit, the final check, the M4 single arm) is ≤ 16000 characters (tasks.text). D-604
+ *  (live test 25.11, run 8): at 4000 the oracle's API took ¾ and cut its last items and the spec to ~1000 characters. */
+export const JOB_TEXT_MAX = 16000;
 /** the planner gets its problems back this many times before the job parks */
 export const PLAN_ROUNDS = 3;
 /** after the last unit: this many rounds of new units for criteria still red, then the job parks */

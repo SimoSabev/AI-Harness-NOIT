@@ -58,7 +58,7 @@ export function briefText(b: Brief): string {
 }
 
 /** the spec as the text of today's task (what "Start work" hands to createTask; the task text is ≤ 4000 chars) */
-export function specText(s: Spec): string {
+export function specText(s: Spec, max: number = CHAT_TEXT_MAX): string {
   const list = (xs: string[]) => (xs.length > 0 ? xs.join("; ") : "-");
   const head = [
     `Goal: ${s.goal}`,
@@ -68,9 +68,10 @@ export function specText(s: Spec): string {
     `Unchanged: ${list(s.unchanged)}`,
     `Out of scope: ${list(s.out_of_scope)}`,
   ].join("\n");
-  const room = CHAT_TEXT_MAX - head.length - 2;
+  // D-604: a job's task may take more than a person's (JOB_TEXT_MAX)
+  const room = max - head.length - 2;
   const product = s.product.trim();
-  return (product !== "" && room > 20 ? `${head}\n\n${product.slice(0, room)}` : head).slice(0, CHAT_TEXT_MAX);
+  return (product !== "" && room > 20 ? `${head}\n\n${product.slice(0, room)}` : head).slice(0, max);
 }
 
 /** a path inside the selected project, as the model writes it; the server normalizes and confines it (repo-tools) */

@@ -62,7 +62,7 @@ export const Contract = z
     task_id: TaskId,
     type: TaskType,
     agent: z.enum(["claude", "codex"]),
-    text: z.string().min(1).max(4000),
+    text: z.string().min(1).max(16000), // D-604: a job task carries the whole spec and the oracle's API
     base_commit: GitSha,
     config_hash: Sha256,
     scan_facts_hash: z.null(),

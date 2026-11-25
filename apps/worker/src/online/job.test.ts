@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ADVISOR_SYSTEM, OracleManifest, PLAYBOOK_SYSTEM, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
+import { ADVISOR_SYSTEM, JOB_TEXT_MAX, OracleManifest, PLAYBOOK_SYSTEM, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
 import { fakeGitHub } from "@mandat/gate-github";
 import type { ModelClient } from "@mandat/research";
@@ -714,5 +714,17 @@ describe("writers get the public API the oracle fixed (D-566)", () => {
     expect(sealed.seal).toMatchObject({ verdict: "UNKNOWN", unchecked: expect.arrayContaining(["D11.mutation: a mutant survived at src/cards.ts:3 (0 → 1); a person decides"]) });
     const parked = await run(["D11:survived:src/cards.ts:3", "D12:console_error:/"]);
     expect(parked.status).toBe("parked");
+  });
+  it("D-604: the single arm gets the whole API and spec of a big oracle; a unit gets its scope's API whole (no item dropped)", async () => {
+    // run 8: 10 API items of ~320 chars each (3164 in all) and a long spec; the 4000-char text dropped payWithGiftCard
+    const api = Array.from({ length: 10 }, (_, i) => `\`packages/shop/src/promo.ts\`: \`fn${i}(store, order, code, token, gateway): Result\` — ${"does a precise thing the hidden tests check, ".repeat(6)}`);
+    const s = await setup({ plans: [GOOD_PLAN], api, outcome: () => ({ result: "VERIFIED" }) });
+    expect((await startSingleArm(s.db, { job: "j_t1" })).ok).toBe(true);
+    const text = (await s.db.query<{ text: string }>("select text from public.tasks where id = 't_cmp_t1'")).rows[0]?.text ?? "";
+    for (let i = 0; i < 10; i++) expect(text).toContain(`fn${i}(store, order`);
+    expect(text).not.toContain("did not fit");
+    expect(text).toContain("AC-2: WHEN a coupon is given");
+    expect(text.length).toBeLessThanOrEqual(JOB_TEXT_MAX);
+    expect(JOB_TEXT_MAX).toBeGreaterThanOrEqual(16000);
   });
 });
