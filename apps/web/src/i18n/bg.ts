@@ -207,7 +207,7 @@ export const bg: Record<Key, string> = {
 
   "verdict.verified": "ПРОВЕРЕНО",
   "verdict.failed": "ПРОВАЛ",
-  "verdict.unknown": "НЕПРОВЕРЕНО",
+  "verdict.unknown": "НЕЯСНО",
   "verdict.working": "РАБОТИ",
   "tests.none": "тестове: няма данни",
   "action.approve": "Одобри",
