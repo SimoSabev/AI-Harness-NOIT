@@ -223,7 +223,7 @@ describe("the spec in the web (D-533)", () => {
     expect(text).toContain("src/giftcards/checkout.ts:16 0 → 1");
     expect(text).toContain("AC-1");
   });
-  it("D-603: a job that parked before any unit was planned may start again with the same approved oracle; one that ran may not", async () => {
+  it("D-603/D-609: a parked job (before its plan, or after its units stopped) may start again with the same approved oracle; a running one may not", async () => {
     const id = await proposed(known);
     const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
     await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
@@ -237,11 +237,17 @@ describe("the spec in the web (D-533)", () => {
     const old = (await asService(db, (sql) => sql.query<{ question: string }>("select question from public.jobs where id = $1", [first]))).rows[0];
     expect(old?.question).toMatch(/^plan_superseded/);
     const second = String(again.body.job);
+    // D-609: a job whose units ran and then parked (run 8: a limit) starts again too, with the same approved oracle
+    expect((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "work_started" });
     await asService(db, async (sql) => {
       await sql.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria) values ($1, 'u1', $2::uuid, 0, 'x', '[\"AC-1\"]'::jsonb)", [second, DEMO_ORG_ID]);
       await sql.query("update public.jobs set status = 'parked' where id = $1", [second]);
     });
-    expect((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "work_started" });
+    const third = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    expect(third.status).toBe(201);
+    const jobs = (await asService(db, (sql) => sql.query<{ id: string; oracle_hash: string; question: string | null }>("select id, oracle_hash, question from public.jobs where conversation_id = $1 order by created_at", [id]))).rows;
+    expect(new Set(jobs.map((j) => j.oracle_hash)).size).toBe(1);
+    expect(jobs.find((j) => j.id === second)?.question).toMatch(/^restarted/);
   });
   it("D-593: a person's note on Build oracle again reaches the oracle agent; a bad body is refused", async () => {
     const id = await proposed(known);
