@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlanUnit } from "@mandat/contract";
-import { criterionModules, scopedApi, sharedModuleProblems } from "./plan-modules.js";
+import { criterionModules, orderSharedModules, scopedApi, sharedModuleProblems } from "./plan-modules.js";
 
 // D-594 / D-595 (live test 24.11.2026, runs 5 and 6 of M4 on the bakery): one hidden test of AC-11 checked both new stores
 // (points and gift cards) while the plan gave them to two units that ran side by side, so neither could pass; and a unit's
@@ -109,5 +109,32 @@ describe("a unit's API is its scope's (D-595)", () => {
   it("no hidden files or no scope: the whole API, as before", () => {
     expect(scopedApi(api, [], ["AC-1"])).toEqual(api);
     expect(scopedApi(api, [HIDDEN], [])).toEqual(api);
+  });
+});
+
+describe("a plan whose only problem is a shared new module is ordered, not refused (D-603, live test 25.11, run 8)", () => {
+  // oracle v4: AC-1's test counts the gift card part, so points and gift cards meet in more criteria than the planner untangled
+  const mods = new Map<string, string[]>([
+    ["AC-1", ["src/giftcards/cards", "src/giftcards/checkout", "src/loyalty/points"]],
+    ["AC-2", ["src/loyalty/points"]],
+    ["AC-3", ["src/loyalty/checkout", "src/loyalty/points"]],
+    ["AC-6", ["src/giftcards/cards"]],
+    ["AC-7", ["src/giftcards/cards", "src/giftcards/checkout"]],
+    ["AC-11", ["src/giftcards/cards", "src/loyalty/points"]],
+  ]);
+  const plan = [unit("u1", ["AC-1", "AC-2"]), unit("u2", ["AC-3"], ["u1"]), unit("u3", ["AC-6", "AC-11"]), unit("u4", ["AC-7"])];
+  it("each later unit of a clashing pair waits for the earlier one; then nothing is shared and the planner's units stay", () => {
+    expect(sharedModuleProblems(plan, mods).length).toBeGreaterThan(0);
+    const ordered = orderSharedModules(plan, mods);
+    expect(sharedModuleProblems(ordered, mods)).toEqual([]);
+    expect(ordered.map((u) => [u.id, u.criteria])).toEqual(plan.map((u) => [u.id, u.criteria]));
+    expect(ordered.find((u) => u.id === "u3")?.depends_on).toContain("u1");
+    expect(ordered.find((u) => u.id === "u4")?.depends_on).toEqual(expect.arrayContaining(["u1"]));
+    // only earlier units are waited for, so the plan stays acyclic and valid
+    ordered.forEach((u, n) => u.depends_on.forEach((d) => expect(ordered.findIndex((x) => x.id === d)).toBeLessThan(n)));
+  });
+  it("a plan without shared modules comes back unchanged", () => {
+    const fine = [unit("u1", ["AC-2"]), unit("u2", ["AC-6"])];
+    expect(orderSharedModules(fine, mods)).toEqual(fine);
   });
 });

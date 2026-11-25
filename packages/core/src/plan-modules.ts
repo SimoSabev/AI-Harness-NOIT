@@ -107,6 +107,28 @@ export function sharedModuleProblems(units: readonly PlanUnit[], modules: Readon
   return out.slice(0, 50);
 }
 
+/**
+ * D-603 (live test 25.11, run 8): a plan whose only problem is a shared new module is put in order instead of refused —
+ * the later unit of each clashing pair waits for the earlier one (so the plan stays acyclic) until nothing is shared.
+ * The planner's units and criteria stay; only waits are added. Unchanged when nothing is shared.
+ */
+export function orderSharedModules(units: readonly PlanUnit[], modules: ReadonlyMap<string, readonly string[]>, exists: (module: string) => boolean = () => false): PlanUnit[] {
+  let out = units.map((u) => ({ ...u, depends_on: [...u.depends_on] }));
+  const index = new Map(out.map((u, n) => [u.id, n]));
+  for (let round = 0; round < out.length * out.length; round++) {
+    const problems = sharedModuleProblems(out, modules, exists);
+    if (problems.length === 0) return out.some((u, n) => u.depends_on.length !== units[n]?.depends_on.length) ? out : [...units];
+    const pair = /^([^+]+)\+([^:]+):/.exec(problems[0]?.id ?? "");
+    const a = index.get(pair?.[1] ?? "");
+    const b = index.get(pair?.[2] ?? "");
+    if (a === undefined || b === undefined) return out;
+    const [early, late] = a < b ? [a, b] : [b, a];
+    const earlyId = out[early]?.id as string;
+    out = out.map((u, n) => (n === late && !u.depends_on.includes(earlyId) ? { ...u, depends_on: [...u.depends_on, earlyId] } : u));
+  }
+  return out;
+}
+
 /** the name an API.md line gives: the identifier at the start of its second `…` (the last part of a dotted one) */
 function apiName(line: string): string | null {
   const ticks = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? "");

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { CONVERGE_ROUNDS, JOB_PARALLEL_MAX, PLAN_ROUNDS, PlanProposal, Spec, TaskAxes, hashJcs, jobBranch, plannerSystem, plannerUser, unitTaskText, withApi, withFiles, withPlaybook, SITES_MAX } from "@mandat/contract";
 import type { PlanProblem, PlanUnit, Sha256, VerdictResult } from "@mandat/contract";
-import { axesKey, criterionModules, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, scopedApi, sealable, sealFor, sharedModuleProblems, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
+import { axesKey, criterionModules, orderSharedModules, deriveProfile, failingCriteria, savedProfileName, jobMode, pilotSize, pilotUnits, scopedApi, sealable, sealFor, sharedModuleProblems, siteTable, unitWaves, unitsToStart, validatePlan, validateSites } from "@mandat/core";
 import type { JobMode, SiteRow } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { ChatModelChoice, ChatRoute } from "./conversation-host.js";
@@ -69,6 +69,7 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
   const shared = mode === "waves" ? await sharedModuleCheck(d.db, j) : null;
   let problems: PlanProblem[] = [];
   let units: PlanUnit[] | null = null;
+  let ordered = 0;
   let sites: SiteRow[] | null = null;
   let rounds = 0;
   for (; rounds < PLAN_ROUNDS && !units; rounds++) {
@@ -85,7 +86,13 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
       continue;
     }
     problems = validatePlan(spec, proposal.data.units);
-    if (problems.length === 0 && shared) problems = shared(proposal.data.units);
+    // D-603: units that share a new module are put in order (the later waits), not sent back to the planner
+    let proposed = proposal.data.units;
+    if (problems.length === 0 && shared) {
+      proposed = shared.order(proposed);
+      ordered = proposed.reduce((n, u, k) => n + u.depends_on.length - (proposal.data.units[k]?.depends_on.length ?? 0), 0);
+      problems = shared.check(proposed);
+    }
     if (problems.length === 0 && migration) {
       const p = proposal.data;
       const found = p.sites ? await findSites({ mirror: mirrorOf(j), match: p.sites.match, max: SITES_MAX }) : null;
@@ -97,7 +104,7 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
         sites = siteTable(found, p.units, p.skip ?? []);
       }
     }
-    if (problems.length === 0) units = proposal.data.units;
+    if (problems.length === 0) units = proposed;
   }
   if (!units) {
     await inTransaction(d.db, (tx) => tx.query("update public.jobs set plan_rounds = $2, problems = $3::jsonb where id = $1", [j.id, rounds, JSON.stringify(problems.slice(0, 100))]));
@@ -116,7 +123,7 @@ export async function planJob(d: JobDeps, j: JobRow): Promise<"planned" | "parke
     await tx.query("update public.jobs set status = 'running', mode = $6, pilot_state = $7, sites = $8::jsonb, plan_hash = $2, plan_rounds = $3, problems = '[]'::jsonb, base_sha = $4, head_sha = $5, updated_at = now() where id = $1", [j.id, planHash, rounds, branch.base, branch.head, mode, pilot.size > 0 ? "running" : "none", sites ? JSON.stringify(sites) : null]);
     // hashes and counts only: no criterion text, no titles
     const waves = Math.max(0, ...Object.values(unitWaves(plan))) + 1;
-    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves, pilot: pilot.size, sites: sites?.length ?? 0 } });
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "plan_built", task_id: null, payload: { job: j.id, spec_hash: j.spec_hash, oracle_hash: j.oracle_hash, plan_hash: planHash, units: plan.length, rounds, mode, waves, pilot: pilot.size, sites: sites?.length ?? 0, ...(ordered > 0 ? { ordered } : {}) } });
   });
   return "planned";
 }
@@ -177,13 +184,13 @@ export function unitScope(u: Pick<UnitRow, "unit_id" | "criteria">, units: reado
 
 const MODULE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", "/index.ts", "/index.js"];
 /** D-594: the plan check from the hidden tests, or null when the oracle names no new module */
-async function sharedModuleCheck(db: Db, j: JobRow): Promise<((units: readonly PlanUnit[]) => PlanProblem[]) | null> {
+async function sharedModuleCheck(db: Db, j: JobRow): Promise<{ check: (units: readonly PlanUnit[]) => PlanProblem[]; order: (units: readonly PlanUnit[]) => PlanUnit[] } | null> {
   const mods = criterionModules(await hiddenFilesOf(db, j));
   if ([...mods.values()].every((m) => m.length === 0)) return null;
   // a module on main already is not new (an oracle may import existing code inside a test too)
   const facts = await repoFacts(j.remote_url);
   const exists = (m: string) => (facts ? MODULE_EXT.some((e) => facts.files.has(`${m}${e}`)) : false);
-  return (units) => sharedModuleProblems(units, mods, exists);
+  return { check: (units) => sharedModuleProblems(units, mods, exists), order: (units) => orderSharedModules(units, mods, exists) };
 }
 
 /** D-566: the public API lines of the job's approved oracle (its manifest), or none */

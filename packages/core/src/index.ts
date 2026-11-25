@@ -51,4 +51,4 @@ export { axesKey, savedProfileName } from "./saved-profile.js";
 export { compareArms, hiddenCounts } from "./compare.js";
 export type { ArmResult, Comparison } from "./compare.js";
 export { criteriaMet } from "./unit-done.js";
-export { criterionModules, scopedApi, sharedModuleProblems } from "./plan-modules.js";
+export { criterionModules, orderSharedModules, scopedApi, sharedModuleProblems } from "./plan-modules.js";

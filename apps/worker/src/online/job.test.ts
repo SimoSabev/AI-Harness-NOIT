@@ -678,13 +678,14 @@ describe("writers get the public API the oracle fixed (D-566)", () => {
     { path: "packages/shop/test/__hidden__/b.spec.ts", data: Buffer.from(`it("AC-2: coupon after the ten", async () => { const { couponCents } = await import("../../src/promo"); couponCents(); });\n`) },
     { path: "tests/__hidden__/u.spec.ts", data: Buffer.from(`it("U-1: none under fifty", () => {});\n`) },
   ];
-  it("D-594: two units side by side that need one new module go back to the planner; the ordered plan is taken", async () => {
-    const s = await setup({ plans: [PAR_PLAN, GOOD_PLAN], divisible: "yes", files: SHARED, outcome: () => ({ result: "VERIFIED" }) });
+  it("D-594/D-603: two units side by side that need one new module: the harness orders them (the later waits), no new round", async () => {
+    const s = await setup({ plans: [PAR_PLAN], divisible: "yes", files: SHARED, outcome: () => ({ result: "VERIFIED" }) });
     await jobTick(s.jd);
-    expect(s.asked).toHaveLength(2);
-    expect(s.asked[1]).toContain("shared_new_module: u1+u2:packages/shop/src/promo");
-    expect((await s.units()).map((u) => u.unit_id)).toEqual(["u1", "u2"]);
+    expect(s.asked).toHaveLength(1);
+    const units = (await s.db.query<{ unit_id: string; depends_on: string[] }>("select unit_id, depends_on from public.job_units where job_id = 'j_t1' order by ord")).rows;
+    expect(units).toEqual([{ unit_id: "u1", depends_on: [] }, { unit_id: "u2", depends_on: ["u1"] }]);
     expect((await s.db.query<{ status: string }>("select status from public.jobs where id = 'j_t1'")).rows[0]?.status).toBe("running");
+    expect((await s.ledger("plan_built"))[0]).toMatchObject({ ordered: 1 });
   });
   it("D-595: a unit's writer gets only the API its scope's tests call (and names no test calls)", async () => {
     const api = ["`packages/shop/src/promo.ts`: `tenPercent(): number` — 10% over 50", "`packages/shop/src/promo.ts`: `couponCents(): number` — the coupon", "`packages/shop/src/promo.ts`: `helper(): void` — unused"];
