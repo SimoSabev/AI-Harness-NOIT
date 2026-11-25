@@ -31,7 +31,7 @@ export function HomePage({ lang }: { lang: Lang }) {
         {POINTS.map((p) => (
           <li key={p.key} className={`${card} p-6`}>
             <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-[10px] bg-accent-soft text-accent-text">
-              <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d={p.icon} /></svg>
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d={p.icon} /></svg>
             </span>
             <p className="mt-4 text-[15px] leading-relaxed text-ink">{t(p.key)}</p>
           </li>

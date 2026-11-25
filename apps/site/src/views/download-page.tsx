@@ -32,7 +32,7 @@ export function DownloadPage({ lang }: { lang: Lang }) {
           <section key={p} id={platformAnchor(p)} className={`${card} scroll-mt-20 p-6`} aria-labelledby={`h-${p}`}>
             <h2 id={`h-${p}`} className={`flex items-center gap-3 ${h2}`}>
               <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-[10px] bg-raised text-ink">
-                <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={OS_ICON[p]} /></svg>
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d={OS_ICON[p]} /></svg>
               </span>
               {t(`os.${p}`)}
             </h2>
