@@ -5,7 +5,7 @@ import type { Lang, PagePath } from "../i18n/t";
 import { DownloadButton } from "./download-button";
 import { link } from "./ui";
 
-// E9g B (D-377), D-606: header (logo, pages, language, download), main and footer of every page — a sticky, quiet bar
+// E9g B (D-377), D-608: header (logo, pages, language, download), main and footer of every page — a sticky, quiet bar
 // like a product site's; on a phone it wraps under the logo.
 export function Frame({ lang, page, children, wide = false }: { lang: Lang; page: PagePath; children: ReactNode; wide?: boolean }) {
   const t = translator(lang);

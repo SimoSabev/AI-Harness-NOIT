@@ -1,6 +1,6 @@
 import type { T } from "../i18n/t";
 
-// E9g B (D-377), D-606: the path of a task — four stops on one strap, the verdict in the accent, the ledger under all of
+// E9g B (D-377), D-608: the path of a task — four stops on one strap, the verdict in the accent, the ledger under all of
 // them. Drawn with the theme tokens (fill-/stroke- classes), so it follows the dark and the light theme.
 export function FlowDiagram({ t }: { t: T }) {
   const steps = [t("flow.task"), t("flow.sandbox"), t("flow.export"), t("flow.verdict")];

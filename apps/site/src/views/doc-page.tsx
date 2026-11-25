@@ -12,7 +12,7 @@ import { reasonText } from "../lib/reasons";
 import { DOCKER_MIN } from "../lib/requirements";
 
 // E9g B step 7 (D-378): one docs page — the side list of all pages, the page's blocks (lib/docs.ts), and the links to
-// the previous and the next page. The same renderer for English and Bulgarian. D-606: a product's docs — a quiet sticky
+// the previous and the next page. The same renderer for English and Bulgarian. D-608: a product's docs — a quiet sticky
 // side list with the current page marked by the accent diamond, readable text (15–16 px, 1.75), framed code and tables.
 
 const VERDICT_TONE = { VERIFIED: "bg-ok-soft text-ok", UNKNOWN: "bg-warn-soft text-warn", FAILED: "bg-bad-soft text-bad" } as const;

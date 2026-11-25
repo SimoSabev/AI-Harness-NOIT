@@ -10,7 +10,7 @@ import type { Platform } from "../lib/os";
 
 const PLATFORMS: readonly Platform[] = ["mac", "windows", "linux"];
 
-// E9g B (D-377), D-606: "/download" — every installer with its SHA-256 (apps/site/releases.json), what you need, the phone.
+// E9g B (D-377), D-608: "/download" — every installer with its SHA-256 (apps/site/releases.json), what you need, the phone.
 // One card per system with its mark; the checksum under each file, small.
 const OS_ICON: Record<Platform, string> = {
   mac: "M4 6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v9H4zM2 18h20M9 18l.5-1.5h5L15 18",

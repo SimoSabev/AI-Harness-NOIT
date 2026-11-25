@@ -5,7 +5,7 @@ import { btn, card, h2 } from "../components/ui";
 import { pagePath, translator } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 
-// E9g B (D-377), D-606: "/" — the promise large, the way to download, then what Harnova does in three points (the sandbox,
+// E9g B (D-377), D-608: "/" — the promise large, the way to download, then what Harnova does in three points (the sandbox,
 // the verdict, the ledger), and the path of a task.
 const POINTS = [
   { key: "home.s1", icon: "M4 7l8-4 8 4v10l-8 4-8-4zM4 7l8 4 8-4M12 11v10" },

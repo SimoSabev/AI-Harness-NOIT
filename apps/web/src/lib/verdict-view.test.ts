@@ -6,7 +6,8 @@ describe("verdict view (Ф4 карта)", () => {
     expect(verdictView("VERIFIED")).toEqual({ sign: "✔", word: "VERIFIED", tone: "verified" });
     expect(verdictView("VERIFIED", "bg")).toEqual({ sign: "✔", word: "ПРОВЕРЕНО", tone: "verified" });
     expect(verdictView("FAILED", "bg")).toEqual({ sign: "✖", word: "ПРОВАЛ", tone: "failed" });
-    expect(verdictView("UNKNOWN", "bg")).toEqual({ sign: "?", word: "НЕПРОВЕРЕНО", tone: "unknown" });
+    // D-606: UNKNOWN is „НЕЯСНО“ in Bulgarian, as in the brand kit, the pitch and the site
+    expect(verdictView("UNKNOWN", "bg")).toEqual({ sign: "?", word: "НЕЯСНО", tone: "unknown" });
     expect(verdictView(null, "bg")).toEqual({ sign: "…", word: "РАБОТИ", tone: "working" });
     expect(verdictView(null)).toEqual({ sign: "…", word: "WORKING", tone: "working" });
   });

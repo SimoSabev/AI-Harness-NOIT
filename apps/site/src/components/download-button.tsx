@@ -22,7 +22,7 @@ export function DownloadButton({ lang, small = false }: { lang: Lang; small?: bo
     setOs(detectOs({ userAgent: navigator.userAgent, platform: ua?.platform, mobile: ua?.mobile, maxTouchPoints: navigator.maxTouchPoints }));
   }, []);
   const base = pagePath(lang, "/download/");
-  // D-606: the header's button is the compact one
+  // D-608: the header's button is the compact one
   const cls = small ? `${btn.primary} px-3 py-1.5` : `${btn.primary} px-5 py-2.5 text-[15px]`;
   if (os === "unknown") return <a className={cls} href={base}>{t("download.ctaAny")}</a>;
   if (os === "phone") return <a className={cls} href={`${base}#${platformAnchor("phone")}`}>{t("download.ctaPhone")}</a>;

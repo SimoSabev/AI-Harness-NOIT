@@ -153,7 +153,7 @@
   }
 }
 
-/* D-606: under lang="bg" the system face (SF Pro) switches to its Bulgarian letterforms, which many read as handwriting
+/* D-608: under lang="bg" the system face (SF Pro) switches to its Bulgarian letterforms, which many read as handwriting
    on screen; the common Cyrillic forms stay, in Bulgarian and English alike. */
 html {
   font-feature-settings: "locl" 0;

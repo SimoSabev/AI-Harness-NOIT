@@ -1,7 +1,7 @@
 import type { Lang } from "../i18n/t";
 import { SHOT_SIZE, shotSrc } from "../lib/shots";
 
-// E9g B step 7 (D-378), D-606: a real screenshot of the app (scripts/site-shots.mjs) in the visitor's theme — the light
+// E9g B step 7 (D-378), D-608: a real screenshot of the app (scripts/site-shots.mjs) in the visitor's theme — the light
 // image when the system is light, the dark one otherwise — framed like the app's window (a title bar with three dots).
 export function Shot({ name, lang, alt, caption }: { name: string; lang: Lang; alt: string; caption: string }) {
   return (

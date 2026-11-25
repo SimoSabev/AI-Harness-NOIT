@@ -13,7 +13,7 @@ export default function GlobalNotFound() {
   return (
     <SiteHtml lang="en">
       <Frame lang="en" page="/">
-        {/* D-606: the mark, the code large, the way home as a button */}
+        {/* D-608: the mark, the code large, the way home as a button */}
         <div className="flex flex-col items-center py-16 text-center">
           <span aria-hidden="true" className="logo-mark block size-12" />
           <h1 className="mt-6 text-6xl font-semibold tracking-[-0.04em]">404</h1>
