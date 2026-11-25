@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +10,8 @@ import { DOC_SLUGS } from "./lib/docs";
 // every page exists in both languages, every link inside the site resolves, and the pages load nothing from another
 // host (PRD-15: no analytics, no cookies, no external fonts). Links TO GitHub (source, release files) are plain anchors.
 const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** D-605: the first 10 hex of the sha256 of the web app's icon file */
+const version = (f: string) => createHash("sha256").update(readFileSync(path.join(site, "..", "web", "public", f))).digest("hex").slice(0, 10);
 const out = path.join(site, "out");
 const DOC_PAGES = ["docs/index.html", ...DOC_SLUGS.map((s) => `docs/${s}/index.html`)];
 const PAGES: Record<string, "en" | "bg"> = {
@@ -83,7 +86,9 @@ describe("site export (E9g B)", () => {
     for (const page of Object.keys(PAGES)) {
       const html = read(page);
       expect(html, page).toMatch(/<span aria-hidden="true" class="logo-mark /);
-      expect(html, page).toMatch(/<link rel="icon" href="\/logo\.png" type="image\/png"/);
+      // D-605: the favicon's address carries the image's own hash, so a browser never keeps an old logo
+      expect(html, page).toMatch(new RegExp(`<link rel="icon" href="/logo\\.png\\?v=${version("logo.png")}" type="image/png"`));
+      expect(html, page).toMatch(new RegExp(`<link rel="icon" href="/icon-192\\.png\\?v=${version("icon-192.png")}" sizes="192x192"`));
     }
     for (const f of ["logo.png", "icon-192.png"]) expect(existsSync(path.join(out, f)), f).toBe(true);
   });
