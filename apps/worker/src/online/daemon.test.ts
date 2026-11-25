@@ -260,6 +260,18 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
       await runDaemonOnce(b.deps);
       expect((await row(b))?.wait_reason).toBe("agent_failed:rate_limited");
     });
+    it("D-607: a subscription (no channel) that says when its limit resets waits for it as a channel limit, not an empty change", async () => {
+      const resets = new Date(Date.now() + 3 * 3600_000).toISOString();
+      for (const end of [{ ok: false, replied: false, cause: null }, { ok: true, replied: false, cause: null }]) {
+        const s = await setup(0);
+        emptyRun(s, end, { limit: { retry_after_s: null, resets_at: resets, at: new Date().toISOString() } }, end.ok ? 0 : 1);
+        await runDaemonOnce(s.deps);
+        expect(await row(s)).toMatchObject({ state: "HELD", wait_reason: "channel_limit" });
+        const lim = (await readLedgerOnline(s.db, DEMO_ORG_ID)).filter((r) => r.kind === "channel_limit").map((r) => JSON.parse(r.payload_jcs ?? "{}") as { resets_at: string | null });
+        expect(lim.at(-1)?.resets_at).toBe(resets);
+        await nothingDelivered(s);
+      }
+    });
     it("an agent that replied and then crashed is still a failure, its words do not rescue it", async () => {
       const s = await setup(0);
       emptyRun(s, { ok: false, replied: true, cause: "timed_out" }, {}, 1);

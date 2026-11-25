@@ -18,6 +18,11 @@ describe("nextMove: the waits Mandat finishes alone (D-521)", () => {
     expect(m({ wait_reason: "channel_limit", resets_at: at(30) })).toEqual({ move: "wait", until: at(30), why: "channel_limit" });
     expect(m({ wait_reason: "channel_limit", resets_at: at(-1) })).toEqual({ move: "retry", retry_reason: "auto", why: "channel_limit" });
   });
+  it("D-607: a limit is not a failed attempt — it is waited out and retried even at the last attempt or after the auto retries", () => {
+    expect(m({ wait_reason: "channel_limit", resets_at: at(30), attempt: 5, attempts_max: 5 })).toEqual({ move: "wait", until: at(30), why: "channel_limit" });
+    expect(m({ wait_reason: "channel_limit", resets_at: at(-1), attempt: 5, attempts_max: 5, auto_retries: 9 })).toEqual({ move: "retry", retry_reason: "auto", why: "channel_limit" });
+    expect(m({ wait_reason: "agent_failed:overloaded", attempt: 5, attempts_max: 5 })).toEqual({ move: "ask", why: "attempts" });
+  });
   it("channel_limit without resets_at: the backoff from when it was held", () => {
     expect(m({ wait_reason: "channel_limit", held_since: at(-1) })).toEqual({ move: "wait", until: at(-1 + SELF_FINISH.backoff_min), why: "channel_limit" });
     expect(m({ wait_reason: "channel_limit", held_since: at(-SELF_FINISH.backoff_min) })).toMatchObject({ move: "retry" });
