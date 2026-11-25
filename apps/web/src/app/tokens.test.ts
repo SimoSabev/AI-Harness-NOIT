@@ -36,6 +36,8 @@ describe("one token file (AC-12.4, E9g B)", () => {
     expect(css).toMatch(/--font-sans:\s*ui-sans-serif,\s*-apple-system,\s*BlinkMacSystemFont,\s*"Segoe UI"/);
     expect(css).toMatch(/--font-display:\s*ui-sans-serif/);
     expect(css).toMatch(/--font-mono:\s*ui-monospace,\s*"SF Mono"/);
+    // D-606: under lang="bg" SF Pro switches to its Bulgarian letterforms; the common ones read better on screen
+    expect(css).toMatch(/html\s*\{[^}]*font-feature-settings:\s*"locl" 0/);
   });
   it("the logo is one class of the token file: the straps in ink, the star in the accent the person picked (D-599)", () => {
     const css = readFileSync(path.join(here, "tokens.css"), "utf8");
