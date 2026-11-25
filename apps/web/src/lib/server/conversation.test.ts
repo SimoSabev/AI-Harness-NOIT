@@ -210,6 +210,26 @@ describe("the spec in the web (D-533)", () => {
     expect(text).toContain("src/giftcards/checkout.ts:16 0 → 1");
     expect(text).toContain("AC-1");
   });
+  it("D-603: a job that parked before any unit was planned may start again with the same approved oracle; one that ran may not", async () => {
+    const id = await proposed(known);
+    const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;
+    await approveSpec(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { spec_hash: hash } });
+    await approvedOracle(id, hash);
+    const first = String((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body.job);
+    expect((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "work_started" });
+    await asService(db, (sql) => sql.query("update public.jobs set status = 'parked', question = 'The planner did not make a valid plan in 3 round(s).' where id = $1", [first]));
+    const again = await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id });
+    expect(again.status).toBe(201);
+    expect(again.body.job).not.toBe(first);
+    const old = (await asService(db, (sql) => sql.query<{ question: string }>("select question from public.jobs where id = $1", [first]))).rows[0];
+    expect(old?.question).toMatch(/^plan_superseded/);
+    const second = String(again.body.job);
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.job_units (job_id, unit_id, org_id, ord, title, criteria) values ($1, 'u1', $2::uuid, 0, 'x', '[\"AC-1\"]'::jsonb)", [second, DEMO_ORG_ID]);
+      await sql.query("update public.jobs set status = 'parked' where id = $1", [second]);
+    });
+    expect((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body).toEqual({ error: "work_started" });
+  });
   it("D-593: a person's note on Build oracle again reaches the oracle agent; a bad body is refused", async () => {
     const id = await proposed(known);
     const hash = (await conversationFeed(db, U.viewer, DEMO_ORG_ID, id, -1))!.conversation.spec_hash!;

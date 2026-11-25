@@ -139,6 +139,12 @@ async function parkedJobOf(db: Db, id: string): Promise<string | null> {
   return j?.status === "parked" ? j.id : null;
 }
 
+/** D-603: the conversation's latest job when it parked before any unit was planned */
+async function unplannedParkedJobOf(db: Db, id: string): Promise<string | null> {
+  const j = (await asService(db, (sql) => sql.query<{ id: string; status: string; units: number }>("select j.id, j.status, (select count(*)::int from public.job_units u where u.job_id = j.id) as units from public.jobs j where j.conversation_id = $1 order by j.created_at desc, j.id desc limit 1", [id]))).rows[0];
+  return j?.status === "parked" && j.units === 0 ? j.id : null;
+}
+
 /** D-571: the problems of the latest not-ready oracle of this spec (a failed attempt after it does not hide them) */
 /** D-592: the mutants that survived the final check of a parked job (its last D11.mutation evidence) */
 async function survivedOfJob(db: Db, job: string): Promise<SurvivedMutant[]> {
@@ -233,7 +239,10 @@ export async function startWork(db: Db, o: { uid: string; org: string; id: strin
   const c0 = await approvedOf(db, o.id, o.org);
   if (!c0) return err(404, "unknown_conversation");
   const c = c0.row;
-  if (c.phase !== "conversation") return err(409, "work_started");
+  // D-603: a job that parked before its plan was built (no unit ever ran) may start again with the same approved oracle
+  const unplanned = c.phase === "conversation" ? null : await unplannedParkedJobOf(db, o.id);
+  if (c.phase !== "conversation" && !unplanned) return err(409, "work_started");
+  if (unplanned) await asService(db, (sql) => sql.query("update public.jobs set question = 'plan_superseded: a person started the work again (D-603)', updated_at = now() where id = $1 and status = 'parked'", [unplanned]));
   // D-533: an approved spec (its hash checked again) is the task; without one the brief and the person's words (D-531)
   const spec = c0.spec;
   // D-534: a spec whose plan has hidden tests needs an approved oracle; its hash goes into the task next to spec_hash
