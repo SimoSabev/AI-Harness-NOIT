@@ -30,10 +30,10 @@ interface BoxProps {
 function Box({ x, y, w, h, title, note, tone = "plain", dashed = false }: BoxProps) {
   return (
     <g>
-      <rect x={x} y={y} width={w} height={h} rx={12} className={TONE[tone]} strokeWidth={1.5} strokeDasharray={dashed ? "5 5" : undefined} />
+      <rect x={x} y={y} width={w} height={h} rx={10} className={TONE[tone]} strokeWidth={1.5} strokeDasharray={dashed ? "5 5" : undefined} />
       <foreignObject x={x} y={y} width={w} height={h}>
         <div className="flex h-full flex-col items-center justify-center gap-1 px-2 text-center">
-          <span className="font-display text-[13px] font-medium leading-tight text-ink">{title}</span>
+          <span className="text-[13px] font-medium leading-tight text-ink">{title}</span>
           {note && <span className="text-[11px] leading-snug text-mute">{note}</span>}
         </div>
       </foreignObject>
@@ -68,7 +68,7 @@ function Frame({ id, name, t, view, minW, children }: { id: string; name: Diagra
         </defs>
         {children}
       </svg>
-      <figcaption className="mt-2 px-1 font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{title}</figcaption>
+      <figcaption className="mt-2 px-1 text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{title}</figcaption>
     </figure>
   );
 }
@@ -104,8 +104,8 @@ function FlowDiagram({ t }: { t: T }) {
       {xs.map((x) => (
         <path key={`l${x}`} d={`M${x + w / 2} ${x === x1 ? top + h + 104 : top + h + 4} V270`} className="stroke-line-strong" strokeWidth={1.5} strokeDasharray="2 6" />
       ))}
-      <rect x={6} y={274} width={4 * (w + gap) + w} height={52} rx={12} className="fill-raised stroke-line-strong" strokeWidth={1.5} />
-      <Label x={6} y={274} w={4 * (w + gap) + w} h={52} className="font-display text-[13px] text-ink">{t("dg.flow.ledger")}</Label>
+      <rect x={6} y={274} width={4 * (w + gap) + w} height={52} rx={10} className="fill-raised stroke-line-strong" strokeWidth={1.5} />
+      <Label x={6} y={274} w={4 * (w + gap) + w} h={52} className="text-[13px] text-ink">{t("dg.flow.ledger")}</Label>
     </Frame>
   );
 }
@@ -118,7 +118,7 @@ function PermissionsDiagram({ t }: { t: T }) {
       <rect x={6} y={10} width={300} height={280} rx={14} className="fill-panel stroke-line-strong" strokeWidth={1.5} />
       <foreignObject x={6} y={10} width={300} height={280}>
         <div className="flex h-full flex-col gap-3 p-4 text-left">
-          <span className="font-display text-[13px] font-medium text-ink">{t("dg.perm.folders")}</span>
+          <span className="text-[13px] font-medium text-ink">{t("dg.perm.folders")}</span>
           <div className="rounded-lg border border-accent bg-accent-soft p-2">
             <div className="font-mono text-[11px] text-ink">~/code/shop</div>
             <div className="mt-1.5 flex flex-wrap gap-1">
