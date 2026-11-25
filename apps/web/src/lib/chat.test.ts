@@ -154,3 +154,17 @@ describe("the task box: project and Enter (live run 20.11)", () => {
     expect(sendsOnEnter({ key: "a", shiftKey: false, isComposing: false })).toBe(false);
   });
 });
+
+// D-599: while Harnova answers, the line says what it answers, never only "Thinking…"
+describe("answeringLine (D-599)", () => {
+  it("names the person's last message, cut to one line", async () => {
+    const { answeringLine } = await import("./chat");
+    expect(answeringLine([{ kind: "human", text: "Добави точки при всяко плащане", seq: 1, at: "x" }])).toEqual({ key: "chat.answering", params: { target: "Добави точки при всяко плащане" } });
+    const long = "а".repeat(80);
+    expect(answeringLine([{ kind: "human", text: long, seq: 1, at: "x" }]).params?.target).toHaveLength(43);
+  });
+  it("without a message of the person it says Harnova reads the project", async () => {
+    const { answeringLine } = await import("./chat");
+    expect(answeringLine([])).toEqual({ key: "chat.answeringStart" });
+  });
+});

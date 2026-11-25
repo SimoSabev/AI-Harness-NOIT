@@ -89,3 +89,19 @@ describe("conversation contract (D-531)", () => {
     expect(ChatMessageBody.safeParse({ text: "hi", agent: "claude", extra: true }).success).toBe(false);
   });
 });
+
+// D-600: a question of the interview may come with answers to pick (one or several); the person can always write their own
+describe("questions with choices (D-600)", () => {
+  it("ask_user may carry, per question, 2–8 short options and whether several may be picked", async () => {
+    const { ChatToolCall: Call } = await import("./index.js");
+    const ok = Call.safeParse({ tool: "ask_user", questions: ["Кой ползва магазина?", "Кое е най-опасно да се счупи?"], choices: [{ options: ["Клиенти", "Персонал"], multi: true }, { options: ["Плащането", "Поръчките", "Акаунтите"] }] });
+    expect(ok.success).toBe(true);
+    if (ok.success && ok.data.tool === "ask_user") expect(ok.data.choices?.[1]?.multi).toBe(false);
+    expect(Call.safeParse({ tool: "ask_user", questions: ["x"], choices: [{ options: ["only one"] }] }).success).toBe(false);
+    expect(Call.safeParse({ tool: "ask_user", questions: ["x"], choices: [null] }).success).toBe(true);
+  });
+  it("the assistant turn keeps the choices", () => {
+    const t = { seq: 1, at: "2026-11-24T10:00:00.000Z", kind: "assistant", text: "", questions: ["Кой ползва магазина?"], choices: [{ options: ["Клиенти", "Персонал"], multi: true }], brief: null, model: "m", usd: 0 };
+    expect(ChatTurn.safeParse(t).success).toBe(true);
+  });
+});

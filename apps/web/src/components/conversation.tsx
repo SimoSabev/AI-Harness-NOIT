@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Brief, ChatTurn } from "@mandat/contract";
 import { ORACLE_NOTE_MAX, limitResetsAt } from "@mandat/contract";
 import { useT } from "../i18n/client";
+import { pathOf } from "../lib/task-path";
+import { answeringLine } from "../lib/chat";
+import { TaskPath } from "./task-path";
+import { OracleGrid } from "./oracle-grid";
 import type { Key, T } from "../i18n/t";
 import { isAnswering, isFollowing } from "../lib/conversation-types";
 import type { ConversationFeed, ConversationRow, JobView, OracleView } from "../lib/conversation-types";
@@ -62,7 +66,7 @@ function BriefCard({ brief, t }: { brief: Brief; t: T }) {
   const rows: [string, string[]][] = [[t("chat.brief.touches"), brief.touches], [t("chat.brief.avoid"), brief.avoid], [t("chat.brief.done"), brief.done_when]];
   return (
     <section aria-label={t("chat.brief")} className="rounded-xl border border-accent-text/30 bg-accent-soft px-4 py-3 text-sm">
-      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.brief")}</p>
+      <p className="text-xs font-medium text-mute">{t("chat.brief")}</p>
       <p className="mt-1 text-[15px] font-medium">{brief.goal}</p>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {rows.filter(([, xs]) => xs.length > 0).map(([k, xs]) => (
@@ -110,7 +114,7 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
   const lists: [string, string[]][] = [[t("chat.spec.unchanged"), s.unchanged], [t("chat.spec.outOfScope"), s.out_of_scope]];
   return (
     <section aria-label={t("chat.spec")} className="rounded-xl border border-accent-text/30 bg-accent-soft px-4 py-3 text-sm">
-      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.spec")} · {t(`chat.taskProfile.${s.profile}` as Key)}</p>
+      <p className="text-xs font-medium text-mute">{t("chat.spec")} · {t(`chat.taskProfile.${s.profile}` as Key)}</p>
       <p className="mt-1 text-[15px] font-medium">{s.goal}</p>
       {s.product.trim() !== "" && <p className="mt-1 whitespace-pre-wrap">{s.product}</p>}
       <p className="mt-3 text-mute">{t("chat.spec.criteria")}</p>
@@ -159,7 +163,7 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
   const again = canBuild && s !== null;
   return (
     <section aria-label={t("chat.oracle")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
-      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.oracle")}</p>
+      <p className="text-xs font-medium text-mute">{t("chat.oracle")}</p>
       {s === null && <p className="mt-1 text-mute">{t("chat.oracle.none")}</p>}
       {s === "building" && <p className="mt-1 text-mute">{t("chat.oracle.building")}</p>}
       {s === "failed" && <p className="mt-1 text-warn">{t("chat.oracle.failed")}</p>}
@@ -171,17 +175,7 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
       )}
       {s === "ready" && oracle && <p className="mt-1">{t("chat.oracle.ready", { tests: String(oracle.tests) })}</p>}
       {s === "approved" && <p className="mt-1 font-medium text-ok">{t("chat.oracle.approved")}</p>}
-      {oracle && oracle.red_on_base.length > 0 && (s === "ready" || s === "approved" || s === "not_ready") && (
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-          <dt className="col-span-2 text-mute">{t("chat.oracle.onBase")}</dt>
-          {oracle.red_on_base.map((c) => (
-            <div key={c.criterion_id} className="contents">
-              <dt className="font-mono">{c.criterion_id}</dt>
-              <dd className={c.red ? "text-ok" : "text-warn"}>{t(c.red ? "chat.oracle.red" : "chat.oracle.green")}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      {oracle && oracle.red_on_base.length > 0 && (s === "ready" || s === "approved" || s === "not_ready") && <OracleGrid cells={oracle.red_on_base} t={t} />}
       {(canBuild || (s === "ready" && a.canApprove)) && (
         <div className="mt-2 flex flex-wrap items-center gap-3">
           {canBuild && <p className="min-w-0 flex-1 text-xs text-mute">{t(s === "approved" ? "chat.oracle.parked" : "chat.oracle.needed")}</p>}
@@ -209,26 +203,30 @@ function ProjectCard({ turn, t, a }: { turn: Extract<ChatTurn, { kind: "project"
     const r = await postJson(`/api/conversations/${a.row.id}/approve-project`, { brief_hash: turn.hash });
     setState(r.status === 200 ? "done" : "error");
   };
-  const rows: [Key, string][] = [
-    ["project.brief.product", b.product],
-    ["project.brief.users", list(b.users)],
-    ["project.brief.works", list(b.works_today)],
-    ["project.brief.keep", list(b.must_not_break)],
-    ["project.brief.tests", b.commands.test ?? "—"],
-    ["project.brief.stack", list(b.stack)],
-    ["project.brief.approver", `${b.approver} · ${b.budget_usd} USD`],
+  const rows: [Key, string, string][] = [
+    ["project.brief.product", b.product, "product"],
+    ["project.brief.users", list(b.users), "users"],
+    ["project.brief.works", list(b.works_today), "works_today"],
+    ["project.brief.keep", list(b.must_not_break), "must_not_break"],
+    ["project.brief.tests", b.commands.test ?? "—", "commands.test"],
+    ["project.brief.stack", list(b.stack), "stack"],
+    ["project.brief.approver", `${b.approver} · ${b.budget_usd} USD`, "approver"],
   ];
   return (
     <section aria-label={t("project.brief.title")} className="max-w-[46rem] rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
-      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("project.brief.title")}</p>
-      <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-        {rows.map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-mute">{t(k)}</dt>
-            <dd className="whitespace-pre-wrap">{v}</dd>
-          </div>
-        ))}
-      </dl>
+      <p className="text-xs font-medium text-mute">{t("project.brief.title")}</p>
+      {/* D-599: the brief as tiles (the brand kit's profile tiles); a part the model still lacks is a dashed amber tile */}
+      <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+        {rows.map(([k, v, field]) => {
+          const lacking = turn.missing.includes(field);
+          return (
+            <li key={k} className={`flex flex-col gap-1 rounded-[10px] border px-3 py-2.5 ${lacking ? "border-dashed border-warn bg-warn-soft" : "border-line bg-canvas"}`}>
+              <span className="text-xs font-medium text-mute">{t(k)}</span>
+              <span className={`whitespace-pre-wrap ${lacking ? "text-warn" : ""}`}>{lacking ? t("project.brief.lacking") : v}</span>
+            </li>
+          );
+        })}
+      </ul>
       {!turn.ready && <p className="mt-2 text-warn">{t("project.brief.missing", { what: turn.missing.join(", ") })}</p>}
       {turn.ready && state === "done" && <p className="mt-2 font-medium text-ok">{t("project.brief.approved")}</p>}
       {turn.ready && state !== "done" && a.canApprove && (
@@ -255,6 +253,15 @@ function Turn({ turn, t, a }: { turn: ChatTurn; t: T; a: SpecActions }) {
   if (turn.kind === "axes") return <AxesCard turn={turn} t={t} />;
   if (turn.kind === "spec") return <SpecCard turn={turn} t={t} a={a} />;
   if (turn.kind === "project") return <ProjectCard turn={turn} t={t} a={a} />;
+  // D-599: a note of the interview — the brief beside the conversation writes it; here one quiet line says what was noted
+  if (turn.kind === "project_note") {
+    return (
+      <p className="flex items-center gap-2 font-mono text-[11px] text-mute">
+        <span aria-hidden="true" className={`size-1.5 rotate-45 ${turn.from === "code" ? "bg-info" : "bg-accent"}`} />
+        {t("project.noted", { parts: Object.keys(turn.parts).join(", ") })} · {t(turn.from === "code" ? "interview.fromCode" : "interview.fromYou")}
+      </p>
+    );
+  }
   return (
     <div className="max-w-[46rem] space-y-3">
       <p className="text-[11px] font-medium text-mute">{t("chat.assistant")}</p>
@@ -292,13 +299,20 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
   const retryable = chat.row.status === "overloaded" || chat.row.status === "failed" || chat.row.status === "limit";
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
+      {/* D-599: the path of the task (the strap), above the conversation; not for the interview of a whole project */}
+      {chat.row.purpose === "task" && (
+        <div className="sticky -top-5 z-10 -mt-5 border-b border-line bg-canvas pb-3 pt-5">
+          <TaskPath stops={pathOf({ conversation: chat.row, turns: chat.turns, oracle_required: chat.oracleRequired ?? false, oracle: chat.oracle ?? null, job: chat.job ?? null })} t={t} />
+        </div>
+      )}
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
       {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle, jobParked: chat.job?.status === "parked" }} />}
       {chat.job && <JobCard job={chat.job} t={t} a={{ canApprove, busy, onApprove: onApproveJob, brought, ...(onBring ? { onBring } : {}) }} />}
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">
           <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
-          {t("chat.thinking")}
+          {/* D-599: what it answers, never only "Thinking…" */}
+          {(() => { const l = answeringLine(chat.turns); return t(l.key, l.params); })()}
         </p>
       )}
       {stop && (

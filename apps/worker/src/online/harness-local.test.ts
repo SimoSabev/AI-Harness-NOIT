@@ -67,3 +67,18 @@ describe("rules of an own local project (D-388)", () => {
     expect(gh.state.calls).toEqual([]);
   });
 });
+
+// D-601: the profile proposed after the project's interview carries the approved brief in layer B
+describe("the profile from the approved brief (D-601)", () => {
+  it("a scan of a project with an approved brief puts the brief's summary, commands and boundaries in the new profile", async () => {
+    const brief = { product: "An online shop for a bakery", users: ["customers"], works_today: ["checkout"], must_not_break: ["payments"], commands: { test: "pnpm test --run" }, stack: ["TypeScript"], approver: "Simo", budget_usd: 5, notes: [] };
+    await db.query("update public.repos set brief = $2::jsonb, brief_hash = $3, brief_approved_at = now() where id = $1", [DEMO_REPO_ID, JSON.stringify(brief), `sha256:${"c".repeat(64)}`]);
+    const deps = { db, gh: fakeGitHub({ repos: { "mandat-demo/shop": {} } }), ghRepo: "mandat-demo/shop", localGh: fakeGitHub({ autoRepos: true }) };
+    await scanForProposal(deps, DEMO_REPO_ID);
+    const p = (await db.query<{ layers: { b: { summary: string; commands: Record<string, string>; boundaries: string[] } }; sources: Record<string, string> }>("select layers, sources from public.harness_profiles where repo_id = $1 order by version desc limit 1", [DEMO_REPO_ID])).rows[0];
+    expect(p?.layers.b.summary).toContain("An online shop for a bakery");
+    expect(p?.layers.b.commands.test).toBe("pnpm test --run");
+    expect(p?.layers.b.boundaries[0]).toBe("Must keep working: payments");
+    expect(p?.sources["b.summary"]).toBe("human");
+  });
+});

@@ -6,6 +6,7 @@ import type { GitHubPort } from "@mandat/gate-github";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { dirView, filesPatch, lineDiff, propose, proposeProfile, scanRepo } from "@mandat/onboard";
 import type { Baseline } from "@mandat/onboard";
+import { ProjectBrief } from "@mandat/contract";
 import type { MandatPolicy } from "@mandat/contract";
 import type { Db } from "./db.js";
 import { inTransaction } from "./db.js";
@@ -75,7 +76,10 @@ export async function scanForProposal(d: HarnessDeps, repoId: string): Promise<s
       const id = ins.rows[0]?.id as string;
       // E8б (D-351): the full profile as a new proposed version (approved only by a human with TOTP)
       const next = (await tx.query<{ v: number }>("select coalesce(max(version), 0) + 1 as v from public.harness_profiles where repo_id = $1::uuid", [repoId])).rows[0]?.v ?? 1;
-      const prof = proposeProfile(scan, { repoId, version: next, history: { subjects, diffLines } }).profile;
+      // D-601: the project's approved brief (its interview) goes into the profile — summary, commands, what must keep working
+      const raw = (await tx.query<{ brief: unknown }>("select brief from public.repos where id = $1::uuid and brief_hash is not null and brief_approved_at is not null", [repoId])).rows[0]?.brief;
+      const brief = raw ? ProjectBrief.safeParse(raw) : null;
+      const prof = proposeProfile(scan, { repoId, version: next, history: { subjects, diffLines }, brief: brief?.success ? brief.data : null }).profile;
       await tx.query("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::jsonb, $6)", [r.org_id, repoId, next, JSON.stringify(prof.layers), JSON.stringify(prof.sources), prof.profile_hash]);
       await upsertSkills(tx, r.org_id, repoId, scan.skills); // E8e: the skills catalog and the harness plugins
       await upsertBuiltinPlugins(tx, r.org_id);

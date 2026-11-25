@@ -92,3 +92,12 @@ describe("the voice's tools (D-556)", () => {
   });
 });
 
+
+// D-600: every project goes through its interview before its first task; Nova starts it when a task is refused for that
+describe("Nova and the mandatory interview (D-600)", () => {
+  it("the prompt names the refusal and the way out", async () => {
+    const { NOVA_PROMPT_BG } = await import("./index.js");
+    expect(NOVA_PROMPT_BG).toContain("project_interview_required");
+    expect(NOVA_PROMPT_BG).toContain("start_project_interview");
+  });
+});

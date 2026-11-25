@@ -50,6 +50,9 @@ describe("the project interview from the web (D-557)", () => {
     expect((await repoBrief())?.brief_approved_at).not.toBeNull();
     const led = (await asService(db, (sql) => sql.query<{ payload_jcs: string }>("select payload_jcs from public.ledger where kind = 'project_approved'"))).rows.map((x) => JSON.parse(x.payload_jcs) as Record<string, unknown>);
     expect(led).toEqual([{ conversation: id, repo: DEMO_REPO_ID, brief_hash: hash, by: U.approver }]);
+    // D-601: the approved brief asks the harness for a new profile of the project (a person approves it, with TOTP)
+    const scans = (await asService(db, (sql) => sql.query<{ idempotency_key: string; payload: { repo_id: string } }>("select idempotency_key, payload from public.outbox where kind = 'harness_scan'"))).rows;
+    expect(scans).toEqual([{ idempotency_key: `scan:brief:${DEMO_REPO_ID}:${hash}`, payload: { repo_id: DEMO_REPO_ID } }]);
   });
   it("a task conversation has no brief to approve", async () => {
     const r = await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { text: "fix it", agent: "fake:honest-fix", repo: DEMO_REPO_ID } });

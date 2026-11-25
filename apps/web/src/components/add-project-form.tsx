@@ -42,6 +42,8 @@ export function AddProjectForm({ path: given, interview = null }: { path?: strin
     const reply = AddProjectReply.safeParse(r.body);
     if (r.status === 200 && reply.success && reply.data.ok) {
       setDone({ name: reply.data.full_name, created: reply.data.created, repo: reply.data.repo_id });
+      // D-600: the interview is required for every project — a new project goes straight into it
+      if (reply.data.created && interview) return void startInterview(reply.data.repo_id);
       router.refresh();
       return;
     }

@@ -26,7 +26,7 @@ import { AskDecisionBody, PermissionBody, decideAsk, setPermission } from "./per
 import { consolidateMemoryWeb, createMemoryWeb, deleteMemoryWeb, memoryHistoryWeb, memoryOverview, patchMemoryWeb } from "./memory";
 import type { Db } from "./sql";
 import { createResearch, researchFeed, researchReport, stopResearch } from "./research";
-import { approveOracle, approveSpec, buildOracle, conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
+import { approveOracle, approveSpec, briefApproved, buildOracle, conversationFeed, retryConversation, sendMessage, startWork } from "./conversation";
 import { approveProject } from "./project-interview";
 import { approveJob, bringJob } from "./job";
 import { isFollowing } from "../conversation-types";
@@ -199,6 +199,8 @@ export async function postTask(req: Request, d: ApiDeps): Promise<Response> {
   if (!d.createLimiter.take(p.uid)) return json(429, { error: "rate_limited" });
   const b = CreateTaskBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
+  // D-600: no task on a project before its interview (the brief is approved first)
+  if (b.data.repo && !(await briefApproved(d.db, b.data.repo))) return json(409, { error: "project_interview_required", repo: b.data.repo });
   return done(await createTask(d.db, { uid: p.uid, org: p.org, body: b.data }), d);
 }
 

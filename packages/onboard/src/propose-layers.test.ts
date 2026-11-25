@@ -42,3 +42,24 @@ describe("proposeProfile: all 8 layers without AI (E8б, AC-2.1)", () => {
     expect(l.h.budgets).toEqual(l.a.budgets);
   });
 });
+
+// D-601: the approved brief of the project (its interview, D-557/D-600) goes into the proposed profile — the summary, the
+// commands the person confirmed and what must not break as boundaries, each with the source "human".
+describe("the profile from the approved brief (D-601)", () => {
+  const brief = { product: "An online shop for a bakery", users: ["customers", "staff"], works_today: ["checkout"], must_not_break: ["payments", "orders are saved"], commands: { install: "pnpm i", test: "pnpm test --run", dev: "pnpm dev" }, stack: ["TypeScript"], approver: "Simo", budget_usd: 5, notes: [] };
+  it("layer B carries the brief; its fields say the person gave them; the profile stays valid and sealed", () => {
+    const scan = scanRepo(memView({ ...FIXTURES["npm-vitest"] }));
+    const p = proposeProfile(scan, { repoId: "local", version: 1, brief });
+    expect(p.profile.layers.b.summary).toContain("An online shop for a bakery");
+    expect(p.profile.layers.b.summary).toContain("customers");
+    expect(p.profile.layers.b.commands).toMatchObject({ install: "pnpm i", test: "pnpm test --run", dev: "pnpm dev" });
+    expect(p.profile.layers.b.boundaries.slice(0, 2)).toEqual(["Must keep working: payments", "Must keep working: orders are saved"]);
+    expect(p.sources).toMatchObject({ "b.summary": "human", "b.commands": "human", "b.boundaries": "human" });
+    expect(HarnessProfile.safeParse(p.profile).success).toBe(true);
+    expect(p.profile.profile_hash).toBe(profileHash(p.profile.layers));
+  });
+  it("without a brief nothing changes", () => {
+    const scan = scanRepo(memView({ ...FIXTURES["npm-vitest"] }));
+    expect(proposeProfile(scan, { repoId: "local", version: 1, brief: null }).profile.profile_hash).toBe(proposeProfile(scan, { repoId: "local", version: 1 }).profile.profile_hash);
+  });
+});

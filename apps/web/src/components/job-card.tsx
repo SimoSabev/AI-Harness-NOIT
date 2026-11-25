@@ -5,6 +5,8 @@ import type { Key, T } from "../i18n/t";
 import type { BringReply } from "@mandat/contract";
 import type { JobView } from "../lib/conversation-types";
 import { JobGates, JobStrategy } from "./job-strategy";
+import { SealRing } from "./seal-ring";
+import { sealView } from "../lib/seal-view";
 import { btn, input } from "./ui";
 
 // D-535 (M1 X6/X7 minimum): the job under the approved spec and oracle — the plan (units with their criteria and
@@ -17,12 +19,14 @@ export interface JobActions { canApprove: boolean; busy: boolean; onApprove: (se
 const UNIT_TONE: Record<string, string> = { passed: "text-ok", failed: "text-warn", blocked: "text-warn", parked: "text-warn", running: "text-ink", pending: "text-mute" };
 const UNIT_STATUSES = ["pending", "running", "passed", "failed", "blocked", "parked"] as const;
 const unitStatus = (s: string): (typeof UNIT_STATUSES)[number] => UNIT_STATUSES.find((x) => x === s) ?? "blocked";
+/** D-599: each unit's strap — cobalt while it works, cyan when it passed, coral when it failed, amber when it waits */
+const UNIT_BAR: Record<(typeof UNIT_STATUSES)[number], string> = { pending: "bg-line-strong", running: "bg-info animate-pulse", passed: "bg-ok", failed: "bg-bad", blocked: "bg-warn", parked: "bg-warn" };
 
 export function JobCard({ job, t, a }: { job: JobView; t: T; a: JobActions }) {
   const s = job.status;
   return (
     <section aria-label={t("chat.job")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
-      <p className="font-display text-[11px] font-medium uppercase tracking-[0.12em] text-mute">{t("chat.job")}</p>
+      <p className="text-xs font-medium text-mute">{t("chat.job")}</p>
       <p className={s === "parked" || s === "failed" ? "mt-1 text-warn" : s === "delivered" ? "mt-1 font-medium text-ok" : "mt-1"}>{t(`chat.job.status.${s}` as Key)}</p>
       <JobStrategy job={job} t={t} />
       {job.units.length > 0 && (
@@ -38,10 +42,15 @@ export function JobCard({ job, t, a }: { job: JobView; t: T; a: JobActions }) {
               {u.result && <span className="font-mono text-xs">{u.result}</span>}
               {u.copy && <span className="w-full font-mono text-[11px] text-mute">{t("job.unit.copy", { task: u.copy.task, attempt: String(u.copy.attempt), state: u.copy.state })}</span>}
               {u.failing.length > 0 && <span className="w-full text-xs text-warn">{t("chat.job.failing", { ids: u.failing.join(", ") })}</span>}
+              <span aria-hidden="true" className={`h-1.5 w-full rounded-full ${UNIT_BAR[unitStatus(u.status)]}`} />
               {u.task_id && job.current === u.id && <Link href={`/?task=${u.task_id}`} className="text-xs text-accent underline-offset-4 hover:underline">{t("chat.job.openUnit")}</Link>}
             </li>
           ))}
         </ol>
+      )}
+      {/* D-599: the seal — the gates as a ring around the verdict */}
+      {(job.seal || job.gates.some((g) => g.status !== "pending")) && (
+        <div className="mt-3 flex justify-center"><SealRing view={sealView(job.gates, job.seal?.verdict ?? null)} t={t} /></div>
       )}
       <JobGates job={job} t={t} />
       {job.question && (

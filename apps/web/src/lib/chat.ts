@@ -1,6 +1,7 @@
 // The workspace chat: the agent's stream lines (session_lines, already redacted by the worker) → what the person reads.
 // Pure, so the browser and the tests share it.
 import { RunPhase, decodeProviderNotice } from "@mandat/contract";
+import { clip } from "./clip";
 import type { ProviderNotice } from "@mandat/contract";
 
 export interface StreamLine { seq: number; kind: string; text: string; at: string }
@@ -177,4 +178,11 @@ export function boxRepo(projects: readonly { id: string }[], chatRepo: string | 
 /** Enter sends the message; Shift+Enter makes a new line; Enter while an IME composes a word is not a send. */
 export function sendsOnEnter(e: { key: string; shiftKey: boolean; isComposing: boolean }): boolean {
   return e.key === "Enter" && !e.shiftKey && !e.isComposing;
+}
+
+/** D-599: while Harnova answers, what it answers (the person's last message, one line); never only "Thinking…" */
+export function answeringLine(turns: readonly { kind: string; text?: string }[]): { key: "chat.answering" | "chat.answeringStart"; params?: { target: string } } {
+  const last = [...turns].reverse().find((x) => x.kind === "human" && typeof x.text === "string" && x.text.trim() !== "");
+  if (!last?.text) return { key: "chat.answeringStart" };
+  return { key: "chat.answering", params: { target: clip(last.text) } };
 }

@@ -46,7 +46,8 @@ describe("site export (E9g B)", () => {
       expect(existsSync(path.join(out, page)), page).toBe(true);
       expect(read(page), page).toMatch(new RegExp(`<html lang="${lang}"`));
     }
-    expect(existsSync(path.join(out, "fonts/tektur-latin.woff2"))).toBe(true);
+    // D-602: the system's own fonts — nothing to serve
+    expect(existsSync(path.join(out, "fonts"))).toBe(false);
   });
 
   it("every internal link and asset resolves, including #anchors", () => {

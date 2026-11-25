@@ -6,7 +6,10 @@ import { searchMemory } from "@mandat/memory";
 export const MEMORY_FILTERS = ["all", "mine", "project", "pending", "archive"] as const;
 export type MemoryFilter = (typeof MEMORY_FILTERS)[number];
 /** `at`: round 2 — a day (YYYY-MM-DD) the memory is shown as of; absent = today */
-export interface MemoryQuery { view: "list" | "graph"; filter: MemoryFilter; q: string; id: string | null; at?: string | null }
+/** D-599: list, the 2D map (graph), 3D threads, a timeline per kind, clusters per kind */
+export const MEMORY_VIEWS = ["list", "graph", "threads", "time", "clusters"] as const;
+export type MemoryViewId = (typeof MEMORY_VIEWS)[number];
+export interface MemoryQuery { view: MemoryViewId; filter: MemoryFilter; q: string; id: string | null; at?: string | null }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
@@ -20,7 +23,7 @@ export function parseMemoryQuery(sp: Record<string, string | string[] | undefine
   const day = at && Number.isFinite(t) && new Date(t).toISOString().startsWith(at) ? at : null;
   return {
     ...(day ? { at: day } : {}),
-    view: one(sp.view) === "graph" ? "graph" : "list",
+    view: (MEMORY_VIEWS as readonly string[]).includes(one(sp.view) ?? "") ? (one(sp.view) as MemoryViewId) : "list",
     filter: (MEMORY_FILTERS as readonly string[]).includes(f ?? "") ? (f as MemoryFilter) : "all",
     q: (one(sp.q) ?? "").trim().slice(0, 200),
     id: id && UUID.test(id) ? id : null,

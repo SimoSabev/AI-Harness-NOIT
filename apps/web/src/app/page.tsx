@@ -16,7 +16,8 @@ import { agentsView } from "../lib/server/connections";
 import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
 import { twinView } from "../lib/server/twin";
-import { conversationFeed, openConversations } from "../lib/server/conversation";
+import { conversationFeed, openConversations, projectBriefs } from "../lib/server/conversation";
+import { homeBrief } from "../lib/home";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
 import { taskTitle } from "../lib/task-title";
@@ -42,7 +43,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
   // D-531: the open conversation of "Ask first" (?chat=c_…) survives a reload
   const chatId = !selected && typeof sp.chat === "string" && /^c_[a-z0-9_]{1,40}$/.test(sp.chat) ? sp.chat : null;
-  const [b, projects, initial, d, sess, twin, chat, convs] = await Promise.all([
+  const [b, projects, initial, d, sess, twin, chat, convs, briefs] = await Promise.all([
     board(db(), c.uid, c.org),
     repos(db(), c.uid, c.org),
     selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
@@ -51,6 +52,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     selected ? twinView(db(), c.uid, c.org, selected) : null,
     chatId ? conversationFeed(db(), c.uid, c.org, chatId, -1) : null,
     openConversations(db(), c.uid, c.org),
+    projectBriefs(db(), c.org),
   ]);
   const now = new Date();
   const rows = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1));
@@ -73,6 +75,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     ago: ago(v.updated_at, now, t.lang), at: v.updated_at,
   }));
   const tasks = mergeByTime(taskRows, convRows).slice(0, 100).map(({ at: _at, ...rest }) => rest);
+  // D-600: the start is a conversation with Harnova: the numbers on top and its first message with buttons
+  const home = homeBrief({ waiting: c.waiting ?? 0, running: tasks.filter((x) => x.tone === "blue").length, projects: briefs, firstWaiting: tasks.find((x) => x.tone === "amber")?.href ?? null });
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
   let preferredModel: string | null = null;
@@ -86,17 +90,22 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   }
   return (
     <Shell current="tasks" waiting={c.waiting} full>
-      <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="min-h-0 lg:border-r lg:border-line lg:pr-4">
+      {/* D-602: the conversations are a column from tablet width up; on a phone they fold above the work */}
+      <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(200px,248px)_minmax(0,1fr)] md:gap-6">
+        <details className="rounded-[10px] border border-line bg-panel px-3 py-2 md:hidden">
+          <summary className="cursor-pointer text-sm font-medium">{t("ws.tasks")} · {tasks.length}</summary>
+          <div className="mt-2 max-h-[50vh] overflow-y-auto"><TaskList tasks={tasks} selected={initial ? selected : chatId} /></div>
+        </details>
+        <div className="hidden min-h-0 md:block md:border-r md:border-line md:pr-3">
           <TaskList tasks={tasks} selected={initial ? selected : chatId} />
         </div>
-        <div className="flex min-h-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-col">
           {initial && d && sess ? (
             <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)}
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
           ) : (
-            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} />
+            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} home={home} />
           )}
         </div>
       </div>

@@ -7,6 +7,8 @@ import { subscriptionCards } from "../../components/connections/subscriptions/su
 import { LocalAccessLink } from "../../components/local-access";
 import { Shell } from "../../components/shell";
 import { LangChoice, ThemeChoice } from "../../components/theme-switch";
+import { AppearanceChoice } from "../../components/appearance-choice";
+import { parseAppearance } from "../../lib/appearance";
 import { card } from "../../components/ui";
 import { getT } from "../../i18n/server";
 import { pageName } from "../../lib/brand";
@@ -80,6 +82,12 @@ export default async function SettingsPage() {
       <section aria-labelledby="s-theme" className={`${card} mt-4 p-5`}>
         <h2 id="s-theme" className="mb-4 font-display text-base font-semibold">{t("settings.theme")}</h2>
         <ThemeChoice value={parseTheme(jar.get("theme")?.value)} />
+      </section>
+      {/* D-599: the person's accent, ground, Nova colour and size */}
+      <section aria-labelledby="s-look" className={`${card} mt-4 p-5`}>
+        <h2 id="s-look" className="font-display text-base font-semibold">{t("settings.look")}</h2>
+        <p className="mb-4 text-sm text-mute">{t("settings.lookHint")}</p>
+        <AppearanceChoice value={parseAppearance({ accent: jar.get("accent")?.value, ground: jar.get("ground")?.value, nova: jar.get("nova")?.value, scale: jar.get("scale")?.value })} />
       </section>
       <LocalAccessLink />
       <details className={`${card} mt-4 p-5`}>

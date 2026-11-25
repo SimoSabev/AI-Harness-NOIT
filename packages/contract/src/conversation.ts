@@ -3,7 +3,7 @@ import { AgentRefString, ModelId } from "./connections.js";
 import { Sha256 } from "./schemas.js";
 import { AXIS_NAMES, TaskAxes, TaskProfileId } from "./task-profile.js";
 import { CriterionId, Spec } from "./task-spec.js";
-import { ProjectBrief } from "./project-brief.js";
+import { ProjectBrief, ProjectBriefParts } from "./project-brief.js";
 
 // E10а ф. 1 (D-531): a conversation before work. The model answers and asks; it cannot change files, run commands or
 // reach the network. A brief or a spec is only shown: work starts from a person's action ("Start work"), never from
@@ -41,6 +41,9 @@ export const CHAT_MINUTES = 120;
 export const CHAT_TEXT_MAX = 4000;
 
 const Line = z.string().trim().min(1).max(300);
+/** D-600: the answers a question offers — 2 to 8 short options, one or several to pick; the person can always write their own */
+export const QuestionChoices = z.object({ options: z.array(z.string().trim().min(1).max(120)).min(2).max(8), multi: z.boolean().default(false) }).strict();
+export type QuestionChoices = z.infer<typeof QuestionChoices>;
 export const Brief = z
   .object({
     goal: z.string().trim().min(1).max(600),
@@ -79,7 +82,7 @@ const RepoPathArg = z.string().max(300);
 export const CHAT_TOOLS = ["ask_user", "search_memory", "list_dir", "read_file", "grep", "propose_axes", "propose_spec", "propose_brief"] as const;
 export const CHAT_REPO_TOOLS = ["list_dir", "read_file", "grep"] as const;
 export const ChatToolCall = z.discriminatedUnion("tool", [
-  z.object({ tool: z.literal("ask_user"), questions: z.array(Line).min(1).max(CHAT_QUESTIONS_LIMIT) }).strict(),
+  z.object({ tool: z.literal("ask_user"), questions: z.array(Line).min(1).max(CHAT_QUESTIONS_LIMIT), /** D-600: per question, answers to pick (null: free text) */ choices: z.array(QuestionChoices.nullable()).max(CHAT_QUESTIONS_LIMIT).optional() }).strict(),
   z.object({ tool: z.literal("search_memory"), query: z.string().trim().min(1).max(200) }).strict(),
   z.object({ tool: z.literal("list_dir"), path: RepoPathArg.default("") }).strict(),
   z.object({ tool: z.literal("read_file"), path: RepoPathArg, from_line: z.number().int().min(1).max(1_000_000).optional(), to_line: z.number().int().min(1).max(1_000_000).optional() }).strict(),
@@ -94,7 +97,12 @@ export const ChatToolCall = z.discriminatedUnion("tool", [
 export type ChatToolCall = z.infer<typeof ChatToolCall>;
 
 /** what the model answers with: one JSON object, the words for the person and at most one tool call */
-export const ChatModelReply = z.object({ say: z.string().max(8000), call: ChatToolCall.nullable().default(null) }).strict();
+export const ChatModelReply = z.object({
+  say: z.string().max(8000),
+  call: ChatToolCall.nullable().default(null),
+  /** D-599: in a project interview, the parts of the brief the model just learned (the server checks them like a call) */
+  note: z.unknown().optional(),
+}).strict();
 export type ChatModelReply = z.infer<typeof ChatModelReply>;
 
 /** a model that asks more than the safety limit keeps the first CHAT_QUESTIONS_LIMIT (D-533) */
@@ -103,7 +111,8 @@ export function capQuestions(raw: unknown): unknown {
   const r = raw as { call?: unknown };
   const call = r.call as { tool?: unknown; questions?: unknown } | null | undefined;
   if (!call || call.tool !== "ask_user" || !Array.isArray(call.questions)) return raw;
-  return { ...r, call: { ...call, questions: call.questions.filter((q): q is string => typeof q === "string").slice(0, CHAT_QUESTIONS_LIMIT) } };
+  const choices = (call as { choices?: unknown }).choices;
+  return { ...r, call: { ...call, questions: call.questions.filter((q): q is string => typeof q === "string").slice(0, CHAT_QUESTIONS_LIMIT), ...(Array.isArray(choices) ? { choices: choices.slice(0, CHAT_QUESTIONS_LIMIT) } : {}) } };
 }
 
 const Instant = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/);
@@ -116,6 +125,8 @@ export const ChatTurn = z.discriminatedUnion("kind", [
       kind: z.literal("assistant"),
       text: z.string().max(8000),
       questions: z.array(Line).max(CHAT_QUESTIONS_LIMIT),
+      /** D-600: the answers each question offers (aligned with questions; null: free text) */
+      choices: z.array(QuestionChoices.nullable()).max(CHAT_QUESTIONS_LIMIT).optional(),
       brief: Brief.nullable(),
       model: z.string().max(140),
       usd: z.number().min(0),
@@ -129,6 +140,8 @@ export const ChatTurn = z.discriminatedUnion("kind", [
   z.object({ ...head, kind: z.literal("axes"), axes: TaskAxes, hint: TaskProfileId.nullable(), profile: TaskProfileId, unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), /** D-552: a saved Other profile for these axes */ saved: z.string().trim().min(1).max(80).optional() }).strict(),
   // D-557: the project brief the model proposed, with its hash and what it still lacks
   z.object({ ...head, kind: z.literal("project"), brief: ProjectBrief, hash: Sha256, ready: z.boolean(), missing: z.array(z.string().max(40)).max(10) }).strict(),
+  // D-599: a note of the interview — parts of the brief the model just learned, and where from (the screen writes them live)
+  z.object({ ...head, kind: z.literal("project_note"), from: z.enum(["code", "person"]), parts: ProjectBriefParts }).strict(),
   z.object({ ...head, kind: z.literal("spec"), spec: Spec, hash: Sha256, ready: z.boolean(), unknown: z.array(z.enum(AXIS_NAMES)).max(AXIS_NAMES.length), untestable: z.array(CriterionId).max(200) }).strict(),
 ]);
 export type ChatTurn = z.infer<typeof ChatTurn>;
