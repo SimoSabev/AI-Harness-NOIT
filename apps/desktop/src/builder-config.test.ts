@@ -28,6 +28,10 @@ describe("electron-builder config (E9g A5, D-380)", () => {
     expect(config.linux?.synopsis).toMatch(/^Harnova: /);
     expect(config.linux?.synopsis).not.toMatch(/Mandat/);
   });
+  // D-639: the .deb (fpm) refuses to build without a project homepage (app-builder-lib 26.17.0 FpmTarget)
+  it("the package metadata has the project homepage the .deb needs (D-639)", () => {
+    expect((config.extraMetadata as { homepage?: string } | undefined)?.homepage).toBe("https://github.com/SimoSabev/AI-Harness-NOIT");
+  });
 });
 
 // D-637 (Simo 26.11.2026, "без да трябва да пиша пароли"): every ad-hoc build has a new cdhash, and the keychain entry

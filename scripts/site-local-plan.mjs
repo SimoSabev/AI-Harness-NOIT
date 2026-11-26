@@ -1,5 +1,6 @@
 // D-639: the pure part of scripts/site-local-release.mjs — which installers a local build of the download site makes.
-// All of them are built on this Apple Silicon Mac (electron-builder 26.17.0 cross-builds Windows and Linux without wine);
+// All of them are built on this Apple Silicon Mac (electron-builder 26.17.0 cross-builds Windows and Linux without wine,
+// with the toolsets below);
 // the harness bundle has no native code, and node-pty carries its prebuilds for every OS (D-375), so one bundle serves all.
 
 /** Every target, in the order the download page lists them. */
@@ -28,6 +29,12 @@ export function parseLocalArgs(argv) {
 
 const CONFIG = ["--config", "electron-builder.config.mjs"];
 const NEVER = ["--publish", "never"];
+// The default NSIS (nsis-3.0.4.1, mac/makensis) and AppImage (appimage-12.0.1, darwin/mksquashfs) tools of electron-builder
+// 26.17.0 are x86_64 only and fail on an Apple Silicon Mac without Rosetta ("Bad CPU type", spawn -86). Its newer bundles
+// run here (tried 26.11.2026): toolsets.nsis 1.2.1 (makensis 3.12) and toolsets.appimage 1.0.3. Only for these local runs;
+// the CI file keeps the defaults on its own OS.
+const NSIS_ARM64 = "-c.toolsets.nsis=1.2.1";
+const APPIMAGE_ARM64 = "-c.toolsets.appimage=1.0.3";
 
 /**
  * One electron-builder run per target (a failing target does not hide which one failed). The Mac arch comes only from
@@ -37,8 +44,8 @@ const NEVER = ["--publish", "never"];
 export function builderRuns(targets) {
   return targets.map((target) => {
     if (target === "mac-arm64" || target === "mac-x64") return { target, args: [...CONFIG, "--mac", ...NEVER], env: { MANDAT_MAC_ARCH: target.slice(4) } };
-    if (target === "win-x64") return { target, args: [...CONFIG, "--win", "--x64", ...NEVER], env: {} };
-    if (target === "linux-x64") return { target, args: [...CONFIG, "--linux", "--x64", ...NEVER], env: {} };
+    if (target === "win-x64") return { target, args: [...CONFIG, NSIS_ARM64, "--win", "--x64", ...NEVER], env: {} };
+    if (target === "linux-x64") return { target, args: [...CONFIG, APPIMAGE_ARM64, "--linux", "--x64", ...NEVER], env: {} };
     throw new Error(`site-local: unknown target ${target}`);
   });
 }

@@ -21,12 +21,14 @@ describe("local site build plan (D-639)", () => {
     expect(() => parseLocalArgs(["--targets"])).toThrow(/--targets needs a value/);
     expect(() => parseLocalArgs(["--targets", ","])).toThrow(/--targets needs a value/);
   });
+  // the default NSIS and AppImage tools of electron-builder 26.17.0 for macOS are x86_64 only (no Rosetta here):
+  // the local runs use its arm64-capable bundles nsis 1.2.1 and appimage 1.0.3; CI keeps the defaults
   it("one electron-builder run per target, never publishing; the Mac arch only through MANDAT_MAC_ARCH", () => {
     expect(builderRuns(["mac-arm64", "mac-x64", "win-x64", "linux-x64"])).toEqual([
       { target: "mac-arm64", args: ["--config", "electron-builder.config.mjs", "--mac", "--publish", "never"], env: { MANDAT_MAC_ARCH: "arm64" } },
       { target: "mac-x64", args: ["--config", "electron-builder.config.mjs", "--mac", "--publish", "never"], env: { MANDAT_MAC_ARCH: "x64" } },
-      { target: "win-x64", args: ["--config", "electron-builder.config.mjs", "--win", "--x64", "--publish", "never"], env: {} },
-      { target: "linux-x64", args: ["--config", "electron-builder.config.mjs", "--linux", "--x64", "--publish", "never"], env: {} },
+      { target: "win-x64", args: ["--config", "electron-builder.config.mjs", "-c.toolsets.nsis=1.2.1", "--win", "--x64", "--publish", "never"], env: {} },
+      { target: "linux-x64", args: ["--config", "electron-builder.config.mjs", "-c.toolsets.appimage=1.0.3", "--linux", "--x64", "--publish", "never"], env: {} },
     ]);
     for (const r of builderRuns(LOCAL_TARGETS)) expect(r.args.slice(-2)).toEqual(["--publish", "never"]);
   });

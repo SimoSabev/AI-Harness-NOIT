@@ -71,7 +71,8 @@ export const config = {
   // the default MANDAT_HOME is <userData>/mandat: connections, sealed keys, folder grants) and its keychain entry
   // ("Harness Safe Storage", which unlocks those keys). Renaming it would leave all of that behind, so it stays and nothing
   // is migrated. Dev (`pnpm desktop`) keeps the package name.
-  extraMetadata: { productName: "Harness" },
+  // D-639: the .deb (fpm) needs the project homepage (app-builder-lib 26.17.0 FpmTarget computeFpmMetaInfoOptions)
+  extraMetadata: { productName: "Harness", homepage: "https://github.com/SimoSabev/AI-Harness-NOIT" },
   copyright: "GPL-3.0-or-later",
   artifactName: "Harnova-${version}-${os}-${arch}.${ext}",
   directories: { output: path.join(out, "release"), buildResources: "build-resources" },
