@@ -1,5 +1,6 @@
 import { EditorKind } from "@mandat/contract";
 import type { DesktopResult, DesktopValue, LocalActivityBody, LocalScope } from "@mandat/contract";
+import type { DesktopClient } from "./desktop";
 
 // E9g A3 (AC-12.6, D-373): pure helpers of the web half of local access. Grants live in the desktop app's main process;
 // the web only asks over the bridge, and main checks every path again (real path, inside a grant, the right scope).
@@ -41,4 +42,27 @@ export function activityFor(kind: LocalActivityBody["kind"], r: DesktopResult<un
   const v = r.value as DesktopValue<"applyLocal">;
   const detail = v.status === "refused" ? v.detail : v.head?.slice(0, 12);
   return { kind, outcome: v.status, ...(detail ? { detail: detail.slice(0, 300) } : {}) };
+}
+
+/** D-634: what a new project is granted — read is all it needs; apply, editor and terminal come later in Local access */
+export const PROJECT_SCOPES: readonly LocalScope[] = ["read"];
+export type PickAndGrant = { ok: true; path: string } | { ok: false; cancelled: true } | { ok: false; result: Extract<DesktopResult<unknown>, { ok: false }> };
+
+/** D-634: "Add project" in one step — the folder (picked now, or given by a drop / Open with), then the grant, which the
+ * desktop confirms in its own native dialog (D-373). Nothing to tick on the page. */
+export async function pickAndGrant(b: Pick<DesktopClient, "call">, given: string | null): Promise<PickAndGrant> {
+  let path = given;
+  if (path === null) {
+    const r = await b.call("pickFolder", {});
+    if (!r.ok) return { ok: false, result: r };
+    if (!r.value.path) return { ok: false, cancelled: true };
+    path = r.value.path;
+  }
+  const g = await b.call("grant", { path, scopes: [...PROJECT_SCOPES] });
+  return g.ok ? { ok: true, path: g.value.grant.path } : { ok: false, result: g };
+}
+
+/** D-634: the rights a granted folder does not have yet (Local access offers them one by one) */
+export function missingScopes(has: readonly LocalScope[]): LocalScope[] {
+  return (["read", "apply", "open_editor", "terminal"] as const).filter((x) => !has.includes(x));
 }

@@ -74,30 +74,26 @@ test("browser: no bridge → Local access is not in Settings; Add project takes 
   await expect(page.getByText("This works only while the app runs on this computer.")).toBeVisible();
 });
 
-test("desktop: a dropped folder → Add project with the suggestion → grant → listed in Local access → revoke", async ({ page }) => {
+// D-634: one step — a dropped or chosen folder is granted read at once (the desktop confirms in its own dialog); more
+// rights are added later in Local access
+test("desktop: a dropped folder is granted read at once → listed in Local access → a right added → revoke", async ({ page }) => {
   await fakeBridge(page);
   await login(page, EMAIL.owner);
   await page.goto("/projects/add?path=%2FUsers%2Fsimo%2Fcode%2Fshop");
   await expect(page.getByRole("heading", { name: "Add project", level: 1 })).toBeVisible();
-  await expect(page.locator("#main").getByText("shop", { exact: true })).toBeVisible();
-  await expect(page.getByRole("checkbox", { name: /^Read/ })).toBeChecked();
-  await expect(page.getByRole("checkbox", { name: /^Apply locally/ })).not.toBeChecked();
-  await page.getByRole("checkbox", { name: /^Apply locally/ }).check();
-  await page.getByRole("button", { name: "Grant access" }).click();
-  await expect(page.getByText("Granted: /Users/simo/code/shop")).toBeVisible();
-  expect((await calls(page)).find((c) => c.m === "grant")?.p).toEqual({ path: "/Users/simo/code/shop", scopes: ["read", "apply"] });
+  await expect.poll(async () => (await calls(page)).find((c) => c.m === "grant")?.p).toEqual({ path: "/Users/simo/code/shop", scopes: ["read"] });
+  await expect(page.getByRole("checkbox", { name: /^Read/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Grant access" })).toHaveCount(0);
 
-  await page.goto("/settings");
-  await page.getByRole("link", { name: "Open Local access" }).click();
-  await expect(page.getByRole("heading", { name: "Local access", level: 1 })).toBeVisible();
   // a full reload loses the fake bridge's memory; the list comes from grantsList, so grant again through the page
   await page.goto("/projects/add");
   await page.getByRole("button", { name: "Choose a folder…" }).click();
-  await page.getByRole("button", { name: "Grant access" }).click();
-  await expect(page.getByText("Granted: /Users/simo/code/picked")).toBeVisible();
+  await expect(page.locator("#main").getByText("/Users/simo/code/picked")).toBeVisible();
   await page.getByRole("link", { name: /Settings/ }).first().click();
   await page.getByRole("link", { name: "Open Local access" }).click();
   await expect(page.getByText("/Users/simo/code/picked")).toBeVisible();
+  await page.getByRole("button", { name: "Allow Apply locally for /Users/simo/code/picked" }).click();
+  await expect.poll(async () => (await calls(page)).filter((c) => c.m === "grant").at(-1)?.p).toEqual({ path: "/Users/simo/code/picked", scopes: ["apply"] });
   await page.getByRole("button", { name: "Forget /Users/simo/code/picked" }).click();
   await expect(page.getByText("No folder is granted yet.")).toBeVisible();
 });

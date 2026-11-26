@@ -1,15 +1,15 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DesktopResult, EditorKind, LocalActivityBody, LocalGrant, LocalScope } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import type { Key } from "../i18n/t";
 import { postJson } from "../lib/client/api";
 import { desktopBridge } from "../lib/client/desktop";
 import type { DesktopClient } from "../lib/client/desktop";
-import { EDITOR_STORAGE_KEY, WORKING_COPY_STORAGE_KEY, activityFor, joinLocal, parseEditor, suggestProject } from "../lib/client/local-access";
+import { EDITOR_STORAGE_KEY, WORKING_COPY_STORAGE_KEY, activityFor, joinLocal, missingScopes, parseEditor, pickAndGrant } from "../lib/client/local-access";
 import { HostTerminal } from "./host-terminal";
-import { btn, card, input } from "./ui";
+import { btn, card } from "./ui";
 import { Select } from "./select";
 import { AddProjectForm } from "./add-project-form";
 import type { AddedProject, Interview } from "./add-project-form";
@@ -18,7 +18,6 @@ import type { AddedProject, Interview } from "./add-project-form";
 // in a browser or the PWA these components render nothing. Grants live in the desktop app's main process; main checks
 // every path again and asks the person in a native dialog before any grant.
 
-const SCOPES: readonly LocalScope[] = ["read", "apply", "open_editor", "terminal"];
 const SCOPE_LABEL: Record<LocalScope, { label: Key; hint: Key }> = {
   read: { label: "local.scope.read", hint: "local.scope.readHint" },
   apply: { label: "local.scope.apply", hint: "local.scope.applyHint" },
@@ -90,6 +89,13 @@ export function LocalAccessPanel() {
   }, [b]); // m.fail only sets a message
   if (b === undefined) return null;
   if (!b) return <p className={`${card} mt-6 p-5 text-sm text-mute`}>{t("local.desktopOnly")}</p>;
+  // D-634: a right the folder does not have yet — the desktop asks in its own dialog, as for any grant
+  const allow = async (path: string, scope: LocalScope) => {
+    const r = await b.call("grant", { path, scopes: [scope] });
+    if (!r.ok) return m.fail(r);
+    const all = await b.call("grantsList", {});
+    if (all.ok) setGrants(all.value.grants);
+  };
   const revoke = async (path: string, scopes?: LocalScope[]) => {
     const r = await b.call("revoke", scopes ? { path, scopes } : { path });
     if (r.ok) setGrants(r.value.grants);
@@ -115,6 +121,13 @@ export function LocalAccessPanel() {
                     <li key={s}>
                       <button type="button" className="inline-flex items-center gap-2 rounded-full border border-line-strong px-3 py-1 text-xs hover:bg-raised" aria-label={t("local.revokeScope", { scope: t(SCOPE_LABEL[s].label), path: g.path })} onClick={() => void revoke(g.path, [s])}>
                         {t(SCOPE_LABEL[s].label)} <span aria-hidden="true">×</span>
+                      </button>
+                    </li>
+                  ))}
+                  {missingScopes(g.scopes).map((s) => (
+                    <li key={`+${s}`}>
+                      <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-line px-3 py-1 text-xs text-mute hover:bg-raised hover:text-ink" aria-label={t("local.allowScope", { scope: t(SCOPE_LABEL[s].label), path: g.path })} onClick={() => void allow(g.path, s)}>
+                        <span aria-hidden="true">+</span> {t(SCOPE_LABEL[s].label)}
                       </button>
                     </li>
                   ))}
@@ -147,68 +160,43 @@ export function AddProject({ initialPath, interview = null, onAdded }: { initial
   const t = useT();
   const b = useDesktop();
   const [path, setPath] = useState<string | null>(initialPath);
-  const [scopes, setScopes] = useState<LocalScope[]>(initialPath ? suggestProject(initialPath).scopes : ["read"]);
   const [granted, setGranted] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const m = useMessage();
+  // D-634: one step — choose the folder, the desktop asks once in its own dialog, the project is added
+  const add = async (given: string | null) => {
+    if (!b) return;
+    m.setMsg(null);
+    setBusy(true);
+    const r = await pickAndGrant(b, given);
+    setBusy(false);
+    if (r.ok) {
+      setPath(r.path);
+      setGranted(r.path);
+    } else if ("result" in r) m.fail(r.result);
+  };
+  // a folder dropped on the window or opened with the app comes in as initialPath: it is added the same way
+  const once = useRef<string | null>(null);
   useEffect(() => {
     setPath(initialPath);
     setGranted(null);
-  }, [initialPath]);
+    if (b && initialPath && once.current !== initialPath) {
+      once.current = initialPath;
+      void add(initialPath);
+    }
+  }, [initialPath, b]);
   if (b === undefined) return null;
-  // D-388: in a browser the folder is typed; the desktop picks it, grants the rights, then adds it the same way
+  // D-388: in a browser the folder is typed; the desktop picks it, grants it, then adds it the same way
   if (!b) return <AddProjectForm interview={interview} {...(onAdded ? { onAdded } : {})} />;
-  const pick = async () => {
-    const r = await b.call("pickFolder", {});
-    if (r.ok && r.value.path) {
-      setPath(r.value.path);
-      setScopes(suggestProject(r.value.path).scopes);
-      setGranted(null);
-    } else m.fail(r);
-  };
-  const grant = async () => {
-    if (!path || scopes.length === 0) return;
-    m.setMsg(null);
-    const r = await b.call("grant", { path, scopes });
-    if (r.ok) setGranted(r.value.grant.path);
-    else m.fail(r);
-  };
-  const toggle = (s: LocalScope) => setScopes((xs) => (xs.includes(s) ? xs.filter((x) => x !== s) : SCOPES.filter((x) => x === s || xs.includes(x))));
-  const suggestion = path ? suggestProject(path) : null;
   return (
     <section aria-labelledby="add-h" className={`${card} mt-6 p-5`}>
       <h2 id="add-h" className="sr-only">{t("add.title")}</h2>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="min-w-0 flex-1">
-          <span className="text-sm font-medium">{t("add.folder")}</span>
-          <input className={`${input} mt-1 font-mono`} value={path ?? ""} readOnly aria-readonly="true" />
-        </label>
-        <button type="button" className={btn.secondary} onClick={() => void pick()}>{t("add.pick")}</button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={btn.primary} disabled={busy} onClick={() => void add(null)}>{t("add.pick")}</button>
+        {path && <span className="min-w-0 flex-1 truncate font-mono text-sm text-mute" title={path}>{path}</span>}
       </div>
-      <p className="mt-2 text-xs text-mute">{t("add.dropHint")}</p>
-      {suggestion && (
-        <>
-          <p className="mt-4 text-sm">
-            <span className="text-mute">{t("add.suggestedName")}: </span>
-            <span className="font-mono">{suggestion.name}</span>
-          </p>
-          <fieldset className="mt-4 grid gap-2 sm:grid-cols-2">
-            <legend className="mb-2 text-sm font-medium">{t("add.scopes")}</legend>
-            {SCOPES.map((s) => (
-              <label key={s} className="flex cursor-pointer gap-3 rounded-lg border border-line p-3 transition hover:bg-raised has-[:checked]:border-accent-text has-[:checked]:bg-accent-soft">
-                <input type="checkbox" checked={scopes.includes(s)} onChange={() => toggle(s)} className="mt-1 accent-[var(--accent)]" />
-                <span><span className="block text-sm font-medium">{t(SCOPE_LABEL[s].label)}</span><span className="mt-0.5 block text-xs text-mute">{t(SCOPE_LABEL[s].hint)}</span></span>
-              </label>
-            ))}
-          </fieldset>
-          <button type="button" className={`${btn.primary} mt-4`} disabled={scopes.length === 0} onClick={() => void grant()}>{t("add.grant")}</button>
-        </>
-      )}
-      {granted && (
-        <div className="mt-4 text-sm">
-          <p role="status" className="text-ok">{t("add.granted", { path: granted })}</p>
-          <AddProjectForm path={granted} interview={interview} {...(onAdded ? { onAdded } : {})} />
-        </div>
-      )}
+      <p className="mt-2 text-xs text-mute">{t("add.oneStepHint")}</p>
+      {granted && <AddProjectForm path={granted} interview={interview} {...(onAdded ? { onAdded } : {})} />}
       {m.node}
     </section>
   );
