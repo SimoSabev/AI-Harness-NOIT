@@ -1,7 +1,14 @@
-# Демо промпт т. 9.8: only GitHub webhooks reach the worker; everything else is 404. Auto TLS for {$MANDAT_DOMAIN}.
+# Демо промпт т. 9.8 + E10 hosted (D-700): only the GitHub webhooks and the runner protocol reach the worker; /healthz
+# and everything else is 404. Auto TLS for {$MANDAT_DOMAIN} (on this computer: localhost → Caddy's internal CA).
 # The LLM proxy is never routed here (S19).
 {$MANDAT_DOMAIN} {
+	request_body {
+		max_size 5MB
+	}
 	handle /api/webhooks/* {
+		reverse_proxy worker:8790
+	}
+	handle /api/runner/* {
 		reverse_proxy worker:8790
 	}
 	handle {

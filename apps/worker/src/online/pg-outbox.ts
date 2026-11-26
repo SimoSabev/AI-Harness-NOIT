@@ -4,6 +4,7 @@ import type { OutboxRow, OutboxStore } from "./outbox.js";
 /**
  * T3-2 on Postgres: one transaction per drain on a DEDICATED connection; rows locked FOR UPDATE SKIP LOCKED so two
  * workers never take the same effect. The effect runs inside the claim; done/failed are written before COMMIT.
+ * E10 hosted (D-702): a row a runner holds (a live lease through /api/runner/*) is not taken here either.
  */
 export class PgOutbox implements OutboxStore {
   private open = false;
@@ -12,7 +13,7 @@ export class PgOutbox implements OutboxStore {
     await this.db.query("begin");
     this.open = true;
     const r = await this.db.query<OutboxRow>(
-      "select id::int as id, org_id::text as org_id, kind, idempotency_key, payload, attempts from public.outbox where status = 'pending' order by id limit $1 for update skip locked",
+      "select id::int as id, org_id::text as org_id, kind, idempotency_key, payload, attempts from public.outbox where status = 'pending' and (lease_until is null or lease_until < now()) order by id limit $1 for update skip locked",
       [limit],
     );
     return r.rows;

@@ -67,3 +67,13 @@ export { chatModelFor, demoChatModel } from "./online/conversation-host.js";
 export type { ChatModelChoice, ChatRoute, HostChatOptions } from "./online/conversation-host.js";
 export { jobTick, newJobId } from "./online/job.js";
 export type { JobDeps, JobTick } from "./online/job.js";
+// E10 hosted (D-700–D-702): the hosted HTTP port, the runner protocol and its client
+export { hostedHandler, startHostedServer } from "./online/hosted-server.js";
+export type { HostedHandlers } from "./online/hosted-server.js";
+export { runnerApi } from "./online/runner-api.js";
+export type { RunnerApiDeps } from "./online/runner-api.js";
+export { HttpOutbox, RunnerClient, RunnerHttpError } from "./online/runner-client.js";
+export type { FetchLike } from "./online/runner-client.js";
+export { mintRunnerJwt, runnerJwtSecret, verifyRunnerJwt } from "./online/runner-jwt.js";
+export { hostedFromEnv, workerRole } from "./online/hosted-env.js";
+export type { WorkerRole } from "./online/hosted-env.js";
