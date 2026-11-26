@@ -453,7 +453,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   if (out.stopped === "conflict" && conflictWith) {
     const other = conflictWith;
     seq = await inTransaction(d.db, async (tx) => {
-      await tx.query("update public.tasks set attempt = attempt + 1, retry_reason = 'conflict', wait_for = $2 where id = $1", [t.id, other]);
+      // D-617 (live test 26.11, run 9): a wait for a file is not a failed attempt; the cap grows with it (tasks_check: ≤ 10)
+      await tx.query("update public.tasks set attempt = attempt + 1, attempts_max = least(attempts_max + 1, 10), retry_reason = 'conflict', wait_for = $2 where id = $1", [t.id, other]);
       const s2 = await setState(tx, t, "CREATED", { wait_reason: null });
       await appendLedgerOnline(tx, { org_id: t.org_id, kind: "task_retry", task_id: t.id, payload: { attempt: t.attempt + 1, reason: "conflict", wait_for: other } });
       return s2;

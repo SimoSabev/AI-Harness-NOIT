@@ -575,9 +575,12 @@ describe("daemon and file conflicts (E8f, AC-4.2)", () => {
       const out = await base(i);
       return { ...out, agentExit: null, stopped: "conflict" as const };
     };
+    const before = (await s.db.query<{ attempts_max: number }>("select attempts_max from public.tasks where id = 't_web_1'")).rows[0]?.attempts_max ?? 0;
     await runDaemonOnce(s.deps);
     expect(stop).toBe("conflict");
     expect((await s.db.query("select state, wait_for, retry_reason, attempt from public.tasks where id = 't_web_1'")).rows[0]).toEqual({ state: "CREATED", wait_for: "t_other", retry_reason: "conflict", attempt: 2 });
+    // D-617 (live test 26.11, run 9): a wait for a file is not a failed attempt; the cap grows with it
+    expect((await s.db.query<{ attempts_max: number }>("select attempts_max from public.tasks where id = 't_web_1'")).rows[0]?.attempts_max).toBe(before + 1);
     expect((await s.db.query("select kind, text from public.task_activities where task_id = 't_web_1'")).rows).toEqual([{ kind: "conflict", text: "src/cart.ts · t_other" }]);
     expect((await s.db.query("select 1 from public.ladder_events")).rows).toHaveLength(0);
   });
