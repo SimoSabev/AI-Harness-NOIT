@@ -1,3 +1,5 @@
+import { newestWindows } from "@mandat/contract";
+import type { LimitSnapshot } from "@mandat/contract";
 import type { UsageRow } from "../usage";
 import { asService } from "./sql";
 import type { Db } from "./sql";
@@ -13,4 +15,15 @@ export async function usageRows(db: Db, org: string, days: number): Promise<Usag
        from public.conversations x where x.org_id = $1::uuid and x.created_at > now() - make_interval(days => $2)`,
     [org, days],
   ))).rows;
+}
+
+/** D-647: what is left of each subscription — the newest windows its CLI reported (a task or a conversation) in the last
+ * 8 days, a week and a day; anything older says nothing about now. Each payload is checked (zod) at this border. */
+export async function accountWindows(db: Db, org: string): Promise<Record<string, LimitSnapshot>> {
+  const rows = (await asService(db, (sql) => sql.query<{ payload: unknown }>(
+    `select g.payload from public.ledger g where g.org_id = $1::uuid and g.kind = 'limit_windows'
+        and g.ts > to_char((now() - interval '8 days') at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') order by g.seq desc limit 500`,
+    [org],
+  ))).rows;
+  return newestWindows(rows.map((r) => r.payload));
 }

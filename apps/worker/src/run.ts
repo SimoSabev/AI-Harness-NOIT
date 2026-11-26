@@ -13,7 +13,7 @@ import {
   isKeyCli,
   JOB_IN,
 } from "@mandat/contract";
-import type { AgentEnding, CompileTarget, Contract, ErrorCode, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
+import type { AgentEnding, CompileTarget, Contract, ErrorCode, LimitWindow, Evidence, GateLogLine, GateRoute, HarnessProfile, ProviderProblem, RunPhase, SecurityEvent, StreamEvent, StreamInput } from "@mandat/contract";
 import { compileProfile, grantOnce, parseAsks, skillTexts } from "@mandat/profile";
 import { scanSkills } from "@mandat/onboard";
 import type { Ask } from "@mandat/profile";
@@ -27,6 +27,7 @@ import type { Channel, TaskUsage } from "@mandat/channels";
 import { buildReasons, canaryCheck, decideVerdict, ev, na, nothingToCheck } from "@mandat/core";
 import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha } from "@mandat/export";
 import type { ChangesetExport } from "@mandat/contract";
+import { claudeLimitWindows } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
 import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, langImageTag, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans, uiImageTag } from "@mandat/sandbox";
@@ -122,6 +123,8 @@ export interface RunTaskOutput {
   error?: { code: ErrorCode; message: string };
   /** E3в: the last upstream 429 of the attempt (from the proxy), for the limit chain */
   limit?: TaskUsage["limit"];
+  /** D-647: the subscription's windows as the agent's stream last reported them (absent when it said nothing) */
+  windows?: LimitWindow[];
   /** D-293: the provider rejected the key (upstream 401/403 seen by the proxy) */
   authFailed?: boolean;
   /** E8g: what the agent asked for (ask rules of the policy it hit); non-empty → the task waits for a person */
@@ -334,6 +337,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     let channel: Channel | undefined;
     let usage: TaskUsage = ZERO_USAGE;
     let streamLimit: TaskUsage["limit"] = null;
+    let streamWindows: LimitWindow[] | null = null;
     let agentExit: number | null = null;
     let exportResult: ChangesetExport | null = null;
     let diffPatch: Buffer | null = null;
@@ -621,6 +625,8 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
                 row = j !== null && typeof j === "object" ? (j as object) : { raw: line };
                 // D-567: a subscription's own limit (rate_limit_event rejected) is a limit, not an empty change
                 streamLimit = subscriptionLimit(row, new Date().toISOString()) ?? streamLimit;
+                // D-647: every window of the account (5 h, week, …), with its use and reset; the newest event wins
+                streamWindows = claudeLimitWindows(row) ?? streamWindows;
               } catch {
                 row = { raw: line };
               }
@@ -900,6 +906,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       verdict: red, exit, runDir, agentExit,
       ledger: w.ledgerFrom !== null && w.ledgerTo !== null ? { from: w.ledgerFrom, to: w.ledgerTo } : null,
       ...(usage.limit ? { limit: usage.limit } : {}),
+      ...(streamWindows ? { windows: streamWindows } : {}),
       ...(usage.authFailed ? { authFailed: true } : {}),
       ...(asks.length > 0 ? { asks } : {}),
       ...(agentStop ? { stopped: agentStop } : {}),

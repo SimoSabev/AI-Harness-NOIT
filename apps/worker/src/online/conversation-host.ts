@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parseAgentRef } from "@mandat/contract";
+import type { LimitWindow } from "@mandat/contract";
 import { cliModel, fakeModel, proxyModel } from "@mandat/research";
 import type { CliExec, ModelClient, RouterChannel } from "@mandat/research";
 import { runToken } from "./research-host.js";
@@ -14,6 +15,8 @@ export interface HostChatOptions {
   proxy: { url: string; secretPath: string } | null;
   /** a subscription profile's CLI call in its container (null = not available on this host) */
   profileExec: ((profile: string, argv: string[], stdin: string, signal?: AbortSignal) => Promise<string>) | null;
+  /** D-647: what the subscription's stream said is left of it (the worker writes it to the ledger) */
+  onWindows?: (r: ChatRoute, w: LimitWindow[]) => void;
 }
 export interface ChatRoute {
   id: string;
@@ -46,7 +49,8 @@ export function chatModelFor(o: HostChatOptions, r: ChatRoute): ChatModelChoice 
     const run = o.profileExec;
     const profile = ref.via.name;
     const exec: CliExec = (argv, stdin, signal) => run(profile, argv, stdin, signal);
-    return { ok: true, client: cliModel({ channel: channel(r, "cli_profile", r.model), exec }) };
+    const onWindows = o.onWindows;
+    return { ok: true, client: cliModel({ channel: channel(r, "cli_profile", r.model), exec, ...(onWindows ? { onWindows: (w: LimitWindow[]) => onWindows(r, w) } : {}) }) };
   }
   if (ref.cli !== "claude" && ref.cli !== "codex") return { ok: false, why: `a conversation through ${ref.cli} is not supported yet` };
   if (!o.proxy) return { ok: false, why: "the proxy is not running" };

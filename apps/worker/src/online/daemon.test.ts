@@ -272,6 +272,20 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
         await nothingDelivered(s);
       }
     });
+    it("D-647: the windows the subscription's stream reported go to the ledger under the task's agent; none → no row", async () => {
+      const windows = [{ id: "five_hour", minutes: 300, used: 0.25, resets_at: "2026-11-26T15:00:00.000Z", status: "allowed" as const }, { id: "seven_day", minutes: 10080, used: 0.5, resets_at: "2026-11-30T09:00:00.000Z", status: "allowed" as const }];
+      const s = await setup(0);
+      emptyRun(s, { ok: true, replied: true, cause: null }, { windows });
+      await runDaemonOnce(s.deps);
+      const rows = (await readLedgerOnline(s.db, DEMO_ORG_ID)).filter((r) => r.kind === "limit_windows").map((r) => JSON.parse(r.payload_jcs ?? "{}") as Record<string, unknown>);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ agent: "fake:honest-fix", windows });
+      expect(Number.isNaN(Date.parse(String(rows[0]?.at)))).toBe(false);
+      const n = await setup(0);
+      emptyRun(n, { ok: true, replied: true, cause: null });
+      await runDaemonOnce(n.deps);
+      expect((await readLedgerOnline(n.db, DEMO_ORG_ID)).filter((r) => r.kind === "limit_windows")).toHaveLength(0);
+    });
     it("an agent that replied and then crashed is still a failure, its words do not rescue it", async () => {
       const s = await setup(0);
       emptyRun(s, { ok: false, replied: true, cause: "timed_out" }, {}, 1);

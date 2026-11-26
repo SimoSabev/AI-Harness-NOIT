@@ -2,10 +2,11 @@ import { existsSync, readFileSync } from "node:fs";
 import type { Server } from "node:http";
 import path from "node:path";
 import { runBench } from "@mandat/bench";
+import type { LimitWindow } from "@mandat/contract";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { BenchRunner, Db, EvolveTick, JobTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, commitSigningKey, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostedFromEnv, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, observerRecorder, openDb, selfFinishTick, startHostedServer, startWebhookServer, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker, workerRole } from "@mandat/worker";
+import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, recordChatWindows, commitSigningKey, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostedFromEnv, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, observerRecorder, openDb, selfFinishTick, startHostedServer, startWebhookServer, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker, workerRole } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { profilePrintExec, researchDeps, researchLoop } from "./research.js";
@@ -254,8 +255,12 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
   const secretPath = path.join(o.home, "proxy", "secret");
   const chatProxy = { url: `http://127.0.0.1:${host.proxyInferencePort}`, secretPath };
   const chatExec = profilePrintExec(realDockerRunner());
+  // D-647: what the subscription said is left of it goes to the ledger (Settings → Models); losing one is harmless
+  const chatWindows = (r: { id: string; agent: string }, windows: LimitWindow[]) => {
+    recordChatWindows(db, { conversation: r.id, agent: r.agent, windows, at: new Date().toISOString() }).catch(() => io.stderr("[chat] could not record the subscription's limit windows\n"));
+  };
   const chat = env.MANDAT_CHAT === "0" ? Promise.resolve() : conversationLoop({ db, log: (l) => io.stderr(`${l}
-`), modelFor: (r) => chatModelFor({ proxy: existsSync(secretPath) ? chatProxy : null, profileExec: chatExec }, r) }, { once: o.once, pollMs: 500, ...(o.signal ? { signal: o.signal } : {}) });
+`), modelFor: (r) => chatModelFor({ proxy: existsSync(secretPath) ? chatProxy : null, profileExec: chatExec, onWindows: chatWindows }, r) }, { once: o.once, pollMs: 500, ...(o.signal ? { signal: o.signal } : {}) });
   // D-535: the jobs' planner answers through the conversation's model paths (proxy, connection, subscription, demo)
   const jobs = jobTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}
 `), tick: () => jobTick({ db, log: (l) => io.stderr(`${l}

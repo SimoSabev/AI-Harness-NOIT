@@ -79,6 +79,23 @@ describe("model clients (D-404)", () => {
     expect((e as MandatError).code).toBe("E_SUBSCRIPTION_LIMIT");
     expect((e as MandatError).message).toBe("subscription_limit resets 2026-11-26T09:00:00.000Z");
   });
+  it("D-647: the newest windows of the stream go to onWindows, also when the answer is a limit; none → not called", async () => {
+    const lines = (...o: unknown[]) => o.map((x) => JSON.stringify(x)).join("\n");
+    const ev = (used: number, status = "allowed") => ({ type: "rate_limit_event", rate_limit_info: { status, unifiedWindows: { five_hour: { utilization: used, resetsAt: 1795683600 }, seven_day: { utilization: 0.4, resetsAt: 1796209200 } } } });
+    const seen: unknown[] = [];
+    const ok = cliModel({ channel: ch("max", "cli_profile"), exec: async () => lines(ev(0.1), ev(0.2), { type: "result", is_error: false, result: "hi", usage: {} }), onWindows: (w) => seen.push(w) });
+    await ok.complete({ system: "s", user: "u", maxTokens: 10, json: false });
+    expect(seen).toEqual([[
+      { id: "five_hour", minutes: 300, used: 0.2, resets_at: "2026-11-26T09:00:00.000Z", status: null },
+      { id: "seven_day", minutes: 10080, used: 0.4, resets_at: new Date(1796209200 * 1000).toISOString(), status: null },
+    ]]);
+    const limited = cliModel({ channel: ch("max", "cli_profile"), exec: async () => lines(ev(1, "rejected"), { type: "result", is_error: true, result: "limit" }), onWindows: (w) => seen.push(w) });
+    await limited.complete({ system: "s", user: "u", maxTokens: 10, json: false }).catch(() => undefined);
+    expect(seen).toHaveLength(2);
+    const quiet = cliModel({ channel: ch("max", "cli_profile"), exec: async () => lines({ type: "result", is_error: false, result: "hi", usage: {} }), onWindows: (w) => seen.push(w) });
+    await quiet.complete({ system: "s", user: "u", maxTokens: 10, json: false });
+    expect(seen).toHaveLength(2);
+  });
 });
 
 describe("role models with fallbacks", () => {

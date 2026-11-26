@@ -10,7 +10,7 @@ import { UsagePanel } from "../../../components/usage-panel";
 import { usageView } from "../../../lib/usage";
 import { db } from "../../../lib/server/db";
 import { accountLimits } from "../../../lib/server/conversation";
-import { usageRows } from "../../../lib/server/usage";
+import { accountWindows, usageRows } from "../../../lib/server/usage";
 import { pageCtx } from "../../../lib/server/page";
 
 export const dynamic = "force-dynamic";
@@ -20,13 +20,14 @@ export async function generateMetadata(): Promise<Metadata> {
 
 // D-393: Settings → Models — every saved connection with its models and the default the task box starts with.
 // D-629: above them, the usage — what each account and model spent, the work it did, and what is left.
+// D-647: what is left of a subscription is its provider's windows, as its CLI last reported them (the ledger).
 export default async function ModelsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const c = await pageCtx();
   const t = await getT();
   const days = (await searchParams).days === "30" ? 30 : 7;
   const limits = await accountLimits(db(), c.org);
-  const [v, rows] = await Promise.all([agentsView(t.lang, process.env, limits), usageRows(db(), c.org, days + 1)]);
-  const usage = usageView(rows, v.agents, { now: Date.now(), days });
+  const [v, rows, windows] = await Promise.all([agentsView(t.lang, process.env, limits), usageRows(db(), c.org, days + 1), accountWindows(db(), c.org)]);
+  const usage = usageView(rows, v.agents, { now: Date.now(), days, windows });
   return (
     <Shell current="settings" waiting={c.waiting}>
       <p className="text-sm"><Link href="/settings" className="text-mute hover:text-ink">{t("settings.title")}</Link></p>

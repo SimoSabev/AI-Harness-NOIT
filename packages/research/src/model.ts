@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { z } from "zod";
-import type { ResearchRole, RoleAssignment } from "@mandat/contract";
-import { MandatError, subscriptionLimitError } from "@mandat/contract";
+import type { LimitWindow, ResearchRole, RoleAssignment } from "@mandat/contract";
+import { MandatError, claudeLimitWindows, subscriptionLimitError } from "@mandat/contract";
 import { costUsd, costUsdOpenAi } from "@mandat/llm-proxy";
 import type { OpenAiRate } from "@mandat/llm-proxy";
 import type { RoleRoute, RouterChannel } from "./router.js";
@@ -134,12 +134,15 @@ function streamRows(out: string): Record<string, unknown>[] {
 }
 /** the worker runs argv in the profile's sandbox and returns stdout */
 export type CliExec = (argv: string[], stdin: string, signal?: AbortSignal) => Promise<string>;
-export function cliModel(o: { channel: RouterChannel; exec: CliExec }): ModelClient {
+/** D-647: onWindows gets the subscription's windows (5 h, week, …) as the stream last reported them, never the answer */
+export function cliModel(o: { channel: RouterChannel; exec: CliExec; onWindows?: (w: LimitWindow[]) => void }): ModelClient {
   return {
     channel: o.channel,
     async complete(r, signal) {
       const out = await o.exec(cliArgv(o.channel.model, r.system), r.user, signal);
       const rows = streamRows(out);
+      const windows = rows.map((x) => claudeLimitWindows(x)).findLast((w) => w !== null);
+      if (windows) o.onWindows?.(windows);
       // D-591: the subscription says it is spent only in its own stream (D-567); the reset goes up, the answer's words never
       const limit = rows.find((x) => x.type === "rate_limit_event" && obj(x.rate_limit_info).status === "rejected");
       if (limit) {
