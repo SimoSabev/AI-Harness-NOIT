@@ -72,7 +72,8 @@ body {
 .sweep { position: relative; overflow: hidden; }
 .sweep::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 22%, transparent), transparent); animation: sweep 2.6s ease-in-out infinite; }
 
-/* D-621: where the chat box sits at the bottom and the window is not wide enough for both, Nova waits above it */
+/* D-621: where the chat box sits at the bottom and the window is not wide enough for both, Nova waits above it.
+   D-632: as high as the box really is (it writes its height to --composer-h; its chips wrap on a phone). */
 @media (max-width: 1535px) {
-  body:has([data-composer]:not(.hidden)) .nova-dock { bottom: 8.5rem; }
+  body:has([data-composer]:not(.hidden)) .nova-dock { bottom: calc(var(--composer-h, 7.5rem) + 1rem); }
 }

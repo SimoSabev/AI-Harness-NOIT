@@ -47,3 +47,15 @@ describe("nothing drags the page sideways (D-631)", () => {
     expect(css).toMatch(/html,\s*body\s*\{[^}]*overflow-x:\s*clip/);
   });
 });
+
+// D-632 (Simo 26.11.2026): on a phone the task box is taller than 8.5rem (its chips wrap), and Nova covered them. Nova
+// now sits as high as the box really is (the box writes its height to --composer-h).
+describe("Nova stays above the task box (D-632)", () => {
+  it("the dock's lift is the box's measured height", () => {
+    const css = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../app/globals.css"), "utf8");
+    expect(css).toMatch(/\.nova-dock\s*\{\s*bottom:\s*calc\(var\(--composer-h/);
+    const ws = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "workspace.tsx"), "utf8");
+    expect(ws).toMatch(/ResizeObserver/);
+    expect(ws).toContain("--composer-h");
+  });
+});

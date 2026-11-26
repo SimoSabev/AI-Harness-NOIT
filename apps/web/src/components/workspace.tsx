@@ -125,6 +125,19 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
   const { chat, follow, reset } = useConversation(initialChat);
   // D-621: the box is one line and grows with its text up to 40% of the window, then scrolls
   const box = useRef<HTMLTextAreaElement>(null);
+  // D-632: the box's real height (its chips wrap on a phone) lifts Nova above it (globals.css, --composer-h)
+  const composer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = composer.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() => root.style.setProperty("--composer-h", `${Math.ceil(el.getBoundingClientRect().height)}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--composer-h");
+    };
+  }, []);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -299,7 +312,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
       )}
       {/* D-621: the box sits at the bottom like in any chat — one line that grows with the text; the mode, the agent,
           the model and the project are small chips in its bar, the send button is round */}
-      <div data-composer className={`sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-canvas pb-3 ${questions ? "hidden" : ""}`}>
+      <div ref={composer} data-composer className={`sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-canvas pb-3 ${questions ? "hidden" : ""}`}>
         <div className="rounded-[18px] border border-line-strong bg-panel shadow-[0_10px_30px_rgb(0_0_0/0.22)] transition focus-within:border-accent/60 focus-within:shadow-[0_0_0_3px_var(--accent-soft),0_10px_30px_rgb(0_0_0/0.22)]">
           <textarea ref={box} data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={1} maxLength={4000} aria-label={t("newTask.what")} placeholder={t("chat.placeholder")} autoFocus
             onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
