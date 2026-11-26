@@ -7,7 +7,7 @@ import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
 import { learnedQuality } from "@mandat/learn";
 import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
-import type { LadderState } from "@mandat/core";
+import type { LadderInput, LadderState, LadderStepResult } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { drift } from "@mandat/onboard";
 import { forbidAtNight } from "@mandat/profile";
@@ -32,6 +32,7 @@ import { mainHead, rebaseOnto } from "./rebase.js";
 import { ciNote } from "./ci.js";
 import { memoryForTask, sandboxProposals, tidyAfterTask } from "./memory.js";
 import { deliverLocal, mergeLocal } from "./deliver-local.js";
+import { commitSigningKey } from "./signing.js";
 import { finishOracle, oracleTestsFor } from "./oracle.js";
 import { finishJobTask, jobInputs } from "./job-task.js";
 import type { JobInputs } from "./job-task.js";
@@ -713,7 +714,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   let applied: { from: string; to: string } | null = null;
   let applyFail = "no_branch";
   if (t.provider === "local" && v.result === "VERIFIED" && diffPatch.length > 0) {
-    const lb = await deliverLocal({ mirror, taskId: t.id, attempt: t.attempt, baseSha: v.base_sha, patch: diffPatch, message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }) }).catch(() => null);
+    // D-661: signed with the harness SSH key (outside the sandbox); MANDAT_SIGN_COMMITS=0 or no ssh-keygen → unsigned
+    const lb = await deliverLocal({ mirror, taskId: t.id, attempt: t.attempt, baseSha: v.base_sha, patch: diffPatch, signingKey: await commitSigningKey(d.home, process.env), message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }) }).catch(() => null);
     if (lb?.ok) {
       await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'local_branch', $3)", [t.org_id, t.id, lb.ref]);
       if (willAuto) {
@@ -777,16 +779,21 @@ export async function finishOutcome(d: Pick<DaemonDeps, "db" | "broadcast">, t: 
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "delivered", task_id: t.id, payload: { pr: prNumber, merge_sha: mergeSha } });
     await tx.query("insert into public.outcomes (org_id, changeset_id, result, window_minutes, tree_match) values ($1::uuid, $2::uuid, $3, $4, null)", [t.org_id, changesetId, result, t.is_demo ? 0 : 7 * 24 * 60]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "outcome", task_id: t.id, payload: { result, window_minutes: t.is_demo ? 0 : 10080 } });
-    await tx.query(
-      `insert into public.ladder_state (org_id, repo_id, task_type, agent, level, s_up, s_down, pinned) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
-         on conflict (repo_id, task_type, agent) do update set level = excluded.level, s_up = excluded.s_up, s_down = excluded.s_down, pinned = excluded.pinned, updated_at = now()`,
-      [t.org_id, t.repo_id, t.type, t.agent, step.next.level, step.next.s_up, step.next.s_down, step.next.pinned],
-    );
-    await tx.query("insert into public.ladder_events (org_id, repo_id, task_type, agent, input, level_before, level_after, s_up, s_down, task_id) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10)", [t.org_id, t.repo_id, t.type, t.agent, result, ladder.level, step.next.level, step.next.s_up, step.next.s_down, t.id]);
-    if (step.delta !== 0) await appendLedgerOnline(tx, { org_id: t.org_id, kind: "ladder_change", task_id: t.id, payload: { agent: t.agent, task_type: t.type, from: ladder.level, to: step.next.level } });
+    await writeLadderStep(tx, t, ladder, step, result);
     return setState(tx, t as TaskRow, "CLOSED", { outcome_decided: true, effective_level: step.next.level });
   });
   await d.broadcast?.(`org:${t.org_id}:board`, "task", { task_id: t.id, seq, state: "CLOSED", level: step.next.level }).catch(() => undefined);
+}
+
+/** The ladder side of an outcome (state, event, ledger row on a level change); shared by OUTCOME and a revert (D-660). */
+export async function writeLadderStep(tx: SqlClient, t: { id: string; org_id: string; repo_id: string; type: string; agent: string }, ladder: LadderState, step: LadderStepResult, input: LadderInput): Promise<void> {
+  await tx.query(
+    `insert into public.ladder_state (org_id, repo_id, task_type, agent, level, s_up, s_down, pinned) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
+       on conflict (repo_id, task_type, agent) do update set level = excluded.level, s_up = excluded.s_up, s_down = excluded.s_down, pinned = excluded.pinned, updated_at = now()`,
+    [t.org_id, t.repo_id, t.type, t.agent, step.next.level, step.next.s_up, step.next.s_down, step.next.pinned],
+  );
+  await tx.query("insert into public.ladder_events (org_id, repo_id, task_type, agent, input, level_before, level_after, s_up, s_down, task_id) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10)", [t.org_id, t.repo_id, t.type, t.agent, input, ladder.level, step.next.level, step.next.s_up, step.next.s_down, t.id]);
+  if (step.delta !== 0) await appendLedgerOnline(tx, { org_id: t.org_id, kind: "ladder_change", task_id: t.id, payload: { agent: t.agent, task_type: t.type, from: ladder.level, to: step.next.level } });
 }
 
 /** Supabase Realtime REST broadcast (private channel; service role only in the worker). */

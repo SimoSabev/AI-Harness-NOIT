@@ -34,6 +34,8 @@ export interface HarnessDeps extends GhDeps {
   baselineRunner?: (treeDir: string, policy: MandatPolicy) => Promise<Baseline>;
   /** E8e (D-354): runs an MCP server once without network and vets its definitions; absent → mcp_vet stays pending */
   mcpVetRunner?: McpVetRunner;
+  /** E9f (D-661): the harness SSH key that signs the approved rules' commit of a local project; absent → unsigned */
+  signingKey?: string | null;
 }
 
 export interface Existing { ".mandat.yml": string | null; "AGENTS.md": string | null; "CLAUDE.md": string | null }
@@ -173,7 +175,7 @@ async function deliverHarnessLocal(d: HarnessDeps, proposalId: string, hp: { org
   const have = await cleanGit({ tmpHome: tmp }).run(["rev-parse", "--verify", "--quiet", "--end-of-options", `refs/heads/${ref}`], { cwd: mirror }).then((x) => (x.code === 0 ? x.stdout.toString("utf8").trim() : null)).finally(() => rmSync(tmp, { recursive: true, force: true }));
   let sha = have;
   if (!sha) {
-    const b = await deliverLocalRef({ mirror, ref, baseSha: hp.base_commit, patch: Buffer.from(hp.patch, "utf8"), message: `mandat: harness v${hp.version} (${hp.yaml_sha256.slice(7, 15)})`, ...(d.tmpRoot ? { tmpRoot: d.tmpRoot } : {}) });
+    const b = await deliverLocalRef({ mirror, ref, baseSha: hp.base_commit, patch: Buffer.from(hp.patch, "utf8"), message: `mandat: harness v${hp.version} (${hp.yaml_sha256.slice(7, 15)})`, ...(d.tmpRoot ? { tmpRoot: d.tmpRoot } : {}), ...(d.signingKey ? { signingKey: d.signingKey } : {}) });
     if (!b.ok) throw new Error(`harness rules: ${b.reason}`);
     sha = b.sha;
   }

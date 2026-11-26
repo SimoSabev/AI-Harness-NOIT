@@ -46,6 +46,8 @@ describe("push-payload", () => {
     const f = pushPayload({ task_id: "t_y", kind: "failed", text: "x", result: "FAILED", level: 0 });
     expect(f).toBe(JSON.stringify({ task_id: "t_y", kind: "failed", title: "ПРОВАЛ: x", verdict: "ПРОВАЛ", level: 0 }));
     expect(f).not.toMatch(/mdt_|sk-|token|secret/i);
+    // E9f (D-660): a revert of a merged change within 7 days
+    expect(JSON.parse(pushPayload({ task_id: "t_z", kind: "reverted", text: "x", result: "VERIFIED", level: 1 })).title).toBe("Върната (revert): x");
   });
 });
 

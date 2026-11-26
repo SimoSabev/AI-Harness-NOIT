@@ -75,6 +75,9 @@ describe("check-test-counts (т. 0.3 е)", () => {
     expect(decisionFor(['it("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe(null);
     // D-423: decisions are in the 4xx range now
     expect(decisionFor(["// D-423: no key", 'it.skip("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe("D-423");
+    // D-662: and in the 6xx range (E9f); D-1xx still does not count
+    expect(decisionFor(["// D-662: no token", 'it.skip("w", () => {})'], { title: "w", ancestorTitles: [] })).toBe("D-662");
+    expect(decisionFor(["// D-123: old", 'it.skip("v", () => {})'], { title: "v", ancestorTitles: [] })).toBeNull();
     expect(decisionFor(["// D-123: old", 'it.skip("z", () => {})'], { title: "z", ancestorTitles: [] })).toBe(null);
   });
 });

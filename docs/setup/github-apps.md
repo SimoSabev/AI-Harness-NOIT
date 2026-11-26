@@ -22,3 +22,11 @@ GITHUB_OBSERVER_APP_ID, GITHUB_OBSERVER_PRIVATE_KEY, GITHUB_OBSERVER_INSTALLATIO
 
 ## 4. Проверка
 `pnpm test:live` (docs/setup/live-tests.md) → L1 (check run на тестов PR), L2 (merge със стар sha → 409), L3 (ruleset блокира при action_required).
+
+## 5. E9е: L4 и revert (чака Симо)
+- **L4 „Verified“** (D-663): след стъпки 1–3 пусни `pnpm test:live`. Тестът L4 прави комит през Writer App, който не е на
+  нито един клон, и иска `verification.verified = true`. Ако падне, кажи на кодера `verification.reason` (без ключове).
+- **Revert → стълба** (D-660): Observer App с включен webhook (събитие **Push**) към
+  `https://<адрес>/api/webhooks/github/observer` и `GITHUB_OBSERVER_WEBHOOK_SECRET` в env на worker-а. Тогава
+  `mandat worker` слуша на `MANDAT_WEBHOOK_HOST:MANDAT_WEBHOOK_PORT` (127.0.0.1:8790) и пише „Observer webhook on“.
+  Отпред трябва обратен прокси (caddy в deploy/), а за локален тест — тунел по твой избор.
