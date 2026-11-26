@@ -174,9 +174,9 @@ describe("a plan whose only problem is a shared new module is ordered, not refus
   });
 });
 
-// D-619 (live test 26.11, run 10): AC-1's hidden test counts the gift card part, so it imports src/giftcards/checkout —
+// D-623 (live test 26.11, run 10): AC-1's hidden test counts the gift card part, so it imports src/giftcards/checkout —
 // the module u6 (which waits for u3) builds for AC-7..AC-10. u3 held AC-1 and failed it in 3 attempts and 2 rescue tries.
-describe("a failing criterion that needs a module a later unit builds goes to that unit (D-619)", () => {
+describe("a failing criterion that needs a module a later unit builds goes to that unit (D-623)", () => {
   const mods = new Map<string, string[]>([
     ["AC-1", ["src/giftcards/cards", "src/giftcards/checkout", "src/loyalty/points"]],
     ["AC-2", ["src/loyalty/points"]],

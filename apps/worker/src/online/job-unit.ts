@@ -109,7 +109,7 @@ async function alreadyDone(db: Db, j: JobRow, u: UnitRow, units: readonly UnitRo
 }
 
 /**
- * D-619 (live test 26.11, run 10): a unit that still fails only criteria whose hidden tests import a new module a later
+ * D-623 (live test 26.11, run 10): a unit that still fails only criteria whose hidden tests import a new module a later
  * unit builds (core laterHome) hands those criteria to that unit and is built again without them; with nothing left it
  * passes without landing. The final check still runs every criterion. Ids only in the ledger.
  */

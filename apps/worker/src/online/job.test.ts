@@ -319,7 +319,7 @@ describe("units, final check, seal and delivery (D-535)", () => {
     await jobTick(t.jd);
     expect((await t.units())[1]?.status).toBe("parked");
   });
-  it("D-619 (run 10): a unit failing only a criterion whose module a later unit builds passes it on to that unit", async () => {
+  it("D-623 (run 10): a unit failing only a criterion whose module a later unit builds passes it on to that unit", async () => {
     // AC-1's hidden test imports src/loyalty, a new module u2 (which waits for u1) needs for AC-2 too
     const files = [
       { path: "tests/__hidden__/a.spec.ts", data: Buffer.from(`it("AC-1: ${SECRET_NAME}", async () => { const { award } = await import("../../src/loyalty"); award(); });\n`) },

@@ -130,7 +130,7 @@ export function orderSharedModules(units: readonly PlanUnit[], modules: Readonly
 }
 
 /**
- * D-619 (live test 26.11, run 10): where the failing criteria of a stopped unit go. A criterion goes to a later unit
+ * D-623 (live test 26.11, run 10): where the failing criteria of a stopped unit go. A criterion goes to a later unit
  * when every new module its hidden tests import that no landed unit built is also needed by that unit: the first unit
  * (plan order) that waits for this one, has not started (`open`), and needs all of them through its own criteria. None
  * of those modules may be needed by the unit's other criteria (then the unit builds it itself). All failing criteria

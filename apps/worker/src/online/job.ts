@@ -191,7 +191,7 @@ async function sharedModuleCheck(db: Db, j: JobRow): Promise<{ check: (units: re
   return { check: (units) => sharedModuleProblems(units, f.mods, f.exists), order: (units) => orderSharedModules(units, f.mods, f.exists) };
 }
 
-/** D-594 / D-619: the new modules each criterion's hidden tests import, and which modules main has; null when none */
+/** D-594 / D-623: the new modules each criterion's hidden tests import, and which modules main has; null when none */
 export async function moduleFacts(db: Db, j: Pick<JobRow, "repo_id" | "spec_hash" | "oracle_hash" | "remote_url">): Promise<{ mods: Map<string, string[]>; exists: (m: string) => boolean } | null> {
   const mods = criterionModules(await hiddenFilesOf(db, j));
   if ([...mods.values()].every((m) => m.length === 0)) return null;
