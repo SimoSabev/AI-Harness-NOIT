@@ -2,6 +2,7 @@ import { LEARN_LIMITS, ProfileChange, ProfileManifest, sourceOfClass } from "@ma
 import type { ProfileLayers, TaskType } from "@mandat/contract";
 import { hasChange, opensDangerous, rulesFromFailures as profileRules } from "@mandat/profile";
 import type { FailureRow } from "@mandat/profile";
+import { weakens } from "./auto.js";
 
 // E9д (spec 5.5, PRD 6.11 т. 2, D-641): failures and asks → proposals for a new version of the harness profile. Each
 // proposal is one fixed change with its evidence and its rule's name (`rule:<name>`); none is text a model wrote.
@@ -9,14 +10,15 @@ import type { FailureRow } from "@mandat/profile";
 //   accept a narrowing one after the bench) and only get their name here;
 // - flaky_repeat: a test that failed D1 in ≥ 2 tasks a person labelled as not the agent's fault → tests.flaky;
 // - ask_repeat: ≥ 5 tasks asked for one tool and a person decided the same way in ≥ 80% → allow / deny of the tool.
-// The two new rules always wait for a person: flaky and allow widen, and deny restates what people already decided.
+// D-647: none waits for a person. Each goes through the bench gate (auto.ts); `weakens` marks the ones (flaky, allow)
+// that need the stricter gate and the regression watch.
 
 export interface LearnFailureRow extends FailureRow {
   /** the person's failure label of the task's verdict (failure_labels), if any */
   label: { layer: string; label: string } | null;
 }
 export interface AskRow { task_id: string; task_type: TaskType; tool: string; status: "pending" | "once" | "always" | "denied"; at: string }
-export interface LearnedRule { manifest: ProfileManifest; needs_person: boolean }
+export interface LearnedRule { manifest: ProfileManifest; /** D-647: can weaken the verdict (flaky, allow) */ weakens: boolean }
 
 const DAY = 86_400_000;
 /** a failure a person said was not the agent's: the checks or the infrastructure */
@@ -31,7 +33,7 @@ export function rulesFromFailures(input: { failures: readonly LearnFailureRow[];
   const out: LearnedRule[] = [];
   for (const m of profileRules(input.failures, profile, now)) {
     const source = sourceOfClass(m.reason_class);
-    out.push({ manifest: source ? { ...m, source } : m, needs_person: false });
+    out.push({ manifest: source ? { ...m, source } : m, weakens: weakens(m.change) });
   }
   out.push(...flaky(input.failures.filter((r) => inWindow(r.at)), profile));
   out.push(...asks(input.asks.filter((r) => inWindow(r.at)), profile));
@@ -50,7 +52,7 @@ function proposal(change: unknown, evidence: string[], types: TaskType[], reason
   if (!c.success || hasChange(profile, c.data)) return null;
   const source = sourceOfClass(reason_class);
   const m = ProfileManifest.safeParse({ change: c.data, evidence: evidence.slice(0, 50), reason_class, prediction: { task_type: mostCommon(types), next_n: 10, max_repeats: 0 }, ...(source ? { source } : {}) });
-  return m.success ? { manifest: m.data, needs_person: true } : null;
+  return m.success ? { manifest: m.data, weakens: weakens(m.data.change) } : null;
 }
 
 function flaky(rows: readonly LearnFailureRow[], profile: ProfileLayers): LearnedRule[] {
