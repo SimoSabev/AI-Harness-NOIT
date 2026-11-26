@@ -382,6 +382,9 @@ importers:
       '@mandat/gate-github':
         specifier: workspace:*
         version: link:../../packages/gate-github
+      '@mandat/learn':
+        specifier: workspace:*
+        version: link:../../packages/learn
       '@mandat/ledger':
         specifier: workspace:*
         version: link:../../packages/ledger

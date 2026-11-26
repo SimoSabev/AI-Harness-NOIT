@@ -36,6 +36,9 @@
       "path": "../../packages/gate-github"
     },
     {
+      "path": "../../packages/learn"
+    },
+    {
       "path": "../../packages/ledger"
     },
     {
