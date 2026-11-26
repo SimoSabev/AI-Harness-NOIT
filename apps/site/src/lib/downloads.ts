@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { MandatError, SiteReleaseManifest, siteDownloadUrl } from "@mandat/contract";
@@ -33,6 +34,8 @@ export function releaseManifest(siteDir: string = process.cwd()): SiteReleaseMan
       const f = path.join(siteDir, "public", "downloads", a.file);
       if (!existsSync(f)) throw new MandatError("E_USAGE", "releases.local.json names a file missing from public/downloads", { file: a.file });
       if (statSync(f).size !== a.size) throw new MandatError("E_USAGE", "public/downloads file size differs from releases.local.json", { file: a.file });
+      // D-639: the SHA-256 the page shows is the hash of the very file it serves
+      if (createHash("sha256").update(readFileSync(f)).digest("hex") !== a.sha256) throw new MandatError("E_USAGE", "public/downloads file SHA-256 differs from releases.local.json", { file: a.file });
     }
   }
   return m;

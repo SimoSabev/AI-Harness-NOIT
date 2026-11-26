@@ -5,9 +5,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import raw from "../../releases.json";
 import { downloadRows, releaseManifest } from "./downloads";
+import { INSTALL_STEPS } from "./install";
+import { en } from "../i18n/en";
 import { platformAnchor } from "./os";
 
 const sha = "b".repeat(64);
+// sha256 of the three bytes "abc"
+const SHA_ABC = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 
 // E9g B (D-377): /download lists every installer; without a release each row says "coming soon", never a broken link.
 describe("download rows (E9g B)", () => {
@@ -42,7 +46,7 @@ describe("download rows (E9g B)", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "site-"));
     writeFileSync(path.join(dir, "releases.json"), JSON.stringify({ version: null, assets: [] }));
     const file = "Harnova-0.1.0-mac-arm64.dmg";
-    writeFileSync(path.join(dir, "releases.local.json"), JSON.stringify({ version: "0.1.0", host: "site", assets: [{ kind: "mac-arm64", file, sha256: sha, size: 3 }] }));
+    writeFileSync(path.join(dir, "releases.local.json"), JSON.stringify({ version: "0.1.0", host: "site", assets: [{ kind: "mac-arm64", file, sha256: SHA_ABC, size: 3 }] }));
     mkdirSync(path.join(dir, "public", "downloads"), { recursive: true });
     writeFileSync(path.join(dir, "public", "downloads", file), "abc");
     const m = releaseManifest(dir);
@@ -57,5 +61,23 @@ describe("download rows (E9g B)", () => {
     mkdirSync(path.join(dir, "public", "downloads"), { recursive: true });
     writeFileSync(path.join(dir, "public", "downloads", file), "abcd");
     expect(() => releaseManifest(dir)).toThrow(/size/);
+  });
+  it("D-639: host site with a file of the right size but other bytes fails: the SHA-256 on the page is the file's", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "site-"));
+    const file = "Harnova-0.1.0-win-x64.exe";
+    writeFileSync(path.join(dir, "releases.local.json"), JSON.stringify({ version: "0.1.0", host: "site", assets: [{ kind: "win-x64", file, sha256: SHA_ABC, size: 3 }] }));
+    mkdirSync(path.join(dir, "public", "downloads"), { recursive: true });
+    writeFileSync(path.join(dir, "public", "downloads", file), "abd");
+    expect(() => releaseManifest(dir)).toThrow(/SHA-256/);
+    writeFileSync(path.join(dir, "public", "downloads", file), "abc");
+    expect(releaseManifest(dir).assets[0]?.sha256).toBe(SHA_ABC);
+  });
+  it("D-639: every system has install steps, each one a key of the catalog", () => {
+    expect(Object.keys(INSTALL_STEPS)).toEqual(["mac", "windows", "linux"]);
+    for (const [p, keys] of Object.entries(INSTALL_STEPS)) {
+      expect(keys.length, p).toBeGreaterThanOrEqual(3);
+      for (const k of keys) expect(Object.keys(en), k).toContain(k);
+      expect(Object.keys(en)).toContain(`install.${p}.title`);
+    }
   });
 });

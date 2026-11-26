@@ -3,6 +3,7 @@ import { btn, card, h1, h2, lead } from "../components/ui";
 import { translator } from "../i18n/t";
 import type { Lang } from "../i18n/t";
 import { downloadRows, releaseManifest } from "../lib/downloads";
+import { INSTALL_STEPS } from "../lib/install";
 import type { DownloadRow } from "../lib/downloads";
 import { platformAnchor } from "../lib/os";
 import { DOCKER_MIN } from "../lib/requirements";
@@ -39,13 +40,13 @@ export function DownloadPage({ lang }: { lang: Lang }) {
             <ul className="mt-3 divide-y divide-line">
               {rows.filter((r) => r.platform === p).map((r) => <Row key={r.kind} row={r} lang={lang} />)}
             </ul>
-            {p === "mac" && rows.some((r) => r.platform === "mac" && r.asset) ? <MacInstall lang={lang} /> : null}
+            {rows.some((r) => r.platform === p && r.asset) ? <Install platform={p} lang={lang} /> : null}
           </section>
         ))}
       </div>
 
       <p className="mt-6 max-w-3xl text-sm text-mute">
-        {t("download.verify", { mac: "shasum -a 256 <file>", win: "Get-FileHash <file>" })}
+        {t("download.verify", { mac: "shasum -a 256 <file>", linux: "sha256sum <file>", win: "Get-FileHash <file>" })}
       </p>
       <p className="mt-2 max-w-3xl text-sm text-mute">{t("download.unsigned")}</p>
 
@@ -71,16 +72,14 @@ export function DownloadPage({ lang }: { lang: Lang }) {
   );
 }
 
-const MAC_STEPS = ["install.mac.1", "install.mac.2", "install.mac.3", "install.mac.4", "install.mac.5"] as const;
-
-// How to open the unsigned app (until Q-053 signing): the steps of macOS 15+, no Terminal needed.
-function MacInstall({ lang }: { lang: Lang }) {
+// How to open the app before distribution signing (Q-053): macOS 15+ without Terminal, Windows SmartScreen, Linux (D-639).
+function Install({ platform, lang }: { platform: Platform; lang: Lang }) {
   const t = translator(lang);
   return (
     <div className="mt-4 border-t border-line pt-4">
-      <h3 className="text-base font-semibold">{t("install.mac.title")}</h3>
+      <h3 className="text-base font-semibold">{t(`install.${platform}.title`)}</h3>
       <ol className="mt-2 list-decimal space-y-1.5 pl-5">
-        {MAC_STEPS.map((k) => <li key={k}>{t(k)}</li>)}
+        {INSTALL_STEPS[platform].map((k) => <li key={k}>{t(k)}</li>)}
       </ol>
     </div>
   );
