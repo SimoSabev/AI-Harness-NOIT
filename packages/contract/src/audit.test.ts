@@ -19,7 +19,7 @@ const row = (seq: number, o: Partial<{ task_id: string | null; ts: string; inclu
 describe("audit export (D-704)", () => {
   it("selection: a task or a period (from < to), never both or neither", () => {
     expect(AuditSelection.parse({ task: "t_a" })).toEqual({ task: "t_a" });
-    expect(AuditSelection.parse({ from: "2026-11-01T00:00:00.000Z", to: "2026-12-01T00:00:00.000Z" }).from).toBe("2026-11-01T00:00:00.000Z");
+    expect(AuditSelection.parse({ from: "2026-11-01T00:00:00.000Z", to: "2026-12-01T00:00:00.000Z" })).toEqual({ from: "2026-11-01T00:00:00.000Z", to: "2026-12-01T00:00:00.000Z" });
     expect(() => AuditSelection.parse({ from: "2026-12-01T00:00:00.000Z", to: "2026-11-01T00:00:00.000Z" })).toThrow();
     expect(() => AuditSelection.parse({ task: "t_a", from: "2026-11-01T00:00:00.000Z", to: "2026-12-01T00:00:00.000Z" })).toThrow();
     expect(() => AuditSelection.parse({})).toThrow();
