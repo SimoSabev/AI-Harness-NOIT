@@ -129,6 +129,40 @@ export function orderSharedModules(units: readonly PlanUnit[], modules: Readonly
   return out;
 }
 
+/**
+ * D-619 (live test 26.11, run 10): where the failing criteria of a stopped unit go. A criterion goes to a later unit
+ * when every new module its hidden tests import that no landed unit built is also needed by that unit: the first unit
+ * (plan order) that waits for this one, has not started (`open`), and needs all of them through its own criteria. None
+ * of those modules may be needed by the unit's other criteria (then the unit builds it itself). All failing criteria
+ * move or none do (a unit that still fails on one gains nothing). Criterion → unit id; empty = nothing moves.
+ */
+export function laterHome(
+  units: readonly PlanUnit[],
+  modules: ReadonlyMap<string, readonly string[]>,
+  o: { unit: string; failing: readonly string[]; landed: readonly string[]; open: (unit: string) => boolean; exists?: (module: string) => boolean },
+): Map<string, string> {
+  const me = units.find((u) => u.id === o.unit);
+  if (!me || o.failing.length === 0) return new Map();
+  const exists = o.exists ?? (() => false);
+  const anc = ancestors(units);
+  const needs = (criteria: readonly string[]) => new Set(criteria.flatMap((c) => modules.get(c) ?? []));
+  const built = needs(units.filter((u) => o.landed.includes(u.id)).flatMap((u) => u.criteria));
+  const later = units.filter((u) => u.id !== me.id && anc.get(u.id)?.has(me.id) && o.open(u.id));
+  const out = new Map<string, string>();
+  for (const c of o.failing) {
+    const need = (modules.get(c) ?? []).filter((m) => !exists(m) && !built.has(m));
+    const mine = needs(me.criteria.filter((x) => x !== c));
+    if (need.length === 0 || need.some((m) => mine.has(m))) return new Map();
+    const home = later.find((u) => {
+      const theirs = needs(u.criteria.filter((x) => x !== c));
+      return need.every((m) => theirs.has(m));
+    });
+    if (!home) return new Map();
+    out.set(c, home.id);
+  }
+  return out;
+}
+
 /** the name an API.md line gives: the identifier at the start of its second `…` (the last part of a dotted one) */
 function apiName(line: string): string | null {
   const ticks = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1] ?? "");
