@@ -50,9 +50,19 @@ export interface FakeSeed {
   autoRepos?: boolean;
 }
 
+/** E9f (D-660): the part of a GitHub `push` webhook the Observer reads (the fake builds it as GitHub would). */
+export interface GitHubPushPayload {
+  ref: string;
+  before: string;
+  after: string;
+  deleted: boolean;
+  repository: { full_name: string };
+  commits: { id: string; tree_id: string; message: string; timestamp: string; distinct: boolean }[];
+}
+
 const DEFAULT_RULES: RulesInfo = { strict: true, requiredContexts: ["Мандат verdict", "Мандат approval"], mergeQueue: false, integrationIds: { "Мандат verdict": WRITER_APP_ID, "Мандат approval": WRITER_APP_ID } };
 
-export function fakeGitHub(seed: FakeSeed = {}): GitHubPort & { state: FakeGitHubState; humanMerge(repo: string, n: number): Promise<MergeResult>; addCheck(repo: string, c: Omit<FakeCheck, "id">): void; pushToPull(repo: string, n: number, sha: string): void } {
+export function fakeGitHub(seed: FakeSeed = {}): GitHubPort & { state: FakeGitHubState; humanMerge(repo: string, n: number): Promise<MergeResult>; addCheck(repo: string, c: Omit<FakeCheck, "id">): void; pushToPull(repo: string, n: number, sha: string): void; revertMerge(repo: string, n: number, how: "git" | "button"): GitHubPushPayload } {
   const st: FakeGitHubState = { repos: new Map(), pulls: new Map(), refs: new Map(), commits: new Map(), checks: [], statuses: [], calls: [] };
   const acting = seed.actingAppId ?? WRITER_APP_ID;
   const addRepo = (name: string, r: Partial<FakeRepo>) => {
@@ -199,6 +209,25 @@ export function fakeGitHub(seed: FakeSeed = {}): GitHubPort & { state: FakeGitHu
     addCheck: (repo, c) => {
       repoOf(repo);
       st.checks.push({ ...c, id: nextCheck++ });
+    },
+    /**
+     * E9f (AC-9.5): someone reverts a merged PR on the default branch. "git" = `git revert <merge sha>` pushed to main;
+     * "button" = GitHub's Revert button, its PR squashed into main. Returns the push webhook GitHub would send.
+     */
+    revertMerge: (repo, n, how) => {
+      st.calls.push(`revert ${repo}#${n} ${how}`);
+      const r = repoOf(repo);
+      const p = pullOf(repo, n);
+      if (!p.merged || !p.merge_commit_sha) throw new Error("revertMerge: not merged");
+      const parentTree = st.commits.get(st.commits.get(p.merge_commit_sha)?.parent ?? "")?.tree ?? sha1(`tree:${p.base_sha}`);
+      const revertPr = nextPull++;
+      const message = how === "git" ? `Revert "${p.title} (#${n})"\n\nThis reverts commit ${p.merge_commit_sha}.\n` : `Revert "${p.title}" (#${revertPr})\n\nReverts ${repo}#${n}`;
+      const before = r.head;
+      const sha = sha1(`revert:${before}:${p.merge_commit_sha}:${how}`);
+      st.commits.set(sha, { tree: parentTree, parent: before });
+      r.head = sha;
+      st.refs.set(`${repo}:refs/heads/${r.default_branch}`, sha);
+      return { ref: `refs/heads/${r.default_branch}`, before, after: sha, deleted: false, repository: { full_name: repo }, commits: [{ id: sha, tree_id: parentTree, message, timestamp: "2026-11-26T12:00:00Z", distinct: true }] };
     },
     pushToPull: (repo, n, sha) => {
       const p = pullOf(repo, n);

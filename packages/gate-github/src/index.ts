@@ -1,7 +1,9 @@
 export { CHECK_NAMES } from "./port.js";
 export type { CheckConclusion, CheckName, CheckRunInput, GitHubPort, MergeResult, PullInfo, RulesInfo } from "./port.js";
 export { OBSERVER_APP_ID, WRITER_APP_ID, fakeGitHub } from "./fake.js";
-export type { FakeCheck, FakeGitHubState, FakeRepo, FakeSeed } from "./fake.js";
+export type { FakeCheck, FakeGitHubState, FakeRepo, FakeSeed, GitHubPushPayload } from "./fake.js";
+export { REVERT_WINDOW_MS, findReverts } from "./revert.js";
+export type { MergedChange, RevertMatch } from "./revert.js";
 export { SUMMARY_MAX, checkLine, conclusionOf, renderCheck, unknownConclusionFrom } from "./render.js";
 export type { UnknownConclusion } from "./render.js";
 export { autoMerge, branchFor, deliver, humanApproved } from "./deliver.js";
