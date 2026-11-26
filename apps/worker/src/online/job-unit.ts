@@ -1,13 +1,13 @@
 import { ADVISOR_SYSTEM, Handoff, JobRoles, PLAYBOOK_SYSTEM, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, playbookUser, rescueTaskText, unitTaskText, withFiles, withPlaybook } from "@mandat/contract";
 import { roleRoute } from "@mandat/contract";
 import type { JobRole, Spec } from "@mandat/contract";
-import { criteriaMet, markOwnApi, scopedApi } from "@mandat/core";
+import { criteriaMet, laterHome, markOwnApi, scopedApi } from "@mandat/core";
 import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { inTransaction } from "./db.js";
 import type { Db } from "./db.js";
 import type { JobDeps } from "./job.js";
-import { hiddenFilesOf, oracleApi, unitScope } from "./job.js";
+import { hiddenFilesOf, moduleFacts, oracleApi, unitScope } from "./job.js";
 import { selfMoveOf } from "./self-finish.js";
 
 // D-541/D-542 (М2 Х6): one unit of a running job, settled on each tick. A unit whose tasks still work waits; one that
@@ -79,6 +79,8 @@ export async function settleUnit(d: JobDeps, j: JobRow, spec: Spec, mode: JobMod
   if (ids.length === 1 && last?.state === "BLOCKED" && cutOff(last.wait_reason ?? "") && u.relands < RELAND_MAX + 2) return reland(d.db, j, u, last.wait_reason ?? "");
   const done = await alreadyDone(d.db, j, u, units);
   if (done) return done;
+  const moved = await moveToLater(d.db, j, u, units);
+  if (moved) return moved;
   if (u.rescues < RESCUE_MAX && tasks.some((t) => t.last_result === "FAILED")) {
     const r = await rescue(d, j, spec, u, units);
     if (r) return r;
@@ -104,6 +106,37 @@ async function alreadyDone(db: Db, j: JobRow, u: UnitRow, units: readonly UnitRo
     await appendLedgerOnline(tx, { org_id: j.org_id, kind: "unit_already_done", task_id: u.task_id, payload: { job: j.id, unit: u.unit_id, criteria: u.criteria } });
   });
   return { ...u, status: "passed", handoff };
+}
+
+/**
+ * D-619 (live test 26.11, run 10): a unit that still fails only criteria whose hidden tests import a new module a later
+ * unit builds (core laterHome) hands those criteria to that unit and is built again without them; with nothing left it
+ * passes without landing. The final check still runs every criterion. Ids only in the ledger.
+ */
+async function moveToLater(db: Db, j: JobRow, u: UnitRow, units: readonly UnitRow[]): Promise<UnitRow | null> {
+  if (u.failing.length === 0 || u.failing.some((c) => !u.criteria.includes(c))) return null;
+  const f = await moduleFacts(db, j);
+  if (!f) return null;
+  const plan = units.map((x) => ({ id: x.unit_id, title: x.title, criteria: x.criteria, depends_on: x.depends_on }));
+  const landed = units.filter((x) => x.status === "passed").map((x) => x.unit_id);
+  const home = laterHome(plan, f.mods, { unit: u.unit_id, failing: u.failing, landed, exists: f.exists, open: (id) => units.find((x) => x.unit_id === id)?.status === "pending" });
+  if (home.size === 0) return null;
+  const left = u.criteria.filter((c) => !home.has(c));
+  const handoff = { done: `nothing landed: ${[...home].map(([c, to]) => `${c} → ${to}`).join(", ")} (a later unit builds the module its checks need)`, deviations: [], risks: [] };
+  await inTransaction(db, async (tx) => {
+    for (const [c, to] of home) {
+      await tx.query("update public.job_units set criteria = criteria || to_jsonb($3::text), updated_at = now() where job_id = $1 and unit_id = $2", [j.id, to, c]);
+    }
+    if (left.length === 0) {
+      await tx.query("update public.job_units set criteria = '[]'::jsonb, failing = '[]'::jsonb, status = 'passed', handoff = $3::jsonb, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, JSON.stringify(handoff)]);
+    } else {
+      await tx.query("update public.job_units set criteria = $3::jsonb, failing = '[]'::jsonb, status = 'pending', task_id = null, tries = '[]'::jsonb, relands = relands + 1, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, JSON.stringify(left)]);
+    }
+    await appendLedgerOnline(tx, { org_id: j.org_id, kind: "criterion_moved", task_id: u.task_id, payload: { job: j.id, unit: u.unit_id, moved: Object.fromEntries(home), left } });
+  });
+  return left.length === 0
+    ? { ...u, criteria: [], failing: [], status: "passed", handoff }
+    : { ...u, criteria: left, failing: [], status: "pending", task_id: null, tries: [], relands: u.relands + 1 };
 }
 
 async function reland(db: Db, j: JobRow, u: UnitRow, why: string): Promise<UnitRow> {

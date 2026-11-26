@@ -319,6 +319,26 @@ describe("units, final check, seal and delivery (D-535)", () => {
     await jobTick(t.jd);
     expect((await t.units())[1]?.status).toBe("parked");
   });
+  it("D-619 (run 10): a unit failing only a criterion whose module a later unit builds passes it on to that unit", async () => {
+    // AC-1's hidden test imports src/loyalty, a new module u2 (which waits for u1) needs for AC-2 too
+    const files = [
+      { path: "tests/__hidden__/a.spec.ts", data: Buffer.from(`it("AC-1: ${SECRET_NAME}", async () => { const { award } = await import("../../src/loyalty"); award(); });\n`) },
+      { path: "tests/__hidden__/b.spec.ts", data: Buffer.from(`it("AC-2: coupon after the ten", async () => { const { award } = await import("../../src/loyalty"); award(); });\n`) },
+    ];
+    const s = await setup({ plans: [GOOD_PLAN], files, outcome: (c) => (c.text.includes("This unit (u1)") ? { result: "FAILED", evidence: d5fail("AC-1") } : { result: "VERIFIED" }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    for (let k = 0; k < 3; k++) {
+      await selfFinishTick(s.db, { now: new Date() });
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd);
+    const units = await s.units();
+    expect(units.map((u) => [u.unit_id, u.status, u.criteria])).toEqual([["u1", "passed", []], ["u2", "running", ["AC-2", "AC-1"]]]);
+    expect((await s.ledger("criterion_moved"))[0]).toMatchObject({ unit: "u1", moved: { "AC-1": "u2" } });
+    expect((await s.db.query<{ n: number }>("select count(*)::int as n from public.ledger where kind = 'unit_rescued'")).rows[0]?.n).toBe(0);
+  });
   it("a failed unit is retried with the failing criterion ids only; at the cap the job parks with a question", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: d5fail("AC-1", "U-1") }) });
     // D-571: a rescue try gets the oracle's API too (the live test's rescue wrote without it and guessed names)

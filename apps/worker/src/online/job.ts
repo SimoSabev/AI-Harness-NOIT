@@ -186,12 +186,19 @@ export function unitScope(u: Pick<UnitRow, "unit_id" | "criteria">, units: reado
 const MODULE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", "/index.ts", "/index.js"];
 /** D-594: the plan check from the hidden tests, or null when the oracle names no new module */
 async function sharedModuleCheck(db: Db, j: JobRow): Promise<{ check: (units: readonly PlanUnit[]) => PlanProblem[]; order: (units: readonly PlanUnit[]) => PlanUnit[] } | null> {
+  const f = await moduleFacts(db, j);
+  if (!f) return null;
+  return { check: (units) => sharedModuleProblems(units, f.mods, f.exists), order: (units) => orderSharedModules(units, f.mods, f.exists) };
+}
+
+/** D-594 / D-619: the new modules each criterion's hidden tests import, and which modules main has; null when none */
+export async function moduleFacts(db: Db, j: Pick<JobRow, "repo_id" | "spec_hash" | "oracle_hash" | "remote_url">): Promise<{ mods: Map<string, string[]>; exists: (m: string) => boolean } | null> {
   const mods = criterionModules(await hiddenFilesOf(db, j));
   if ([...mods.values()].every((m) => m.length === 0)) return null;
   // a module on main already is not new (an oracle may import existing code inside a test too)
   const facts = await repoFacts(j.remote_url);
   const exists = (m: string) => (facts ? MODULE_EXT.some((e) => facts.files.has(`${m}${e}`)) : false);
-  return { check: (units) => sharedModuleProblems(units, mods, exists), order: (units) => orderSharedModules(units, mods, exists) };
+  return { mods, exists };
 }
 
 /** D-566: the public API lines of the job's approved oracle (its manifest), or none */
