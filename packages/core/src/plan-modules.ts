@@ -136,6 +136,24 @@ function apiName(line: string): string | null {
   return m?.[1]?.split(".").pop() ?? null;
 }
 
+/** D-616: the mark on an API line whose name the unit's own criteria's hidden checks call */
+export const OWN_API_MARK = "[your criteria's checks call this: build it fully in this unit, even if a later unit also uses it] ";
+
+/**
+ * D-616 (live test 26.11, run 9): an API line whose name the hidden checks of the unit's own criteria call gets
+ * OWN_API_MARK, so "do only this unit" never leaves out a name the unit's checks need. Names only, never a test.
+ */
+export function markOwnApi(api: readonly string[], files: readonly HiddenFile[], criteria: readonly string[]): string[] {
+  if (files.length === 0 || criteria.length === 0) return [...api];
+  const ok = new Set(criteria.filter((c) => c.startsWith("AC-")));
+  const mine = files.flatMap(blocks).filter((b) => ok.has(b.tag)).map((b) => b.body).join("\n");
+  if (mine === "") return [...api];
+  return api.map((line) => {
+    const name = apiName(line);
+    return name && new RegExp(`(?<![\\w$])${name.replace(/[$]/g, "\\$")}(?![\\w$])`).test(mine) ? `${OWN_API_MARK}${line}` : line;
+  });
+}
+
 /**
  * D-595: the API lines a unit's writer gets — the names its scope's tests (its criteria, the landed units' and the
  * unchanged ones) call. A name no test calls stays (it cannot be placed); no files or no scope keeps the whole API.

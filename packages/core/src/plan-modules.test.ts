@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlanUnit } from "@mandat/contract";
-import { criterionModules, orderSharedModules, scopedApi, sharedModuleProblems } from "./plan-modules.js";
+import { OWN_API_MARK, criterionModules, markOwnApi, orderSharedModules, scopedApi, sharedModuleProblems } from "./plan-modules.js";
 
 // D-594 / D-595 (live test 24.11.2026, runs 5 and 6 of M4 on the bakery): one hidden test of AC-11 checked both new stores
 // (points and gift cards) while the plan gave them to two units that ran side by side, so neither could pass; and a unit's
@@ -109,6 +109,41 @@ describe("a unit's API is its scope's (D-595)", () => {
   it("no hidden files or no scope: the whole API, as before", () => {
     expect(scopedApi(api, [], ["AC-1"])).toEqual(api);
     expect(scopedApi(api, [HIDDEN], [])).toEqual(api);
+  });
+});
+
+// D-616 (live test 26.11, run 9): AC-11's hidden test of the gift card store calls issueGiftCard, which AC-6 (a later
+// unit) also names; u1's writer read "do only this unit", left issueGiftCard to u5 and failed AC-11 three times
+describe("the API names a unit's own checks call are marked to build now (D-616)", () => {
+  const RUN9 = file(
+    "tests/__hidden__/loyalty-giftcards.spec.ts",
+    `describe("gift cards", () => {
+  it("AC-6: a new card has a unique code", async () => {
+    const { createGiftCardStore, issueGiftCard } = await import("../../src/giftcards/cards");
+    issueGiftCard(createGiftCardStore(), 100);
+  });
+  it("AC-11: the gift card store is an in-memory Map with reset()", async () => {
+    const { createGiftCardStore, issueGiftCard } = await import("../../src/giftcards/cards");
+    const s = createGiftCardStore(); issueGiftCard(s, 100); s.reset();
+  });
+});
+`,
+  );
+  const api = [
+    "`src/giftcards/cards.ts`: `createGiftCardStore(): GiftCardStore` — the cards.",
+    "`src/giftcards/cards.ts`: `issueGiftCard(store, initialCents: number): GiftCard` — a new card.",
+    "`src/giftcards/checkout.ts`: `payWithGiftCard(...)` — pays.",
+  ];
+  it("a line whose name the unit's own criteria's checks call gets the mark; the others stay as they were", () => {
+    const out = markOwnApi(api, [RUN9], ["AC-11"]);
+    expect(out[0]).toBe(`${OWN_API_MARK}${api[0]}`);
+    expect(out[1]).toBe(`${OWN_API_MARK}${api[1]}`);
+    expect(out[2]).toBe(api[2]);
+  });
+  it("checks of landed or unchanged criteria do not mark; no files or no criteria: unchanged", () => {
+    expect(markOwnApi(api, [RUN9], ["AC-7"])).toEqual(api);
+    expect(markOwnApi(api, [], ["AC-11"])).toEqual(api);
+    expect(markOwnApi(api, [RUN9], [])).toEqual(api);
   });
 });
 
