@@ -278,6 +278,7 @@ export const LedgerKind = z.enum([
   "unit_relanded", // D-541
   "unit_rescued", // D-542
   "unit_already_done", // D-573
+  "criterion_moved", // D-619
   "pilot_done", // D-545
   "job_restacked", // D-547
   "profile_saved", // D-552

@@ -52,7 +52,7 @@ describe("job contracts (D-535)", () => {
   it("branch, approve body and the new ledger kinds", () => {
     expect(jobBranch("j_abc")).toBe("mandat/job-abc");
     expect(JobApproveBody.safeParse({ seal_hash: `sha256:${"a".repeat(64)}` }).success).toBe(true);
-    for (const k of ["plan_built", "session_sealed", "job_approved"]) expect(LedgerKind.parse(k)).toBe(k);
+    for (const k of ["plan_built", "session_sealed", "job_approved", "criterion_moved"]) expect(LedgerKind.parse(k)).toBe(k);
   });
 });
 
