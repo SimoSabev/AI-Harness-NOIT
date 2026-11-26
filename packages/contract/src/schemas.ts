@@ -254,6 +254,7 @@ export const LedgerKind = z.enum([
   "channel_limit",
   "channel_spill",
   "channel_manual_switch",
+  "limit_windows", // D-647: a subscription's windows as its CLI reported them
   "task_stopped",
   "task_retry",
   "failure_label",
