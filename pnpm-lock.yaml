@@ -586,6 +586,15 @@ importers:
         specifier: 16.1.4
         version: 16.1.4
 
+  packages/learn:
+    dependencies:
+      '@mandat/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@mandat/profile':
+        specifier: workspace:*
+        version: link:../profile
+
   packages/ledger:
     dependencies:
       '@mandat/contract':
