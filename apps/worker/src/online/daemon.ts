@@ -30,6 +30,7 @@ import { mainHead, rebaseOnto } from "./rebase.js";
 import { ciNote } from "./ci.js";
 import { memoryForTask, sandboxProposals, tidyAfterTask } from "./memory.js";
 import { deliverLocal, mergeLocal } from "./deliver-local.js";
+import { commitSigningKey } from "./signing.js";
 import { finishOracle, oracleTestsFor } from "./oracle.js";
 import { finishJobTask, jobInputs } from "./job-task.js";
 import type { JobInputs } from "./job-task.js";
@@ -709,7 +710,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   let applied: { from: string; to: string } | null = null;
   let applyFail = "no_branch";
   if (t.provider === "local" && v.result === "VERIFIED" && diffPatch.length > 0) {
-    const lb = await deliverLocal({ mirror, taskId: t.id, attempt: t.attempt, baseSha: v.base_sha, patch: diffPatch, message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }) }).catch(() => null);
+    // D-661: signed with the harness SSH key (outside the sandbox); MANDAT_SIGN_COMMITS=0 or no ssh-keygen → unsigned
+    const lb = await deliverLocal({ mirror, taskId: t.id, attempt: t.attempt, baseSha: v.base_sha, patch: diffPatch, signingKey: await commitSigningKey(d.home, process.env), message: commitMessage({ type: t.type, text: t.text, taskId: t.id, verdict: v, ledgerSeq: out.ledger?.to ?? null }) }).catch(() => null);
     if (lb?.ok) {
       await d.db.query("insert into public.task_activities (org_id, task_id, kind, text) values ($1::uuid, $2, 'local_branch', $3)", [t.org_id, t.id, lb.ref]);
       if (willAuto) {

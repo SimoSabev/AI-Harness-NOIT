@@ -18,6 +18,7 @@ export { startWebhookServer, webhookHandler } from "./online/webhook.js";
 export type { WebhookDeps } from "./online/webhook.js";
 export { observePush } from "./online/revert.js";
 export { observerRecorder } from "./online/observer.js";
+export { commitSigningKey, ensureSigningKey } from "./online/signing.js";
 export { broadcasterFromEnv, contractForTask, finishOutcome, isProcessing, processTask, realtimeBroadcaster, runDaemonOnce } from "./online/daemon.js";
 export type { DaemonDeps } from "./online/daemon.js";
 export { deliverHarnessPr, drainHarnessOutbox, harnessHandlers, scanForProposal } from "./online/harness.js";

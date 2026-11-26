@@ -4,7 +4,7 @@ import { runBench } from "@mandat/bench";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { BenchRunner, EvolveTick, JobTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, observerRecorder, openDb, selfFinishTick, startWebhookServer, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, commitSigningKey, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, observerRecorder, openDb, selfFinishTick, startWebhookServer, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { profilePrintExec, researchDeps, researchLoop } from "./research.js";
@@ -247,7 +247,8 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
         if (red.length > 0) io.stderr(`[ci] failed: ${red.join(", ")}\n`);
         // E8e (D-354): vetting an approved MCP server runs it once in Docker without network; MANDAT_MCP_VET=0 turns it off
         const mcpVetRunner = env.MANDAT_MCP_VET === "0" ? undefined : (s: Parameters<typeof vetMcpDocker>[0]) => vetMcpDocker(s, { mandatHome: o.home, repoRoot, env });
-        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, localGh, ...(baselineRunner ? { baselineRunner } : {}), ...(mcpVetRunner ? { mcpVetRunner } : {}) });
+        const signingKey = await commitSigningKey(o.home, env);
+        const fx = await drainHarnessOutbox({ db, gh, ghRepo: repo, localGh, signingKey, ...(baselineRunner ? { baselineRunner } : {}), ...(mcpVetRunner ? { mcpVetRunner } : {}) });
         if (fx.done + fx.failed > 0) io.stderr(`[outbox] harness: ${fx.done} done, ${fx.failed} failed\n`);
       },
     });

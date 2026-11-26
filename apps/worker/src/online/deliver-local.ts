@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { cleanGit } from "@mandat/export";
+import { signingConfig } from "./signing.js";
 
 // E8g (v5 p. 4.7 (5), AC-9.3, D-356): a project without GitHub. The verified change becomes branch mandat/<task>-a<n> in
 // Mandat's own mirror: one commit on the verdict's base with the template message. An existing branch is never touched.
@@ -27,13 +28,16 @@ export async function mergeLocal(o: { mirror: string; sha: string; tmpRoot?: str
   }
 }
 
-export async function deliverLocal(o: { mirror: string; taskId: string; attempt: number; baseSha: string; patch: Buffer; message: string; tmpRoot?: string }): Promise<{ ok: true; ref: string; sha: string } | { ok: false; reason: "branch_exists" | "does_not_apply" }> {
+export async function deliverLocal(o: { mirror: string; taskId: string; attempt: number; baseSha: string; patch: Buffer; message: string; tmpRoot?: string; signingKey?: string | null }): Promise<{ ok: true; ref: string; sha: string } | { ok: false; reason: "branch_exists" | "does_not_apply" }> {
   if (!/^t_[a-z0-9_]{1,40}$/.test(o.taskId) || !Number.isInteger(o.attempt) || o.attempt < 1) throw new Error("deliverLocal: bad input");
   return deliverLocalRef({ ...o, ref: `mandat/${o.taskId}-a${o.attempt}` });
 }
 
-/** D-388: the same for any Mandat branch of the mirror (a task's, or the approved rules' mandat/harness-<proposal>). */
-export async function deliverLocalRef(o: { mirror: string; ref: string; baseSha: string; patch: Buffer; message: string; tmpRoot?: string }): Promise<{ ok: true; ref: string; sha: string } | { ok: false; reason: "branch_exists" | "does_not_apply" }> {
+/**
+ * D-388: the same for any Mandat branch of the mirror (a task's, or the approved rules' mandat/harness-<proposal>).
+ * D-661: with `signingKey` (the harness's SSH key, signing.ts) the commit is signed; without it, unsigned as before.
+ */
+export async function deliverLocalRef(o: { mirror: string; ref: string; baseSha: string; patch: Buffer; message: string; tmpRoot?: string; signingKey?: string | null }): Promise<{ ok: true; ref: string; sha: string } | { ok: false; reason: "branch_exists" | "does_not_apply" }> {
   if (!/^mandat\/(t_[a-z0-9_]{1,40}-a\d+|harness-[0-9a-f-]{36})$/.test(o.ref) || !/^[0-9a-f]{40}$/.test(o.baseSha)) throw new Error("deliverLocal: bad input");
   const ref = o.ref;
   const tmp = mkdtempSync(path.join(o.tmpRoot ?? os.tmpdir(), "mandat-deliver-"));
@@ -46,7 +50,8 @@ export async function deliverLocalRef(o: { mirror: string; ref: string; baseSha:
     writeFileSync(path.join(tmp, "change.patch"), o.patch);
     if ((await git.run(["apply", "--index", "--whitespace=nowarn", path.join(tmp, "change.patch")], { cwd: w })).code !== 0) return { ok: false, reason: "does_not_apply" };
     writeFileSync(path.join(tmp, "msg"), o.message.endsWith("\n") ? o.message : `${o.message}\n`);
-    if ((await git.run([...IDENT, "commit", "-q", "--no-gpg-sign", "--cleanup=verbatim", "-F", path.join(tmp, "msg")], { cwd: w })).code !== 0) throw new Error("deliverLocal: commit failed");
+    const sign = o.signingKey ? [...signingConfig(o.signingKey), "commit", "-S"] : ["commit", "--no-gpg-sign"];
+    if ((await git.run([...IDENT, ...sign, "-q", "--cleanup=verbatim", "-F", path.join(tmp, "msg")], { cwd: w })).code !== 0) throw new Error("deliverLocal: commit failed");
     const sha = (await git.run(["rev-parse", "HEAD"], { cwd: w })).stdout.toString("utf8").trim();
     // a new ref only: never --force; a ref that appeared meanwhile makes the push fail
     const p = await git.run(["push", "-q", "origin", `HEAD:refs/heads/${ref}`], { cwd: w });
