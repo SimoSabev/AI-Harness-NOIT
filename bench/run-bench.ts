@@ -3,7 +3,8 @@ import type { ProfileLayersInput } from "@mandat/contract";
 import type { VerdictResult } from "@mandat/contract";
 import type { DockerRunner } from "@mandat/sandbox";
 import { runTask, runTestProcedure } from "@mandat/worker";
-import { CHECKS, HELDOUT, HIDDEN, SCENARIOS } from "./scenarios.js";
+import { CHECKS, HELDOUT, HIDDEN, LANGUAGES, SCENARIOS } from "./scenarios.js";
+import type { LangScenario, Scenario } from "./scenarios.js";
 
 /** v5 E9b (D8): the demo profile (or the profile under trial, D-530) with the shop's own lint and typecheck */
 function checksProfile(base?: ProfileLayersInput) {
@@ -40,8 +41,11 @@ export async function runBench(o: {
   layers?: ProfileLayersInput;
   /** D-530: only the scenarios of one contract — "free" for free tasks, "default" (bugfix) for the other types */
   kind?: "free" | "default";
-  /** D-550: "heldout" runs only the held-out heavy set (the second gate of a trial); default: the visible scenarios */
-  set?: "visible" | "heldout";
+  /** D-550: "heldout" runs only the held-out heavy set (the second gate of a trial); default: the visible scenarios.
+   *  D-689: "languages" runs L1–L7 on shop-py / shop-go, each with its fixture's contract and mirror */
+  set?: "visible" | "heldout" | "languages";
+  /** D-689: the sealed bugfix contract of each language fixture */
+  langContracts?: Partial<Record<LangScenario["fixture"], string>>;
   /** tests only: the task runner */
   run?: typeof runTask;
 }): Promise<BenchResult> {
@@ -49,7 +53,8 @@ export async function runBench(o: {
   const t0 = Date.now();
   let infraError: string | null = null;
   const run = o.run ?? runTask;
-  for (const s of o.set === "heldout" ? HELDOUT : SCENARIOS) {
+  const set: readonly (Scenario & { fixture?: LangScenario["fixture"] })[] = o.set === "heldout" ? HELDOUT : o.set === "languages" ? LANGUAGES : SCENARIOS;
+  for (const s of set) {
     if (o.only && !o.only.includes(s.id)) continue;
     if (o.kind && (o.kind === "free") !== (s.contract === "free")) continue;
     const t = Date.now();
@@ -57,9 +62,15 @@ export async function runBench(o: {
       infraError = `${s.id}: no free contract`;
       break;
     }
+    const langContract = s.fixture ? o.langContracts?.[s.fixture] : undefined;
+    if (s.fixture && !langContract) {
+      infraError = `${s.id}: no contract for ${s.fixture}`;
+      break;
+    }
     const profile = s.checks ? checksProfile(o.layers) : o.layers ? trialProfile(o.layers) : null;
     const r = await run({
-      home: o.home, contractPath: s.contract === "free" ? (o.freeContractPath as string) : o.contractPath, agent: `fake:${s.fake}`, keep: false, json: true,
+      home: o.home, contractPath: langContract ?? (s.contract === "free" ? (o.freeContractPath as string) : o.contractPath), agent: `fake:${s.fake}`, keep: false, json: true,
+      ...(s.fixture ? { mirror: s.fixture } : {}),
       ...(s.hidden ? { hidden: HIDDEN } : {}), ...(profile ? { profile } : {}),
       ...(o.docker ? { docker: o.docker } : {}), internals: { ...(o.env ? { env: o.env } : {}) },
     });

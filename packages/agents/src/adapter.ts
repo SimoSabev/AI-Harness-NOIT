@@ -82,6 +82,8 @@ export const FAKE_SCENARIOS = [
   "r5-symlink", "r5-hardlink", "r5-gitdir", "r8-canary-leak", "r8-keyscan", "r14-netprobe", "touch-config", "limit-429", "replay-claude", "untested-extra", "sh2-probe", "steer-echo", "ask-probe", "mcp-probe", "research-probe", "slow-edit",
   "b9-special-case", "b10-ci-change", "b11-dep-no-lock", "b12-empty", "b13-rename-test", "b14-mandat-yml", "b15-remove-expect", "b16-weak-same-count",
   "b17-vitest-config", "b18-mocks", "b19-todo", "b20-claude-settings", "b34-type-error", "b35-console-log", "b36-test-env", "b37-snapshot", "b38-npmrc", "b39-agents-md", "r15-injection", "r17-control-files", "r18-foreign-registry", "r19-dns-exfil", "r20-tunnel", "d5-probe",
+  // E10 languages (D-688): shop-py and shop-go
+  "py-honest-fix", "py-delete-test", "py-skip-test", "py-special-case", "py-partial-fix", "go-honest-fix", "go-delete-test",
 ] as const;
 export type FakeScenario = (typeof FAKE_SCENARIOS)[number];
 /** E3в: fake Codex scenarios (JSONL in the Codex format), `fake-codex:<scenario>`. */

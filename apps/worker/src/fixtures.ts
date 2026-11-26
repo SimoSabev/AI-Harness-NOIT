@@ -12,7 +12,10 @@ export const SHOP_FILES = [
 ] as const;
 /** D-225 / демо промпт т. 9.1: demo-shop = shop + policy + CI workflow; shop stays byte-for-byte as in E0. */
 export const DEMO_SHOP_FILES = [...SHOP_FILES, ".mandat.yml", ".github/workflows/ci.yml"] as const;
-export const FIXTURES = { shop: SHOP_FILES, "demo-shop": DEMO_SHOP_FILES } as const;
+/** E10 languages (D-688): the Python and Go twins of the shop, each with its own policy (no dependencies) */
+export const SHOP_PY_FILES = [".mandat.yml", ".gitignore", "README.md", "pyproject.toml", "src/shop/__init__.py", "src/shop/money.py", "src/shop/cart.py", "tests/test_money.py", "tests/test_cart.py"] as const;
+export const SHOP_GO_FILES = [".mandat.yml", "README.md", "go.mod", "money/money.go", "money/money_test.go", "cart/cart.go", "cart/cart_test.go"] as const;
+export const FIXTURES = { shop: SHOP_FILES, "demo-shop": DEMO_SHOP_FILES, "shop-py": SHOP_PY_FILES, "shop-go": SHOP_GO_FILES } as const;
 export type FixtureName = keyof typeof FIXTURES;
 
 function git(cwd: string, home: string, args: string[], extraEnv: Record<string, string> = {}): string {

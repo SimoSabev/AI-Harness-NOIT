@@ -7,7 +7,7 @@ import { repoRoot } from "../paths.js";
 /** D-050 / D-099; `--name demo-shop` (демо промпт т. 9.1). */
 export function fixturesBuild(io: Io, o: { mandatHome: string; force: boolean; name?: string }): number {
   const name = o.name ?? "shop";
-  if (!(name in FIXTURES)) throw new MandatError("E_USAGE", `unknown fixture: ${name} (shop, demo-shop)`);
+  if (!(name in FIXTURES)) throw new MandatError("E_USAGE", `unknown fixture: ${name} (${Object.keys(FIXTURES).join(", ")})`);
   const r = buildFixture({ repoRoot, mandatHome: o.mandatHome, force: o.force, name: name as FixtureName });
   io.stdout(`base_commit ${r.sha}${r.state === "unchanged" ? " (unchanged)" : r.state === "advanced" ? " (advanced: Mandat applied changes on top)" : r.state === "recreated" ? " (recreated)" : ""}\n`);
   if (name !== "shop") io.stdout(`mirror ${r.mirror}\n`);
