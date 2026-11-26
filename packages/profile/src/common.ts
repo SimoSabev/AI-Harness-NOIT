@@ -1,4 +1,5 @@
 import type { HarnessProfile, ToolRule } from "@mandat/contract";
+import { plainCheck } from "./checks.js";
 
 export interface CompileCtx {
   runId: string;
@@ -23,7 +24,7 @@ export function policyJson(p: HarnessProfile, ctx: CompileCtx): string {
 }
 
 /** Layer B (+ the definition of done from G) as plain instructions for any agent. */
-export function instructions(p: HarnessProfile): string {
+export function instructions(p: HarnessProfile, subjects: readonly string[] = []): string {
   const b = p.layers.b;
   const out: string[] = ["# Project instructions (from the harness profile; the repo's own instruction files are not read)", ""];
   if (b.summary) out.push(b.summary, "");
@@ -32,16 +33,18 @@ export function instructions(p: HarnessProfile): string {
   // D-522: headless, only these commands are allowed as written; in the live test a chained one was refused and the
   // agent never ran the tests
   const test = b.commands.test && !b.commands.test.includes("{") ? b.commands.test : null;
-  // D-707: the final check also runs the profile's typecheck and lint (D8, packages/verify checks.ts); in run 7 of M4 a
-  // unit failed only on D8 type_fail, so the writer runs them itself before it stops
-  const typecheck = b.commands.typecheck && !b.commands.typecheck.includes("{") ? b.commands.typecheck : null;
-  const lint = b.commands.lint ? b.commands.lint.replace(/\s*\{files\}\s*/g, " ").trim() : null;
+  // D-707: the final check also runs the profile's typecheck and lint (D8, packages/verify checks.ts), so a writer runs
+  // them itself before it stops — only commands its shell may run as written (checks.ts), and never the oracle's writer,
+  // whose tests import modules that do not exist yet (they must stay red)
+  const writer = !subjects.includes("oracle");
+  const typecheck = writer && b.commands.typecheck && plainCheck(b.commands.typecheck) && !b.commands.typecheck.includes("{") ? b.commands.typecheck : null;
+  const lint = writer && b.commands.lint && plainCheck(b.commands.lint) ? b.commands.lint.replace(/\{[a-z_]+\}/g, "<the files you changed>") : null;
   if (cmds.length) {
     out.push("## Running the checks", ...(test ? [`- Run \`${test}\` before you finish and make it pass.`] : []));
     if (typecheck) out.push(`- Run \`${typecheck}\` before you finish and make it pass.`);
-    if (lint) out.push(`- Run \`${lint}\` on the files you changed before you finish and fix what it reports.`);
-    if (typecheck || lint) out.push("- Mandat's final check runs these too; a change that fails them is not accepted.");
-    out.push("- Before you stop, check your change against each acceptance criterion of the task, one by one.");
+    if (lint) out.push(`- Run \`${lint}\` before you finish and fix what it reports.`);
+    if (typecheck || lint) out.push("- Mandat's final check runs these too. A failure that is already there without your change is not yours: leave unrelated files alone.");
+    if (writer) out.push("- Before you stop, check your change against each acceptance criterion of the task, one by one.");
     out.push("- Run each check on its own, not chained with `&&`, `;` or `|`: the sandbox allows these commands only as written.");
     // D-540: in the live test a writer put a heredoc write and the test run into one shell call, was refused, and
     // reported "Bash was denied in this session" — the checks themselves were allowed all along

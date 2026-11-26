@@ -150,8 +150,8 @@ A small shop: cart, discounts, checkout.
 ## Running the checks
 - Run \`npx vitest run\` before you finish and make it pass.
 - Run \`npx tsc --noEmit\` before you finish and make it pass.
-- Run \`npx eslint\` on the files you changed before you finish and fix what it reports.
-- Mandat's final check runs these too; a change that fails them is not accepted.
+- Run \`npx eslint <the files you changed>\` before you finish and fix what it reports.
+- Mandat's final check runs these too. A failure that is already there without your change is not yours: leave unrelated files alone.
 - Before you stop, check your change against each acceptance criterion of the task, one by one.
 - Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
 - Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.
@@ -288,8 +288,8 @@ A small shop: cart, discounts, checkout.
 ## Running the checks
 - Run \`npx vitest run\` before you finish and make it pass.
 - Run \`npx tsc --noEmit\` before you finish and make it pass.
-- Run \`npx eslint\` on the files you changed before you finish and fix what it reports.
-- Mandat's final check runs these too; a change that fails them is not accepted.
+- Run \`npx eslint <the files you changed>\` before you finish and fix what it reports.
+- Mandat's final check runs these too. A failure that is already there without your change is not yours: leave unrelated files alone.
 - Before you stop, check your change against each acceptance criterion of the task, one by one.
 - Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
 - Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.
@@ -385,8 +385,8 @@ A small shop: cart, discounts, checkout.
 ## Running the checks
 - Run \`npx vitest run\` before you finish and make it pass.
 - Run \`npx tsc --noEmit\` before you finish and make it pass.
-- Run \`npx eslint\` on the files you changed before you finish and fix what it reports.
-- Mandat's final check runs these too; a change that fails them is not accepted.
+- Run \`npx eslint <the files you changed>\` before you finish and fix what it reports.
+- Mandat's final check runs these too. A failure that is already there without your change is not yours: leave unrelated files alone.
 - Before you stop, check your change against each acceptance criterion of the task, one by one.
 - Run each check on its own, not chained with \`&&\`, \`;\` or \`|\`: the sandbox allows these commands only as written.
 - Change files with the edit tools, never with a shell redirect or heredoc: such a shell call is refused. A refused shell call does not mean the checks are refused; run them.
