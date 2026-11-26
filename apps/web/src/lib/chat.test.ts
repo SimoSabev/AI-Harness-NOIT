@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxRepo, chatItems, sendsOnEnter, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
+import { boxRepo, chatItems, NEW_PROJECT, projectChoices, withAdded, sendsOnEnter, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -146,6 +146,20 @@ describe("the task box: project and Enter (live run 20.11)", () => {
     expect(boxRepo(P, null)).toBe("r1");
     expect(boxRepo(P, "gone")).toBe("r1");
     expect(boxRepo([], null)).toBe("");
+  });
+  it("D-626: the project chip always opens a menu — the projects, No project, and + New project last", () => {
+    expect(projectChoices(P, { none: "No project", add: "+ New project…" })).toEqual([
+      { value: "r1", label: "local/a" },
+      { value: "r2", label: "local/bakery" },
+      { value: "", label: "No project" },
+      { value: NEW_PROJECT, label: "+ New project…" },
+    ]);
+    expect(projectChoices([], { none: "No project", add: "+ New project…" }).map((o) => o.value)).toEqual(["", NEW_PROJECT]);
+  });
+  it("D-626: a project added from the box is in the list at once, once, even before the page reloads", () => {
+    expect(withAdded(P, { id: "r3", full_name: "local/new" }).map((p) => p.id)).toEqual(["r1", "r2", "r3"]);
+    expect(withAdded(P, { id: "r2", full_name: "local/bakery" })).toEqual(P);
+    expect(withAdded(P, null)).toEqual(P);
   });
   it("Enter sends; Shift+Enter is a new line; typing in an IME is not a send", () => {
     expect(sendsOnEnter({ key: "Enter", shiftKey: false, isComposing: false })).toBe(true);

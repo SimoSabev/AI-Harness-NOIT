@@ -14,7 +14,9 @@ import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
 import { taskTypeFor } from "../lib/agents";
-import { boxRepo, sendsOnEnter } from "../lib/chat";
+import { NEW_PROJECT, boxRepo, projectChoices, sendsOnEnter, withAdded } from "../lib/chat";
+import { AddProject } from "./local-access";
+import type { AddedProject } from "./add-project-form";
 import { isAnswering } from "../lib/conversation-types";
 import type { ConversationFeed } from "../lib/conversation-types";
 import { BringReply } from "@mandat/contract";
@@ -92,7 +94,7 @@ const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.w
 const ENDED = ["budget", "expired"];
 const PARKED = "harnova.parkedTask";
 
-export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
+export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", taskMode = "ask_first", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -105,7 +107,19 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
     setAgent(id);
     setModel(agents.find((a) => a.id === id)?.defaultModel ?? null);
   };
-  const [repo, setRepo] = useState(() => boxRepo(projects, initialChat?.conversation.repo));
+  // D-626: a project added from the box is chosen at once; the page's list catches up on refresh
+  const [added, setAdded] = useState<AddedProject | null>(null);
+  const projects = withAdded(given, added);
+  const [repo, setRepo] = useState(() => boxRepo(given, initialChat?.conversation.repo));
+  const [adding, setAdding] = useState(false);
+  const pickRepo = (v: string) => (v === NEW_PROJECT ? setAdding(true) : setRepo(v));
+  const onAdded = (p: AddedProject) => {
+    setAdded(p);
+    setRepo(p.id);
+    setAdding(false);
+    setError(null);
+    router.refresh();
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<TaskMode>(taskMode);
@@ -259,7 +273,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   if (!canAct) return <p className="m-auto text-sm text-mute">{t("newTask.onlyApprovers")}</p>;
   // A conversation needs no project (D-531): "hi" works on a fresh install. Work does.
   const cannotTalk = busy || answering || agents.length === 0;
-  const blocked = cannotTalk || projects.length === 0;
+  const blocked = cannotTalk || repo === "";
   const sendBlocked = asking ? cannotTalk : blocked;
   const modes = (
     <div role="group" aria-label={t("chat.mode")} className="inline-flex rounded-full border border-line bg-canvas p-0.5 text-xs">
@@ -333,12 +347,11 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
               <Select size="sm" mono aria-label={t("ws.model")} value={model ?? ""} onChange={setModel} options={current.models.map((m) => ({ value: m, label: m }))} />
             )}
             {current && current.models.length === 1 && <span className="px-1.5 font-mono text-xs text-mute">{current.models[0]}</span>}
-            {projects.length > 1 ? (
-              <Select size="sm" mono aria-label={t("newTask.repo")} value={repo} onChange={setRepo} options={projects.map((p) => ({ value: p.id, label: p.full_name }))} />
-            ) : projects[0] ? (
-              <span className="px-1.5 font-mono text-xs text-faint" title={t("newTask.repo")}>{projects[0].full_name}</span>
-            ) : (
-              <Link href="/projects/add" className="px-1.5 text-xs text-accent-text underline-offset-4 hover:underline">{t("add.title")}</Link>
+            {/* D-626: always a menu — the projects, No project, + New project (added right here, then chosen); an open
+                conversation keeps the project it started with */}
+            {!interview && (
+              <Select size="sm" mono aria-label={t("newTask.repo")} value={repo} onChange={pickRepo} disabled={thread}
+                options={projectChoices(projects, { none: t("newTask.noProject"), add: t("newTask.newProject") })} />
             )}
             <span className="ml-auto flex items-center gap-1.5">
               {asking && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
@@ -357,7 +370,22 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       </div>
     </form>
   );
-  if (!interview) return <AgentNames agents={agents}>{form}</AgentNames>;
+  // D-626: "Add project" over the app, outside the box's form (its own forms cannot nest in it)
+  const sheet = adding && (
+    <div role="dialog" aria-modal="true" aria-label={t("add.title")} className="fixed inset-0 z-30 flex items-start justify-center overflow-y-auto bg-scrim p-3 lg:p-8"
+      onKeyDown={(e) => { if (e.key === "Escape") setAdding(false); }}>
+      <div className="w-full max-w-3xl rounded-[16px] border border-line-strong bg-panel p-4 shadow-[0_30px_80px_rgb(0_0_0/0.5)] lg:p-5">
+        <div className="flex items-center gap-3">
+          <span aria-hidden="true" className="logo-mark inline-block size-5" />
+          <p className="flex-1 text-sm font-medium">{t("add.title")}</p>
+          <button type="button" className={btn.ghost} onClick={() => setAdding(false)}>{t("interview.close")}</button>
+        </div>
+        <p className="mt-1 text-sm text-mute">{t("newTask.addHint")}</p>
+        <AddProject initialPath={null} onAdded={onAdded} />
+      </div>
+    </div>
+  );
+  if (!interview) return <AgentNames agents={agents}>{form}{sheet}</AgentNames>;
   return (
     <AgentNames agents={agents}>
     <div role="dialog" aria-modal="true" aria-label={t("interview.title")} className="fixed inset-0 z-30 flex items-stretch justify-center bg-scrim p-3 lg:p-8">

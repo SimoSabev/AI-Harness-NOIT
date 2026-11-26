@@ -26,8 +26,10 @@ const ERR: Record<string, Key> = {
 // it registers that folder at once.
 /** D-557: the agent (and model) the project interview runs on */
 export interface Interview { agent: string; model: string | null }
+/** D-626: the project the form added (or found already added) — the chat box selects it and stays where it is */
+export interface AddedProject { id: string; full_name: string }
 
-export function AddProjectForm({ path: given, interview = null }: { path?: string; interview?: Interview | null }) {
+export function AddProjectForm({ path: given, interview = null, onAdded }: { path?: string; interview?: Interview | null; onAdded?: (p: AddedProject) => void }) {
   const t = useT();
   const router = useRouter();
   const [path, setPath] = useState(given ?? "");
@@ -41,6 +43,8 @@ export function AddProjectForm({ path: given, interview = null }: { path?: strin
     setBusy(false);
     const reply = AddProjectReply.safeParse(r.body);
     if (r.status === 200 && reply.success && reply.data.ok) {
+      // D-626: from the chat box — select it there; its interview opens there when work on it starts (D-600)
+      if (onAdded) return void onAdded({ id: reply.data.repo_id, full_name: reply.data.full_name });
       setDone({ name: reply.data.full_name, created: reply.data.created, repo: reply.data.repo_id });
       // D-600: the interview is required for every project — a new project goes straight into it
       if (reply.data.created && interview) return void startInterview(reply.data.repo_id);

@@ -175,6 +175,17 @@ export function showChat<C extends { conversation: { phase: string }; job?: unkn
 export function boxRepo(projects: readonly { id: string }[], chatRepo: string | null | undefined): string {
   return chatRepo && projects.some((p) => p.id === chatRepo) ? chatRepo : (projects[0]?.id ?? "");
 }
+/** D-626: the menu value that opens "Add project" over the box instead of choosing a project */
+export const NEW_PROJECT = "__new_project";
+/** D-626: the project chip always opens a menu — the projects, "No project" (a conversation needs none, D-531) and
+ * "+ New project" last, as in any chat app. */
+export function projectChoices(projects: readonly { id: string; full_name: string }[], labels: { none: string; add: string }): { value: string; label: string }[] {
+  return [...projects.map((p) => ({ value: p.id, label: p.full_name })), { value: "", label: labels.none }, { value: NEW_PROJECT, label: labels.add }];
+}
+/** D-626: a project added from the box joins the list at once (the page's own list catches up on refresh), once. */
+export function withAdded<P extends { id: string; full_name: string }>(projects: readonly P[], added: P | null): readonly P[] {
+  return added && !projects.some((p) => p.id === added.id) ? [...projects, added] : projects;
+}
 /** Enter sends the message; Shift+Enter makes a new line; Enter while an IME composes a word is not a send. */
 export function sendsOnEnter(e: { key: string; shiftKey: boolean; isComposing: boolean }): boolean {
   return e.key === "Enter" && !e.shiftKey && !e.isComposing;
