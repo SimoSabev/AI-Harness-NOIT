@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import type { Spec} from "@mandat/contract";
+import type { Spec, VerdictResult } from "@mandat/contract";
 import { BringBody, JobApproveBody, JobRoles, JobStatus, SessionSeal, TaskAxes, TaskProfileId, hashJcs, jcs, roleRoute, sha256Tag } from "@mandat/contract";
-import { unitWaves } from "@mandat/core";
+import { hiddenCounts, unitWaves } from "@mandat/core";
+import { singleArmTask } from "@mandat/worker";
 import { gateRows, strategyReasons } from "../job-strategy";
 import { canAct, factorAt } from "./actions";
 import { hasCap } from "./roles";
@@ -62,7 +63,17 @@ export async function jobView(sql: Sql, conversation: string, spec: Spec | null)
     merged_sha: j.merged_sha,
     strategy: strategyOf(j, units),
     gates: gateRows(await finalEvidence(sql, j.final_task_id)),
+    compare: await compareArm(sql, j.id),
   };
+}
+
+/** D-615: M4's single-agent arm of this job, if it was started (`mandat compare start`): who runs it and how it ended */
+async function compareArm(sql: Sql, job: string): Promise<JobView["compare"]> {
+  const t = (await sql.query<{ id: string; agent: string; model: string | null; state: string }>("select id, agent, model, state from public.tasks where id = $1 and kind = 'compare'", [singleArmTask(job)])).rows[0];
+  if (!t) return null;
+  const v = (await sql.query<{ id: string; result: VerdictResult }>("select id::text as id, result from public.verdicts where task_id = $1 order by created_at desc limit 1", [t.id])).rows[0];
+  const h = v ? hiddenCounts((await sql.query<{ detector: string; status: string; data: unknown }>("select detector, status, data from public.evidence where verdict_id = $1::uuid", [v.id])).rows) : { passed: 0, total: 0 };
+  return { task: t.id, agent: t.agent, model: t.model, state: t.state, verdict: v?.result ?? null, ...h };
 }
 
 function strategyOf(j: JobDbRow, units: { wave: number; pilot: boolean }[]): JobView["strategy"] {

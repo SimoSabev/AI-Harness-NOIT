@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import type { Key, T } from "../i18n/t";
 import { useAgentName, whenShort } from "./agent-names";
 import type { JobView } from "../lib/conversation-types";
@@ -7,6 +8,7 @@ import type { GateStatus } from "../lib/job-strategy";
 // D-558 (demo 4.12): how the harness planned this job and who does what — the profile, one writer or waves, the pilot,
 // the model per role and why (fixed sentences chosen from the axes) — and the gates of the final check, each with its
 // status. "How do we know it is done": every gate passed in a fresh container against the hidden oracle.
+// D-615: when M4's single-agent arm runs on the same spec and oracle, its own row says which account runs it and how it ended.
 
 const GATE_TONE: Record<GateStatus, string> = { pass: "text-ok", fail: "text-bad", unknown: "text-warn", "n/a": "text-mute", pending: "text-mute" };
 
@@ -35,6 +37,18 @@ export function JobStrategy({ job, t }: { job: JobView; t: T }) {
             </p>
           ))}
         </dd>
+        {job.compare && (
+          <>
+            <dt className="text-mute">{t("job.strategy.compare")}</dt>
+            <dd className="flex flex-wrap items-baseline gap-x-2">
+              <RoleAgent agent={job.compare.agent} model={job.compare.model} t={t} />
+              <span className={job.compare.verdict === "VERIFIED" ? "text-ok" : job.compare.verdict === "FAILED" ? "text-bad" : "text-mute"}>
+                {job.compare.verdict ? t(`job.compare.verdict.${job.compare.verdict}`, { n: String(job.compare.passed), of: String(job.compare.total) }) : t("job.compare.running")}
+              </span>
+              <Link href={`/?task=${job.compare.task}`} className="text-accent-text underline-offset-4 hover:underline">{t("job.compare.open")}</Link>
+            </dd>
+          </>
+        )}
       </dl>
       <ul aria-label={t("job.strategy.why")} className="list-disc space-y-0.5 pl-5 text-xs text-mute">
         {s.reasons.map((k) => <li key={k}>{t(k)}</li>)}
