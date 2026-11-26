@@ -49,7 +49,7 @@ describe("rules from failures, end to end (AC-11.1)", () => {
     expect(m).toMatchObject({ change: { rule: "protect_path", layer: "c", detail: "infra/**" }, source: "rule:d4_repeat" });
   });
 
-  it("a flaky test (two labelled failures) and five granted asks → proposals that only a person may accept", async () => {
+  it("a flaky test (two labelled failures) and five granted asks → proposals nobody waits for; one change per tick (D-647)", async () => {
     const T = "tests/cart.test.ts > adds an item";
     for (let i = 0; i < 2; i++) {
       const t = await task("FAILED", [`D1:regression:${T}`]);
@@ -62,9 +62,9 @@ describe("rules from failures, end to end (AC-11.1)", () => {
     let benched = 0;
     const tick = await evolveTick(db, { now: new Date(), bench: async () => { benched++; return { pass: 10, total: 10, false_verified: 0 }; } });
     expect(tick.proposed.sort()).toEqual([`flaky_test|${T}|bugfix`, "tool_allow|bash:pnpm add *|feature"]);
-    const rows = (await trials()).filter((t) => t.needs_person);
-    expect(rows.map((t) => [t.source, t.status])).toEqual([["rule:flaky_repeat", "proposed"], ["rule:ask_repeat", "proposed"]].sort((a, b) => (String(a[0]) < String(b[0]) ? 1 : -1)));
-    // the bench only ran for the D-530 proposal; nothing a person must decide was accepted by Mandat
+    // nothing waits for a person any more; the column stays for the trials made before D-647
+    expect((await trials()).map((t) => [t.source, t.needs_person])).toEqual([["rule:d4_repeat", false], ["rule:flaky_repeat", false], ["rule:ask_repeat", false]]);
+    // the oldest proposal is benched first and applies; the next ones wait for the next tick, benched against it
     expect(benched).toBe(2);
     expect(tick.accepted).toEqual(["protect_path|infra/**|bugfix"]);
   });
