@@ -9,12 +9,15 @@ export interface HomeProject { id: string; name: string; brief: boolean }
 export type HomeAction = { kind: "interview"; repo: string; label: { key: Key; params?: Params } } | { kind: "link"; href: string; label: { key: Key; params?: Params } };
 export interface HomeBrief { stats: { waiting: number; running: number; projects: number; noBrief: number }; say: { key: Key; params?: Params }; actions: HomeAction[] }
 
-export function homeBrief(o: { waiting: number; running: number; projects: HomeProject[]; firstWaiting: string | null }): HomeBrief {
+export function homeBrief(o: { waiting: number; running: number; projects: HomeProject[]; firstWaiting: string | null; /** D-709 */ firstReview?: string | null }): HomeBrief {
   const missing = o.projects.filter((p) => !p.brief);
   const stats = { waiting: o.waiting, running: o.running, projects: o.projects.length, noBrief: missing.length };
   const waitingAct: HomeAction[] = o.firstWaiting ? [{ kind: "link", href: o.firstWaiting, label: { key: "home.act.waiting" } }] : [];
+  // D-709: a sealed job waiting for the person's review is the one decision that moves work into main: it goes first
+  const review: HomeAction[] = o.firstReview ? [{ kind: "link", href: o.firstReview, label: { key: "home.act.review" } }] : [];
   if (o.projects.length === 0) return { stats, say: { key: "home.say.noProject" }, actions: [{ kind: "link", href: "/projects/add", label: { key: "home.act.add" } }] };
   const first = missing[0];
+  if (review.length > 0) return { stats, say: { key: "home.say.review", params: { n: o.waiting } }, actions: [...review, ...missing.slice(0, 2).map((p): HomeAction => ({ kind: "interview", repo: p.id, label: { key: "home.act.meet", params: { name: p.name } } }))] };
   if (first) {
     return {
       stats,

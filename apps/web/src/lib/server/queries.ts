@@ -4,6 +4,7 @@ import { inboxSummary } from "../inbox";
 import type { Summary } from "../inbox";
 import { asUser } from "./sql";
 import type { Db, Sql } from "./sql";
+import type { LatestJob } from "../task-list";
 
 // Demo prompt §8.1: GET /api/inbox, /api/board, /api/tasks/:id — all under RLS as the user.
 export type Role = "owner" | "approver" | "viewer";
@@ -157,5 +158,13 @@ export async function changesetShot(db: Db, uid: string, changesetId: string, na
   return asUser(db, uid, async (sql) => {
     const r = (await sql.query<{ png: Uint8Array }>("select png from public.changeset_shots where changeset_id = $1::uuid and name = $2", [changesetId, name])).rows[0];
     return r ? Buffer.from(r.png) : null;
+  });
+}
+
+/** D-709: the latest job of each conversation (its state is the state of the conversation's session in the list) */
+export async function latestJobs(db: Db, uid: string, org: string): Promise<Map<string, LatestJob>> {
+  return asUser(db, uid, async (sql) => {
+    const r = await sql.query<LatestJob & { conversation_id: string }>("select distinct on (conversation_id) conversation_id, id, status from public.jobs where org_id = $1::uuid order by conversation_id, created_at desc, id desc", [org]);
+    return new Map(r.rows.map((x) => [x.conversation_id, { id: x.id, status: x.status }]));
   });
 }

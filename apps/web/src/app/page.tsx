@@ -56,7 +56,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const tasks = await requestList(c.uid, c.org, t.lang);
   // D-619: the dashboard counts the list's own groups, so its numbers are the ones the side bar shows
   const queue = homeQueue(tasks);
-  const home = { ...homeBrief({ waiting: queue.counts.waiting, running: queue.counts.running, projects: briefs, firstWaiting: queue.waiting[0]?.href ?? null }), queue };
+  const home = { ...homeBrief({ waiting: queue.counts.waiting, running: queue.counts.running, projects: briefs, firstWaiting: queue.waiting[0]?.href ?? null, firstReview: tasks.find((x) => x.review)?.href ?? null }), queue };
   const side = parseSide((await cookies()).get(SIDE_COOKIE)?.value);
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];

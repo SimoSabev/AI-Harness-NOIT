@@ -30,7 +30,7 @@ export type HomeView = HomeBrief & { queue: HomeQueue<WsTask> };
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsSub { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
 /** D-633: a session of the list — a conversation (its tasks are `subs`) or a task on its own — and its project */
-export interface WsTask extends WsSub { project: string | null; projectName: string; subs?: WsSub[] }
+export interface WsTask extends WsSub { project: string | null; projectName: string; subs?: WsSub[]; /** D-709: a sealed job waits for the person's review */ review?: boolean }
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
 export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-612 */ limitedUntil?: string | null | undefined }
 
@@ -465,6 +465,8 @@ function HomeDashboard({ home, onMeet, busy }: { home: HomeView; onMeet: (repo: 
     </li>
   );
   const interviews = home.actions.filter((a) => a.kind === "interview");
+  // D-709: a finished job waiting for review is the next step, before any interview
+  const review = home.actions.find((a) => a.kind === "link" && a.label.key === "home.act.review");
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 pb-6 pt-2">
       <header className="flex items-start gap-3">
@@ -480,12 +482,13 @@ function HomeDashboard({ home, onMeet, busy }: { home: HomeView; onMeet: (repo: 
         {tile({ n: counts.done, label: t("home.tile.done"), sub: share(counts.done), tone: "text-ok", bar: "bg-ok", shape: "rounded-full", href: null, fill: pct(counts.done) })}
         {tile({ n: home.stats.projects, label: t("home.tile.projects"), sub: home.stats.noBrief > 0 ? t("home.tile.noBrief", { n: home.stats.noBrief }) : t("home.tile.allBriefs"), tone: "text-ink", bar: home.stats.noBrief > 0 ? "bg-warn" : "bg-accent", shape: "rounded-[3px]", href: "/harness", fill: home.stats.projects > 0 ? Math.round(((home.stats.projects - home.stats.noBrief) / home.stats.projects) * 100) : 0 })}
       </div>
-      {interviews.length > 0 && (
+      {(review || interviews.length > 0) && (
         <section aria-label={t("home.next")} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-warn/40 bg-warn-soft px-4 py-3">
           <Hex tone="amber" className="size-3" />
           <p className="min-w-0 flex-1 text-sm"><span className="font-medium text-warn">{t("home.next")}</span></p>
+          {review?.kind === "link" && <Link href={review.href} className={`${btn.primary} rounded-full py-1.5`}>{t(review.label.key, review.label.params)}</Link>}
           {interviews.map((a) => a.kind === "interview" && (
-            <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${btn.primary} rounded-full py-1.5`}>{t(a.label.key, a.label.params)}</button>
+            <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${review ? btn.secondary : btn.primary} rounded-full py-1.5`}>{t(a.label.key, a.label.params)}</button>
           ))}
         </section>
       )}
