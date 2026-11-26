@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { config, pickMacIdentity } from "../electron-builder.config.mjs";
+import { config, macTimestamp, pickMacIdentity } from "../electron-builder.config.mjs";
 
 // D-380: until Simo has an Apple Developer ID (Q-053) the Mac app is signed ad-hoc ("-"), without hardened runtime.
 // Unsigned (identity null), an app downloaded from a browser on Apple Silicon is "damaged and can't be opened" with no
@@ -58,5 +58,13 @@ describe("pickMacIdentity (D-637)", () => {
   });
   it("an override that is neither '-' nor a hash is refused", () => {
     expect(() => pickMacIdentity("", "Apple Development: x")).toThrow(/MANDAT_MAC_IDENTITY/);
+  });
+  // D-637 (first signed build, 26.11.2026): with --timestamp every one of thousands of files waits on Apple's timestamp
+  // server; it took 1,5 h and then failed ("A timestamp was expected but was not found"). Notarization needs the timestamp
+  // (Developer ID); an Apple Development build for this Mac does not, so it signs with --timestamp=none.
+  it("timestamp: none for Apple Development and ad-hoc; Apple's server only for Developer ID (notarization)", () => {
+    expect(macTimestamp([dev, did, footer].join("\n"), "0123456789ABCDEF0123456789ABCDEF01234567")).toBe("none");
+    expect(macTimestamp([dev, did, footer].join("\n"), "89ABCDEF0123456789ABCDEF0123456789ABCDEF")).toBeUndefined();
+    expect(macTimestamp("", "-")).toBe("none");
   });
 });

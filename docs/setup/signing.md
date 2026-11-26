@@ -24,7 +24,9 @@ Ad-hoc подписът е различен при всеки билд и keycha
 1. Инсталирай Xcode от App Store и го отвори веднъж (приеми лиценза и допълнителните компоненти).
 2. Xcode → Settings → Accounts → **+** → Apple ID → влез с твоя Apple ID (безплатният стига).
 3. Избери акаунта → **Manage Certificates…** → **+** → **Apple Development** → Done.
-4. Провери: `security find-identity -v -p codesigning` показва ред `"Apple Development: … (TEAMID)"`.
+4. Провери: `security find-identity -v -p codesigning` показва ред `"Apple Development: … (TEAMID)"`. Ако пише
+   „0 valid identities“, липсва посредникът Apple WWDR G3: изтегли https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+   и го отвори (или `security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db`).
 5. Строй както досега (`pnpm --dir apps/desktop run dist:mac` или `pnpm site:mac`). В изхода пише `identityName=Apple Development: …`.
 6. При първото пускане на подписания Harnova macOS пита за паролата **още веднъж** → **Always Allow**. След това новите
    билдове със същия сертификат не питат [НП — потвърждава се с първия такъв билд].

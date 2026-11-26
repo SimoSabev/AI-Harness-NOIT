@@ -34,17 +34,29 @@ export function pickMacIdentity(findIdentityOutput, override) {
   return byKind["Developer ID Application"] ?? byKind["Apple Development"] ?? "-";
 }
 
-function macIdentity() {
-  let out = "";
-  if (process.platform === "darwin") {
-    try {
-      out = execFileSync("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    } catch {
-      out = "";
-    }
-  }
-  return pickMacIdentity(out, process.env.MANDAT_MAC_IDENTITY);
+/**
+ * D-637: Apple's timestamp server is needed for notarization (Developer ID). For Apple Development and ad-hoc it only
+ * makes thousands of per-file network calls (the first signed build waited 1,5 h and then failed), so it is off.
+ * @param {string} findIdentityOutput @param {string} identity the result of pickMacIdentity
+ * @returns {"none" | undefined}
+ */
+export function macTimestamp(findIdentityOutput, identity) {
+  const developerId = findIdentityOutput.split("\n").some((l) => l.includes(identity) && l.includes('"Developer ID Application: '));
+  return identity !== "-" && developerId ? undefined : "none";
 }
+
+function findIdentities() {
+  if (process.platform !== "darwin") return "";
+  try {
+    return execFileSync("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return "";
+  }
+}
+
+const identities = findIdentities();
+const macSignIdentity = pickMacIdentity(identities, process.env.MANDAT_MAC_IDENTITY);
+
 
 // MANDAT_MAC_ARCH=arm64 builds only the Apple Silicon dmg (`pnpm site:mac`, scripts/site-local-release.mjs)
 const macArch = (process.env.MANDAT_MAC_ARCH ?? "arm64,x64").split(",").filter((a) => a === "arm64" || a === "x64");
@@ -84,7 +96,8 @@ export const config = {
     // D-637: a Developer ID or Apple Development certificate in this Mac's keychain is used when present, so the keychain
     // stops asking for the password after every build. Hardened runtime off: it needs extra entitlements and buys nothing
     // without notarization.
-    identity: macIdentity(),
+    identity: macSignIdentity,
+    timestamp: macTimestamp(identities, macSignIdentity),
     hardenedRuntime: false,
     // D-580, D-596: Nova (the voice) listens; without this line macOS never asks and the microphone stays silent. No camera line.
     extendInfo: { NSMicrophoneUsageDescription: "Nova listens to you through the microphone while you talk to it." },

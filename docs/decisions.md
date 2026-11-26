@@ -5793,7 +5793,12 @@ channel_limit`, а агентът трябва да е в списъка на с
 с първия билд със сертификата на Симо; самоподписан сертификат няма Team ID и не помага].
 Алтернативи, които Симо не избра: малка помощна програма със стабилен cdhash, която отключва ключа (по-слаба защита от
 други програми на същия потребител), или ключ във файл 0600 без keychain.
-Тестове: apps/desktop builder-config.test.ts (+6). Стъпки за сертификата: docs/setup/signing.md. Статус: решено от Симо.
+Timestamp (първият подписан билд, 26.11.2026): с `--timestamp` всеки от хилядите файлове чакаше сървъра на Apple; след
+1,5 ч. `codesign` спря с „A timestamp was expected but was not found“. Timestamp трябва само за нотаризация (Developer ID),
+затова `macTimestamp` дава `--timestamp=none` за Apple Development и ad-hoc (app-builder-lib 26.17.0 `mac.timestamp` →
+@electron/osx-sign `--timestamp=<value>`). С него билдът отне минути; ACL изискването вече е по сертификата
+(`anchor apple generic and certificate leaf[subject.CN] = "Apple Development: …"`), не по cdhash.
+Тестове: apps/desktop builder-config.test.ts (+7). Стъпки за сертификата: docs/setup/signing.md. Статус: решено от Симо.
 
 ## D-640 E9д „учене“: карта на припокриването с еволюцията на профила (кодерът, 26.11.2026)
 Решение: т. 5.5 не започва от нулата. Какво вече има и какво липсва:
