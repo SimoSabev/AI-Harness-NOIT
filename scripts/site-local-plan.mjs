@@ -35,6 +35,9 @@ const NEVER = ["--publish", "never"];
 // the CI file keeps the defaults on its own OS.
 const NSIS_ARM64 = "-c.toolsets.nsis=1.2.1";
 const APPIMAGE_ARM64 = "-c.toolsets.appimage=1.0.3";
+// fpm compresses the .deb with xz by default, and there is no xz binary on macOS or in linux-tools-mac 1.0.1 (gtar -J
+// fails): gzip, which dpkg reads too
+const DEB_GZIP = "-c.deb.compression=gz";
 
 /**
  * One electron-builder run per target (a failing target does not hide which one failed). The Mac arch comes only from
@@ -45,7 +48,7 @@ export function builderRuns(targets) {
   return targets.map((target) => {
     if (target === "mac-arm64" || target === "mac-x64") return { target, args: [...CONFIG, "--mac", ...NEVER], env: { MANDAT_MAC_ARCH: target.slice(4) } };
     if (target === "win-x64") return { target, args: [...CONFIG, NSIS_ARM64, "--win", "--x64", ...NEVER], env: {} };
-    if (target === "linux-x64") return { target, args: [...CONFIG, APPIMAGE_ARM64, "--linux", "--x64", ...NEVER], env: {} };
+    if (target === "linux-x64") return { target, args: [...CONFIG, APPIMAGE_ARM64, DEB_GZIP, "--linux", "--x64", ...NEVER], env: {} };
     throw new Error(`site-local: unknown target ${target}`);
   });
 }

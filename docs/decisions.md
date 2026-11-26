@@ -6265,9 +6265,8 @@ SHA-256 на всеки файл в `public/downloads`, не само разме
 node-pty: инсталаторът носи всички prebuilds на node-pty 1.1.0 (darwin-arm64, darwin-x64, win32-x64, win32-arm64).
 За Linux няма prebuild, затова панелът с терминала на Linux е изключен (D-375). Страницата го казва. За да тръгне, трябва
 `pty.node`, строен на Linux срещу Electron 44.9.0.
-.deb още не се строи тук: fpm пакетира control.tar.xz с `gtar -J`, а xz липсва и на машината, и в linux-tools-mac
-1.0.1 (gtar exit 2). Възможен ход: `-c.deb.compression=gz` за локалния билд или xz на машината. Дотогава сайтът дава
-четири инсталатора, а .deb е „Скоро“ (сайтът е събран със `writeLocalSiteRelease` за четирите вида).
+.deb: fpm пакетира с xz (`gtar -J`), а xz липсва и на машината, и в linux-tools-mac 1.0.1 (gtar exit 2). Затова
+локалният билд дава `-c.deb.compression=gz` (dpkg чете gzip). CI остава с xz.
 [НП]: инсталаторите за Windows и Linux не са пускани на истински Windows или Linux. Проверени са само по съдържание
 (`file`, `7za l`, `ar`). Не е проверено дали AppImage-ът с runtime 20251108 иска libfuse2 на Ubuntu 22.04+.
 Тестове: scripts site-local-plan.test.ts (+5), release-manifest.test.ts (+1), apps/site downloads.test.ts (+2),
