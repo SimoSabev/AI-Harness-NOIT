@@ -6236,3 +6236,39 @@ hosted — hosted порта с runner протокола и webhook-ите (D-7
 се бият за порта. Сега hosted портът праща push от Observer през `observerRecorder` (записва се без текстовете на
 комитите и revert-ът се хваща), а другите събития — както в D-700. Отделният сървър на E9е се пуска само без hosted.
 Тестове: worker hosted-env.test.ts (+1). Статус: решено при сливането (Симо: „слей ги“).
+
+## D-639 Всички инсталатори се строят на Apple Silicon Mac-а за локалния сайт (`pnpm site:all`, 26.11.2026)
+Решение: `scripts/site-local-release.mjs --all` (`pnpm site:all`) строи до Apple Silicon dmg и Intel dmg
+(`MANDAT_MAC_ARCH=x64`, подпис по D-637), Windows NSIS .exe (x64), Linux AppImage и .deb (x64). Windows и Linux са
+неподписани. Всичко се строи на този Mac, без wine. Планът е в `scripts/site-local-plan.mjs`: по едно извикване на
+electron-builder за всяка цел, винаги с `--publish never`. Бандълът на харнеса е един за всички цели, защото в него няма
+native код (`bundle-harness.mjs` спира, ако намери; проверено и с `file`: няма Mach-O/ELF/PE файлове в бандъла).
+`writeLocalSiteRelease` спира, ако някой от поисканите видове липсва. Build-ът на сайта (`releaseManifest`) сравнява и
+SHA-256 на всеки файл в `public/downloads`, не само размера. Така хешът на страницата е хешът на файла, който сървърът
+дава. `/download/` вече има стъпки за инсталиране и на Windows (SmartScreen: More info → Run anyway) и на Linux.
+Факти за electron-builder 26.17.0 (от кода в node_modules, 26.11.2026):
+- Windows от macOS без wine: ресурсите на exe се пишат с `resedit` (`app-builder-lib/out/util/resEdit.js`). На macOS
+  Catalina+ деинсталаторът се вади от инсталатора с `UninstallerReader` (`targets/nsis/NsisTarget.js`); wine е само
+  резервен път.
+- Стандартните инструменти за macOS са само x86_64 и без Rosetta 2 дават „Bad CPU type“ (spawn -86): NSIS
+  `nsis-3.0.4.1/mac/makensis` и AppImage `appimage-12.0.1/darwin/mksquashfs` (`file` → Mach-O x86_64). Тук Rosetta няма.
+  По-новите пакети вървят тук: `toolsets.nsis: "1.2.1"` (makensis 3.12) и `toolsets.appimage: "1.0.3"`.
+  electron-builder ги води като бета (`out/configuration.d.ts`; https://github.com/electron-userland/electron-builder-binaries/releases,
+  26.11.2026). Затова ги ползват само локалните извиквания (`-c.toolsets.…`). CI (`desktop-build.yml`) строи всяка ОС на
+  собствената ѝ машина със стандартните инструменти.
+- fpm за .deb идва като пакет `fpm-1.17.0-ruby-3.4.3-darwin-arm64.7z` (`out/toolsets/linux.js`). .deb не се строи без
+  homepage (`FpmTarget.computeFpmMetaInfoOptions`; https://www.electron.build/configuration#metadata, 26.11.2026).
+  Затова `extraMetadata.homepage` е адресът на хранилището. Това трябва и на CI.
+- Electron zip-овете за win32-x64 и linux-x64 се теглят от GitHub releases на electron и се проверяват срещу
+  SHASUMS256.txt (`@electron/get` 3.1.0). Тук два пъти спряха по таймаут (ETIMEDOUT). Свалени с `@electron/get` и
+  повторен опит, после взети от кеша.
+node-pty: инсталаторът носи всички prebuilds на node-pty 1.1.0 (darwin-arm64, darwin-x64, win32-x64, win32-arm64).
+За Linux няма prebuild, затова панелът с терминала на Linux е изключен (D-375). Страницата го казва. За да тръгне, трябва
+`pty.node`, строен на Linux срещу Electron 44.9.0.
+.deb още не се строи тук: fpm пакетира control.tar.xz с `gtar -J`, а xz липсва и на машината, и в linux-tools-mac
+1.0.1 (gtar exit 2). Възможен ход: `-c.deb.compression=gz` за локалния билд или xz на машината. Дотогава сайтът дава
+четири инсталатора, а .deb е „Скоро“ (сайтът е събран със `writeLocalSiteRelease` за четирите вида).
+[НП]: инсталаторите за Windows и Linux не са пускани на истински Windows или Linux. Проверени са само по съдържание
+(`file`, `7za l`, `ar`). Не е проверено дали AppImage-ът с runtime 20251108 иска libfuse2 на Ubuntu 22.04+.
+Тестове: scripts site-local-plan.test.ts (+5), release-manifest.test.ts (+1), apps/site downloads.test.ts (+2),
+apps/desktop builder-config.test.ts (+1). Статус: решено (задача от сесията на Симо „работещи инсталатори за всички ОС“).

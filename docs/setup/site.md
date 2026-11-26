@@ -19,6 +19,17 @@ pnpm --filter @mandat/site serve        # → http://127.0.0.1:3101/ (само 1
 - `pnpm --filter @mandat/site e2e` → axe 0 serious/critical на всяка страница в тъмна и светла тема, без хоризонтален скрол на
   375 px, светлата снимка в светла тема. Ползва Chromium-а на Playwright; ако не е свален, `MANDAT_CHROMIUM=<път до Chrome>`.
 
+## 1б. Локално с истинските инсталатори (D-639)
+```sh
+pnpm site:mac                                              # само Apple Silicon dmg
+pnpm site:all                                              # + Intel dmg, Windows NSIS .exe, Linux AppImage и .deb
+node scripts/site-local-release.mjs --all --skip-build --no-serve   # само сайтът от готовите файлове; сървърът на 3101 вече върви
+```
+Всичко се строи на този Apple Silicon Mac, без wine. Mac се подписва както в D-637; Windows и Linux са неподписани.
+Файловете отиват в `apps/site/public/downloads` (не са в git). Build-ът на сайта спира, ако размерът или SHA-256 на файл не
+съвпада с `releases.local.json`. Затова хешът на страницата е хешът на файла, който сървърът дава. На Linux панелът с
+терминала още липсва: node-pty няма готов бинарен файл за Linux (D-375).
+
 ## 2. Преди издание: линковете за изтегляне
 Без издание `/download/` казва „Скоро“ на всеки ред. Когато публикуваш издание в GitHub Releases (Q-054):
 ```sh
