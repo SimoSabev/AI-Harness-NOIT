@@ -64,8 +64,9 @@ export function CheckMark({ status, t }: { status: string; t: T }) {
 /** D-622: a tooltip of the brand — the name, an optional line under it and a key; it shows on hover and on keyboard
  * focus after a short pause, beside a vertical rail (side "right") or under a row (side "bottom", the phone's bar).
  * Screen readers get the name from the control itself, so the tip is aria-hidden. */
-export function Tip({ label, hint, keys, side = "right", children }: { label: string; hint?: string | undefined; keys?: string | undefined; side?: "right" | "bottom" | "rail"; children: React.ReactNode }) {
-  const at = side === "right" ? "left-full top-1/2 ml-3 -translate-y-1/2" : side === "bottom" ? "left-1/2 top-full mt-2 -translate-x-1/2" : "left-1/2 top-full mt-2 -translate-x-1/2 lg:left-full lg:top-1/2 lg:ml-3 lg:mt-0 lg:translate-x-0 lg:-translate-y-1/2";
+export function Tip({ label, hint, keys, side = "right", children }: { label: string; hint?: string | undefined; keys?: string | undefined; side?: "right" | "bottom" | "rail" | "top-end"; children: React.ReactNode }) {
+  // D-631: "top-end" — above the control, aligned to its right edge (a control at the right end of the window)
+  const at = side === "top-end" ? "bottom-full right-0 mb-2" : side === "right" ? "left-full top-1/2 ml-3 -translate-y-1/2" : side === "bottom" ? "left-1/2 top-full mt-2 -translate-x-1/2" : "left-1/2 top-full mt-2 -translate-x-1/2 lg:left-full lg:top-1/2 lg:ml-3 lg:mt-0 lg:translate-x-0 lg:-translate-y-1/2";
   return (
     <span className="group/tip relative inline-flex">
       {children}

@@ -21,3 +21,14 @@ describe("the task box has no mode (D-630)", () => {
     expect(html).toContain("chat.placeholder");
   });
 });
+
+// D-631: on a phone the two queues of the start page grew as wide as their longest title (one row of 42 873px), so the
+// page dragged sideways. Their grid has a column that may shrink below its content.
+describe("the start page fits a phone (D-631)", () => {
+  it("the queues' grid has one shrinkable column on a narrow screen", async () => {
+    const { NewTask } = await import("./workspace");
+    const home = { stats: { waiting: 0, running: 0, projects: 1, noBrief: 0 }, say: { key: "home.say.calm" as const, params: { n: 0 } }, actions: [], queue: { counts: { waiting: 0, running: 0, done: 0 }, waiting: [], running: [] } };
+    const html = renderToStaticMarkup(createElement(NewTask, { agents, projects, canAct: true, home }));
+    expect(html).toContain("grid-cols-[minmax(0,1fr)]");
+  });
+});

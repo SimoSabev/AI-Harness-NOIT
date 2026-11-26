@@ -324,7 +324,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
             )}
             <span className="ml-auto flex items-center gap-1.5">
               {thread && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
-              <Tip side="bottom" label={busy ? t("chat.sending") : t("chat.send")} hint={t("composer.keys")}>
+              <Tip side="top-end" label={busy ? t("chat.sending") : t("chat.send")} hint={t("composer.keys")}>
                 <button type="submit" disabled={cannotTalk || text.trim() === ""} aria-label={busy ? t("chat.sending") : t("chat.send")}
                   className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-[inset_0_-2px_0_rgb(0_0_0/0.18)] transition hover:brightness-110 disabled:bg-raised disabled:text-faint disabled:shadow-none">
                   {busy ? <span aria-hidden="true" className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : (
@@ -437,7 +437,8 @@ function HomeDashboard({ home, onMeet, busy }: { home: HomeView; onMeet: (repo: 
           ))}
         </section>
       )}
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      {/* D-631: one column that may shrink below its titles on a phone; two side by side from tablet width */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <section aria-label={t("home.queue.waiting")} className="rounded-[14px] border border-line bg-panel p-1.5">
           <p className="flex items-center gap-2 px-3 pb-1 pt-2 text-xs font-medium text-warn">{t("home.queue.waiting")}<span className="tabular-nums text-faint">{counts.waiting}</span></p>
           {waiting.length > 0 ? <ul>{waiting.map((x) => row(x, false))}</ul> : <p className="px-3 pb-3 pt-1 text-sm text-mute">{t("home.queue.calm")}</p>}

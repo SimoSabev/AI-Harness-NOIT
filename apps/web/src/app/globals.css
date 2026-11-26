@@ -4,6 +4,13 @@
 /* The tokens (fonts, colours of both themes) are one file, shared with the download site (AC-12.4). */
 @import "./tokens.css";
 
+/* D-631: whatever hangs out sideways (a tooltip, a wide row) is clipped; the page never drags sideways. `clip`, not
+   `hidden`, so no scroll container is made and the sticky task box still sticks. */
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   @apply bg-canvas font-sans text-ink antialiased;
 }
