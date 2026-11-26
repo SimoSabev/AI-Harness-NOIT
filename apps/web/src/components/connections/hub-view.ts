@@ -17,7 +17,8 @@ export interface HubInput {
   servers: readonly { vet_status: string }[];
   skills: readonly { approved: boolean }[];
   models: number;
-  account: "off" | "signed_in";
+  /** D-625: "hidden" = no sync server and not signed in — the tile is left out */
+  account: "hidden" | "off" | "signed_in";
 }
 
 const HREF: Record<TileId, string> = {
@@ -44,6 +45,6 @@ export function connectionTiles(i: HubInput): Tile[] {
     tile("api-keys", i.local ? counted(keys, false) : off),
     tile("tools", counted(tools, toolsBad)),
     tile("models", i.local ? counted(i.models, false) : off),
-    tile("account", !i.local ? off : { count: null, state: i.account === "signed_in" ? "ok" : "optional" }),
+    ...(i.local && i.account === "hidden" ? [] : [tile("account", !i.local ? off : { count: null, state: i.account === "signed_in" ? "ok" : "optional" })]),
   ];
 }

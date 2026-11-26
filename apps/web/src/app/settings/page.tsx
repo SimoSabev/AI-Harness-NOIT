@@ -40,7 +40,7 @@ export default async function SettingsPage() {
   // D-500: what is connected now, for the hub at the top
   const v = await agentsView(t.lang);
   const accounts = (await controlKeys(process.env)?.accounts()) ?? [];
-  const [servers, skills, account] = await Promise.all([mcpCatalog(db(), c.uid, c.org), skillCatalog(db(), c.uid, c.org), v.local ? accountMenu() : Promise.resolve("off" as const)]);
+  const [servers, skills, account] = await Promise.all([mcpCatalog(db(), c.uid, c.org), skillCatalog(db(), c.uid, c.org), v.local ? accountMenu() : Promise.resolve("hidden" as const)]);
   const tiles = connectionTiles({ local: v.local, subscriptions: subscriptionCards(accounts), keys: v.connections.map((k) => ({ hasKey: k.hasKey, kind: PROVIDERS[k.provider].kind })), servers, skills, models: v.agents.filter((a) => !a.id.startsWith("fake")).reduce((n, a) => n + a.models.length, 0), account });
   return (
     <Shell current="settings" waiting={c.waiting}>
@@ -62,11 +62,11 @@ export default async function SettingsPage() {
           <span className="mt-0.5 block text-sm text-mute">{t("settings.apiKeysHint")}</span>
         </p>
       </section>
-      {authMode() === "local" && (
+      {authMode() === "local" && account !== "hidden" && (
         <section aria-labelledby="s-account" className={`${card} mt-4 p-5`}>
           <h2 id="s-account" className="font-display text-base font-semibold">{t("settings.account")}</h2>
           <p className="mt-1 mb-3 text-sm text-mute">{t("settings.accountHint")}</p>
-          <Link href="/settings/account" className={link}>{t((await accountMenu()) === "signed_in" ? "account.menuSignedIn" : "account.signIn")}</Link>
+          <Link href="/settings/account" className={link}>{t(account === "signed_in" ? "account.menuSignedIn" : "account.signIn")}</Link>
         </section>
       )}
 

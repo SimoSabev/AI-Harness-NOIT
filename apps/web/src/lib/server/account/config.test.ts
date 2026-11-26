@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { syncServerConfig, syncUrl } from "./config";
+import { accountMenuState, syncServerConfig, syncUrl } from "./config";
 
 const SECRET = "t".repeat(40); // test value only
 
@@ -7,6 +7,14 @@ describe("account config (D-496)", () => {
   it("no env → no account, no sync server (the default of `pnpm local`)", () => {
     expect(syncUrl({})).toBeNull();
     expect(syncServerConfig({})).toBeNull();
+  });
+
+  it("D-625: no sync server and not signed in → the profile is hidden (the rail icon, the Settings section, the tile)", () => {
+    expect(accountMenuState(null, false)).toBe("hidden");
+    expect(accountMenuState("https://sync.example.org", false)).toBe("off");
+    expect(accountMenuState("https://sync.example.org", true)).toBe("signed_in");
+    // a device still signed in after the address was removed keeps the page, so the person can sign out
+    expect(accountMenuState(null, true)).toBe("signed_in");
   });
 
   it("the device accepts https, or http only on loopback", () => {

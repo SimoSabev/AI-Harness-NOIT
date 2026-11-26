@@ -30,7 +30,7 @@ const ICON: Record<(typeof NAV)[number]["id"], string> = {
 export async function Shell({ current, waiting, wide = false, full = false, children }: { current: Page; wide?: boolean; full?: boolean; waiting: number | null; children: React.ReactNode }) {
   const t = await getT();
   const active = navActive(current);
-  const account = authMode() === "local" ? await accountMenu() : "off";
+  const account = authMode() === "local" ? await accountMenu() : "hidden";
   // D-600: the bar is icons only — the conversations are the column next to it. D-622: each icon has the brand's tooltip
   // (its name, what lives there, and for tasks how many wait) instead of the browser's slow title
   const nav = (n: (typeof NAV)[number]) => (
@@ -58,8 +58,8 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
                 </Link>
               </Tip>
               <nav aria-label={t("nav.main")} className="flex gap-1 overflow-x-auto lg:mt-3 lg:flex-col lg:items-center lg:overflow-visible">{NAV.map(nav)}</nav>
-              {authMode() === "local" && (
-                // D-498: the optional sign-in; the label says whether this computer is signed in
+              {authMode() === "local" && account !== "hidden" && (
+                // D-498: the optional sign-in; the label says whether this computer is signed in (D-625: only with a sync server)
                 <span className="mt-auto hidden lg:block">
                 <Tip label={t("nav.tip.account")} hint={t(account === "signed_in" ? "account.menuSignedIn" : "account.menu")}>
                 <Link href="/settings/account" className="flex size-11 items-center justify-center rounded-[10px] text-mute hover:bg-raised hover:text-ink">

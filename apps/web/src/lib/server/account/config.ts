@@ -45,6 +45,15 @@ export function syncServerConfig(env: Env = process.env): SyncServerConfig | nul
   };
 }
 
+export type AccountMenu = "hidden" | "off" | "signed_in";
+
+/** D-625: the profile shows only where it can do something — a sync server is set, or the device is still signed in
+ * (so the person can sign out). Without either, there is nothing to sign in to and no rail icon, section or tile. */
+export function accountMenuState(url: string | null, signedIn: boolean): AccountMenu {
+  if (signedIn) return "signed_in";
+  return url ? "off" : "hidden";
+}
+
 /** The sync server this device signs in to; null = no account possible (the default). https only, except loopback. */
 export function syncUrl(env: Env = process.env): string | null {
   return httpUrl(env.MANDAT_SYNC_URL);

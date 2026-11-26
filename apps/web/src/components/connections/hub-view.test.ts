@@ -41,6 +41,10 @@ describe("connections hub (D-500)", () => {
     expect(by.account).toMatchObject({ state: "ok", count: null });
   });
 
+  it("D-625: without a sync server the profile tile is not there at all", () => {
+    expect(connectionTiles({ ...empty, account: "hidden" }).map((t) => t.id)).toEqual(["subscriptions", "api-keys", "tools", "models"]);
+  });
+
   it("outside `pnpm local` the local parts are unavailable, never shown as empty", () => {
     const t = connectionTiles({ ...empty, local: false });
     expect(t.filter((x) => ["subscriptions", "api-keys", "models", "account"].includes(x.id)).every((x) => x.state === "unavailable")).toBe(true);
