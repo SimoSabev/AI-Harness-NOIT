@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ADVISOR_SYSTEM, JOB_TEXT_MAX, OracleManifest, PLAYBOOK_SYSTEM, PLANNER_SYSTEM, PLAN_ROUNDS, SessionSeal, plannerSystem, Verdict, hashJcs, jcs, jobBranch, oracleHash, sha256Tag, specHash } from "@mandat/contract";
 import type { Spec } from "@mandat/contract";
+import { OWN_API_MARK } from "@mandat/core";
 import { fakeGitHub } from "@mandat/gate-github";
 import type { ModelClient } from "@mandat/research";
 import { buildFixture } from "../fixtures.js";
@@ -697,6 +698,9 @@ describe("writers get the public API the oracle fixed (D-566)", () => {
     expect(first).toContain("tenPercent(): number");
     expect(first).toContain("helper(): void");
     expect(first).not.toContain("couponCents(): number");
+    // D-616 (run 9): the names the unit's own criteria's checks call carry the mark; a name no check calls does not
+    expect(first).toContain(`${OWN_API_MARK}\`packages/shop/src/promo.ts\`: \`tenPercent(): number\``);
+    expect(first).not.toContain(`${OWN_API_MARK}\`packages/shop/src/promo.ts\`: \`helper(): void\``);
   });
   it("D-598: a final check UNKNOWN only from surviving mutants seals UNKNOWN for a person; any other UNKNOWN parks", async () => {
     const survived = [ev("D11.mutation", "unknown", { sites: 3, killed: 2, survived: [{ path: "src/cards.ts", line: 3, from: "0", to: "1" }] })];

@@ -1,7 +1,7 @@
 import { ADVISOR_SYSTEM, Handoff, JobRoles, PLAYBOOK_SYSTEM, RELAND_MAX, RESCUE_MAX, RESCUE_TRIES, advisorUser, playbookUser, rescueTaskText, unitTaskText, withFiles, withPlaybook } from "@mandat/contract";
 import { roleRoute } from "@mandat/contract";
 import type { JobRole, Spec } from "@mandat/contract";
-import { criteriaMet, scopedApi } from "@mandat/core";
+import { criteriaMet, markOwnApi, scopedApi } from "@mandat/core";
 import type { JobMode } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { inTransaction } from "./db.js";
@@ -141,7 +141,9 @@ async function rescue(d: JobDeps, j: JobRow, spec: Spec, u: UnitRow, units: read
   // one attempt each: the tries are the retries now (self-finish does not multiply them)
   // D-571: a rescue try writes to the same API the first attempt had (the oracle's API.md)
   // D-595: the same scoped API the unit's first attempt had
-  const api = scopedApi(await oracleApi(d.db, j.oracle_hash), await hiddenFilesOf(d.db, j), unitScope(u, units));
+  // D-616: and the names its own criteria's checks call carry the mark
+  const hidden = await hiddenFilesOf(d.db, j);
+  const api = markOwnApi(scopedApi(await oracleApi(d.db, j.oracle_hash), hidden, unitScope(u, units)), hidden, u.criteria);
   for (const [n, id] of ids.entries()) await insertTask(d.db, j, { id, text: rescueTaskText(base, advice, n, api), unit: u.unit_id, role: "unit", attemptsMax: 1 });
   await inTransaction(d.db, async (tx) => {
     await tx.query("update public.job_units set status = 'running', task_id = $3, tries = $4::jsonb, rescues = $5, updated_at = now() where job_id = $1 and unit_id = $2", [j.id, u.unit_id, ids[0], JSON.stringify(ids), rescues]);
