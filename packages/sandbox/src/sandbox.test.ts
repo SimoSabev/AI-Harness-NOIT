@@ -17,6 +17,8 @@ import {
   profileVolume,
   buildProfileArgs,
   imageTags,
+  imagesForLanguage,
+  langImageTag,
   uiImageTag,
   infraUser,
   names,
@@ -471,5 +473,28 @@ describe("sandbox image tag (D-428)", () => {
     const f = path.join(root, "packages/agents/gemini/settings.json");
     write(f, read(f, "utf8").replace("false", "true"));
     expect((await imageTags(root)).sandbox).not.toBe(before);
+  });
+});
+
+describe("образ по език (D-687)", () => {
+  it("тагът зависи от Dockerfile-а на езика, файловете му и точния sandbox таг; js → основният образ", () => {
+    const root = mkdtempSync(path.join(tmpdir(), "mandat-lang-"));
+    const w = (p: string, c: string) => {
+      mkdirSync(path.dirname(path.join(root, p)), { recursive: true });
+      writeFileSync(path.join(root, p), c);
+    };
+    w("docker/sandbox-python/Dockerfile", "py");
+    w("docker/sandbox-python/requirements.lock", "pytest==9.2.0");
+    w("docker/sandbox-go/Dockerfile", "go");
+    const a = langImageTag(root, "python", "mandat-sandbox:cc2.1.302-aaaaaaaaaaaa");
+    expect(a).toMatch(/^mandat-sandbox-python:py3\.11-[0-9a-f]{12}$/);
+    expect(langImageTag(root, "python", "mandat-sandbox:cc2.1.302-aaaaaaaaaaaa")).toBe(a);
+    expect(langImageTag(root, "python", "mandat-sandbox:cc2.1.302-bbbbbbbbbbbb")).not.toBe(a);
+    w("docker/sandbox-python/requirements.lock", "pytest==9.2.1");
+    expect(langImageTag(root, "python", "mandat-sandbox:cc2.1.302-aaaaaaaaaaaa")).not.toBe(a);
+    expect(langImageTag(root, "go", "s")).toMatch(/^mandat-sandbox-go:go1\.27\.4-[0-9a-f]{12}$/);
+    const images = { sandbox: "mandat-sandbox:cc2.1.302-aaaaaaaaaaaa", gate: "g", proxy: "p" };
+    expect(imagesForLanguage(root, images, "js")).toBe(images);
+    expect(imagesForLanguage(root, images, "python")).toEqual({ ...images, sandbox: langImageTag(root, "python", images.sandbox) });
   });
 });
