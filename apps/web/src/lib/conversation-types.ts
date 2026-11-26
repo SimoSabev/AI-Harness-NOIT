@@ -63,7 +63,10 @@ export interface JobView {
   strategy: JobStrategyView;
   /** D-558: the gates of the final check and their status (pending until it ran) */
   gates: GateRow[];
+  /** D-615: M4's single-agent arm (one task, the same spec and oracle) — its own account, model and result */
+  compare: CompareArmView | null;
 }
+export interface CompareArmView { task: string; agent: string; model: string | null; state: string; verdict: VerdictResult | null; passed: number; total: number }
 export interface ConversationFeed {
   conversation: ConversationRow;
   turns: ChatTurn[];

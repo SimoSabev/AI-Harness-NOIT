@@ -20,7 +20,7 @@ const job = (o: Omit<Partial<JobView>, "units"> & { units?: UnitIn[] }): JobView
     { id: "u2", title: "coupons", criteria: ["AC-2", "AC-3"], status: "failed", result: "FAILED", failing: ["AC-3"], task_id: "t_b" },
   ];
   return {
-    id: "j_x", status: "running", question: null, current: "u2", final_task_id: null, seal: null, merged_sha: null, strategy, gates: [{ id: "D5.hidden", status: "pending" }],
+    id: "j_x", status: "running", question: null, current: "u2", final_task_id: null, seal: null, merged_sha: null, strategy, gates: [{ id: "D5.hidden", status: "pending" }], compare: null,
     ...o,
     units: units.map((u) => ({ wave: 0, pilot: false, copy: null, ...u })),
   };
@@ -32,6 +32,16 @@ async function render(chat: Partial<Chat>, canApprove = true): Promise<string> {
 }
 
 describe("the job in the thread (D-535)", () => {
+  it("D-615: M4's single-agent arm on its own row — its account and model, its hidden tests and a link to its task", async () => {
+    const html = await render({ job: job({ compare: { task: "t_cmp_x", agent: "claude@lichno-2", model: "opus", state: "CLOSED", verdict: "VERIFIED", passed: 12, total: 14 } }) });
+    expect(html).toContain("job.strategy.compare");
+    expect(html).toContain("lichno-2");
+    expect(html).toContain("opus");
+    expect(html).toContain("job.compare.verdict.VERIFIED(12|14)");
+    expect(html).toContain("/?task=t_cmp_x");
+    expect(await render({ job: job({}) })).not.toContain("job.strategy.compare");
+    expect(await render({ job: job({ compare: { task: "t_cmp_x", agent: "claude", model: null, state: "RUNNING", verdict: null, passed: 0, total: 0 } }) })).toContain("job.compare.running");
+  });
   it("the plan: units with criteria, status and verdict; the current unit with its task; failing criteria; no approve button", async () => {
     const html = await render({ job: job({}) });
     expect(html).toContain("chat.job.status.running");

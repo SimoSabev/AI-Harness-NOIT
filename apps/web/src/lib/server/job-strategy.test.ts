@@ -36,5 +36,16 @@ describe("the job's strategy on the page (D-558)", () => {
     expect(v?.units[0]?.copy).toEqual({ task: "t_strat_1", attempt: 2, state: "RUNNING" });
     expect(v?.units[2]?.copy).toBeNull();
     expect(v?.gates.every((g) => g.status === "pending")).toBe(true);
+    expect(v?.compare).toBeNull();
+  });
+
+  it("D-615: the single-agent arm of M4 shows its own account, model, state and hidden tests", async () => {
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, model, text, state, kind) values ('t_cmp_strat', $1::uuid, $2::uuid, 'free', 'claude@lichno-2', 'opus', 'x', 'CLOSED', 'compare')", [DEMO_ORG_ID, DEMO_REPO_ID]);
+      const v = (await sql.query<{ id: string }>("insert into public.verdicts (org_id, task_id, run_id, attempt, mode, agent, result, base_sha, verdict_hash) values ($1::uuid, 't_cmp_strat', 'r_00000000000000000000000000', 1, 'full', 'claude@lichno-2', 'VERIFIED', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'sha256:00') returning id::text as id", [DEMO_ORG_ID])).rows[0];
+      await sql.query("insert into public.evidence (org_id, verdict_id, detector, phase, status, summary, data, source) values ($1::uuid, $2::uuid, 'D5.hidden', 2, 'pass', 'hidden', $3::jsonb, 'test')", [DEMO_ORG_ID, v?.id, JSON.stringify({ passed: 12, total: 14 })]);
+    });
+    const v = await asService(db, (sql) => jobView(sql, "c_strat", null));
+    expect(v?.compare).toEqual({ task: "t_cmp_strat", agent: "claude@lichno-2", model: "opus", state: "CLOSED", verdict: "VERIFIED", passed: 12, total: 14 });
   });
 });
