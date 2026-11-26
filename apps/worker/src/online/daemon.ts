@@ -452,6 +452,8 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     }
   };
   const usageRow = async (o: RunTaskOutput) => {
+    // D-647: what is left of the subscription, as its own stream said — Settings → Models reads the newest per agent
+    if (o.windows && o.windows.length > 0) await appendLedgerOnline(d.db, { org_id: t.org_id, kind: "limit_windows", task_id: t.id, payload: { agent: t.agent, at: now().toISOString(), windows: o.windows.slice(0, 8) } });
     if (current) await d.db.query("insert into public.channel_usage (org_id, channel_id, task_id, attempt, usd, requests, limited) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)", [t.org_id, current.id, t.id, t.attempt, o.verdict?.usage.usd ?? 0, o.verdict?.usage.requests ?? 0, o.limit !== undefined && o.limit !== null]);
   };
   let out = await runOnce();
