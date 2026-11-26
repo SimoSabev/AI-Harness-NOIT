@@ -1903,4 +1903,5 @@ export const bg: Record<Key, string> = {
   "ws.group.running": "Работи",
   "ws.group.done": "Готови",
   "ws.group.more": "Още {n}",
+  "chat.spec.more": "Покажи още {n}",
 };

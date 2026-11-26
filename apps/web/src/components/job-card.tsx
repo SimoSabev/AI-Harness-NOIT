@@ -25,7 +25,7 @@ const UNIT_BAR: Record<(typeof UNIT_STATUSES)[number], string> = { pending: "bg-
 export function JobCard({ job, t, a }: { job: JobView; t: T; a: JobActions }) {
   const s = job.status;
   return (
-    <section aria-label={t("chat.job")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
+    <section aria-label={t("chat.job")} className="rounded-[12px] border border-line bg-panel px-5 py-4 text-sm shadow-[0_1px_2px_rgb(0_0_0/0.15)]">
       <p className="text-xs font-medium text-mute">{t("chat.job")}</p>
       <p className={s === "parked" || s === "failed" ? "mt-1 text-warn" : s === "delivered" ? "mt-1 font-medium text-ok" : "mt-1"}>{t(`chat.job.status.${s}` as Key)}</p>
       <JobStrategy job={job} t={t} />

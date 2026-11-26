@@ -1927,6 +1927,7 @@ export const en = {
   "ws.group.running": "Running",
   "ws.group.done": "Done",
   "ws.group.more": "{n} more",
+  "chat.spec.more": "Show {n} more",
 } as const;
 
 export type Key = keyof typeof en;

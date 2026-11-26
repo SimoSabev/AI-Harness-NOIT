@@ -5,6 +5,7 @@ import { ORACLE_NOTE_MAX, limitResetsAt } from "@mandat/contract";
 import { useT } from "../i18n/client";
 import { pathOf } from "../lib/task-path";
 import { answeringLine } from "../lib/chat";
+import { cleanTitle } from "../lib/task-groups";
 import { TaskPath } from "./task-path";
 import { OracleGrid } from "./oracle-grid";
 import { useAgentName, whenShort } from "./agent-names";
@@ -66,7 +67,7 @@ export function useConversation(initial: ConversationFeed | null): { chat: Chat 
 function BriefCard({ brief, t }: { brief: Brief; t: T }) {
   const rows: [string, string[]][] = [[t("chat.brief.touches"), brief.touches], [t("chat.brief.avoid"), brief.avoid], [t("chat.brief.done"), brief.done_when]];
   return (
-    <section aria-label={t("chat.brief")} className="rounded-xl border border-accent-text/30 bg-accent-soft px-4 py-3 text-sm">
+    <section aria-label={t("chat.brief")} className="rounded-[12px] border border-line bg-panel px-5 py-4 text-sm shadow-[0_1px_2px_rgb(0_0_0/0.15)]">
       <p className="text-xs font-medium text-mute">{t("chat.brief")}</p>
       <p className="mt-1 text-[15px] font-medium">{brief.goal}</p>
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
@@ -97,7 +98,7 @@ function ToolLine({ turn, t }: { turn: ToolTurn; t: T }) {
 
 function AxesCard({ turn, t }: { turn: AxesTurn; t: T }) {
   return (
-    <section aria-label={t("chat.profile")} className="rounded-xl border border-line-strong bg-panel px-4 py-2.5 text-sm">
+    <section aria-label={t("chat.profile")} className="rounded-[10px] border border-line bg-panel px-4 py-2.5 text-sm">
       <p className="font-medium">{t("chat.profileName", { name: t(`chat.taskProfile.${turn.profile}` as Key) })}</p>
       <p className={turn.unknown.length > 0 ? "text-warn" : "text-mute"}>
         {turn.unknown.length > 0 ? t("chat.axesOpen", { axes: turn.unknown.map((a) => t(`chat.axis.${a}` as Key)).join(", ") }) : t("chat.axesKnown")}
@@ -108,24 +109,39 @@ function AxesCard({ turn, t }: { turn: AxesTurn; t: T }) {
 
 export interface SpecActions { row: ConversationRow; canApprove: boolean; busy: boolean; onApprove: (hash: string) => void }
 
+const SPEC_SHOWN = 4;
+function Criterion({ c, warn, t }: { c: SpecTurn["spec"]["criteria"][number]; warn: boolean; t: T }) {
+  return (
+    <li className={`flex gap-3 px-3 py-2 ${warn ? "text-warn" : ""}`}>
+      <span className="mt-0.5 shrink-0 rounded-[4px] bg-raised px-1.5 font-mono text-[11px] text-mute">{c.id}</span>
+      <span className="min-w-0 flex-1 leading-relaxed">{t("chat.spec.criterion", { when: c.when, shall: c.shall })} <span className="text-xs text-mute">· {t("chat.spec.proof", { proof: c.proof })}</span></span>
+    </li>
+  );
+}
+
 function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
   const s = turn.spec;
   const approved = a.row.approved_spec_hash === turn.hash;
   const current = a.row.spec_hash === turn.hash;
   const lists: [string, string[]][] = [[t("chat.spec.unchanged"), s.unchanged], [t("chat.spec.outOfScope"), s.out_of_scope]];
   return (
-    <section aria-label={t("chat.spec")} className="rounded-xl border border-accent-text/30 bg-accent-soft px-4 py-3 text-sm">
+    <section aria-label={t("chat.spec")} className="rounded-[12px] border border-line bg-panel px-5 py-4 text-sm shadow-[0_1px_2px_rgb(0_0_0/0.15)]">
       <p className="text-xs font-medium text-mute">{t("chat.spec")} · {t(`chat.taskProfile.${s.profile}` as Key)}</p>
-      <p className="mt-1 text-[15px] font-medium">{s.goal}</p>
+      <p className="mt-1 text-base font-semibold leading-snug">{cleanTitle(s.goal)}</p>
       {s.product.trim() !== "" && <p className="mt-1 whitespace-pre-wrap">{s.product}</p>}
-      <p className="mt-3 text-mute">{t("chat.spec.criteria")}</p>
-      <ol className="mt-1 space-y-1">
-        {s.criteria.map((c) => (
-          <li key={c.id} className={turn.untestable.includes(c.id) ? "text-warn" : undefined}>
-            <span className="font-mono text-xs">{c.id}</span> {t("chat.spec.criterion", { when: c.when, shall: c.shall })} <span className="text-xs text-mute">({t("chat.spec.proof", { proof: c.proof })})</span>
-          </li>
-        ))}
+      {/* D-612: the criteria as rows with their id; past four they fold, so a long spec stays readable */}
+      <p className="mt-4 text-xs font-medium text-mute">{t("chat.spec.criteria")} · {s.criteria.length}</p>
+      <ol className="mt-2 divide-y divide-line rounded-[10px] border border-line">
+        {s.criteria.slice(0, SPEC_SHOWN).map((c) => <Criterion key={c.id} c={c} warn={turn.untestable.includes(c.id)} t={t} />)}
       </ol>
+      {s.criteria.length > SPEC_SHOWN && (
+        <details className="mt-1">
+          <summary className="cursor-pointer list-none py-1.5 text-xs text-accent-text hover:underline">{t("chat.spec.more", { n: s.criteria.length - SPEC_SHOWN })}</summary>
+          <ol className="divide-y divide-line rounded-[10px] border border-line">
+            {s.criteria.slice(SPEC_SHOWN).map((c) => <Criterion key={c.id} c={c} warn={turn.untestable.includes(c.id)} t={t} />)}
+          </ol>
+        </details>
+      )}
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {lists.filter(([, xs]) => xs.length > 0).map(([k, xs]) => (
           <div key={k} className="contents">
@@ -144,7 +160,7 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
       {turn.ready && approved && <p className="mt-2 text-xs font-medium text-ok">{t("chat.spec.approved")}</p>}
       {turn.ready && !approved && !current && <p className="mt-2 text-xs text-mute">{t("chat.spec.replaced")}</p>}
       {turn.ready && !approved && current && (
-        <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-3">
           <p className="min-w-0 flex-1 text-xs text-mute">{t("chat.spec.ready")}</p>
           {a.canApprove && <button type="button" className={btn.primary} disabled={a.busy} onClick={() => a.onApprove(turn.hash)}>{a.busy ? t("chat.spec.approving") : t("chat.spec.approve")}</button>}
         </div>
@@ -163,7 +179,7 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
   const [note, setNote] = useState("");
   const again = canBuild && s !== null;
   return (
-    <section aria-label={t("chat.oracle")} className="rounded-xl border border-line-strong bg-panel px-4 py-3 text-sm">
+    <section aria-label={t("chat.oracle")} className="rounded-[12px] border border-line bg-panel px-5 py-4 text-sm shadow-[0_1px_2px_rgb(0_0_0/0.15)]">
       <p className="text-xs font-medium text-mute">{t("chat.oracle")}</p>
       {s === null && <p className="mt-1 text-mute">{t("chat.oracle.none")}</p>}
       {s === "building" && <p className="mt-1 text-mute">{t("chat.oracle.building")}</p>}
