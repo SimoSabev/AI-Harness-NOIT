@@ -15,7 +15,7 @@ import type { KeysClient, LoginReply } from "./keys";
 import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
-import { TrialDecisionBody, decideTrial } from "./evolve";
+import { TrialDecisionBody, TrialRevertBody, decideTrial, revertTrial } from "./evolve";
 import { steerTask } from "./steer";
 import { localActivity } from "./local-activity";
 import { taskFeed } from "./chat-feed";
@@ -594,6 +594,16 @@ export async function postTrialDecision(req: Request, d: ApiDeps, trialId: strin
   const b = TrialDecisionBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await decideTrial(d.db, { uid: p.uid, trialId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+
+// D-647: a person reverts a change learning applied by itself
+export async function postTrialRevert(req: Request, d: ApiDeps, trialId: string): Promise<Response> {
+  if (!UUID.test(trialId)) return json(404, { error: "unknown_proposal" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = TrialRevertBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await revertTrial(d.db, { uid: p.uid, trialId, body: b.data, secondFactor: d.secondFactor }), d);
 }
 
 // E8g (v5 p. 4.4, AC-8.1): a person decides an ask of a HELD tool_approval task; the permission matrix is editable
