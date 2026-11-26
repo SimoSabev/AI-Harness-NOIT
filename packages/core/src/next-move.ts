@@ -48,6 +48,8 @@ export function nextMove(i: SelfFinishInput): SelfMove {
   if (i.night) return { move: "none", why: "night" };
   if (i.state !== "HELD" && i.state !== "BLOCKED") return { move: "none", why: "not_waiting" };
   if (i.wait_reason === "stopped") return { move: "ask", why: "stopped" };
+  // D-607 (live test 25.11, run 8): a limit is not a failed attempt; its reset is waited out even at the last attempt
+  if (i.state === "HELD" && i.wait_reason === "channel_limit") return afterHold(i);
   if (i.attempt >= i.attempts_max) return { move: "ask", why: "attempts" };
   if (i.auto_retries >= SELF_FINISH.max_auto_retries) return { move: "ask", why: "auto_retries" };
   return i.state === "BLOCKED" ? afterFailure(i) : afterHold(i);

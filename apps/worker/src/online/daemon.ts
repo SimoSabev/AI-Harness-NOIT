@@ -511,6 +511,18 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
     out = await runOnce();
     await usageRow(out);
   }
+  // D-607 (live test 25.11, run 8): a subscription has no channel row, so the chain above never sees its limit; when its
+  // own stream says when the limit resets (D-567), the task waits for that like a channel limit — never an empty change.
+  if (!current && out.limit?.resets_at && out.verdict?.result !== "VERIFIED") {
+    const resetsAt = out.limit.resets_at;
+    seq = await inTransaction(d.db, async (tx) => {
+      await appendLedgerOnline(tx, { org_id: t.org_id, kind: "channel_limit", task_id: t.id, payload: { channel: t.agent, retry_after_s: out.limit?.retry_after_s ?? null, resets_at: resetsAt } });
+      return setState(tx, t, "HELD", { wait_reason: "channel_limit" });
+    });
+    await bc("HELD", seq, { wait_reason: "channel_limit" });
+    log(`[daemon] ${t.id}: ${t.agent} reached its limit, waits until ${resetsAt}`);
+    return { state: "HELD", verdict: null };
+  }
   // D-534: an oracle task ends here: its tests become the oracle (or the reasons it is not ready); nothing is delivered
   if (t.kind === "oracle") {
     const o = await finishOracle(d.db, { org: t.org_id, repo: t.repo_id, taskId: t.id, out });

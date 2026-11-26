@@ -162,10 +162,10 @@ async function parkedJobOf(db: Db, id: string): Promise<string | null> {
   return j?.status === "parked" ? j.id : null;
 }
 
-/** D-603: the conversation's latest job when it parked before any unit was planned */
-async function unplannedParkedJobOf(db: Db, id: string): Promise<string | null> {
+/** D-603 / D-609: the conversation's latest job when it is parked, with how many units it planned */
+async function lastParkedJobOf(db: Db, id: string): Promise<{ id: string; units: number } | null> {
   const j = (await asService(db, (sql) => sql.query<{ id: string; status: string; units: number }>("select j.id, j.status, (select count(*)::int from public.job_units u where u.job_id = j.id) as units from public.jobs j where j.conversation_id = $1 order by j.created_at desc, j.id desc limit 1", [id]))).rows[0];
-  return j?.status === "parked" && j.units === 0 ? j.id : null;
+  return j?.status === "parked" ? { id: j.id, units: j.units } : null;
 }
 
 /** D-571: the problems of the latest not-ready oracle of this spec (a failed attempt after it does not hide them) */
@@ -262,10 +262,14 @@ export async function startWork(db: Db, o: { uid: string; org: string; id: strin
   const c0 = await approvedOf(db, o.id, o.org);
   if (!c0) return err(404, "unknown_conversation");
   const c = c0.row;
-  // D-603: a job that parked before its plan was built (no unit ever ran) may start again with the same approved oracle
-  const unplanned = c.phase === "conversation" ? null : await unplannedParkedJobOf(db, o.id);
-  if (c.phase !== "conversation" && !unplanned) return err(409, "work_started");
-  if (unplanned) await asService(db, (sql) => sql.query("update public.jobs set question = 'plan_superseded: a person started the work again (D-603)', updated_at = now() where id = $1 and status = 'parked'", [unplanned]));
+  // D-603 / D-609: after a parked job (its plan never built, or its units stopped — run 8: a limit) a person may start the
+  // work again with the same approved spec and oracle; the stopped job stays as it is, with why it was left
+  const parked = c.phase === "conversation" ? null : await lastParkedJobOf(db, o.id);
+  if (c.phase !== "conversation" && !parked) return err(409, "work_started");
+  if (parked) {
+    const why = parked.units === 0 ? "plan_superseded: a person started the work again (D-603)" : "restarted: a person started the work again with the same oracle (D-609)";
+    await asService(db, (sql) => sql.query("update public.jobs set question = $2, updated_at = now() where id = $1 and status = 'parked'", [parked.id, why]));
+  }
   // D-533: an approved spec (its hash checked again) is the task; without one the brief and the person's words (D-531)
   const spec = c0.spec;
   // D-534: a spec whose plan has hidden tests needs an approved oracle; its hash goes into the task next to spec_hash
