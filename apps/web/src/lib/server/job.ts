@@ -7,7 +7,7 @@ import { gateRows, strategyReasons } from "../job-strategy";
 import { canAct, factorAt } from "./actions";
 import { hasCap } from "./roles";
 import type { Result, SecondFactor } from "./actions";
-import { asService } from "./sql";
+import { asService, asUser } from "./sql";
 import type { Db, Sql } from "./sql";
 import type { JobView } from "../conversation-types";
 import type { KeysClient } from "./keys";
@@ -158,4 +158,24 @@ export async function bringJob(db: Db, keys: KeysClient | undefined, o: { uid: s
     await asService(db, (sql) => sql.query("select private.ledger_append($1::uuid, 'folder_updated', null, $2, $3)", [o.org, text, sha256Tag(text)]));
   }
   return { status: 200, body: { result: r } };
+}
+
+/**
+ * D-710: the whole change of the conversation's sealed (or approved, or merged) job — its current final check's own
+ * export (job_diffs, D-708), read as the person (approver+ by RLS). Only the text whose sha256 is the final verdict's
+ * diff_hash counts as the change; anything else is refused. Its own route, not the feed (that reloads every 400 ms).
+ */
+export async function jobDiff(db: Db, uid: string, conversation: string): Promise<Result> {
+  return asUser(db, uid, async (sql) => {
+    const r = await sql.query<{ diff: string; omitted_bytes: string | null; diff_hash: string | null }>(
+      `select d.diff, d.omitted_bytes::text as omitted_bytes, d.diff_hash from public.jobs j join public.job_diffs d on d.task_id = j.final_task_id
+        where j.conversation_id = $1 and j.status in ('sealed', 'approved', 'delivered') order by j.created_at desc limit 1`,
+      [conversation],
+    );
+    const row = r.rows[0];
+    if (!row) return err(404, "no_diff");
+    if (row.omitted_bytes !== null) return { status: 200, body: { diff: "", omitted_bytes: Number(row.omitted_bytes) } };
+    if (row.diff_hash === null || sha256Tag(Buffer.from(row.diff, "utf8")) !== row.diff_hash) return err(409, "diff_changed");
+    return { status: 200, body: { diff: row.diff, omitted_bytes: null } };
+  });
 }

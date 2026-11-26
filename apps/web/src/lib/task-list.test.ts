@@ -97,6 +97,8 @@ describe("a session's state comes from its latest job (D-709)", () => {
   it("sealed and parked wait for the person; a running job works; a merged one is merged; no job keeps the task's state", () => {
     expect(sessionState({ id: "j_1", status: "sealed" }, newest)).toEqual({ tone: "amber", say: "task.job.review" });
     expect(sessionState({ id: "j_1", status: "parked" }, newest)).toEqual({ tone: "amber", say: "task.job.waiting" });
+    // D-542: a unit waits for the person while the rest of the job goes on
+    expect(sessionState({ id: "j_1", status: "running", waits: true }, newest)).toEqual({ tone: "amber", say: "task.job.waiting" });
     for (const s of ["planning", "running", "converging", "approved"] as const) expect(sessionState({ id: "j_1", status: s }, newest)).toEqual({ tone: "blue", say: "task.job.working" });
     expect(sessionState({ id: "j_1", status: "delivered" }, newest)).toEqual({ tone: "green", say: "task.job.merged" });
     expect(sessionState({ id: "j_1", status: "failed" }, newest)).toEqual({ tone: "red", say: "task.job.failed" });

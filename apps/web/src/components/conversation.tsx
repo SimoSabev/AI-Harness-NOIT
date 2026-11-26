@@ -88,6 +88,9 @@ type AxesTurn = Extract<ChatTurn, { kind: "axes" }>;
 type SpecTurn = Extract<ChatTurn, { kind: "spec" }>;
 
 function ToolLine({ turn, t }: { turn: ToolTurn; t: T }) {
+  // D-710: the model's own malformed call goes back to the model (D-590), which fixes it; the person sees a quiet line,
+  // not the validator's words ("Too big: expected string to have <=40 characters")
+  if (!turn.ok && turn.target === "call") return <p className="text-xs text-faint">{t("chat.tool.selfFixed")}</p>;
   return (
     <p className="text-xs text-mute">
       {t(`chat.tool.${turn.tool}` as Key, { target: turn.target })}
@@ -327,7 +330,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
   const stop = stopText(t, chat.row.status, chat.row.error);
   const retryable = chat.row.status === "overloaded" || chat.row.status === "failed" || chat.row.status === "limit";
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
+    <div className="relative min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {/* D-599: the path of the task (the strap), above the conversation; not for the interview of a whole project */}
       {chat.row.purpose === "task" && (
         <div className="sticky -top-5 z-10 -mt-5 border-b border-line bg-canvas pb-3 pt-5">
@@ -337,7 +340,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
       )}
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
       {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle, jobParked: chat.job?.status === "parked" }} />}
-      {chat.job && <JobCard job={chat.job} t={t} a={{ canApprove, busy, onApprove: onApproveJob, brought, ...(onBring ? { onBring } : {}) }} />}
+      {chat.job && <JobCard job={chat.job} t={t} conversation={chat.row.id} a={{ canApprove, busy, onApprove: onApproveJob, brought, ...(onBring ? { onBring } : {}) }} />}
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">
           <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>

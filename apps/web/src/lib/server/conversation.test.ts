@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { HIDDEN_SEGMENT, MandatError, OracleManifest, hashJcs, oracleHash, oracleTaskText, parseMandatYml, sha256Tag, specHash, specText, subscriptionLimitError } from "@mandat/contract";
 import { contractForTask } from "../../../../worker/src/online/daemon";
-import { postConversation, postConversationApprove, postConversationJobApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
+import { getJobDiff, postConversation, postConversationApprove, postConversationJobApprove, postConversationOracle, postConversationOracleApprove, postConversationRetry, postConversationStart, streamConversation } from "./api";
 import type { ApiDeps } from "./api";
 import { approveOracle, approveSpec, buildOracle, conversationFeed, openConversations, retryConversation, sendMessage, startWork, workText } from "./conversation";
 import { RateLimiter } from "./guard";
@@ -446,6 +446,34 @@ describe("the oracle in the web (D-534)", () => {
     expect(await approveJob(db, { uid: U.approver, org: DEMO_ORG_ID, id, body: { seal_hash: sh, code: "123456" }, secondFactor: totp })).toEqual({ status: 200, body: { job, seal_hash: sh } });
     const row = (await ledgerRows("job_approved")).map((r) => JSON.parse(r.payload_jcs) as { job: string; verdict?: string; method?: string }).find((r) => r.job === job);
     expect(row).toMatchObject({ verdict: "UNKNOWN", method: "totp" });
+  });
+  it("D-710: the whole change of a sealed job is its own route — an approver reads it, tied to the final check's verdict", async () => {
+    const { id, hash } = await approvedSpec();
+    const h = await approvedOracle(id, hash);
+    const job = String((await startWork(db, { uid: U.approver, org: DEMO_ORG_ID, id })).body.job);
+    const diff = "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -1 +1 @@\n-a\n+b\n";
+    const fin = `t_j${job.slice(2)}_f0`;
+    const seal = { spec_hash: hash, oracle_hash: h, profile: "feature", verdict: "VERIFIED", result_ref: "c".repeat(40), unchecked: [] };
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, job_id, job_role, state) values ($1, $2::uuid, $3::uuid, 'feature', 'fake:honest-fix', 'final', $4, 'final', 'CLOSED')", [fin, DEMO_ORG_ID, DEMO_REPO_ID, job]);
+      await sql.query("insert into public.job_diffs (task_id, job_id, org_id, diff, diff_hash) values ($1, $2, $3::uuid, $4, $5)", [fin, job, DEMO_ORG_ID, diff, sha256Tag(Buffer.from(diff))]);
+      await sql.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3, final_task_id = $4 where id = $1", [job, JSON.stringify(seal), hashJcs(seal), fin]);
+    });
+    const read = async () => {
+      const r = await getJobDiff(get(`/api/conversations/${id}/job/diff`), deps, id);
+      return { status: r.status, body: (await r.json()) as unknown };
+    };
+    expect(await read()).toEqual({ status: 200, body: { diff, omitted_bytes: null } });
+    who = U.viewer;
+    expect((await read()).status).toBe(404);
+    who = U.approver;
+    expect((await getJobDiff(get("/api/conversations/x/job/diff"), deps, "../x")).status).toBe(404);
+    // a diff that is not the one the final check judged is never shown as the change
+    await asService(db, (sql) => sql.query("update public.job_diffs set diff = $2 where task_id = $1", [fin, `${diff}+more\n`]));
+    expect(await read()).toEqual({ status: 409, body: { error: "diff_changed" } });
+    // main moved: the job is built and checked again; the old final check's change is not this seal's
+    await asService(db, (sql) => sql.query("update public.jobs set status = 'running', seal = null, seal_hash = null, final_task_id = null where id = $1", [job]));
+    expect((await read()).status).toBe(404);
   });
   it("the job approve route: a person's session with CSRF and origin", async () => {
     const { id, hash } = await approvedSpec();

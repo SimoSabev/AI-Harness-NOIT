@@ -13,7 +13,7 @@ import { cleanTitle } from "../lib/task-groups";
 import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
-import { NEW_PROJECT, boxRepo, projectChoices, sendsOnEnter, withAdded } from "../lib/chat";
+import { NEW_PROJECT, boxRepo, canStartWork, projectChoices, sendsOnEnter, withAdded } from "../lib/chat";
 import { byProject } from "../lib/task-list";
 import { AddProject } from "./local-access";
 import type { AddedProject } from "./add-project-form";
@@ -101,7 +101,7 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
       </Link>
       {tasks.length === 0 && <p className="px-2 pt-3 text-sm text-mute">{t("ws.noTasks")}</p>}
       {/* D-633: by project only; each project folds, and a conversation folds its sub-sessions */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         {byProject(tasks).map((g) => {
           const key = `p:${g.id ?? "none"}`;
           const waiting = g.items.filter((x) => x.tone === "amber" || x.tone === "red").length;
@@ -337,7 +337,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
           onApproveJob={(h, code) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h, ...(code ? { code } : {}) }, 200)}
           onBring={() => void bring()} brought={brought} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           {home ? <HomeDashboard home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-10">
               <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
@@ -375,7 +375,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
                 options={projectChoices(projects, { none: t("newTask.noProject"), add: t("newTask.newProject") })} />
             )}
             <span className="ml-auto flex items-center gap-1.5">
-              {thread && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
+              {thread && canStartWork(chat.row, chat.job ?? null) && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
               <Tip side="top-end" label={busy ? t("chat.sending") : t("chat.send")} hint={t("composer.keys")}>
                 <button type="submit" disabled={cannotTalk || text.trim() === ""} aria-label={busy ? t("chat.sending") : t("chat.send")}
                   className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-[inset_0_-2px_0_rgb(0_0_0/0.18)] transition hover:brightness-110 disabled:bg-raised disabled:text-faint disabled:shadow-none">

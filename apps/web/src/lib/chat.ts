@@ -197,3 +197,10 @@ export function answeringLine(turns: readonly { kind: string; text?: string }[])
   if (!last?.text) return { key: "chat.answeringStart" };
   return { key: "chat.answering", params: { target: clip(last.text) } };
 }
+
+/** D-710: "Start work" only when it can start here — a conversation without a waiting proposed spec, or after a job parked or stopped (D-609) */
+export function canStartWork(row: { phase: string; spec_ready: boolean; spec_hash: string | null; approved_spec_hash: string | null }, job: { status: string } | null): boolean {
+  if (job) return job.status === "parked" || job.status === "failed";
+  if (row.phase !== "conversation") return false;
+  return !(row.spec_ready && row.spec_hash !== null && row.spec_hash !== row.approved_spec_hash);
+}

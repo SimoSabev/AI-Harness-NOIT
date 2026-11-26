@@ -8,6 +8,8 @@ create table if not exists public.job_diffs (
   org_id uuid not null references public.orgs (id) on delete cascade,
   diff text not null check (octet_length(diff) <= 1048576),
   omitted_bytes bigint,
+  -- D-710: the final verdict's diff_hash (sha256 of this patch, in the verdict the ledger hashes): the web shows the text only when it matches
+  diff_hash text check (diff_hash ~ '^sha256:[0-9a-f]{64}$'),
   created_at timestamptz not null default now(),
   constraint job_diffs_omitted_check check (omitted_bytes is null or (omitted_bytes > 1048576 and diff = ''))
 );

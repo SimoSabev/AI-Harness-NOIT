@@ -113,7 +113,7 @@ export async function finishJobTask(db: Db, t: JobTaskRef, o: { mirror: string; 
     // (only the non-redacted patch reaches here, as for changeset_diffs; over 1 MB only its size)
     if (t.job_role === "final" && o.diffPatch.length > 0) {
       const big = o.diffPatch.length > 1048576;
-      await tx.query("insert into public.job_diffs (task_id, job_id, org_id, diff, omitted_bytes) values ($1, $2, $3::uuid, $4, $5) on conflict (task_id) do update set diff = excluded.diff, omitted_bytes = excluded.omitted_bytes", [t.id, t.job_id, t.org_id, big ? "" : o.diffPatch.toString("utf8"), big ? o.diffPatch.length : null]);
+      await tx.query("insert into public.job_diffs (task_id, job_id, org_id, diff, omitted_bytes, diff_hash) values ($1, $2, $3::uuid, $4, $5, $6) on conflict (task_id) do update set diff = excluded.diff, omitted_bytes = excluded.omitted_bytes, diff_hash = excluded.diff_hash", [t.id, t.job_id, t.org_id, big ? "" : o.diffPatch.toString("utf8"), big ? o.diffPatch.length : null, v.diff_hash]);
     }
     await setTask(tx, t.id, state, { wait_reason: wait, last_result: v.result, usd, minutes: o.minutes });
   });

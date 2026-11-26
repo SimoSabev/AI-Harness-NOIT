@@ -30,11 +30,16 @@ describe("the waiting count is the list's (D-624)", () => {
     const rows = await workspaceList(db, DEMO_OWNER_ID, DEMO_ORG_ID, translator("en"));
     const waiting = homeQueue(rows).counts.waiting;
     const mine = rows.filter((r) => ["c_wjob", "c_wtalk"].includes(r.id)).map((r) => [r.id, r.tone]);
-    expect(mine).toEqual(expect.arrayContaining([["c_wjob", "red"], ["c_wtalk", "amber"]]));
+    // D-709: the session has its job's state — running, though its units' tries are blocked (the job retries them)
+    expect(mine).toEqual(expect.arrayContaining([["c_wjob", "blue"], ["c_wtalk", "amber"]]));
     expect(rows.some((r) => r.id.startsWith("t_wu"))).toBe(false);
     const ib = await inbox(db, DEMO_OWNER_ID, DEMO_ORG_ID);
     expect(ib.items.filter((x) => x.id.startsWith("t_wu"))).toHaveLength(3);
     expect(waiting).toBe(rows.filter((r) => r.tone === "amber" || r.tone === "red").length);
+    // D-542/D-709: a question while the rest works makes it wait for the person
+    await asService(db, (sql) => sql.query("update public.jobs set question = 'u2?' where id = 'j_wjob'"));
+    expect((await workspaceList(db, DEMO_OWNER_ID, DEMO_ORG_ID, translator("en"))).find((r) => r.id === "c_wjob")).toMatchObject({ tone: "amber", label: "Waiting for you" });
+    await asService(db, (sql) => sql.query("update public.jobs set question = null where id = 'j_wjob'"));
   });
 });
 
@@ -58,12 +63,12 @@ describe("a task waiting for its subscription's limit (D-627)", () => {
 // D-633: the list by project — a conversation is one session and its tasks (units, the single-agent comparison) are its
 // sub-sessions; every session carries its project's name
 describe("sessions and sub-sessions (D-633)", () => {
-  it("a job's units and its comparison task sit under its conversation, with the project", async () => {
+  it("a job's units and its comparison task belong to its conversation, with the project; under it only what waits (D-709)", async () => {
     await asService(db, (sql) => sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, state, kind) values ('t_cmp_wjob', $1::uuid, $2::uuid, 'free', 'claude', 'compare', 'CLOSED', 'compare')", [DEMO_ORG_ID, DEMO_REPO_ID]));
     const rows = await workspaceList(db, DEMO_OWNER_ID, DEMO_ORG_ID, translator("en"));
     const job = rows.find((r) => r.id === "c_wjob");
-    expect(job?.subs?.map((x) => x.id).sort()).toEqual(["t_cmp_wjob", "t_wu1", "t_wu2", "t_wu3"]);
-    expect(job?.subs?.find((x) => x.id === "t_cmp_wjob")?.text).toBe("Single agent, for comparison");
+    // D-709: the tries and the comparison are in the job card, not under the session
+    expect(job?.subs).toBeUndefined();
     expect(job?.project).toBe(DEMO_REPO_ID);
     expect(job?.projectName).not.toBe("");
     expect(rows.some((r) => r.id === "t_cmp_wjob")).toBe(false);

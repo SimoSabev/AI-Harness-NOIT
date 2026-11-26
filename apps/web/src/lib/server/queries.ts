@@ -164,7 +164,9 @@ export async function changesetShot(db: Db, uid: string, changesetId: string, na
 /** D-709: the latest job of each conversation (its state is the state of the conversation's session in the list) */
 export async function latestJobs(db: Db, uid: string, org: string): Promise<Map<string, LatestJob>> {
   return asUser(db, uid, async (sql) => {
-    const r = await sql.query<LatestJob & { conversation_id: string }>("select distinct on (conversation_id) conversation_id, id, status from public.jobs where org_id = $1::uuid order by conversation_id, created_at desc, id desc", [org]);
-    return new Map(r.rows.map((x) => [x.conversation_id, { id: x.id, status: x.status }]));
+    const r = await sql.query<LatestJob & { conversation_id: string }>(`select distinct on (j.conversation_id) j.conversation_id, j.id, j.status,
+       (j.question is not null or exists (select 1 from public.job_units u where u.job_id = j.id and u.status = 'parked')) as waits
+  from public.jobs j where j.org_id = $1::uuid order by j.conversation_id, j.created_at desc, j.id desc`, [org]);
+    return new Map(r.rows.map((x) => [x.conversation_id, { id: x.id, status: x.status, waits: x.waits === true }]));
   });
 }
