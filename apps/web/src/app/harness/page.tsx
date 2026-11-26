@@ -13,8 +13,9 @@ import { fieldLabel, humanFields, pendingProfile, proposalStatus, sourceLabel } 
 import { pageTitle } from "../../lib/inbox";
 import { db } from "../../lib/server/db";
 import { harnessView } from "../../lib/server/harness";
-import { profileTrials } from "../../lib/server/evolve";
+import { learnCards, profileTrials } from "../../lib/server/evolve";
 import type { TrialView } from "../../lib/server/evolve";
+import type { LearnCard } from "@mandat/contract";
 import { profileView } from "../../lib/server/profile";
 import type { ProfileView } from "../../lib/server/profile";
 import type { Key, T } from "../../i18n/t";
@@ -41,6 +42,7 @@ export default async function HarnessPage() {
   const hidden = new Map<string, Awaited<ReturnType<typeof hiddenSets>>>();
   for (const r of v.repos) hidden.set(r.id, await hiddenSets(db(), c.uid, r.id));
   const trials = await profileTrials(db(), c.uid, c.org);
+  const cards = await learnCards(db(), c.uid, c.org);
   // D-600: every project goes through its interview before its first task — say where each one is
   const briefs = new Map((await projectBriefs(db(), c.org)).map((b) => [b.id, b.brief]));
   return (
@@ -50,6 +52,7 @@ export default async function HarnessPage() {
         <Link href="/projects/add" className={`${btn.secondary} ml-auto`}>+ {t("add.title")}</Link>
       </div>
       <p className="mt-1 max-w-2xl text-sm text-mute">{t("harness.intro")}</p>
+      <Cards t={t} cards={cards} />
       {v.repos.length === 0 && <p className={`${card} mt-6 p-5 text-sm`}>{rich(t("common.noRepo"), { cmd: <code className="font-mono">pnpm local</code> })}</p>}
       {v.repos.map((r) => {
         const p = r.proposal;
@@ -151,12 +154,29 @@ function Trials({ t, trials }: { t: T; trials: TrialView[] }) {
                 <span className="font-medium">{t(`evolve.rule.${m.change.rule}`, { p: m.change.detail })}</span>
                 <StatusBadge tone={TRIAL_TONE[x.status]} label={t(`evolve.status.${x.status}`)} />
               </div>
+              {m.source && <p className="mt-1 text-xs text-mute">{t("evolve.source", { s: m.source })}{x.needs_person ? ` · ${t("evolve.needs_person")}` : ""}</p>}
               <p className="mt-1 text-xs text-mute">{t("evolve.evidence", { n: m.evidence.length, cls: m.reason_class, type: m.prediction.task_type })}</p>
               <p className="text-xs text-mute">{t("evolve.prediction", { cls: m.reason_class, n: m.prediction.next_n })}</p>
               {x.bench && <p className="text-xs text-mute">{t("evolve.bench", { a: x.bench.after.pass, at: x.bench.after.total, b: x.bench.before.pass, bt: x.bench.before.total })}</p>}
             </li>
           );
         })}
+      </ul>
+    </section>
+  );
+}
+
+/** E9e (D-645, PRD 6.11 p. 6): a model's VERIFIED share fell week on week; the person decides */
+function Cards({ t, cards }: { t: T; cards: LearnCard[] }) {
+  if (cards.length === 0) return null;
+  const pct = (x: number) => String(Math.round(x * 100));
+  return (
+    <section aria-label={t("learn.cards.title")} className={`${card} mt-6 p-5`}>
+      <h2 className="text-sm font-medium">{t("learn.cards.title")}</h2>
+      <ul className="mt-2 space-y-1 text-sm">
+        {cards.map((x) => (
+          <li key={`${x.model}|${x.week}`}>{t("learn.card.regression", { model: x.model, share: pct(x.share), prev: pct(x.prev_share), week: x.week, n: x.tasks, pn: x.prev_tasks })}</li>
+        ))}
       </ul>
     </section>
   );

@@ -42,6 +42,7 @@ export type { SelfFinishTick } from "./online/self-finish.js";
 export { twinTick } from "./online/twin.js";
 export { repoFacts } from "./online/repo-facts.js";
 export { evolveTick, profileLineage } from "./online/evolve.js";
+export { abTable, channelQualityOf, forecastAccuracyOf, forecastFor, learnCardsTick, learnInputs } from "./online/learn.js";
 export { compareReport, singleArmTask, startSingleArm } from "./online/compare.js";
 export type { CompareReport } from "./online/compare.js";
 export type { BenchRunner, BenchScore, EvolveTick } from "./online/evolve.js";

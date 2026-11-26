@@ -1,9 +1,11 @@
 import { EVOLVE_LIMITS, ProfileLayers, ProfileManifest, profileHash } from "@mandat/contract";
 import type { ProfileLayers as Layers, TaskType } from "@mandat/contract";
-import { ablationCandidates, applyChange, isNarrowing, lineage, predictionHeld, removeChange, rulesFromFailures } from "@mandat/profile";
+import { ablationCandidates, applyChange, isNarrowing, lineage, predictionHeld, removeChange } from "@mandat/profile";
+import { rulesFromFailures } from "@mandat/learn";
 import type { FailureRow, LineageStep, LineageTrial, LineageVersion } from "@mandat/profile";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
+import { learnCardsTick, learnInputs } from "./learn.js";
 
 // D-530 (round 2): profile evolution with evidence, the worker's tick.
 // 1. propose: a recurring failure class of a project → a trial (one per change, never twice);
@@ -15,7 +17,7 @@ export interface Score { pass: number; total: number; false_verified: number }
 /** D-550: the visible scenarios plus, when run, the held-out heavy set (only its counts ever leave the gate) */
 export interface BenchScore extends Score { heldout?: Score }
 export type BenchRunner = (layers: Layers, taskType: TaskType) => Promise<BenchScore>;
-export interface EvolveTick { proposed: string[]; accepted: string[]; refused: string[]; rolledBack: string[]; /** D-553: removal trials benched this tick */ ablated: string[] }
+export interface EvolveTick { proposed: string[]; accepted: string[]; refused: string[]; rolledBack: string[]; /** D-553: removal trials benched this tick */ ablated: string[]; /** D-644: model regression cards written this tick */ cards?: string[] }
 
 interface Repo { id: string; org_id: string; profile_id: string; version: number; layers: unknown }
 interface Trial { id: string; org_id: string; repo_id: string; change_key: string; manifest: unknown; from_profile: string; to_profile: string | null; decided_at: string | null }
@@ -45,22 +47,23 @@ export async function evolveTick(db: SqlClient, o: { now: Date; bench?: BenchRun
     await watch(db, r, out);
     if (o.bench && out.accepted.length === 0 && out.rolledBack.length === 0) await ablate(db, r, o.bench, out);
   }
+  out.cards = await learnCardsTick(db, o.now);
   return out;
 }
 
 async function propose(db: SqlClient, r: Repo, layers: Layers, now: Date, out: EvolveTick): Promise<void> {
   const since = new Date(now.getTime() - EVOLVE_LIMITS.window_days * 86_400_000).toISOString();
-  const rows = rowsOf((await db.query<{ task_id: string; task_type: TaskType; at: string; reasons: unknown }>(ROWS, [r.id, since])).rows);
-  for (const m of rulesFromFailures(rows, layers, now.toISOString())) {
-    const ins = await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::uuid) on conflict (repo_id, change_key) do nothing returning id", [r.org_id, r.id, keyOf(m), JSON.stringify(m), r.profile_id]);
+  // E9д (D-641): the D-530/D-549 classes with their rule's name, plus flaky tests and repeated asks (only a person accepts those)
+  for (const { manifest: m, needs_person } of rulesFromFailures(await learnInputs(db, r.id, since), layers, now.toISOString())) {
+    const ins = await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile, source, needs_person) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::uuid, $6, $7) on conflict (repo_id, change_key) do nothing returning id", [r.org_id, r.id, keyOf(m).slice(0, 300), JSON.stringify(m), r.profile_id, m.source ?? null, needs_person]);
     if (ins.rows.length === 0) continue;
-    await appendLedgerOnline(db, { org_id: r.org_id, kind: "profile_trial", task_id: null, payload: { status: "proposed", change: m.change, reason_class: m.reason_class, evidence: m.evidence.length, prediction: m.prediction, by: "mandat" } });
+    await appendLedgerOnline(db, { org_id: r.org_id, kind: "profile_trial", task_id: null, payload: { status: "proposed", change: m.change, reason_class: m.reason_class, evidence: m.evidence.length, prediction: m.prediction, ...(m.source ? { source: m.source } : {}), needs_person, by: "mandat" } });
     out.proposed.push(keyOf(m));
   }
 }
 
 async function gate(db: SqlClient, r: Repo, layers: Layers, bench: BenchRunner, out: EvolveTick, requireHeldout: boolean): Promise<void> {
-  const open = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'proposed' order by created_at", [r.id])).rows;
+  const open = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'proposed' and not needs_person order by created_at", [r.id])).rows;
   for (const t of open) {
     const m = ProfileManifest.safeParse(t.manifest);
     if (!m.success) continue;
@@ -163,7 +166,7 @@ async function ablate(db: SqlClient, r: Repo, bench: BenchRunner, out: EvolveTic
   const cur = (await db.query<{ layers: unknown }>("select layers from public.harness_profiles where id = $1::uuid", [r.profile_id])).rows[0];
   const layers = ProfileLayers.safeParse(cur?.layers);
   if (!layers.success) return;
-  const accepted = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'accepted' order by decided_at", [r.id])).rows;
+  const accepted = (await db.query<Trial>("select id::text as id, org_id::text as org_id, repo_id::text as repo_id, change_key, manifest, from_profile::text as from_profile, to_profile::text as to_profile, decided_at::text as decided_at from public.profile_trials where repo_id = $1::uuid and status = 'accepted' and not needs_person order by decided_at", [r.id])).rows;
   for (const t of accepted) {
     const m = ProfileManifest.safeParse(t.manifest);
     if (!m.success || !t.decided_at) continue;

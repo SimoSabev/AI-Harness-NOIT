@@ -141,3 +141,35 @@ describe("removing a part when the model changes (D-553)", () => {
     expect(ablationCandidates(accepted, on, null)).toEqual([]);
   });
 });
+
+describe("the changes learning proposes (D-641)", () => {
+  const T = "tests/cart.test.ts > adds an item";
+  it("a flaky test goes into layer A tests.flaky; removing it restores the profile exactly; it never narrows", () => {
+    const p = base();
+    const c = { rule: "flaky_test", layer: "a", detail: T } as const;
+    expect(hasChange(p, c)).toBe(false);
+    const after = applyChange(p, c);
+    expect(after.a.tests.flaky).toEqual([T]);
+    expect(hasChange(after, c)).toBe(true);
+    expect(isNarrowing(p, after)).toBe(false);
+    expect(removeChange(after, c)).toEqual(p);
+    expect(applyChange(after, c)).toEqual(after); // twice is once
+  });
+
+  it("an allow or deny of a tool replaces the any-subject rule of that tool; deny narrows, allow does not", () => {
+    const p = { ...base(), c: [...base().c, { subject: "any", tool: "bash:pnpm add *", decision: "ask", reason: "x" }] } as Layers;
+    const allow = { rule: "tool_allow", layer: "c", detail: "bash:pnpm add *" } as const;
+    const deny = { rule: "tool_deny", layer: "c", detail: "bash:pnpm add *" } as const;
+    const a = applyChange(p, allow);
+    expect(a.c.filter((r) => r.tool === "bash:pnpm add *")).toEqual([{ subject: "any", tool: "bash:pnpm add *", decision: "allow", reason: "learned from asks (D-641)" }]);
+    expect(hasChange(a, allow)).toBe(true);
+    expect(hasChange(a, deny)).toBe(false);
+    expect(isNarrowing(p, a)).toBe(false);
+    const d = applyChange(p, deny);
+    expect(isNarrowing(p, d)).toBe(true);
+    expect(hasChange(removeChange(d, deny), deny)).toBe(false);
+    // a rule for one agent only is left alone
+    const scoped = { ...p, c: [...p.c, { subject: "agent:codex", tool: "bash:pnpm add *", decision: "deny", reason: "y" }] } as Layers;
+    expect(applyChange(scoped, allow).c.some((r) => r.subject === "agent:codex" && r.decision === "deny")).toBe(true);
+  });
+});

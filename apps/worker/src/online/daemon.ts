@@ -5,6 +5,7 @@ import { HarnessProfile, JOB_TEXT_MAX, NightRules, ORACLE_GLOB, ORACLE_MIN_KILL,
 import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } from "@mandat/contract";
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
+import { learnedQuality } from "@mandat/learn";
 import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
 import type { LadderState } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
@@ -21,6 +22,7 @@ import { sessionRecorder } from "./session-recorder.js";
 import { workbench } from "./workbench.js";
 import type { RunTaskInput, RunTaskOutput } from "../run.js";
 import { loadChannels, providerOfAgent, refOf, ruleFor, spillAgent } from "./channels.js";
+import { channelQualityOf, forecastFor } from "./learn.js";
 import { routeOf } from "./agent-route.js";
 import { ConnectionStore } from "@mandat/llm-proxy";
 import { inTransaction, isDbConnectionError } from "./db.js";
@@ -278,8 +280,10 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
   let current: (typeof chans)[number] | null = null;
   if (chans.length > 0) {
     const rule = await ruleFor(d.db, t.org_id, t.repo_id, t.type);
-    const est = parsed.policy.budgets.task_usd / 4;
-    const compatible = chans.filter((c) => c.provider === providerOfAgent(t.agent));
+    // E9д (D-644, PRD 6.11 т. 3–4): the forecast of this kind of task (else a quarter of the budget) and the learned Q
+    // of each channel for the task type, once it rests on ≥ 10 outcomes
+    const est = (await forecastFor(d.db, { repo_id: t.repo_id, task_type: t.type, agent: t.agent }))?.forecast_usd ?? parsed.policy.budgets.task_usd / 4;
+    const compatible = learnedQuality(chans.filter((c) => c.provider === providerOfAgent(t.agent)), await channelQualityOf(d.db, t.org_id, now()), t.type);
     const sel = selectChannel(compatible, { estCostUsd: est, rule, now: now() });
     if (!sel.ok) {
       const seq = await inTransaction(d.db, async (tx) => setState(tx, t, "HELD", { wait_reason: "no_channel" }));
