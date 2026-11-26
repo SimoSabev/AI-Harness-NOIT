@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEMO_ORG_ID, DEMO_REPO_ID, DEMO_OWNER_ID } from "../../../../worker/src/online/seed";
 import { translator } from "../../i18n/t";
 import { homeQueue } from "../home";
-import { inbox } from "./queries";
+import { inbox, taskRow } from "./queries";
+import { jcs, sha256Tag } from "@mandat/contract";
 import { asService } from "./sql";
 import { workspaceList } from "./workspace-list";
 import { webDb } from "./web-db.test-helper";
@@ -34,5 +35,22 @@ describe("the waiting count is the list's (D-624)", () => {
     const ib = await inbox(db, DEMO_OWNER_ID, DEMO_ORG_ID);
     expect(ib.items.filter((x) => x.id.startsWith("t_wu"))).toHaveLength(3);
     expect(waiting).toBe(rows.filter((r) => r.tone === "amber" || r.tone === "red").length);
+  });
+});
+
+// D-627: a task its subscription's limit holds (D-607) is in work, with the reset time; the worker runs it again by itself
+describe("a task waiting for its subscription's limit (D-627)", () => {
+  it("is not waiting for the person; the row carries the reset time from the ledger", async () => {
+    const resets = "2026-11-26T09:00:00.000Z";
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, state, wait_reason) values ('t_wlimit', $1::uuid, $2::uuid, 'free', 'claude', 'limit', 'HELD', 'channel_limit')", [DEMO_ORG_ID, DEMO_REPO_ID]);
+      const text = jcs({ channel: "claude", retry_after_s: null, resets_at: resets });
+      await sql.query("select private.ledger_append($1::uuid, 'channel_limit', 't_wlimit', $2, $3)", [DEMO_ORG_ID, text, sha256Tag(text)]);
+    });
+    const row = await asService(db, (sql) => taskRow(sql, DEMO_ORG_ID, "t_wlimit"));
+    expect(row?.limit_resets_at).toBe(resets);
+    const rows = await workspaceList(db, DEMO_OWNER_ID, DEMO_ORG_ID, translator("en"));
+    expect(rows.find((r) => r.id === "t_wlimit")?.tone).toBe("blue");
+    expect((await inbox(db, DEMO_OWNER_ID, DEMO_ORG_ID)).items.some((x) => x.id === "t_wlimit")).toBe(false);
   });
 });

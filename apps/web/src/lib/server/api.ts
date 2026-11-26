@@ -7,6 +7,7 @@ import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
 import type { RateLimiter } from "./guard";
 import { SwitchBody, listChannels, switchChannel } from "./channels";
 import { SubscribeBody, subscribePush } from "./push";
+import { switchAccount } from "./switch-account";
 import { HarnessApproveBody, approveHarness, connectRepo } from "./harness";
 import { KeysBody, ResearchKeyBody, VoiceAgentBody, VoiceKeyBody } from "./keys";
 import type { VoiceReply } from "./keys";
@@ -276,6 +277,19 @@ export async function postSwitchChannel(req: Request, d: ApiDeps, taskId: string
   const b = SwitchBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await switchChannel(d.db, { uid: p.uid, taskId, body: b.data }), d);
+}
+
+/** D-628: the agents a held task may go on with (the box's own list, with the limits), read for the caller's org */
+export type SwitchTargetsFor = (org: string) => Promise<readonly { id: string; defaultModel: string | null; limitedUntil?: string | null }[]>;
+const SwitchAccountBody = z.object({ agent: z.string().min(1).max(200) }).strict();
+export async function postSwitchAccount(req: Request, d: ApiDeps, taskId: string, targetsFor: SwitchTargetsFor): Promise<Response> {
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = SwitchAccountBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  const now = Date.now();
+  const targets = (await targetsFor(p.org)).filter((a) => !(a.limitedUntil && Date.parse(a.limitedUntil) > now));
+  return done(await switchAccount(d.db, { uid: p.uid, taskId, agent: b.data.agent, targets }), d);
 }
 
 export async function postPushSubscribe(req: Request, d: ApiDeps): Promise<Response> {

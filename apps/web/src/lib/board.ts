@@ -49,7 +49,8 @@ export function boardColumn(t: { state: BoardState; result: VerdictResult | null
 
 /** F4 S34: "Waiting for you" = a gate decision (HELD; GATED needing approval) + BLOCKED for any reason but stopped. */
 export function isInboxItem(t: { state: string; approval_needed: boolean; wait_reason: string | null }): boolean {
-  if (t.state === "HELD") return true;
+  // D-627: a subscription limit is waited out by the worker, not by the person
+  if (t.state === "HELD") return t.wait_reason !== "channel_limit";
   if (t.state === "GATED") return t.approval_needed;
   if (t.state === "BLOCKED") return t.wait_reason !== "stopped";
   return false;

@@ -6,13 +6,14 @@ import { errorText, postJson } from "../lib/client/api";
 import { actionsOf } from "../lib/status";
 import type { StatusKey } from "../lib/status";
 import { useNeedsCode } from "./second-factor";
+import { Select } from "./select";
 import { btn, input } from "./ui";
 
 // D-292: the decision for the status the task is in. Approve/reject is one click + confirm (a fresh TOTP code only
 // when the change asks for a second factor); stop while it runs. Errors are announced (role=alert).
 // D-386: after a failure "Run again" takes an optional note to the agent; a change waiting for approval can be sent
 // back with a note. A note starts a new attempt with it (apply-comments: the worker hands it to the agent).
-export function TaskActions(p: { taskId: string; status: StatusKey; canAct: boolean; changesetId: string | null; headSha: string | null; twoFactor: boolean }) {
+export function TaskActions(p: { taskId: string; status: StatusKey; canAct: boolean; changesetId: string | null; headSha: string | null; twoFactor: boolean; /** D-628: who it can go on with now */ switchTo?: readonly { id: string; label: string }[] }) {
   const router = useRouter();
   const t = useT();
   const needsCode = useNeedsCode() && p.twoFactor;
@@ -22,6 +23,8 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
+  const targets = p.switchTo ?? [];
+  const [to, setTo] = useState(targets[0]?.id ?? "");
   if (!p.canAct) return null;
 
   const run = async (url: string, body: unknown): Promise<boolean> => {
@@ -43,6 +46,17 @@ export function TaskActions(p: { taskId: string; status: StatusKey; canAct: bool
 
   const a = actionsOf(p.status);
   const canDecide = a.decide && p.changesetId !== null && p.headSha !== null;
+  // D-628: a task its subscription's limit holds goes on by itself at the reset, or now with another account
+  if (a.switchAccount) {
+    if (targets.length === 0) return <p className="text-sm text-mute">{t("actions.switchNone")}</p>;
+    return (
+      <form className="flex flex-wrap items-center gap-2" onSubmit={(e) => (e.preventDefault(), void run(`/api/tasks/${p.taskId}/switch-account`, { agent: to }))}>
+        <Select size="sm" aria-label={t("actions.switchWho")} value={to} onChange={setTo} options={targets.map((x) => ({ value: x.id, label: x.label }))} />
+        <button className={btn.primary} type="submit" disabled={busy || to === ""}>{t("actions.switch")}</button>
+        {error && <p className="w-full text-sm text-bad" role="alert">{error}</p>}
+      </form>
+    );
+  }
   if (!canDecide && !a.again && !a.stop && !a.fixCi && !a.note) return null;
   const again = () => void (note.trim() ? run(`/api/tasks/${p.taskId}/apply-comments`, { text: note.trim() }) : run(`/api/tasks/${p.taskId}/retry`, {})).then((ok) => ok && setNote(""));
   const sendBack = (e: React.FormEvent) => (e.preventDefault(), void run(`/api/tasks/${p.taskId}/apply-comments`, { text: note.trim() }).then((ok) => ok && (setNote(""), setNoteOpen(false))));

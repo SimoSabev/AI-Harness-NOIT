@@ -58,6 +58,15 @@ describe("accounts out of their limit (D-612)", () => {
     const now = Date.parse("2026-11-26T08:00:00.000Z");
     expect(await accountLimits(db, DEMO_ORG_ID, now)).toEqual({ "claude@lichno": "2099-01-01T09:00:00.000Z" });
   });
+  it("D-628: a task held by the limit says it too (its channel_limit in the ledger)", async () => {
+    const { accountLimits } = await import("./conversation");
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, state, wait_reason) values ('t_lim_acc', $1::uuid, $2::uuid, 'free', 'claude@work', 'x', 'HELD', 'channel_limit')", [DEMO_ORG_ID, DEMO_REPO_ID]);
+      const text = JSON.stringify({ channel: "claude@work", resets_at: "2099-02-01T09:00:00.000Z", retry_after_s: null });
+      await sql.query("select private.ledger_append($1::uuid, 'channel_limit', 't_lim_acc', $2, $3)", [DEMO_ORG_ID, text, sha256Tag(text)]);
+    });
+    expect(await accountLimits(db, DEMO_ORG_ID, Date.parse("2026-11-26T08:00:00.000Z"))).toMatchObject({ "claude@work": "2099-02-01T09:00:00.000Z" });
+  });
 });
 
 describe("the conversation in the web (D-531)", () => {

@@ -86,6 +86,12 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean; em
   return i > 0 ? [out[i] as TaskAgent, ...out.slice(0, i), ...out.slice(i + 1)] : out;
 }
 
+/** D-628: who a task its subscription's limit holds can go on with now — the other agents of the same kind of task
+ * that are not in their own limit. */
+export function switchTargets<A extends { id: string; limitedUntil?: string | null }>(agents: readonly A[], current: string, now: number = Date.now()): A[] {
+  return agents.filter((a) => a.id !== current && taskTypeFor(a.id) === taskTypeFor(current) && !(a.limitedUntil && Date.parse(a.limitedUntil) > now));
+}
+
 /** the task type of the task box: a real agent works without limits ("free", D-360), the demo agents' scenarios are bug fixes */
 export const taskTypeFor = (agent: string): "free" | "bugfix" => (agent.startsWith("fake") ? "bugfix" : "free");
 

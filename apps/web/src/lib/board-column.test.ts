@@ -50,5 +50,7 @@ describe("board column", () => {
     expect(isInboxItem({ ...base, state: "BLOCKED", wait_reason: "budget" })).toBe(true);
     expect(isInboxItem({ ...base, state: "BLOCKED", wait_reason: "stopped" })).toBe(false);
     expect(isInboxItem({ ...base, state: "RUNNING" })).toBe(false);
+    // D-627: a subscription limit is waited out by the worker, not by the person
+    expect(isInboxItem({ ...base, state: "HELD", wait_reason: "channel_limit" })).toBe(false);
   });
 });

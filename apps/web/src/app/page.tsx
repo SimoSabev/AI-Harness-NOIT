@@ -9,7 +9,7 @@ import { cookies } from "next/headers";
 import { SIDE_COOKIE, parseSide } from "../lib/side-pane";
 
 import { getT } from "../i18n/server";
-import { agentLabel } from "../lib/agents";
+import { agentLabel, switchTargets } from "../lib/agents";
 import type { TaskAgent } from "../lib/agents";
 import { pageTitle } from "../lib/inbox";
 import { taskFeed } from "../lib/server/chat-feed";
@@ -70,6 +70,9 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
     taskMode = v.prefs.taskMode;
     preferredModel = v.prefs.defaultAgent === agents[0]?.id ? v.prefs.defaultModel : null;
   }
+  // D-628: a task its subscription's limit holds can go on now with an account that is not in its own limit
+  const held = initial?.task.state === "HELD" && initial.task.wait_reason === "channel_limit" ? initial.task.agent : null;
+  const switchTo = held ? switchTargets((await agentsView(t.lang, process.env, await accountLimits(db(), c.org))).agents, held).map((a) => ({ id: a.id, label: a.label })) : [];
   return (
     <Shell current="tasks" waiting={c.waiting} full>
       {/* D-602: the conversations are a column from tablet width up; on a phone they fold above the work */}
@@ -86,7 +89,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
           {initial && d && sess ? (
             <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)}
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
-              shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} />
+              shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} switchTo={switchTo} />
           ) : (
             <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} home={home} />
           )}

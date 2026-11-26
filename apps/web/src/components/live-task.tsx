@@ -118,7 +118,7 @@ export interface TaskView {
   twin?: TwinView | null;
 }
 
-export function LiveTask({ id, initial, canAct, agentName, view, shots, details }: { id: string; initial: Feed | null; canAct: boolean; agentName: string; view: TaskView; shots: React.ReactNode; details: React.ReactNode }) {
+export function LiveTask({ id, initial, canAct, agentName, view, shots, details, switchTo = [] }: { id: string; initial: Feed | null; canAct: boolean; agentName: string; view: TaskView; shots: React.ReactNode; details: React.ReactNode; /** D-628 */ switchTo?: readonly { id: string; label: string }[] }) {
   const t = useT();
   const { feed, online } = useFeed(id, initial);
   const task = feed?.task ?? null;
@@ -190,7 +190,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
             </p>
             {selfNote && <p role="status" className="text-sm text-mute">{t("ws.self")}</p>}
             {s.key === "running" && live.notice && <p role="status" className="rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">{noticeLine(live.notice, task.agent, t.lang)}</p>}
-            <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} />
+            <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} switchTo={switchTo} />
           </>
         ) : (
           <>
@@ -222,7 +222,7 @@ export function LiveTask({ id, initial, canAct, agentName, view, shots, details 
             {files.length === 0 && view.diffOmitted !== null && <p className="rounded-xl bg-raised px-4 py-3 text-sm text-mute">{t("res.tooLarge", { mb: t.num(view.diffOmitted / 1048576, 1) })}</p>}
             {shots}
             {view.twin && <TwinBox twin={view.twin} canAct={canAct} waiting={s.key === "review"} taskId={task.id} />}
-            <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} />
+            <TaskActions taskId={task.id} status={s.key} canAct={canAct} changesetId={task.changeset_id} headSha={task.head_sha} twoFactor={task.requires_second_factor} switchTo={switchTo} />
             {files.length > 0 && <LocalActions taskId={task.id} repoId={view.repoId} files={files.map((f) => f.path)} />}
             {view.asks.length > 0 && <AskCards taskId={task.id} asks={view.asks} attempt={view.asks[0]?.attempt ?? 1} canDecide={canAct && s.key === "ask"} />}
             <details className="rounded-xl border border-line px-4 py-3">

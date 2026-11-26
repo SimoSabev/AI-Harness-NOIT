@@ -19,7 +19,7 @@ describe("status (D-292)", () => {
     expect(statusOf(t({ state: "CLOSED", last_result: "VERIFIED" })).key).toBe("closed");
     expect(statusOf(t({ state: "GATED", last_result: "VERIFIED", approved_by_human: true })).key).toBe("approved");
     expect(statusOf(t({ state: "HELD", last_result: "VERIFIED", wait_reason: "key_rejected" }))).toMatchObject({ key: "key", label: "Key rejected", tone: "red" });
-    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "agent", "answered", "key", "stopped", "approved", "applied", "closed", "expired", "ask", "base", "ci"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
+    for (const s of ["queued", "running", "checking", "review", "failed", "unknown", "empty", "agent", "answered", "key", "stopped", "approved", "applied", "closed", "expired", "ask", "base", "ci", "limit"] as const) for (const lang of ["en", "bg"] as const) expect(statusOf(t(stateFor(s)), lang).headline.length).toBeGreaterThan(10);
   });
   it("D-367: a change that went into main by itself → applied (green, done); approved by a person stays approved", () => {
     const st = statusOf(t({ state: "CLOSED", last_result: "VERIFIED", delivered: "merge" }));
@@ -85,9 +85,33 @@ function stateFor(k: string): Partial<Parameters<typeof statusOf>[0]> {
     ask: { state: "HELD", last_result: "VERIFIED", wait_reason: "tool_approval" },
     base: { state: "HELD", last_result: "VERIFIED", wait_reason: "base_moved" },
     ci: { state: "HELD", last_result: "VERIFIED", wait_reason: "ci_failed" },
+    limit: { state: "HELD", wait_reason: "channel_limit" },
   };
   return m[k] ?? {};
 }
+
+// D-627: a task held by its subscription's limit is not waiting for the person: the worker runs it again at the reset
+describe("waiting for the subscription limit (D-627)", () => {
+  it("its own status, in work (not Waiting for you), with the reset time when the provider said it", () => {
+    const at = "2026-11-26T09:00:00Z";
+    const st = statusOf(t({ state: "HELD", wait_reason: "channel_limit", limit_resets_at: at }));
+    expect([st.key, st.tone, st.label]).toEqual(["limit", "blue", "Waits for the limit"]);
+    expect(groupOf(st.key)).toBe("active");
+    const when = new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    expect(st.headline).toContain(when);
+    expect(statusOf(t({ state: "HELD", wait_reason: "channel_limit", limit_resets_at: at }), "bg").label).toBe("Чака лимита");
+    // without a time: still the same status, a sentence without one
+    const none = statusOf(t({ state: "HELD", wait_reason: "channel_limit" }));
+    expect(none.key).toBe("limit");
+    expect(none.headline).not.toContain("{when}");
+    // even with an old verdict, a limit hold is a limit
+    expect(statusOf(t({ state: "HELD", last_result: "UNKNOWN", wait_reason: "channel_limit" })).key).toBe("limit");
+  });
+  it("nothing to decide or retry; the one move is another account", () => {
+    expect(actionsOf("limit")).toMatchObject({ decide: false, again: false, note: false, stop: false, switchAccount: true });
+    expect(actionsOf("review").switchAccount).toBe(false);
+  });
+});
 
 // D-386: a task that waits for the person is amber in every list; the box under it takes the colour of the verdict.
 describe("waiting on you, the verdict box, the actions (D-386)", () => {
@@ -102,10 +126,10 @@ describe("waiting on you, the verdict box, the actions (D-386)", () => {
     expect(outcomeTone(null, "gray")).toBe("gray");
   });
   it("review: approve, reject, send back with a note; a failure: run again, with an optional note; running: stop", () => {
-    expect(actionsOf("review")).toEqual({ decide: true, again: false, note: true, fixCi: false, stop: false });
-    for (const k of ["failed", "unknown", "empty", "base"] as const) expect(actionsOf(k), k).toEqual({ decide: false, again: true, note: true, fixCi: false, stop: false });
-    expect(actionsOf("key")).toEqual({ decide: false, again: true, note: false, fixCi: false, stop: false });
-    expect(actionsOf("ci")).toEqual({ decide: false, again: false, note: true, fixCi: true, stop: false });
+    expect(actionsOf("review")).toEqual({ decide: true, again: false, note: true, fixCi: false, stop: false, switchAccount: false });
+    for (const k of ["failed", "unknown", "empty", "base"] as const) expect(actionsOf(k), k).toEqual({ decide: false, again: true, note: true, fixCi: false, stop: false, switchAccount: false });
+    expect(actionsOf("key")).toEqual({ decide: false, again: true, note: false, fixCi: false, stop: false, switchAccount: false });
+    expect(actionsOf("ci")).toEqual({ decide: false, again: false, note: true, fixCi: true, stop: false, switchAccount: false });
     for (const k of ["queued", "running", "checking"] as const) expect(actionsOf(k).stop, k).toBe(true);
     for (const k of ["approved", "applied", "closed", "expired", "stopped", "ask"] as const) expect(Object.values(actionsOf(k)).some(Boolean), k).toBe(false);
   });
@@ -148,6 +172,6 @@ describe("an honest ending (D-448)", () => {
     const st = statusOf(t(stateFor("answered")));
     expect([st.key, st.tone, groupOf(st.key)]).toEqual(["answered", "gray", "done"]);
     expect(st.headline).not.toMatch(/fail|error|did not|could not/i);
-    expect(actionsOf("answered")).toEqual({ decide: false, again: false, note: false, fixCi: false, stop: false });
+    expect(actionsOf("answered")).toEqual({ decide: false, again: false, note: false, fixCi: false, stop: false, switchAccount: false });
   });
 });

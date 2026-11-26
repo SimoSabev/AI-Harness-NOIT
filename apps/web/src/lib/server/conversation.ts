@@ -38,10 +38,11 @@ async function nextSeq(db: Db, id: string): Promise<number> {
 /** D-612: the subscription accounts out of their limit, until when — from the conversations that stopped on it (D-591) */
 export async function accountLimits(db: Db, org: string, now: number = Date.now()): Promise<Record<string, string>> {
   const rows = (await asService(db, (sql) => sql.query<{ agent: string; error: string | null }>("select agent, error from public.conversations where org_id = $1::uuid and status = 'limit' and updated_at > now() - interval '8 days'", [org]))).rows;
+  // D-628: a task that hit the limit says it too (its channel_limit in the ledger, D-607)
+  const held = (await asService(db, (sql) => sql.query<{ agent: string; resets_at: string | null }>("select t.agent, g.payload ->> 'resets_at' as resets_at from public.ledger g join public.tasks t on t.id = g.task_id where g.org_id = $1::uuid and g.kind = 'channel_limit' and g.ts > to_char((now() - interval '8 days') at time zone 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS')", [org]))).rows;
   const out: Record<string, string> = {};
-  for (const r of rows) {
-    const at = limitResetsAt(r.error);
-    if (at && Date.parse(at) > now && (!out[r.agent] || at > (out[r.agent] as string))) out[r.agent] = at;
+  for (const [agent, at] of [...rows.map((r) => [r.agent, limitResetsAt(r.error)] as const), ...held.map((r) => [r.agent, r.resets_at] as const)]) {
+    if (at && Date.parse(at) > now && (!out[agent] || at > (out[agent] as string))) out[agent] = at;
   }
   return out;
 }

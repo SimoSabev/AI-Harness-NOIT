@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AGENTS, AGENT_IDS, agentChoices, agentHint, agentLabel, apiKeyUse, taskAgents } from "./agents";
+import { AGENTS, AGENT_IDS, agentChoices, agentHint, agentLabel, apiKeyUse, switchTargets, taskAgents } from "./agents";
 import type { Connection } from "@mandat/contract";
 import { CreateTaskBody } from "./server/actions";
 
@@ -118,5 +118,17 @@ describe("taskAgents: keys become models (D-471, D-473)", () => {
     expect(apiKeyUse("xai")).toBe("codex");
     expect(apiKeyUse("gemini")).toBe("gemini");
     expect(apiKeyUse("cerebras")).toBeNull();
+  });
+});
+
+// D-628: a task its subscription's limit holds can go on with another account now — any agent that is not limited
+describe("switchTargets (D-628)", () => {
+  const now = Date.parse("2026-11-26T10:00:00Z");
+  const a = (id: string, limitedUntil: string | null = null) => ({ id, label: id, models: ["m"], defaultModel: "m", local: false, limitedUntil });
+  it("every other agent of the same kind of task, except the one in use and those still in their limit", () => {
+    const agents = [a("claude@lichno", "2026-11-26T12:00:00Z"), a("claude@lichno-2"), a("claude@old", "2026-11-26T09:00:00Z"), a("codex"), a("fake:honest-fix")];
+    expect(switchTargets(agents, "claude@lichno", now).map((x) => x.id)).toEqual(["claude@lichno-2", "claude@old", "codex"]);
+    expect(switchTargets(agents, "claude@lichno-2", now).map((x) => x.id)).toEqual(["claude@old", "codex"]);
+    expect(switchTargets([a("claude@lichno")], "claude@lichno", now)).toEqual([]);
   });
 });

@@ -23,6 +23,8 @@ export interface TaskRow {
   conversation_id?: string | null;
   /** D-554: the job of this internal task is merged (jobs.merged_sha) */
   job_merged?: boolean | null;
+  /** D-627: while it waits for its subscription's limit, when the limit resets (the last channel_limit), if known */
+  limit_resets_at?: string | null;
 }
 
 const TASKS = `
@@ -43,7 +45,10 @@ select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t
                 (select coalesce(cv.approved_spec, cv.spec) ->> 'goal' from public.oracles o join public.conversations cv on cv.id = o.conversation_id where o.task_id = t.id order by o.created_at desc limit 1)) as spec_goal,
        coalesce((select j.conversation_id::text from public.jobs j where j.id = t.job_id),
                 (select o.conversation_id::text from public.oracles o where o.task_id = t.id order by o.created_at desc limit 1)) as conversation_id,
-       (select j.merged_sha is not null from public.jobs j where j.id = t.job_id) as job_merged
+       (select j.merged_sha is not null from public.jobs j where j.id = t.job_id) as job_merged,
+       case when t.state = 'HELD' and t.wait_reason = 'channel_limit' then
+         (select g.payload ->> 'resets_at' from public.ledger g where g.org_id = t.org_id and g.task_id = t.id and g.kind = 'channel_limit' order by g.seq desc limit 1)
+       end as limit_resets_at
   from public.tasks t
   -- D-452: only the current attempt's change and verdict; a new attempt has none until it makes its own
   left join lateral (select * from public.changesets x where x.task_id = t.id and x.attempt = t.attempt order by x.created_at desc limit 1) c on true
