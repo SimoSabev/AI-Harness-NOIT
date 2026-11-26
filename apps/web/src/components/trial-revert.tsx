@@ -13,7 +13,7 @@ const ERR: Record<string, Key> = {
   second_factor_rejected: "error.second_factor_rejected",
 };
 
-// D-647: one button reverts a change learning applied by itself. Reverting a flaky test or an allowed tool only narrows
+// D-650: one button reverts a change learning applied by itself. Reverting a flaky test or an allowed tool only narrows
 // (no code); reverting a narrowing widens again, so it asks for a fresh authenticator code.
 export function TrialRevert({ trialId, widens }: { trialId: string; widens: boolean }) {
   const router = useRouter();

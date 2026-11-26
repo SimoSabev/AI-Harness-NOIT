@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// E9д (spec 5.5, PRD 6.11, D-640/D-641): learning is deterministic statistics over the ledger plus proposals. D-647
+// E9д (spec 5.5, PRD 6.11, D-640/D-641): learning is deterministic statistics over the ledger plus proposals. D-650
 // (Simo 26.11.2026): a proposal applies itself after the bench gate and rolls itself back when things get worse. Every proposal names its origin as `rule:<name>`; the names are fixed here, never text a model wrote.
 
 export const LEARN_LIMITS = Object.freeze({
@@ -23,7 +23,7 @@ export const LEARN_LIMITS = Object.freeze({
   /** fewer tasks than this in either week say nothing */
   regression_min_week: 5,
   window_days: 30,
-  /** D-647: a change that can weaken the verdict is watched over this many tasks of its type after it applied */
+  /** D-650: a change that can weaken the verdict is watched over this many tasks of its type after it applied */
   watch_n: 10,
   /** … and says nothing before this many */
   watch_min: 5,

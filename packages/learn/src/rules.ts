@@ -10,7 +10,7 @@ import { weakens } from "./auto.js";
 //   accept a narrowing one after the bench) and only get their name here;
 // - flaky_repeat: a test that failed D1 in ≥ 2 tasks a person labelled as not the agent's fault → tests.flaky;
 // - ask_repeat: ≥ 5 tasks asked for one tool and a person decided the same way in ≥ 80% → allow / deny of the tool.
-// D-647: none waits for a person. Each goes through the bench gate (auto.ts); `weakens` marks the ones (flaky, allow)
+// D-650: none waits for a person. Each goes through the bench gate (auto.ts); `weakens` marks the ones (flaky, allow)
 // that need the stricter gate and the regression watch.
 
 export interface LearnFailureRow extends FailureRow {
@@ -18,7 +18,7 @@ export interface LearnFailureRow extends FailureRow {
   label: { layer: string; label: string } | null;
 }
 export interface AskRow { task_id: string; task_type: TaskType; tool: string; status: "pending" | "once" | "always" | "denied"; at: string }
-export interface LearnedRule { manifest: ProfileManifest; /** D-647: can weaken the verdict (flaky, allow) */ weakens: boolean }
+export interface LearnedRule { manifest: ProfileManifest; /** D-650: can weaken the verdict (flaky, allow) */ weakens: boolean }
 
 const DAY = 86_400_000;
 /** a failure a person said was not the agent's: the checks or the infrastructure */

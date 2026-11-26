@@ -72,7 +72,7 @@ describe("нощен доклад (E9а)", () => {
   });
 });
 
-describe("ученето се промени само (D-647)", () => {
+describe("ученето се промени само (D-650)", () => {
   it("заглавие с правилото, никога с детайла (тест, инструмент); само trial_id, kind, status, title", () => {
     const p = JSON.parse(learnPushPayload({ trial_id: "50000000-0000-4000-8000-000000000002", status: "accepted", source: "rule:flaky_repeat" })) as Record<string, unknown>;
     expect(Object.keys(p).sort()).toEqual(["kind", "status", "title", "trial_id"]);

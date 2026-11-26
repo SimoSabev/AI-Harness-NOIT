@@ -9,7 +9,7 @@ import { totpAt } from "./totp";
 import { TEST_TOTP, U, webDb } from "./web-db.test-helper";
 
 // E9д (spec 5.5, PRD 6.11, AC-11.1 e2e, AC-11.4; D-645): the rules screen shows each proposal with its rule's name; a
-// regression card is read by every member. D-647: nothing waits for a person — the bench gate applies a learned change,
+// regression card is read by every member. D-650: nothing waits for a person — the bench gate applies a learned change,
 // the screen shows it, and a person reverts it with one button (approve.rules; a fresh TOTP when the revert widens).
 let db: Awaited<ReturnType<typeof webDb>>;
 let org = "";
@@ -43,7 +43,7 @@ describe("the rules screen (AC-11.1 end to end)", () => {
   });
 });
 
-describe("a learned change applies itself; a person reverts it (D-647)", () => {
+describe("a learned change applies itself; a person reverts it (D-650)", () => {
   const full = { pass: 10, total: 10, false_verified: 0, heldout: { pass: 5, total: 5, false_verified: 0 } };
   const ALLOW = "bash:pnpm add *";
   const current = async () => (await db.query<{ version: number; layers: Layers; origin: string | null }>("select h.version, h.layers, h.origin from public.repos r join public.harness_profiles h on h.id = r.profile_id where r.id = $1", [DEMO_REPO_ID])).rows[0];

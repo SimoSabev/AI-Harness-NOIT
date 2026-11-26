@@ -6,7 +6,7 @@ import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
 import { evolveTick } from "./evolve.js";
 import type { BenchScore } from "./evolve.js";
 
-// D-647 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): the worker's tick applies a learned proposal by
+// D-650 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): the worker's tick applies a learned proposal by
 // itself after the bench gate. A change that can weaken the verdict (a flaky test, an allowed tool) needs the held-out
 // set and no false VERIFIED, and rolls itself back when the failures of its task type or a model regression get worse.
 // Each apply and roll back is a profile_change row (by: mandat) and a push.
@@ -42,7 +42,7 @@ const trial = async (key: string) => (await db.query<{ status: string; why: stri
 const changes = async () => (await db.query<{ payload: { action: string; by: string; source?: string; change_key?: string } }>("select payload from public.ledger where kind = 'profile_change' order by seq")).rows.map((r) => r.payload);
 const pushes = async () => (await db.query<{ payload: { kind: string; status: string } }>("select payload from public.outbox where kind = 'web_push' and payload ->> 'kind' = 'profile_learn' order by id")).rows.map((r) => r.payload.status);
 
-describe("a learned change applies itself (D-647)", () => {
+describe("a learned change applies itself (D-650)", () => {
   it("a flaky test and five granted asks pass the bench gate and apply, one per tick, without a person", async () => {
     for (let i = 0; i < 2; i++) {
       const t = await task("FAILED", [`D1:regression:${T}`], { minsAgo: 300 + i });
@@ -79,7 +79,7 @@ describe("a learned change applies itself (D-647)", () => {
   });
 });
 
-describe("a weakening change rolls itself back (D-647)", () => {
+describe("a weakening change rolls itself back (D-650)", () => {
   it("the failures of its task type get worse after the flaky test → rolled back; the allowed tool stays", async () => {
     await db.query("update public.profile_trials set decided_at = now() - interval '100 minutes' where change_key = $1", [FLAKY]);
     for (const [i, r] of (["FAILED", "FAILED", "FAILED", "VERIFIED", "VERIFIED"] as const).entries()) await task(r, [], { minsAgo: 50 - i });

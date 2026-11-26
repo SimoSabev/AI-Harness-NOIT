@@ -13,7 +13,7 @@ import { enqueueOutbox } from "./pg-outbox.js";
 // 1. propose: a recurring failure class of a project → a trial (one per change, never twice);
 // 2. gate: the bench runs the same scenarios with the current and the changed profile; worse → refused; not worse and
 //    narrowing → Mandat accepts it as a new approved version (the twin's rule follows the narrowing, by Simo's choice);
-//    D-647 (Simo 26.11.2026): nothing waits for a person. A change that can weaken the verdict (a flaky test, an allowed
+//    D-650 (Simo 26.11.2026): nothing waits for a person. A change that can weaken the verdict (a flaky test, an allowed
 //    tool) applies only with the held-out set and no false VERIFIED (packages/learn gateDecision);
 // 3. watch: an accepted change whose prediction the next tasks falsify is rolled back to the old layers; a weakening one
 //    rolls back when its task type's failures or a model regression get worse (watchDecision).
@@ -61,7 +61,7 @@ export async function evolveTick(db: SqlClient, o: { now: Date; bench?: BenchRun
 
 async function propose(db: SqlClient, r: Repo, layers: Layers, now: Date, out: EvolveTick): Promise<void> {
   const since = new Date(now.getTime() - EVOLVE_LIMITS.window_days * 86_400_000).toISOString();
-  // E9д (D-641): the D-530/D-549 classes with their rule's name, plus flaky tests and repeated asks; D-647: none waits
+  // E9д (D-641): the D-530/D-549 classes with their rule's name, plus flaky tests and repeated asks; D-650: none waits
   // for a person (needs_person stays false; the column keeps the trials made before)
   for (const { manifest: m, weakens: weak } of rulesFromFailures(await learnInputs(db, r.id, since), layers, now.toISOString())) {
     const ins = await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile, source) values ($1::uuid, $2::uuid, $3, $4::jsonb, $5::uuid, $6) on conflict (repo_id, change_key) do nothing returning id", [r.org_id, r.id, keyOf(m).slice(0, 300), JSON.stringify(m), r.profile_id, m.source ?? null]);
@@ -72,7 +72,7 @@ async function propose(db: SqlClient, r: Repo, layers: Layers, now: Date, out: E
 }
 
 async function gate(db: SqlClient, r: Repo, layers: Layers, bench: BenchRunner, out: EvolveTick, requireHeldout: boolean): Promise<void> {
-  // D-647: every open proposal, the learned ones included (the trials made before with needs_person, too)
+  // D-650: every open proposal, the learned ones included (the trials made before with needs_person, too)
   const open = (await db.query<Trial>(`select ${TRIAL} from public.profile_trials where repo_id = $1::uuid and status = 'proposed' order by created_at, change_key`, [r.id])).rows;
   for (const t of open) {
     const m = ProfileManifest.safeParse(t.manifest);
@@ -123,7 +123,7 @@ const WATCH_ROW = `select to_char(t.state_entered_at at time zone 'UTC', 'YYYY-M
    where t.repo_id = $1::uuid and t.type = $2 and t.state in ${DONE}`;
 
 /**
- * D-647: a change that can weaken the verdict (a flaky test, an allowed tool), still in the profile, is watched over the
+ * D-650: a change that can weaken the verdict (a flaky test, an allowed tool), still in the profile, is watched over the
  * next tasks of its type: worse failures than before it, or a model regression card (D-642) of a model this repo runs for
  * a week the watch overlaps → back to what it replaced, keeping what came after. One roll back per tick.
  */
@@ -155,7 +155,7 @@ async function watchWeakening(db: SqlClient, r: Repo, now: Date, out: EvolveTick
   }
 }
 
-/** D-647: a push to the org when Mandat applied or rolled back a learned change by itself */
+/** D-650: a push to the org when Mandat applied or rolled back a learned change by itself */
 async function notify(db: SqlClient, t: Trial, status: "accepted" | "rolled_back"): Promise<void> {
   await enqueueOutbox(db, { org_id: t.org_id, kind: "web_push", idempotency_key: `push:learn:${t.id}:${status}`, payload: { kind: "profile_learn", trial_id: t.id, status } });
 }

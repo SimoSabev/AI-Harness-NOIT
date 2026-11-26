@@ -2,7 +2,7 @@ import { LEARN_LIMITS, jcs } from "@mandat/contract";
 import type { ProfileChange, ProfileLayers } from "@mandat/contract";
 import { isNarrowing, opensDangerous, removeChange } from "@mandat/profile";
 
-// D-647 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): no learned proposal waits for a person.
+// D-650 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): no learned proposal waits for a person.
 // - gateDecision: the bench of the task type's contract, current profile against changed. Worse → not applied. A change
 //   that can weaken the verdict (a flaky test, an allowed tool) also needs the held-out set and no false VERIFIED on
 //   either set; it is then watched for regressions. A narrowing keeps D-530: not worse is enough, watched by its

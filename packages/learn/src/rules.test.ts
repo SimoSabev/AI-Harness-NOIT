@@ -38,7 +38,7 @@ describe("rulesFromFailures (AC-11.1)", () => {
 
 describe("flaky (spec 5.5: 2× flaky → tests.flaky)", () => {
   const T = "tests/cart.test.ts > adds an item";
-  it("a test that failed D1 in two tasks a person labelled as not the agent's → tests.flaky, a change that can weaken (D-647)", () => {
+  it("a test that failed D1 in two tasks a person labelled as not the agent's → tests.flaky, a change that can weaken (D-650)", () => {
     const out = rulesFromFailures({ failures: [fail("t_1", [`D1:regression:${T}`], { label: NOT_AGENT }), fail("t_2", [`D1:regression:${T}`], { label: { layer: "infra", label: "x" }, type: "feature" })], asks: [] }, base(), NOW);
     expect(out).toEqual([{ weakens: true, manifest: { change: { rule: "flaky_test", layer: "a", detail: T }, evidence: ["t_1", "t_2"], reason_class: "D1:regression", prediction: { task_type: "bugfix", next_n: 10, max_repeats: 0 }, source: "rule:flaky_repeat" } }]);
   });
@@ -56,7 +56,7 @@ describe("flaky (spec 5.5: 2× flaky → tests.flaky)", () => {
 });
 
 describe("asks (spec 5.5: 5× ask for one tool → allow / deny)", () => {
-  it("five tasks where a person let the tool through → allow (newest first); five denials → deny; an allow can weaken, a deny cannot (D-647)", () => {
+  it("five tasks where a person let the tool through → allow (newest first); five denials → deny; an allow can weaken, a deny cannot (D-650)", () => {
     const granted = ["t_1", "t_2", "t_3", "t_4", "t_5"].map((t, i) => ask(t, "bash:pnpm add *", i % 2 ? "once" : "always", i + 1));
     const out = rulesFromFailures({ failures: [], asks: granted }, base(), NOW);
     expect(out).toEqual([{ weakens: true, manifest: { change: { rule: "tool_allow", layer: "c", detail: "bash:pnpm add *" }, evidence: ["t_1", "t_2", "t_3", "t_4", "t_5"], reason_class: "ASK:tool_ask", prediction: { task_type: "feature", next_n: 10, max_repeats: 0 }, source: "rule:ask_repeat" } }]);

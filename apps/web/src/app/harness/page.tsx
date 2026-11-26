@@ -141,7 +141,7 @@ const TRIAL_TONE: Record<TrialView["status"], "green" | "amber" | "gray" | "red"
 
 /**
  * D-530: what Mandat changed by itself from recurring failures and asks — the change, the evidence, the prediction, the
- * bench. D-647: nothing waits for a person; an applied change has a Revert button for the owner.
+ * bench. D-650: nothing waits for a person; an applied change has a Revert button for the owner.
  */
 function Trials({ t, trials, canRevert }: { t: T; trials: TrialView[]; canRevert: boolean }) {
   if (trials.length === 0) return null;

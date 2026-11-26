@@ -1,4 +1,4 @@
--- D-647 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“). Learning no longer waits for a person: the worker
+-- D-650 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“). Learning no longer waits for a person: the worker
 -- applies a learned change after the bench gate (profile_change, by: mandat) and rolls it back by itself when things get
 -- worse. A person sees what was applied and reverts it with one button:
 -- private.revert_trial(trial, layers, hash, user, mfa): approve.rules; the trial must be applied (accepted); only the

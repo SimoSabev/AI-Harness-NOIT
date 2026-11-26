@@ -75,7 +75,7 @@ export function nightPushPayload(o: { shift_id: string; report: NightReport }): 
   return JSON.stringify({ shift_id: o.shift_id, kind: "night_report", title });
 }
 
-/** D-647: Mandat applied or rolled back a learned change by itself — the rule's name only, never the detail (a test, a tool) */
+/** D-650: Mandat applied or rolled back a learned change by itself — the rule's name only, never the detail (a test, a tool) */
 export function learnPushPayload(o: { trial_id: string; status: "accepted" | "rolled_back"; source: string | null }): string {
   const rule = o.source ?? "правило";
   const title = o.status === "accepted" ? `Мандат научи и приложи сам: ${rule}` : `Мандат върна сам наученото: ${rule}`;

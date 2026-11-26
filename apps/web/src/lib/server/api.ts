@@ -596,7 +596,7 @@ export async function postTrialDecision(req: Request, d: ApiDeps, trialId: strin
   return done(await decideTrial(d.db, { uid: p.uid, trialId, body: b.data, secondFactor: d.secondFactor }), d);
 }
 
-// D-647: a person reverts a change learning applied by itself
+// D-650: a person reverts a change learning applied by itself
 export async function postTrialRevert(req: Request, d: ApiDeps, trialId: string): Promise<Response> {
   if (!UUID.test(trialId)) return json(404, { error: "unknown_proposal" });
   const p = await post(req, d);

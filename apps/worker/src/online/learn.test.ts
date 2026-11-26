@@ -49,7 +49,7 @@ describe("rules from failures, end to end (AC-11.1)", () => {
     expect(m).toMatchObject({ change: { rule: "protect_path", layer: "c", detail: "infra/**" }, source: "rule:d4_repeat" });
   });
 
-  it("a flaky test (two labelled failures) and five granted asks → proposals nobody waits for; one change per tick (D-647)", async () => {
+  it("a flaky test (two labelled failures) and five granted asks → proposals nobody waits for; one change per tick (D-650)", async () => {
     const T = "tests/cart.test.ts > adds an item";
     for (let i = 0; i < 2; i++) {
       const t = await task("FAILED", [`D1:regression:${T}`]);
@@ -62,7 +62,7 @@ describe("rules from failures, end to end (AC-11.1)", () => {
     let benched = 0;
     const tick = await evolveTick(db, { now: new Date(), bench: async () => { benched++; return { pass: 10, total: 10, false_verified: 0 }; } });
     expect(tick.proposed.sort()).toEqual([`flaky_test|${T}|bugfix`, "tool_allow|bash:pnpm add *|feature"]);
-    // nothing waits for a person any more; the column stays for the trials made before D-647
+    // nothing waits for a person any more; the column stays for the trials made before D-650
     expect((await trials()).map((t) => [t.source, t.needs_person])).toEqual([["rule:d4_repeat", false], ["rule:flaky_repeat", false], ["rule:ask_repeat", false]]);
     // the oldest proposal is benched first and applies; the next ones wait for the next tick, benched against it
     expect(benched).toBe(2);

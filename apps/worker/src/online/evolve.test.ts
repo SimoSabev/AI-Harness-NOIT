@@ -96,7 +96,7 @@ describe("the held-out heavy bench in the gate (D-550)", () => {
     expect(t?.bench).toEqual({ before: { ...score(10), heldout: { pass: 8, total: 8, false_verified: 0 } }, after: { ...score(10), heldout: { pass: 6, total: 8, false_verified: 0 } } });
     expect((await current())?.version).toBe(before?.version);
   });
-  it("a bench without the held-out set can not accept a change: refused, nobody waits for it (D-647)", async () => {
+  it("a bench without the held-out set can not accept a change: refused, nobody waits for it (D-650)", async () => {
     for (let i = 0; i < 3; i++) await task("FAILED", ["D4:out_of_contract:vendorx/**"]);
     await evolveTick(db, { now: new Date() });
     const before = await current();

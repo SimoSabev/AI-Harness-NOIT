@@ -1,6 +1,6 @@
 begin;
 select plan(16);
--- D-647 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): Mandat applies a learned change by itself; a person
+-- D-650 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): Mandat applies a learned change by itself; a person
 -- sees it on the rules screen and reverts it with one button through private.revert_trial. The revert is a new approved
 -- version (origin learn_revert) and a profile_change row with who did it. Reverting a change that can weaken the verdict
 -- (flaky, allow) only narrows and needs no TOTP; reverting a narrowing widens, so it needs a fresh TOTP.

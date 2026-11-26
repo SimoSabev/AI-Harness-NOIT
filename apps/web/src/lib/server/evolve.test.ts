@@ -18,7 +18,7 @@ describe("profileTrials (D-530)", () => {
     await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile, status, bench, why, created_at) values ($1, $2, 'tests_kept||bugfix', $3::jsonb, $4::uuid, 'accepted', $5::jsonb, 'held', now() - interval '1 hour')", [DEMO_ORG_ID, DEMO_REPO_ID, JSON.stringify(manifest), p.rows[0]?.id, JSON.stringify({ before: { pass: 9, total: 10, false_verified: 0 }, after: { pass: 10, total: 10, false_verified: 0 } })]);
     await db.query("insert into public.profile_trials (org_id, repo_id, change_key, manifest, from_profile) values ($1, $2, 'bad', '{}'::jsonb, $3::uuid)", [DEMO_ORG_ID, DEMO_REPO_ID, p.rows[0]?.id]);
     const v = await profileTrials(db, U.viewer, DEMO_ORG_ID);
-    // E9д (D-645): a trial from before E9д has no rule name; D-647: it does not weaken; its change is not in the current profile
+    // E9д (D-645): a trial from before E9д has no rule name; D-650: it does not weaken; its change is not in the current profile
     expect(v[DEMO_REPO_ID]).toEqual([{ id: expect.any(String), status: "accepted", manifest, bench: { before: { pass: 9, total: 10, false_verified: 0 }, after: { pass: 10, total: 10, false_verified: 0 } }, why: "held", source: null, weakens: false, revertable: false }]);
   });
 });

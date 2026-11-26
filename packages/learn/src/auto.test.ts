@@ -5,7 +5,7 @@ import { applyChange } from "@mandat/profile";
 import { gateDecision, keepsHardRules, undoChange, watchDecision, weakens } from "./auto.js";
 import type { BenchScore, WatchRow } from "./auto.js";
 
-// D-647 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): a learned proposal applies itself after the bench
+// D-650 (Simo 26.11.2026, „за ученето да е автоматично, а не ръчно“): a learned proposal applies itself after the bench
 // gate, without a person; one that can weaken the verdict (a flaky test, an allowed tool) is also watched and rolls
 // itself back when the failures or the model regressions get worse. The hard rules of AGENTS.md stay.
 const base = (): Layers => {

@@ -11,7 +11,7 @@ import type { Db } from "./sql";
 // D-530: the trials of profile evolution per project, for the projects page; a row whose manifest does not read
 // through the contract is left out (never shown half-understood).
 // E9e (D-645): each proposal shows the rule that made it (`rule:<name>`); the regression cards are read alongside.
-// D-647 (Simo 26.11.2026): nobody approves a learned proposal — the worker's bench gate applies it. Here a person sees
+// D-650 (Simo 26.11.2026): nobody approves a learned proposal — the worker's bench gate applies it. Here a person sees
 // what was applied (`weakens`: a flaky test or an allowed tool, watched for regressions) and reverts it with one button
 // (`revertable`: applied and still in the current profile).
 export interface TrialView {
@@ -59,7 +59,7 @@ const err = (status: number, error: string): Result => ({ status, body: { error 
 const pgCode = (e: unknown) => (typeof e === "object" && e !== null && "code" in e ? String((e as { code: unknown }).code) : undefined);
 
 /**
- * A person approves (a new version through private.decide_trial, with a fresh TOTP) or refuses a proposal. D-647: only a
+ * A person approves (a new version through private.decide_trial, with a fresh TOTP) or refuses a proposal. D-650: only a
  * D-553 removal trial waits for a person; a learned proposal (with a rule's name) applies itself after the bench.
  */
 export async function decideTrial(db: Db, o: { uid: string; trialId: string; body: z.infer<typeof TrialDecisionBody>; secondFactor: SecondFactor }): Promise<Result> {
@@ -99,7 +99,7 @@ export async function decideTrial(db: Db, o: { uid: string; trialId: string; bod
 export const TrialRevertBody = z.object({ factor_id: z.string().max(100).optional(), code: z.string().regex(/^\d{6}$/).optional() }).strict();
 
 /**
- * D-647: the Revert button — a person reverts a change Mandat applied (approve.rules). The layers go back to what the change replaced,
+ * D-650: the Revert button — a person reverts a change Mandat applied (approve.rules). The layers go back to what the change replaced,
  * keeping what came after (undoChange); the database checks that only the change's layer differs. Reverting a flaky
  * test or an allowed tool only narrows: no code. Reverting a narrowing widens again: a fresh TOTP.
  */
