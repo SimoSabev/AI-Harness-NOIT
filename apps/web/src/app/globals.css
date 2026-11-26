@@ -64,3 +64,8 @@ body {
 .rise { animation: rise .35s ease-out both; }
 .sweep { position: relative; overflow: hidden; }
 .sweep::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent) 22%, transparent), transparent); animation: sweep 2.6s ease-in-out infinite; }
+
+/* D-621: where the chat box sits at the bottom and the window is not wide enough for both, Nova waits above it */
+@media (max-width: 1535px) {
+  body:has([data-composer]:not(.hidden)) .nova-dock { bottom: 8.5rem; }
+}

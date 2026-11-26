@@ -7,6 +7,7 @@ import type { Page } from "../lib/nav";
 import type { Health } from "../lib/overview";
 import { accountMenu } from "../lib/server/account/menu";
 import { authMode } from "../lib/server/auth";
+import { Tip } from "./ui";
 
 // D-305, D-384: the frame of every page — a side bar with four sections (tasks, projects, memory, settings; D-403). A new task
 // starts from the box on the tasks page, so the frame has no second "+ New task". On a phone the bar is a row of links.
@@ -30,40 +31,52 @@ export async function Shell({ current, waiting, wide = false, full = false, chil
   const t = await getT();
   const active = navActive(current);
   const account = authMode() === "local" ? await accountMenu() : "off";
-  // D-600: the bar is icons only — the conversations are the column next to it; each place keeps its name as a tooltip
+  // D-600: the bar is icons only — the conversations are the column next to it. D-622: each icon has the brand's tooltip
+  // (its name, what lives there, and for tasks how many wait) instead of the browser's slow title
   const nav = (n: (typeof NAV)[number]) => (
-    <Link key={n.id} href={n.href} aria-current={active === n.id ? "page" : undefined} title={t(n.label)}
+    <Tip key={n.id} side="rail" label={t(n.label)} hint={n.id === "tasks" && waiting ? `${t(`nav.tip.${n.id}`)} · ${t("nav.tip.waiting", { n: waiting })}` : t(`nav.tip.${n.id}`)}>
+    <Link href={n.href} aria-current={active === n.id ? "page" : undefined}
       className="relative flex size-11 shrink-0 items-center justify-center rounded-[10px] text-mute transition hover:bg-raised hover:text-ink aria-[current=page]:bg-raised aria-[current=page]:text-accent-text">
       <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d={ICON[n.id]} /></svg>
       <span className="sr-only">{t(n.label)}</span>
       {n.id === "tasks" && waiting !== null && waiting > 0 && <span className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-warn px-1 text-center font-mono text-[10px] leading-4 text-canvas" aria-label={t.n("inbox.waitingYou", waiting)}>{waiting}</span>}
+      {active === n.id && <span aria-hidden="true" className="absolute -left-[11px] top-1/2 hidden h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-accent lg:block" />}
     </Link>
+    </Tip>
   );
   return (
     <>
       <a className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-panel focus:px-3 focus:py-2" href="#main">{t("shell.skip")}</a>
       <div className="flex min-h-screen flex-col lg:flex-row">
         {waiting !== null && (
-          <aside className="border-b border-line bg-panel lg:sticky lg:top-0 lg:h-screen lg:w-[68px] lg:shrink-0 lg:border-b-0 lg:border-r">
+          <aside className="relative z-40 border-b border-line bg-panel lg:sticky lg:top-0 lg:h-screen lg:w-[68px] lg:shrink-0 lg:border-b-0 lg:border-r">
             <div className="flex h-full items-center gap-1 px-2 py-2 lg:flex-col lg:px-0 lg:py-3">
-              <Link href="/" title={HARNESS} className="flex size-11 shrink-0 items-center justify-center">
-                <span aria-hidden="true" className="logo-mark inline-block size-7" />
-                <span className="sr-only">{HARNESS || t("shell.home")}</span>
-              </Link>
+              <Tip side="rail" label={HARNESS || t("nav.tip.home")}>
+                <Link href="/" className="flex size-11 shrink-0 items-center justify-center">
+                  <span aria-hidden="true" className="logo-mark inline-block size-7" />
+                  <span className="sr-only">{HARNESS || t("shell.home")}</span>
+                </Link>
+              </Tip>
               <nav aria-label={t("nav.main")} className="flex gap-1 overflow-x-auto lg:mt-3 lg:flex-col lg:items-center lg:overflow-visible">{NAV.map(nav)}</nav>
               {authMode() === "local" && (
                 // D-498: the optional sign-in; the label says whether this computer is signed in
-                <Link href="/settings/account" title={t(account === "signed_in" ? "account.menuSignedIn" : "account.menu")} className="mt-auto hidden size-11 items-center justify-center rounded-[10px] text-mute hover:bg-raised hover:text-ink lg:flex">
+                <span className="mt-auto hidden lg:block">
+                <Tip label={t("nav.tip.account")} hint={t(account === "signed_in" ? "account.menuSignedIn" : "account.menu")}>
+                <Link href="/settings/account" className="flex size-11 items-center justify-center rounded-[10px] text-mute hover:bg-raised hover:text-ink">
                   <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" /></svg>
                   <span className="sr-only">{t(account === "signed_in" ? "account.menuSignedIn" : "account.menu")}</span>
                 </Link>
+                </Tip>
+                </span>
               )}
               {authMode() !== "local" && (
                 <form action="/api/auth/logout" method="post" className="mt-auto hidden lg:block">
-                  <button className="flex size-11 items-center justify-center rounded-[10px] text-mute hover:bg-raised hover:text-ink" type="submit" title={t("shell.logout")}>
+                  <Tip label={t("shell.logout")}>
+                  <button className="flex size-11 items-center justify-center rounded-[10px] text-mute hover:bg-raised hover:text-ink" type="submit">
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" /></svg>
                     <span className="sr-only">{t("shell.logout")}</span>
                   </button>
+                  </Tip>
                 </form>
               )}
             </div>

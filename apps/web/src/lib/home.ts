@@ -1,4 +1,6 @@
 import type { Key, Params } from "../i18n/t";
+import type { Tone } from "./status";
+import { groupTasks } from "./task-groups";
 
 // D-600: the start is one conversation with Harnova, pure: the numbers on top and the first message with buttons as
 // answers. A project without an approved brief comes first (no task starts on it before its interview), then what
@@ -22,4 +24,16 @@ export function homeBrief(o: { waiting: number; running: number; projects: HomeP
   }
   if (o.waiting > 0) return { stats, say: { key: "home.say.waiting", params: { n: o.waiting } }, actions: waitingAct };
   return { stats, say: { key: "home.say.calm", params: { n: o.running } }, actions: [] };
+}
+
+/** D-619: the dashboard on top of the start — the counts of the list's own groups (so the numbers match the side bar)
+ * and the first rows of what waits for the person and of what runs */
+export const QUEUE_WAITING = 4;
+export const QUEUE_RUNNING = 3;
+export interface HomeQueue<T> { counts: { waiting: number; running: number; done: number }; waiting: T[]; running: T[] }
+export function homeQueue<T extends { tone: Tone }>(tasks: readonly T[]): HomeQueue<T> {
+  const g = Object.fromEntries(groupTasks(tasks).map((x) => [x.id, x.items])) as Partial<Record<"waiting" | "running" | "done", T[]>>;
+  const waiting = g.waiting ?? [];
+  const running = g.running ?? [];
+  return { counts: { waiting: waiting.length, running: running.length, done: g.done?.length ?? 0 }, waiting: waiting.slice(0, QUEUE_WAITING), running: running.slice(0, QUEUE_RUNNING) };
 }

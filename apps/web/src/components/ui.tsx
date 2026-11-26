@@ -60,3 +60,22 @@ export function CheckMark({ status, t }: { status: string; t: T }) {
     </span>
   );
 }
+
+/** D-622: a tooltip of the brand — the name, an optional line under it and a key; it shows on hover and on keyboard
+ * focus after a short pause, beside a vertical rail (side "right") or under a row (side "bottom", the phone's bar).
+ * Screen readers get the name from the control itself, so the tip is aria-hidden. */
+export function Tip({ label, hint, keys, side = "right", children }: { label: string; hint?: string | undefined; keys?: string | undefined; side?: "right" | "bottom" | "rail"; children: React.ReactNode }) {
+  const at = side === "right" ? "left-full top-1/2 ml-3 -translate-y-1/2" : side === "bottom" ? "left-1/2 top-full mt-2 -translate-x-1/2" : "left-1/2 top-full mt-2 -translate-x-1/2 lg:left-full lg:top-1/2 lg:ml-3 lg:mt-0 lg:translate-x-0 lg:-translate-y-1/2";
+  return (
+    <span className="group/tip relative inline-flex">
+      {children}
+      <span aria-hidden="true" className={`tip pointer-events-none absolute z-50 w-max max-w-[16rem] rounded-[9px] border border-line-strong bg-raised px-2.5 py-1.5 text-left opacity-0 shadow-[0_8px_24px_rgb(0_0_0/0.35)] transition-[opacity,translate] duration-150 group-hover/tip:opacity-100 group-hover/tip:delay-300 group-has-[:focus-visible]/tip:opacity-100 ${at}`}>
+        <span className="flex items-center gap-2 text-[13px] font-medium text-ink">
+          {label}
+          {keys && <kbd className="rounded border border-line bg-panel px-1 font-mono text-[10.5px] text-mute">{keys}</kbd>}
+        </span>
+        {hint && <span className="block text-xs leading-snug text-mute">{hint}</span>}
+      </span>
+    </span>
+  );
+}
