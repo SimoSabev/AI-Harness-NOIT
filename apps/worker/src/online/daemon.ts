@@ -6,7 +6,7 @@ import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } fr
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
 import { FAKE_CODEX_SCENARIOS } from "@mandat/agents";
-import type { LadderState } from "@mandat/core";
+import type { LadderInput, LadderState, LadderStepResult } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import { drift } from "@mandat/onboard";
 import { forbidAtNight } from "@mandat/profile";
@@ -773,16 +773,21 @@ export async function finishOutcome(d: Pick<DaemonDeps, "db" | "broadcast">, t: 
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "delivered", task_id: t.id, payload: { pr: prNumber, merge_sha: mergeSha } });
     await tx.query("insert into public.outcomes (org_id, changeset_id, result, window_minutes, tree_match) values ($1::uuid, $2::uuid, $3, $4, null)", [t.org_id, changesetId, result, t.is_demo ? 0 : 7 * 24 * 60]);
     await appendLedgerOnline(tx, { org_id: t.org_id, kind: "outcome", task_id: t.id, payload: { result, window_minutes: t.is_demo ? 0 : 10080 } });
-    await tx.query(
-      `insert into public.ladder_state (org_id, repo_id, task_type, agent, level, s_up, s_down, pinned) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
-         on conflict (repo_id, task_type, agent) do update set level = excluded.level, s_up = excluded.s_up, s_down = excluded.s_down, pinned = excluded.pinned, updated_at = now()`,
-      [t.org_id, t.repo_id, t.type, t.agent, step.next.level, step.next.s_up, step.next.s_down, step.next.pinned],
-    );
-    await tx.query("insert into public.ladder_events (org_id, repo_id, task_type, agent, input, level_before, level_after, s_up, s_down, task_id) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10)", [t.org_id, t.repo_id, t.type, t.agent, result, ladder.level, step.next.level, step.next.s_up, step.next.s_down, t.id]);
-    if (step.delta !== 0) await appendLedgerOnline(tx, { org_id: t.org_id, kind: "ladder_change", task_id: t.id, payload: { agent: t.agent, task_type: t.type, from: ladder.level, to: step.next.level } });
+    await writeLadderStep(tx, t, ladder, step, result);
     return setState(tx, t as TaskRow, "CLOSED", { outcome_decided: true, effective_level: step.next.level });
   });
   await d.broadcast?.(`org:${t.org_id}:board`, "task", { task_id: t.id, seq, state: "CLOSED", level: step.next.level }).catch(() => undefined);
+}
+
+/** The ladder side of an outcome (state, event, ledger row on a level change); shared by OUTCOME and a revert (D-660). */
+export async function writeLadderStep(tx: SqlClient, t: { id: string; org_id: string; repo_id: string; type: string; agent: string }, ladder: LadderState, step: LadderStepResult, input: LadderInput): Promise<void> {
+  await tx.query(
+    `insert into public.ladder_state (org_id, repo_id, task_type, agent, level, s_up, s_down, pinned) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
+       on conflict (repo_id, task_type, agent) do update set level = excluded.level, s_up = excluded.s_up, s_down = excluded.s_down, pinned = excluded.pinned, updated_at = now()`,
+    [t.org_id, t.repo_id, t.type, t.agent, step.next.level, step.next.s_up, step.next.s_down, step.next.pinned],
+  );
+  await tx.query("insert into public.ladder_events (org_id, repo_id, task_type, agent, input, level_before, level_after, s_up, s_down, task_id) values ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9, $10)", [t.org_id, t.repo_id, t.type, t.agent, input, ladder.level, step.next.level, step.next.s_up, step.next.s_down, t.id]);
+  if (step.delta !== 0) await appendLedgerOnline(tx, { org_id: t.org_id, kind: "ladder_change", task_id: t.id, payload: { agent: t.agent, task_type: t.type, from: ladder.level, to: step.next.level } });
 }
 
 /** Supabase Realtime REST broadcast (private channel; service role only in the worker). */

@@ -4,7 +4,7 @@ import { runBench } from "@mandat/bench";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { BenchRunner, EvolveTick, JobTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
+import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, observerRecorder, openDb, selfFinishTick, startWebhookServer, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { profilePrintExec, researchDeps, researchLoop } from "./research.js";
@@ -180,6 +180,15 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
     return j !== null && typeof j === "object" ? Object.fromEntries(Object.entries(j).filter((e): e is [string, string] => typeof e[1] === "string")) : {};
   };
   if (slots > 1) io.stderr(`mandat worker: ${slots} задачи едновременно\n`);
+  // E9f (D-660, D-215): the Observer App's webhook (push) → sync_events → the revert observer; only with its secret, never with --once
+  const hookSecret = env.GITHUB_OBSERVER_WEBHOOK_SECRET ?? "";
+  const hooks = hookSecret !== "" && !o.once
+    ? await startWebhookServer(
+        { secrets: { observer: hookSecret, writer: null }, record: observerRecorder({ db, ...(broadcast ? { broadcast } : {}), log: (l) => io.stderr(`${l}\n`) }), security: (k, d) => io.stderr(`[webhook] ${k} (${d.app ?? "?"})\n`) },
+        { host: env.MANDAT_WEBHOOK_HOST ?? "127.0.0.1", port: Number(env.MANDAT_WEBHOOK_PORT ?? 8790) },
+      )
+    : null;
+  if (hooks) io.stderr("mandat worker: Observer webhook on\n");
   // E9а (v5 5.1): the night shift ticks every 30 s; its tasks are normal tasks the slots claim
   const night = nightTicker({ now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => nightShiftTick(db, { now: new Date(), slots: slotsFrom(env.MANDAT_NIGHT_SLOTS, Math.max(1, slots)), agent: env.MANDAT_NIGHT_AGENT ?? "claude" }) });
   const self = selfTicker({ env, now: () => Date.now(), log: (l) => io.stderr(`${l}\n`), tick: () => selfFinishTick(db, { now: new Date() }) });
@@ -246,6 +255,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
     await chat;
     return 0;
   } finally {
+    await new Promise<void>((r) => (hooks ? hooks.close(() => r()) : r()));
     await db.end();
   }
 }

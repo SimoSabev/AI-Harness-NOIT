@@ -16,6 +16,8 @@ export { DEMO_CHANNELS, DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, DEMO_USERS, LO
 export type { DemoSecrets } from "./online/seed.js";
 export { startWebhookServer, webhookHandler } from "./online/webhook.js";
 export type { WebhookDeps } from "./online/webhook.js";
+export { observePush } from "./online/revert.js";
+export { observerRecorder } from "./online/observer.js";
 export { broadcasterFromEnv, contractForTask, finishOutcome, isProcessing, processTask, realtimeBroadcaster, runDaemonOnce } from "./online/daemon.js";
 export type { DaemonDeps } from "./online/daemon.js";
 export { deliverHarnessPr, drainHarnessOutbox, harnessHandlers, scanForProposal } from "./online/harness.js";
