@@ -13,7 +13,6 @@ import { GROUP_LABEL, cleanTitle, groupTasks } from "../lib/task-groups";
 import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
-import { taskTypeFor } from "../lib/agents";
 import { NEW_PROJECT, boxRepo, projectChoices, sendsOnEnter, withAdded } from "../lib/chat";
 import { AddProject } from "./local-access";
 import type { AddedProject } from "./add-project-form";
@@ -26,7 +25,6 @@ import { composerHeight } from "../lib/side-pane";
 /** D-619: the start — Harnova's line and the dashboard of the list */
 export type HomeView = HomeBrief & { queue: HomeQueue<WsTask> };
 
-type TaskMode = "ask_first" | "work_now";
 
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
@@ -94,7 +92,7 @@ const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.w
 const ENDED = ["budget", "expired"];
 const PARKED = "harnova.parkedTask";
 
-export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", taskMode = "ask_first", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
+export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -122,7 +120,6 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<TaskMode>(taskMode);
   /** D-611: the questions the person put off ("Later") — the seq of the asking turn */
   const [later, setLater] = useState<number | null>(null);
   const { chat, follow, reset } = useConversation(initialChat);
@@ -134,18 +131,11 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
     el.style.height = "0px";
     el.style.height = `${composerHeight(el.scrollHeight, Math.round(window.innerHeight * 0.4))}px`;
   }, [text]);
-  const asking = mode === "ask_first";
   const answering = chat !== null && isAnswering(chat.row.status);
   const pick = model && current?.models.includes(model) ? { model } : {};
   const fail = (r: { status: number; body: Record<string, unknown> }) => {
     setBusy(false);
     setError(errorText(t, r, CHAT_ERRORS, t("newTask.failed", { status: r.status })));
-  };
-  const pickMode = (m: TaskMode) => {
-    setMode(m);
-    setError(null);
-    // remembered by `mandat local`; elsewhere the choice lasts for this page
-    void postJson("/api/preferences", { taskMode: m }, "PUT").catch(() => undefined);
   };
   // D-600: no task on a project before its interview — the server refuses, and the interview opens here by itself; the
   // task waits (kept for this tab) and comes back to the box once the pop-up closes
@@ -160,12 +150,6 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
     window.history.replaceState(null, "", `/?chat=${i.body.id}`);
     follow(i.body.id);
     return true;
-  };
-  const workNow = async () => {
-    const r = await postJson("/api/tasks", { text: text.trim(), type: taskTypeFor(agent), agent, ...pick, ...(repo ? { repo } : {}) });
-    if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
-    if (await interviewFirst(r, text.trim())) return;
-    fail(r);
   };
   const send = async (said: string = text.trim()) => {
     const open = chat !== null && !ENDED.includes(chat.row.status) ? chat.row.id : undefined;
@@ -204,11 +188,8 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
   }, [initialChat, initialText]);
   const startWork = async () => {
     setError(null);
-    if (!chat) {
-      if (text.trim() === "") return setError(t("ws.ask"));
-      setBusy(true);
-      return workNow();
-    }
+    // D-630: work starts only from a conversation (its goal and tests are agreed there first)
+    if (!chat) return;
     setBusy(true);
     const r = await postJson(`/api/conversations/${chat.row.id}/start`, {});
     if (r.status === 201 && typeof r.body.id === "string") return router.push(`/?task=${r.body.id}`);
@@ -268,24 +249,13 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
     if (text.trim() === "") return setError(t("ws.ask"));
     setBusy(true);
     setError(null);
-    return asking ? send() : workNow();
+    return send();
   };
   if (!canAct) return <p className="m-auto text-sm text-mute">{t("newTask.onlyApprovers")}</p>;
   // A conversation needs no project (D-531): "hi" works on a fresh install. Work does.
   const cannotTalk = busy || answering || agents.length === 0;
   const blocked = cannotTalk || repo === "";
-  const sendBlocked = asking ? cannotTalk : blocked;
-  const modes = (
-    <div role="group" aria-label={t("chat.mode")} className="inline-flex rounded-full border border-line bg-canvas p-0.5 text-xs">
-      {(["ask_first", "work_now"] as const).map((m) => (
-        <button key={m} type="button" aria-pressed={mode === m} onClick={() => pickMode(m)}
-          className="rounded-full px-2.5 py-1 font-medium text-mute transition hover:text-ink aria-pressed:bg-raised aria-pressed:text-ink">
-          {t(m === "ask_first" ? "chat.askFirst" : "chat.workNow")}
-        </button>
-      ))}
-    </div>
-  );
-  const thread = asking && chat !== null;
+  const thread = chat !== null;
   // D-599: the interview of a whole project is a sheet over the app, the brief written live beside the conversation
   const interview = thread && chat.row.purpose === "project";
   // D-600: in the interview, the open questions are cards; the box comes back when nothing is asked
@@ -319,7 +289,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
           {home ? <HomeDashboard home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-10">
               <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
-              <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
+              <p className="text-center text-sm text-mute">{t("chat.askFirstHint")}</p>
             </div>
           )}
         </div>
@@ -331,11 +301,10 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
           the model and the project are small chips in its bar, the send button is round */}
       <div data-composer className={`sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-canvas pb-3 ${questions ? "hidden" : ""}`}>
         <div className="rounded-[18px] border border-line-strong bg-panel shadow-[0_10px_30px_rgb(0_0_0/0.22)] transition focus-within:border-accent/60 focus-within:shadow-[0_0_0_3px_var(--accent-soft),0_10px_30px_rgb(0_0_0/0.22)]">
-          <textarea ref={box} data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={1} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
+          <textarea ref={box} data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={1} maxLength={4000} aria-label={t("newTask.what")} placeholder={t("chat.placeholder")} autoFocus
             onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
             className="block max-h-[40vh] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-faint" />
           <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-1">
-            {!interview && modes}
             {agents.length > 1 ? (
               <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.limitedUntil ? `${a.label} · ${t("agent.limited", { when: whenShort(a.limitedUntil, t.lang) })}` : a.label }))} />
             ) : agents[0] ? (
@@ -354,9 +323,9 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
                 options={projectChoices(projects, { none: t("newTask.noProject"), add: t("newTask.newProject") })} />
             )}
             <span className="ml-auto flex items-center gap-1.5">
-              {asking && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
-              <Tip side="bottom" label={busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")} hint={t("composer.keys")}>
-                <button type="submit" disabled={sendBlocked || text.trim() === ""} aria-label={busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")}
+              {thread && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
+              <Tip side="bottom" label={busy ? t("chat.sending") : t("chat.send")} hint={t("composer.keys")}>
+                <button type="submit" disabled={cannotTalk || text.trim() === ""} aria-label={busy ? t("chat.sending") : t("chat.send")}
                   className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-[inset_0_-2px_0_rgb(0_0_0/0.18)] transition hover:brightness-110 disabled:bg-raised disabled:text-faint disabled:shadow-none">
                   {busy ? <span aria-hidden="true" className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : (
                     <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>

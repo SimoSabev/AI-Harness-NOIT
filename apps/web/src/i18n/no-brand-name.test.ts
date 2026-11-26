@@ -22,7 +22,7 @@ describe("the product's name on the screens (D-524, D-596)", () => {
     expect(bg["voice.talk"]).toBe("Говори с Nova");
   });
   it("the task box example and the first-task hint are not about the demo", () => {
-    for (const k of ["ws.placeholder", "home.emptyHint", "research.form.noModels"] as const) {
+    for (const k of ["chat.placeholder", "home.emptyHint", "research.form.noModels"] as const) {
       expect(en[k], k).not.toMatch(/demo|10%|discount/i);
       expect(bg[k], k).not.toMatch(/демо|10%|отстъпка/i);
     }

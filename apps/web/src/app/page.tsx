@@ -61,13 +61,11 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
   let preferredModel: string | null = null;
-  let taskMode: "ask_first" | "work_now" = "ask_first";
   if (!initial) {
     // D-612: which accounts are out of their subscription limit, so the box and the conversation say it
     const v = await agentsView(t.lang, process.env, await accountLimits(db(), c.org));
     if (v.local && v.agents.length === 0 && !v.prefs.onboarded) redirect("/welcome");
     agents = v.agents;
-    taskMode = v.prefs.taskMode;
     preferredModel = v.prefs.defaultAgent === agents[0]?.id ? v.prefs.defaultModel : null;
   }
   // D-628: a task its subscription's limit holds can go on now with an account that is not in its own limit
@@ -91,7 +89,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} switchTo={switchTo} />
           ) : (
-            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} taskMode={taskMode} initialChat={showChat(chat)} home={home} />
+            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} initialChat={showChat(chat)} home={home} />
           )}
         </div>
       </div>
