@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { claimNext, findConflicts, recordConflicts } from "./coordination.js";
+import { claimNext, findConflicts, liveTouches, recordConflicts } from "./coordination.js";
 
 // E8f (v5 p. 4.6, AC-4.2, D-355): two live tasks of one repo touching one file → a conflict (card, activity, security event);
 // with same_file "wait" the task that started later is the one that waits. The WIP limit and the wait are in the claim.
@@ -49,5 +49,23 @@ describe("claim with the WIP limit and waits (AC-4.2)", () => {
     await recordConflicts(db, { org: DEMO_ORG_ID, taskId: "t_second", conflicts: c });
     expect((await db.query("select kind, text from public.task_activities where task_id = 't_second'")).rows).toEqual([{ kind: "conflict", text: "src/cart.ts · t_first" }]);
     expect((await db.query<{ n: number }>("select count(*)::int as n from public.security_events where kind = 'conflict_file'")).rows[0]?.n).toBe(1);
+  });
+});
+
+// D-610 (live test 26.11, run 9): M4's single-agent arm works in its own copy and is never delivered (D-575); a same-file
+// "conflict" with the job's units stopped it at attempt 1 and a unit's rescue try, each burning an attempt to wait
+describe("the single-agent arm and the job's units never wait for each other (D-610)", () => {
+  it("a compare task is no live touch of another task, and a compare task sees none", async () => {
+    await db.query("update public.tasks set state = 'CLOSED' where state <> 'CLOSED'");
+    await task("t_unit", "RUNNING");
+    await task("t_cmp", "RUNNING");
+    await db.query("update public.tasks set kind = 'compare' where id = 't_cmp'");
+    for (const [sid, tid] of [["s_unit", "t_unit"], ["s_cmp", "t_cmp"]]) {
+      await db.query("insert into public.agent_sessions (id, org_id, task_id, agent, model, role, state, touching) values ($1, $2, $3, 'fake', 'fake', 'lead', 'running', '{src/loyalty/points.ts}')", [sid, DEMO_ORG_ID, tid]);
+    }
+    expect((await liveTouches(db, { repoId: DEMO_REPO_ID, except: "t_unit" })).map((t) => t.task_id)).toEqual([]);
+    expect(await liveTouches(db, { repoId: DEMO_REPO_ID, except: "t_cmp" })).toEqual([]);
+    await task("t_other", "RUNNING");
+    expect((await liveTouches(db, { repoId: DEMO_REPO_ID, except: "t_other" })).map((t) => t.task_id)).toEqual(["t_unit"]);
   });
 });

@@ -48,12 +48,16 @@ export async function claimNext(db: Db): Promise<string | null> {
   }
 }
 
-/** The other live tasks of the repo with the files their sessions touch (agent_sessions.touching). */
+/** The other live tasks of the repo with the files their sessions touch (agent_sessions.touching).
+ *  D-610: M4's single-agent arm (kind compare) works in its own copy and is never delivered (D-575): it neither waits for
+ *  the job's units nor makes them wait. */
 export async function liveTouches(db: SqlClient, o: { repoId: string; except: string }): Promise<Touch[]> {
   const r = await db.query<{ task_id: string; started_at: string; files: string[] }>(
     `select t.id as task_id, to_char(t.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as started_at,
             coalesce((select array_agg(distinct f) from public.agent_sessions s, unnest(s.touching) f where s.task_id = t.id and s.state = 'running'), '{}') as files
-       from public.tasks t where t.repo_id = $1::uuid and t.id <> $2 and t.state in ${LIVE}`,
+       from public.tasks t where t.repo_id = $1::uuid and t.id <> $2 and t.state in ${LIVE}
+        and t.kind is distinct from 'compare'
+        and not exists (select 1 from public.tasks m where m.id = $2 and m.kind = 'compare')`,
     [o.repoId, o.except],
   );
   return r.rows;
