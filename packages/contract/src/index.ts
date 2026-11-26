@@ -34,6 +34,7 @@ export * from "./subscriptions.js";
 export * from "./agent-cli.js";
 export * from "./twin.js";
 export * from "./evolve.js";
+export * from "./learn.js";
 export * from "./conversation.js";
 export * from "./project-brief.js";
 export * from "./task-profile.js";
