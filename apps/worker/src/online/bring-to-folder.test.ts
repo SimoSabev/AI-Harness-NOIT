@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BringReply } from "@mandat/contract";
 import { bringToFolder } from "./bring-to-folder.js";
+import { cleanGit } from "@mandat/export";
+import { snapshotFolder } from "./folder-snapshot.js";
 
 // D-540: "Bring into my folder" with temp git repos (no Docker): the person's folder moves only by a fast-forward, only
 // when it is the project's source folder, on the delivered branch, clean, and not diverged. Otherwise nothing changes.
@@ -115,5 +117,93 @@ describe("bringToFolder (D-540)", () => {
     const s = setup();
     rmSync(path.join(s.folder, ".git"), { recursive: true, force: true });
     expect(await bring(s)).toMatchObject({ ok: false, reason: "not_a_repo" });
+  });
+});
+
+// D-636 (Simo 26.11.2026): "Bring into my folder" for a project added from a folder without git (D-635). The mirror
+// remembers the commit the folder last matched (`mandat.synced`); the bring writes only what the job changed, and only
+// when the folder's files are still exactly that commit (nothing the person changed is overwritten). No .git appears.
+async function setupPlain() {
+  const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "mandat-bring-plain-")));
+  dirs.push(root);
+  const home = path.join(root, "home");
+  const folder = path.join(root, "notes");
+  mkdirSync(path.join(home, "projects"), { recursive: true });
+  mkdirSync(path.join(folder, "src"), { recursive: true });
+  writeFileSync(path.join(folder, "a.txt"), "one\n");
+  writeFileSync(path.join(folder, "old.txt"), "bye\n");
+  writeFileSync(path.join(folder, "src", "keep.js"), "k\n");
+  mkdirSync(path.join(folder, "node_modules"));
+  writeFileSync(path.join(folder, "node_modules", "dep.js"), "dep\n");
+  const tmp = mkdtempSync(path.join(root, "t-"));
+  const snap = await snapshotFolder(cleanGit({ tmpHome: tmp }), folder, tmp);
+  const mirror = path.join(home, "projects", "notes.git");
+  git(root, "clone", "-q", "--bare", snap.from, mirror);
+  git(mirror, "config", "mandat.source", folder);
+  git(mirror, "config", "mandat.synced", snap.sha);
+  const w = path.join(root, "w");
+  git(root, "clone", "-q", mirror, w);
+  writeFileSync(path.join(w, "a.txt"), "one\ntwo\n");
+  mkdirSync(path.join(w, "src", "new"), { recursive: true });
+  writeFileSync(path.join(w, "src", "new", "b.txt"), "new\n");
+  writeFileSync(path.join(w, "run.sh"), "#!/bin/sh\necho hi\n");
+  execFileSync("chmod", ["+x", path.join(w, "run.sh")]);
+  git(w, "rm", "-q", "old.txt");
+  git(w, "add", "-A");
+  git(w, "commit", "-q", "-m", "feat: the job");
+  git(w, "push", "-q", "origin", "HEAD:main");
+  return { root, home, folder, mirror, base: snap.sha, sha: git(mirror, "rev-parse", "main") };
+}
+
+describe("bring into a folder without git (D-636)", () => {
+  it("writes what the job changed and removes what it deleted; the rest and node_modules stay; no .git appears", async () => {
+    const s = await setupPlain();
+    const r = await bringToFolder({ home: s.home, mirror: s.mirror, sha: s.sha });
+    expect(BringReply.parse(r)).toEqual(r);
+    expect(r).toEqual({ ok: true, folder: s.folder, from: s.base, to: s.sha, files: 4 });
+    expect(readFileSync(path.join(s.folder, "a.txt"), "utf8")).toBe("one\ntwo\n");
+    expect(readFileSync(path.join(s.folder, "src", "new", "b.txt"), "utf8")).toBe("new\n");
+    expect(statSync(path.join(s.folder, "run.sh")).mode & 0o111).not.toBe(0);
+    expect(existsSync(path.join(s.folder, "old.txt"))).toBe(false);
+    expect(readFileSync(path.join(s.folder, "src", "keep.js"), "utf8")).toBe("k\n");
+    expect(readFileSync(path.join(s.folder, "node_modules", "dep.js"), "utf8")).toBe("dep\n");
+    expect(existsSync(path.join(s.folder, ".git"))).toBe(false);
+    expect(git(s.mirror, "config", "--get", "mandat.synced")).toBe(s.sha);
+    // again: already there
+    expect(await bringToFolder({ home: s.home, mirror: s.mirror, sha: s.sha })).toEqual({ ok: true, folder: s.folder, from: s.sha, to: s.sha, files: 0 });
+  });
+  it("a file the person changed since → refused, nothing written", async () => {
+    const s = await setupPlain();
+    writeFileSync(path.join(s.folder, "a.txt"), "mine\n");
+    writeFileSync(path.join(s.folder, "extra.txt"), "x\n");
+    const r = await bringToFolder({ home: s.home, mirror: s.mirror, sha: s.sha });
+    expect(r).toMatchObject({ ok: false, reason: "dirty", folder: s.folder, detail: "2" });
+    expect(readFileSync(path.join(s.folder, "a.txt"), "utf8")).toBe("mine\n");
+    expect(existsSync(path.join(s.folder, "src", "new", "b.txt"))).toBe(false);
+    expect(existsSync(path.join(s.folder, "old.txt"))).toBe(true);
+    expect(git(s.mirror, "config", "--get", "mandat.synced")).toBe(s.base);
+  });
+  it("a path through a symlink that leaves the folder → refused, nothing written outside or inside", async () => {
+    const s = await setupPlain();
+    const outside = path.join(s.root, "outside");
+    mkdirSync(outside);
+    rmSync(path.join(s.folder, "node_modules"), { recursive: true, force: true });
+    execFileSync("ln", ["-s", outside, path.join(s.folder, "node_modules")]);
+    const w = path.join(s.root, "w");
+    git(w, "pull", "-q", "origin", "main");
+    mkdirSync(path.join(w, "node_modules"), { recursive: true });
+    writeFileSync(path.join(w, "node_modules", "evil.js"), "x\n");
+    git(w, "add", "-f", "node_modules/evil.js");
+    git(w, "commit", "-q", "-m", "sneaky");
+    git(w, "push", "-q", "origin", "HEAD:main");
+    const sha = git(s.mirror, "rev-parse", "main");
+    expect(await bringToFolder({ home: s.home, mirror: s.mirror, sha })).toMatchObject({ ok: false, reason: "refused", folder: s.folder });
+    expect(existsSync(path.join(outside, "evil.js"))).toBe(false);
+    expect(readFileSync(path.join(s.folder, "a.txt"), "utf8")).toBe("one\n");
+  });
+  it("a folder without git and without a remembered state is still not a repo", async () => {
+    const s = await setupPlain();
+    git(s.mirror, "config", "--unset", "mandat.synced");
+    expect(await bringToFolder({ home: s.home, mirror: s.mirror, sha: s.sha })).toMatchObject({ ok: false, reason: "not_a_repo" });
   });
 });

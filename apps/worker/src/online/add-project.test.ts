@@ -82,6 +82,9 @@ describe("a folder without git history (D-635)", () => {
     expect(r).toMatchObject({ ok: true, full_name: "local/plain-app", created: true });
     if (!r.ok) return;
     expect(files(await mirrorOf(r.repo_id))).toEqual([".gitignore", "README.md", "src/a.js"]);
+    // D-636: the mirror remembers the state the folder is in (the snapshot), for "Bring into my folder"
+    const m = await mirrorOf(r.repo_id);
+    expect(execFileSync("git", ["--git-dir", m, "config", "--get", "mandat.synced"], { env, encoding: "utf8" }).trim()).toBe(execFileSync("git", ["--git-dir", m, "rev-parse", "main"], { env, encoding: "utf8" }).trim());
     expect(ls(plain)).toEqual(before);
     expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: plain })).toEqual({ ...r, created: false });
   });

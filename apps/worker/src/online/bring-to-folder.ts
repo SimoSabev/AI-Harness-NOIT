@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { cleanGit } from "@mandat/export";
 import type { BringReply } from "@mandat/contract";
+import { bringPlain } from "./plain-bring.js";
 
 // D-540 (live test 18.11): after a job is merged, the change is only in Mandat's mirror. "Bring into my folder" — a
 // person's click, never the worker by itself — fast-forwards the project's own folder (the mirror's `mandat.source`,
@@ -44,7 +45,12 @@ export async function bringToFolder(o: { home: string; mirror: string; sha: stri
     if (main.code !== 0 || !SHA.test(main.out) || (await text(["merge-base", "--is-ancestor", o.sha, main.out], mirror)).code !== 0) return no("not_delivered", folder);
     // the folder is the top of a git repo
     const top = await text(["rev-parse", "--show-toplevel"], folder);
-    if (top.code !== 0 || real(top.out) !== folder) return no("not_a_repo", folder);
+    const gitTop = top.code === 0 && real(top.out) === folder;
+    // D-636: a project added from a folder without git history is brought by writing the job's files (plain-bring.ts)
+    const hasHead = gitTop && (await text(["rev-parse", "--verify", "--quiet", "HEAD^{commit}"], folder)).code === 0;
+    const synced = await text(["config", "--get", "mandat.synced"], mirror);
+    if (!hasHead && synced.code === 0 && SHA.test(synced.out)) return await bringPlain({ git, mirror, folder, tmp, synced: synced.out, main: main.out });
+    if (!gitTop) return no("not_a_repo", folder);
     // on the delivered branch (a detached HEAD is no branch)
     const current = await text(["symbolic-ref", "--quiet", "--short", "HEAD"], folder);
     if (current.code !== 0 || current.out !== branch) return no("other_branch", folder, current.code === 0 ? current.out.slice(0, 200) : "HEAD", `git -C ${q(folder)} switch ${branch}`);

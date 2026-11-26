@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { cleanGit } from "@mandat/export";
-import type { CleanGit } from "@mandat/export";
 import type { AddProjectReply } from "@mandat/contract";
 import type { SqlClient } from "@mandat/ledger";
+import { snapshotFolder } from "./folder-snapshot.js";
 import { enqueueOutbox } from "./pg-outbox.js";
 
 // D-388 (Q-061): "Add project" — a git folder on this computer becomes a project of the local org. Mandat keeps its own
@@ -18,24 +18,6 @@ import { enqueueOutbox } from "./pg-outbox.js";
 export function projectSlug(folder: string): string {
   const s = path.basename(folder).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[-.]+|-+$/g, "").slice(0, 60);
   return s || "project";
-}
-
-/** D-635: never in a snapshot (dependencies and Finder files); the folder's own .gitignore applies as well */
-const SNAPSHOT_EXCLUDE = ["node_modules/", ".DS_Store", "Thumbs.db"];
-const SNAPSHOT_ID = ["-c", "user.name=Harnova", "-c", "user.email=harnova@localhost", "-c", "commit.gpgsign=false"];
-
-/** D-635: one commit of the folder's files in a git dir under `tmp`; the folder is only read (it is the work tree) */
-async function snapshot(git: CleanGit, folder: string, tmp: string): Promise<{ from: string; sha: string }> {
-  const snap = path.join(tmp, "snapshot");
-  if ((await git.run(["init", "-q", "-b", "main", snap], { cwd: tmp })).code !== 0) throw new Error("git init failed");
-  const dotgit = path.join(snap, ".git");
-  writeFileSync(path.join(dotgit, "info", "exclude"), `${SNAPSHOT_EXCLUDE.join("\n")}\n`);
-  const at = ["--git-dir", dotgit, "--work-tree", folder];
-  if ((await git.run([...at, "add", "-A"], { cwd: tmp })).code !== 0) throw new Error("git add failed");
-  if ((await git.run([...SNAPSHOT_ID, ...at, "commit", "-q", "--allow-empty", "--no-verify", "-m", "Harnova: the folder as it was when it was added"], { cwd: tmp })).code !== 0) throw new Error("git commit failed");
-  const head = await git.run(["--git-dir", dotgit, "rev-parse", "HEAD"], { cwd: tmp });
-  if (head.code !== 0) throw new Error("no snapshot commit");
-  return { from: snap, sha: head.stdout.toString("utf8").trim() };
 }
 
 const real = (p: string): string | null => {
@@ -75,10 +57,12 @@ export async function addLocalProject(o: { db: SqlClient; home: string; org: str
     let name = base;
     for (let n = 2; taken.has(`local/${name}`) || existsSync(path.join(projects, `${name}.git`)); n++) name = `${base}-${n}`;
     // D-635: no history to clone → a snapshot of the folder's files is the first commit
-    const { from, sha } = head && head.code === 0 ? { from: source, sha: head.stdout.toString("utf8").trim() } : await snapshot(git, source, tmp);
+    const { from, sha } = head && head.code === 0 ? { from: source, sha: head.stdout.toString("utf8").trim() } : await snapshotFolder(git, source, tmp);
     mkdirSync(projects, { recursive: true });
     mirror = path.join(projects, `${name}.git`);
     const steps: string[][] = [["update-ref", "refs/heads/main", sha], ["symbolic-ref", "HEAD", "refs/heads/main"], ["config", "mandat.source", source]];
+    // D-636: a folder without history is in the snapshot's state; "Bring into my folder" starts from it
+    if (from !== source) steps.push(["config", "mandat.synced", sha]);
     if ((await git.run(["clone", "-q", "--bare", "--no-hardlinks", "--end-of-options", from, mirror], { cwd: tmp })).code !== 0) throw new Error("clone failed");
     for (const a of steps) if ((await git.run(a, { cwd: mirror })).code !== 0) throw new Error(`git ${a[0]} failed`);
 
