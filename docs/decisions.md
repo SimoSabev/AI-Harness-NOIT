@@ -5779,3 +5779,110 @@ channel_limit`, а агентът трябва да е в списъка на с
 Граница: празни папки, останали след изтриване, остават. Ако бъде прекъснато насред записа (диск, ток), част от файловете
 може да е записана, а `mandat.synced` да е старият. Следващото „Внеси“ тогава казва „dirty“, без да пише.
 Тестове: worker bring-to-folder.test.ts (+4), add-project.test.ts (+1). Статус: решено от Симо.
+
+## D-680 TestReport — един формат на отчета за всички тестови рамки (E10 езици, 26.11.2026)
+Решение: `packages/contract` има zod схема `TestReport` (`version: 1`, `tool`, `success`, `tests[]` с `file`, `suite[]`,
+`name`, `status`, `duration_ms?`) и чисти адаптери към нея: vitest/jest JSON и репортерът на node --test (същата форма
+като досега), pytest junit (xunit1), `go test -json`, libtest JSON. `parseReport(format, raw, ctx)` превръща всеки от тях
+в `ParsedReport` (картата id → статус), който D1, D2, D5, D11, D14 и MUST_PASS четат. `parseVitestReport` вече минава през
+същия път; тест доказва, че за двата записани vitest отчета картата, success и total са същите. id остава D-025:
+„<файл> > <suite…> > <име>“; за Go файлът е пакетът спрямо модула, за Rust — целта на cargo. Отчетът се разбира на
+хоста; за XML има собствен малък четец (`xml-lite.ts`): без DOCTYPE и ентитита, ограничена дълбочина, без зависимост.
+pytest пише един тест два пъти при грешка в teardown → по-лошият статус печели. Тест в Go/libtest, който е започнал и не
+е свършил (panic, timeout), е failed; провал на пакет или build → success=false.
+Факти за инструментите с линкове и дати: docs/spikes/LANGUAGES.md.
+Защо: т. 6.3 — детекторите да работят върху общ формат; така нов език е само адаптер.
+Тестове: contract test-report.test.ts (15), xml-lite.test.ts (4), core detectors-languages.test.ts (4). Статус: решено.
+
+## D-681 Python: pytest junit с file= (xunit1); образът носи Python 3.11 и прикован pytest (26.11.2026)
+Решение: командата е `python3 -m pytest -p no:cacheprovider -o junit_family=xunit1 --junitxml=$MANDAT_REPORT`
+(`PYTEST_COMMAND`). xunit2 (по подразбиране) няма `file`, затова адаптерът го изисква и иначе казва „run pytest with
+-o junit_family=xunit1“. pytest-json-report не се ползва (трета страна; junit е вграден). Образът
+`mandat-sandbox-python` е основният образ на пясъчника + `python3`, `python3-venv` от Debian + pytest 9.2.0, pluggy 1.7.0,
+iniconfig 2.3.1, packaging 26.3, pygments 2.21.0 като wheel-ове със sha256 (`--require-hashes`, без индекс по време на
+работа: `PIP_NO_INDEX=1`), `PYTHONDONTWRITEBYTECODE=1`.
+Защо: вграденият junit + прикован pytest = нищо не се тегли при проверка; Debian python е подписан.
+Граница: само Python 3.11 (bookworm); проект, който иска ≥ 3.12, ще падне на събирането (D1/D2 → FAILED, не VERIFIED).
+Статус: решено.
+
+## D-682 Go: `go test -json`, образ с Go 1.27.4 без module proxy (26.11.2026)
+Решение: командата е `go test -json ./... > $MANDAT_REPORT` (проверка: започва с `go test -json`, свършва с
+`> $MANDAT_REPORT`). Образът `mandat-sandbox-go` = основният + официалният архив на Go със sha256 от go.dev;
+`GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTELEMETRY=off CGO_ENABLED=0`, кешът в tmpfs дома. Модулът за id-тата идва от
+go.mod на дървото (четене на хоста, symlink → без модул, тогава id-тата са пълните пътища).
+Защо: test2json е стабилният машинен изход на Go.
+Граница: проект с `require` → needs_human (D-683). Go тестовете са до кода: bugfix обхватът е `**/*.go`, затова изтрит тест
+хваща D2 сам, без D4 (bench L7).
+Статус: решено.
+
+## D-683 `.mandat.yml` и RepoConfig за Python/Go/Rust без зависимости (26.11.2026)
+Решение: `runtime` в политиката е или досегашният JS обект (без промяна: стари политики и хешът им са същите), или
+`{ language: python|go|rust, install: none }`. `tests.framework` получава `pytest`, `go`, `cargo`; `repoConfigFromPolicy`
+приема езика само с неговата команда (иначе `unsupported_runner <език>/<рамка>`). RepoConfig: `runtime.install` получава
+`"none"`, `runtime.language` е optional (договорите без него пазят хеша си), `tests.format` — `pytest-junit`,
+`go-test-json`, `libtest-json`. `languageOf(rc)` (липсва = js). Агентът вижда „install: none (the sandbox has …)“ и
+командата на езика (`python3 -m pytest`, `go test ./...`, `cargo test --offline`). Rust: командата е точно
+`RUST_TEST_COMMAND` (RUSTC_BOOTSTRAP=1 само за тестовия процес, --offline, --no-fail-fast, stderr в отчета).
+Защо: най-малката промяна, която не пипа нито един съществуващ JS договор; зависимостите искат собствени маршрути във
+вратата (PyPI/Go proxy/crates.io) — отделна стъпка.
+Статус: решено; инсталирането на зависимости е отворено (следваща стъпка).
+
+## D-684 Скенерът разпознава pyproject.toml, go.mod, Cargo.toml (26.11.2026)
+Решение: `scanRepo` дава `language: { id, source, framework, dependencies[], module? }` или null. JS (package.json с
+lockfile) печели пред всеки друг манифест (помощен pyproject.toml в JS проект не го прави Python). Зависимостите се четат
+без TOML/Go парсер: `[project].dependencies` (низовете на масива, и със скоби в низовете), `[tool.poetry.dependencies]`
+без python, requirements*.txt, заключващи файлове (poetry/uv/pdm/Pipfile/pylock), `require` (ред и блок) в go.mod,
+`[dependencies]`/`[dev-dependencies]`/`[build-dependencies]` и `[dependencies.x]` в Cargo.toml. `propose` прави политика
+за езика: командата, test_globs, защитени конфиг файлове на рамката (pyproject.toml, conftest.py, pytest.ini…; go.mod,
+go.sum, go.work; Cargo.toml, Cargo.lock, build.rs, .cargo/**), без `.npmrc` и protected_json_fields; със зависимости —
+needs_human „runtime.dependencies“. Профилът (слой B) дава командите на езика вместо npm.
+Тестове: onboard languages.test.ts (10). Статус: решено.
+
+## D-685 D11 мутанти, специален случай и „под тест ли съм“ по език (26.11.2026)
+Решение: `mutationSites`, `specialCases`, `testEnvChecks` приемат `lang` (по подразбиране js — JS пътят е байт по байт
+същият). За python/go/rust низовете и коментарите се бланкират върху целия файл: Python `#`, '…', "…" и тройни кавички на
+много редове (`//` е целочислено делене, не коментар); Go `//`, `/* */`, "…", руни и `сурови` низове; Rust същото, но `'a`
+е lifetime, а не кавичка. Операторите са същите видове: сравнения, `and/or`+`True/False` (Python), `&&/||`+`true/false`
+(Go, Rust), `+`/`-` с интервали, число → 0 (0 → 1). Пропускат се import/from/декоратори (Python), import/package (Go),
+use/mod/extern/#[…] (Rust). „Под тест“: `PYTEST_CURRENT_TEST` през environ/getenv и `"pytest" in sys.modules`;
+`testing.Testing()`; `cfg!(test)` (но не атрибутът `#[cfg(test)]`). Специален случай: `if x == N: return M` +
+`assert f(N) == M` (Python), `if x == N { return M }` + `!= M` (Go), `assert_eq!(…, M)` (Rust). В verify-trees изходните
+файлове за мутанти са по разширението на езика; статичният брой тестове (D2 report_mismatch) е само за JS/TS — иначе
+`null`, за да не става unknown без причина.
+Тестове: core d11-languages.test.ts (11). Статус: решено.
+
+## D-686 Проверката на проект на друг език: без install, отчетът на рамката, образът на езика (26.11.2026)
+Решение: `runTestProcedure` с `install: "none"` не чете lockfile, не пуска вратата и install контейнер; тестовете и
+мутантите са както досега (`--network none`), а `reportFormat` избира адаптера (D-680). `mandat run`: вратата на агента
+тръгва без install маршрути (тя още носи LLM трафика), install фазата пише „none (python image)“. Кешът на базовата линия
+пази суровия отчет и го чете със същия формат.
+Тестове: verify test-procedure.test.ts (+3), verify-cli.test.ts (+2, shop-py през mandat-verify със записан pytest отчет),
+docker languages.docker.test.ts. Статус: решено.
+
+## D-687 Образ на пясъчника по език, върху точния таг на основния (26.11.2026)
+Решение: `docker/sandbox-python`, `docker/sandbox-go`, `docker/sandbox-rust` — `FROM ${SANDBOX}` (точният
+`mandat-sandbox:cc…-<хеш>`), добавят само toolchain; агентите, fake-овете, куките и репортерите са същите. Тагът
+`mandat-sandbox-<език>:<версия>-<хеш>` хешира папката на езика и тага на основния образ. `mandat images build --lang
+python,go,rust` ги строи след основния (`--build-arg SANDBOX=<таг>`). `mandat run` слага образа на езика за всеки контейнер
+на задачата (агент, тестове, мутанти); `mandat verify` подава таговете (`images.langs`), а `verifyTrees` избира по
+политиката и проверява, че образът го има → иначе `E_IMAGES_MISSING … --lang <език>` (UNKNOWN), никога JS образът.
+Флаговете на контейнерите идват само от SANDBOX_HARDENING (образите добавят файлове, не права).
+Защо: един пясъчник, един модел на заплахи; езикът е слой отгоре.
+Статус: решено (Python и Go — построени и минали Docker теста; Rust — построим, без Docker тест).
+
+## D-688 shop-py и shop-go: двойниците на магазина (26.11.2026)
+Решение: `fixtures/shop-py` (src/shop/{money,cart}.py, tests/test_{money,cart}.py, pyproject.toml без зависимости) и
+`fixtures/shop-go` (модул example.com/shop, пакети money и cart) със същия бъг: прагът е 50000 вместо 5000 цента. Всеки има
+своя `.mandat.yml`. В `FIXTURES` на worker-а (детерминистични огледала, `mandat fixtures build --name shop-py`) и
+запечатани bugfix договори `contracts/fix-discount-{py,go}.json`. Fake агенти: py-honest-fix, py-delete-test,
+py-skip-test, py-special-case, py-partial-fix, go-honest-fix, go-delete-test.
+Статус: решено.
+
+## D-689 Bench за езиците — отделен набор L1–L7 (26.11.2026)
+Решение: `LANGUAGES` в bench/scenarios.ts, `mandat bench --languages` (всяка сцена с договора и огледалото на своята
+фикстура). Видимият bench остава B1–B40 и 40/40 (bench.docker.test.ts го проверява непроменено); езиците са нов ред в
+същия Docker тест: 7/7, 0 лъжливи VERIFIED. L1 честна (py) → VERIFIED; L2 изтрит → FAILED D2:missing_test; L3 skip →
+FAILED D2:skipped; L4 специален случай → UNKNOWN D11:special_case; L5 `>=` → FAILED D1:regression; L6 честна (go) →
+VERIFIED; L7 изтрит go тест → FAILED D2:missing_test.
+Защо: „bench 40/40 остава“ — числото е договор с прегледите; езиците не го разреждат.
+Статус: решено.
