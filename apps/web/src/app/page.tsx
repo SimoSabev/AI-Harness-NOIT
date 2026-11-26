@@ -12,19 +12,16 @@ import { getT } from "../i18n/server";
 import { agentLabel } from "../lib/agents";
 import type { TaskAgent } from "../lib/agents";
 import { pageTitle } from "../lib/inbox";
-import { ago, statusOf } from "../lib/status";
 import { taskFeed } from "../lib/server/chat-feed";
 import { db } from "../lib/server/db";
 import { agentsView } from "../lib/server/connections";
-import { canAct, pageCtx } from "../lib/server/page";
-import { board, repos, taskDetail } from "../lib/server/queries";
+import { canAct, pageCtx, requestList } from "../lib/server/page";
+import { repos, taskDetail } from "../lib/server/queries";
 import { twinView } from "../lib/server/twin";
-import { accountLimits, conversationFeed, openConversations, projectBriefs } from "../lib/server/conversation";
+import { accountLimits, conversationFeed, projectBriefs } from "../lib/server/conversation";
 import { homeBrief, homeQueue } from "../lib/home";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
-import { taskTitle } from "../lib/task-title";
-import { foldJobs, mergeByTime, openConversationsToList } from "../lib/task-list";
 import { showChat } from "../lib/chat";
 
 export const dynamic = "force-dynamic";
@@ -46,39 +43,17 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const selected = typeof q === "string" && /^t_[a-z0-9_]{1,40}$/.test(q) ? q : null;
   // D-531: the open conversation of "Ask first" (?chat=c_…) survives a reload
   const chatId = !selected && typeof sp.chat === "string" && /^c_[a-z0-9_]{1,40}$/.test(sp.chat) ? sp.chat : null;
-  const [b, projects, initial, d, sess, twin, chat, convs, briefs] = await Promise.all([
-    board(db(), c.uid, c.org),
+  const [projects, initial, d, sess, twin, chat, briefs] = await Promise.all([
     repos(db(), c.uid, c.org),
     selected ? taskFeed(db(), c.uid, c.org, selected, -1) : null,
     selected ? taskDetail(db(), c.uid, c.org, c.role, selected) : null,
     selected ? sessionOf(db(), c.uid, c.org, selected) : null,
     selected ? twinView(db(), c.uid, c.org, selected) : null,
     chatId ? conversationFeed(db(), c.uid, c.org, chatId, -1) : null,
-    openConversations(db(), c.uid, c.org),
     projectBriefs(db(), c.org),
   ]);
-  const now = new Date();
-  const rows = b.columns.flatMap((col) => col.items).sort((x, y) => (x.updated_at < y.updated_at ? 1 : -1));
-  // D-554: a job's oracle, units and final check are one row that opens its conversation
-  const folded = foldJobs(rows);
-  const taskRows = folded.slice(0, 100).map((it) => {
-    const x = it.kind === "job" ? it.newest : it.row;
-    const s = statusOf(x, t.lang);
-    const job = it.kind === "job";
-    const merged = it.kind === "job" && it.merged;
-    return { id: job ? it.conversation_id : x.id, href: job ? `/?chat=${it.conversation_id}` : `/?task=${x.id}`,
-      text: job && x.spec_goal ? x.spec_goal : taskTitle(x, t), tone: merged ? "green" as const : s.tone, label: merged ? t("task.job.merged") : s.label, ago: ago(x.updated_at, now, t.lang), at: x.updated_at };
-  });
-  // D-583: "Ask first" conversations that are not a task or a job yet are listed too, so they are not lost after leaving them
-  const shownJobs = new Set(folded.flatMap((it) => (it.kind === "job" ? [it.conversation_id] : [])));
-  const convRows = openConversationsToList(convs, shownJobs).map((v) => ({
-    id: v.id, href: `/?chat=${v.id}`, text: v.text || t("task.conv.untitled"),
-    tone: v.status === "idle" ? "amber" as const : "blue" as const,
-    label: v.purpose === "project" ? t("task.conv.project") : v.status === "idle" ? t("task.conv.waiting") : t("task.conv.answering"),
-    ago: ago(v.updated_at, now, t.lang), at: v.updated_at,
-  }));
-  const tasks = mergeByTime(taskRows, convRows).slice(0, 100).map(({ at: _at, ...rest }) => rest);
-  // D-600: the start is a conversation with Harnova: the numbers on top and its first message with buttons
+  // D-624: the list is built once per request; the frame's badge counts its waiting rows
+  const tasks = await requestList(c.uid, c.org, t.lang);
   // D-619: the dashboard counts the list's own groups, so its numbers are the ones the side bar shows
   const queue = homeQueue(tasks);
   const home = { ...homeBrief({ waiting: queue.counts.waiting, running: queue.counts.running, projects: briefs, firstWaiting: queue.waiting[0]?.href ?? null }), queue };

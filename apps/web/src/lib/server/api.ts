@@ -1,3 +1,6 @@
+import { workspaceList } from "./workspace-list";
+import { translator } from "../../i18n/t";
+import { homeQueue } from "../home";
 import { ApproveBody, CreateTaskBody, FailureLabelBody, applyComments, approve, createTask, fixCiTask, labelFailure, retryTask, stopTask } from "./actions";
 import type { Result, SecondFactor } from "./actions";
 import { checkCsrf, checkOrigin, readJsonBody } from "./guard";
@@ -82,7 +85,9 @@ async function done(r: Result, d: ApiDeps): Promise<Response> {
 export async function getInbox(req: Request, d: ApiDeps): Promise<Response> {
   const c = await ctx(req, d);
   if (c instanceof Response) return c;
-  return json(200, await inbox(d.db, c.uid, c.org));
+  // D-624: `waiting` is the list's own count, so the desktop's badge says what the list and the window title say
+  const [ib, list] = await Promise.all([inbox(d.db, c.uid, c.org), workspaceList(d.db, c.uid, c.org, translator("en"))]);
+  return json(200, { ...ib, waiting: homeQueue(list).counts.waiting });
 }
 
 export async function getBoard(req: Request, d: ApiDeps): Promise<Response> {

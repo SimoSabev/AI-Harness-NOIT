@@ -10,7 +10,7 @@ type Item = DesktopInboxSnapshot["items"][number];
 
 export function inboxStep(prev: ReadonlySet<string> | null, snap: DesktopInboxSnapshot): { count: number; fresh: Item[]; ids: Set<string> } {
   const ids = new Set(snap.items.map((i) => i.id));
-  return { count: snap.items.length, fresh: prev === null ? [] : snap.items.filter((i) => !prev.has(i.id)), ids };
+  return { count: snap.waiting ?? snap.items.length, fresh: prev === null ? [] : snap.items.filter((i) => !prev.has(i.id)), ids };
 }
 
 /** One notification for what is new; none while the person is looking at the window. */

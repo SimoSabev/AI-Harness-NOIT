@@ -24,7 +24,9 @@ describe("API (т. 8.1)", () => {
     who = null;
     expect((await getInbox(get("/api/inbox"), deps)).status).toBe(401);
     who = U.approver;
-    const ib = (await (await getInbox(get("/api/inbox"), deps)).json()) as { items: unknown[] };
+    const ib = (await (await getInbox(get("/api/inbox"), deps)).json()) as { items: unknown[]; waiting?: unknown };
+    // D-624: the desktop's badge takes the list's own waiting count
+    expect(typeof ib.waiting).toBe("number");
     expect(ib.items).toHaveLength(3);
     expect((await getBoard(get("/api/board?since=nope"), deps)).status).toBe(400);
     expect((await getBoard(get("/api/board?column=5"), deps)).status).toBe(200);

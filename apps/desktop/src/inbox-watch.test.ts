@@ -14,6 +14,9 @@ describe("inbox step", () => {
     expect(r.count).toBe(2);
     expect(r.fresh).toEqual([item("t_3")]);
   });
+  it("D-624: the badge is the web list's own waiting count when the web sends it (a job is one row)", () => {
+    expect(inboxStep(null, { items: [item("t_1"), item("t_2"), item("t_3")], waiting: 1 }).count).toBe(1);
+  });
 });
 
 describe("the notification", () => {
