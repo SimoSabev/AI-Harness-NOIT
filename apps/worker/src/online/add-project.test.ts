@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -53,13 +53,51 @@ describe("addLocalProject (D-388)", () => {
     const other = repo(path.join("b", "My Shop"), "main");
     expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: other })).toMatchObject({ ok: true, full_name: "local/my-shop-2", created: true });
   });
-  it("refusals: no folder, not git, no commit yet, inside Mandat's home", async () => {
+  it("refusals: no folder, inside Mandat's home", async () => {
     expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: path.join(tmp, "nope") })).toEqual({ ok: false, error: "not_a_folder" });
-    const plain = path.join(tmp, "plain");
-    mkdirSync(plain);
-    expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: plain })).toEqual({ ok: false, error: "not_git" });
-    expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: repo("empty", "main", false) })).toEqual({ ok: false, error: "no_commits" });
     expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: home })).toEqual({ ok: false, error: "inside_home" });
-    expect(existsSync(path.join(home, "projects", "plain.git"))).toBe(false);
+  });
+});
+
+// D-635 (Simo 26.11.2026): a folder that is not git (or has no commit yet) is a project too. Mandat's mirror starts from
+// a snapshot of its files — node_modules and .DS_Store left out, the folder's own .gitignore kept — and the folder is
+// never written to: no .git appears in it and a git folder without commits gets none.
+describe("a folder without git history (D-635)", () => {
+  const ls = (d: string): string[] => execFileSync("find", [".", "-print"], { cwd: d, encoding: "utf8" }).split("\n").filter(Boolean).sort();
+  const mirrorOf = async (id: string) => ((await db.query<{ remote_url: string }>("select remote_url from public.repos where id = $1", [id])).rows[0]?.remote_url ?? "").replace(/^file:\/\//, "");
+  const files = (mirror: string) => execFileSync("git", ["--git-dir", mirror, "ls-tree", "-r", "--name-only", "main"], { env, encoding: "utf8" }).split("\n").filter(Boolean).sort();
+
+  it("a plain folder becomes a project from a snapshot of its files; the folder is untouched; again → the same project", async () => {
+    const plain = path.join(tmp, "Plain App");
+    mkdirSync(path.join(plain, "src"), { recursive: true });
+    mkdirSync(path.join(plain, "node_modules", "x"), { recursive: true });
+    writeFileSync(path.join(plain, "README.md"), "# plain\n");
+    writeFileSync(path.join(plain, "src", "a.js"), "export const a = 1;\n");
+    writeFileSync(path.join(plain, "node_modules", "x", "i.js"), "x\n");
+    writeFileSync(path.join(plain, ".DS_Store"), "x");
+    writeFileSync(path.join(plain, ".gitignore"), "secret.txt\n");
+    writeFileSync(path.join(plain, "secret.txt"), "no\n");
+    const before = ls(plain);
+    const r = await addLocalProject({ db, home, org: DEMO_ORG_ID, path: plain });
+    expect(r).toMatchObject({ ok: true, full_name: "local/plain-app", created: true });
+    if (!r.ok) return;
+    expect(files(await mirrorOf(r.repo_id))).toEqual([".gitignore", "README.md", "src/a.js"]);
+    expect(ls(plain)).toEqual(before);
+    expect(await addLocalProject({ db, home, org: DEMO_ORG_ID, path: plain })).toEqual({ ...r, created: false });
+  });
+  it("an empty folder is a project too (a new one, to start from nothing)", async () => {
+    const empty = path.join(tmp, "fresh");
+    mkdirSync(empty);
+    const r = await addLocalProject({ db, home, org: DEMO_ORG_ID, path: empty });
+    expect(r).toMatchObject({ ok: true, full_name: "local/fresh", created: true });
+    if (r.ok) expect(files(await mirrorOf(r.repo_id))).toEqual([]);
+  });
+  it("a git folder without a commit: its files are the snapshot, and its own history stays empty", async () => {
+    const dir = repo("nocommit", "main", false);
+    writeFileSync(path.join(dir, "index.html"), "<p>hi</p>\n");
+    const r = await addLocalProject({ db, home, org: DEMO_ORG_ID, path: dir });
+    expect(r).toMatchObject({ ok: true, full_name: "local/nocommit", created: true });
+    if (r.ok) expect(files(await mirrorOf(r.repo_id))).toEqual(["index.html"]);
+    expect(() => execFileSync("git", ["rev-parse", "--verify", "--quiet", "HEAD"], { cwd: dir, env, stdio: "pipe" })).toThrow();
   });
 });
