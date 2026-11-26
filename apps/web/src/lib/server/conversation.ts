@@ -305,7 +305,7 @@ const parseTurns = (rows: readonly TurnRow[]): ChatTurn[] =>
 /** D-583: the conversations that are not a task or a job yet, for the task list (newest 50; the first human words as title) */
 export async function openConversations(db: Db, uid: string, org: string): Promise<OpenConversation[]> {
   return asUser(db, uid, async (sql) => (await sql.query<OpenConversation>(
-    `select c.id, c.purpose, c.status, c.phase, to_json(c.updated_at)#>>'{}' as updated_at, c.job_id, c.task_id,
+    `select c.id, c.purpose, c.status, c.phase, to_json(c.updated_at)#>>'{}' as updated_at, c.job_id, c.task_id, c.repo_id::text as repo,
        coalesce((select left(t.data->>'text', 200) from public.conversation_turns t where t.conversation_id = c.id and t.kind = 'human' order by t.seq limit 1), '') as text
      from public.conversations c where c.org_id = $1::uuid and c.job_id is null and c.task_id is null order by c.updated_at desc limit 50`,
     [org],

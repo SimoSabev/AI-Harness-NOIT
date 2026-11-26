@@ -32,3 +32,24 @@ describe("the start page fits a phone (D-631)", () => {
     expect(html).toContain("grid-cols-[minmax(0,1fr)]");
   });
 });
+
+// D-633: the left list is by project only; projects and sessions with sub-sessions fold
+describe("the list by project (D-633)", () => {
+  const sub = (id: string) => ({ id, href: `/?task=${id}`, text: id, tone: "gray" as const, label: "Closed", ago: "1h" });
+  const tasks = [
+    { id: "c1", href: "/?chat=c1", text: "Loyalty points", tone: "amber" as const, label: "Waiting", ago: "1h", project: "p1", projectName: "local/bakery", subs: [sub("t_u1"), sub("t_cmp")] },
+    { id: "t_x", href: "/?task=t_x", text: "Fix the cart", tone: "blue" as const, label: "Running", ago: "2h", project: "p2", projectName: "local/shop" },
+    { id: "c2", href: "/?chat=c2", text: "hi", tone: "amber" as const, label: "Waiting", ago: "3h", project: null, projectName: "" },
+  ];
+  it("a folding group per project (no project last), a folding session with its sub-sessions", async () => {
+    const { TaskList } = await import("./workspace");
+    const html = renderToStaticMarkup(createElement(TaskList, { tasks, selected: null }));
+    const order = ["local/bakery", "local/shop", "ws.listNoProject"].map((k) => html.indexOf(k));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html.match(/<details/g)?.length).toBe(3);
+    expect(html).toContain("aria-expanded=\"false\"");
+    expect(html).toContain('href="/?task=t_cmp"');
+    expect(html).not.toContain("group.waiting");
+  });
+});

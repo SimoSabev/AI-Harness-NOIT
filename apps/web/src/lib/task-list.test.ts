@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldJobs, mergeByTime, openConversationsToList } from "./task-list";
+import { byProject, foldJobs, mergeByTime, openConversationsToList, sessionsOf } from "./task-list";
 import type { OpenConversation } from "./task-list";
 
 // D-554 (screens 19.11.2026): a job's internal tasks (oracle, units, final check) crowded the task list, one row each;
@@ -59,3 +59,31 @@ describe("open conversations in the task list (D-583)", () => {
   });
 });
 
+
+// D-633 (Simo 26.11.2026): the list is by project only, each folds; a conversation is a session and the tasks it made
+// (the oracle, the units, the final check, the single-agent comparison, a task it started) are its sub-sessions.
+describe("sessions and sub-sessions (D-633)", () => {
+  const r = (id: string, at: string, conv: string | null, repo: string | null = "p1") => ({ id, updated_at: at, conversation_id: conv, repo_id: repo });
+  it("every task of one conversation is one session at the place of its newest; a task without one is its own", () => {
+    const rows = [r("t_u2", "2026-11-26T10:05:00Z", "c1"), r("t_alone", "2026-11-26T10:04:00Z", null), r("t_cmp", "2026-11-26T10:03:00Z", "c1"), r("t_o", "2026-11-26T09:00:00Z", "c1"), r("t_x", "2026-11-25T09:00:00Z", "c2")];
+    const s = sessionsOf(rows);
+    expect(s.map((x) => (x.kind === "conv" ? [x.conversation_id, x.rows.map((y) => y.id)] : [x.row.id]))).toEqual([
+      ["c1", ["t_u2", "t_cmp", "t_o"]],
+      ["t_alone"],
+      ["c2", ["t_x"]],
+    ]);
+  });
+});
+
+describe("the list by project (D-633)", () => {
+  const w = (id: string, project: string | null, projectName: string) => ({ id, project, projectName });
+  it("one group per project in the order of its newest session; the sessions keep their order; no project last", () => {
+    const rows = [w("a", "p2", "local/shop"), w("b", null, ""), w("c", "p1", "local/bakery"), w("d", "p2", "local/shop")];
+    expect(byProject(rows).map((g) => [g.id, g.name, g.items.map((x) => x.id)])).toEqual([
+      ["p2", "local/shop", ["a", "d"]],
+      ["p1", "local/bakery", ["c"]],
+      [null, "", ["b"]],
+    ]);
+    expect(byProject([])).toEqual([]);
+  });
+});

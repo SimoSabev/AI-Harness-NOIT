@@ -54,3 +54,18 @@ describe("a task waiting for its subscription's limit (D-627)", () => {
     expect((await inbox(db, DEMO_OWNER_ID, DEMO_ORG_ID)).items.some((x) => x.id === "t_wlimit")).toBe(false);
   });
 });
+
+// D-633: the list by project — a conversation is one session and its tasks (units, the single-agent comparison) are its
+// sub-sessions; every session carries its project's name
+describe("sessions and sub-sessions (D-633)", () => {
+  it("a job's units and its comparison task sit under its conversation, with the project", async () => {
+    await asService(db, (sql) => sql.query("insert into public.tasks (id, org_id, repo_id, type, agent, text, state, kind) values ('t_cmp_wjob', $1::uuid, $2::uuid, 'free', 'claude', 'compare', 'CLOSED', 'compare')", [DEMO_ORG_ID, DEMO_REPO_ID]));
+    const rows = await workspaceList(db, DEMO_OWNER_ID, DEMO_ORG_ID, translator("en"));
+    const job = rows.find((r) => r.id === "c_wjob");
+    expect(job?.subs?.map((x) => x.id).sort()).toEqual(["t_cmp_wjob", "t_wu1", "t_wu2", "t_wu3"]);
+    expect(job?.subs?.find((x) => x.id === "t_cmp_wjob")?.text).toBe("Single agent, for comparison");
+    expect(job?.project).toBe(DEMO_REPO_ID);
+    expect(job?.projectName).not.toBe("");
+    expect(rows.some((r) => r.id === "t_cmp_wjob")).toBe(false);
+  });
+});

@@ -18,7 +18,7 @@ export interface TaskRow {
   /** E8g: a steerable agent is running now (the "Steer" box) */
   steerable?: boolean;
   /** D-540: what a short title of a job's internal task needs (lib/task-title.ts) */
-  internal_role?: "oracle" | "unit" | "final" | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null;
+  internal_role?: "oracle" | "unit" | "final" | "compare" | null; unit_id?: string | null; unit_title?: string | null; spec_goal?: string | null;
   /** D-554: the conversation a job's internal task belongs to (the task list folds them into one row) */
   conversation_id?: string | null;
   /** D-554: the job of this internal task is merged (jobs.merged_sha) */
@@ -39,12 +39,15 @@ select t.id, t.repo_id::text as repo_id, t.steerable, t.type, t.agent, t.text, t
        (e1.data ->> 'passed')::int as a_passed, (e1.data ->> 'total')::int as a_total, (e2.data ->> 'before')::int as inv_before, (e2.data ->> 'after')::int as inv_after,
        l.level as ladder_level, l.s_up::float8 as ladder_s_up, l.pinned as ladder_pinned,
        (select max(g.seq)::int from public.ledger g where g.org_id = t.org_id and g.task_id = t.id) as ledger_seq,
-       case when t.kind = 'oracle' then 'oracle' else t.job_role end as internal_role, t.unit_id,
+       case when t.kind = 'oracle' then 'oracle' when t.kind = 'compare' then 'compare' else t.job_role end as internal_role, t.unit_id,
        (select u.title from public.job_units u where u.job_id = t.job_id and u.unit_id = t.unit_id) as unit_title,
        coalesce((select cv.approved_spec ->> 'goal' from public.jobs j join public.conversations cv on cv.id = j.conversation_id where j.id = t.job_id),
                 (select coalesce(cv.approved_spec, cv.spec) ->> 'goal' from public.oracles o join public.conversations cv on cv.id = o.conversation_id where o.task_id = t.id order by o.created_at desc limit 1)) as spec_goal,
        coalesce((select j.conversation_id::text from public.jobs j where j.id = t.job_id),
-                (select o.conversation_id::text from public.oracles o where o.task_id = t.id order by o.created_at desc limit 1)) as conversation_id,
+                (select o.conversation_id::text from public.oracles o where o.task_id = t.id order by o.created_at desc limit 1),
+                -- D-633: the single-agent comparison of a job (worker compare.ts singleArmTask) and a task a conversation started
+                (select j.conversation_id::text from public.jobs j where t.kind = 'compare' and left('t_cmp_' || regexp_replace(j.id, '^j_', ''), 44) = t.id limit 1),
+                (select cv.id from public.conversations cv where cv.task_id = t.id limit 1)) as conversation_id,
        (select j.merged_sha is not null from public.jobs j where j.id = t.job_id) as job_merged,
        case when t.state = 'HELD' and t.wait_reason = 'channel_limit' then
          (select g.payload ->> 'resets_at' from public.ledger g where g.org_id = t.org_id and g.task_id = t.id and g.kind = 'channel_limit' order by g.seq desc limit 1)
