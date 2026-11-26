@@ -3,8 +3,48 @@
 // ($MANDAT_DESKTOP_OUT, default <tmp>/mandat-desktop), so neither the Docker build context of the repo nor the tests see it.
 // Built only with `--publish never`: no release, no upload (rule 3). The publish entry only writes app-update.yml for
 // electron-updater, which stays off unless MANDAT_UPDATE_FEED is set (src/updater.ts, Q-054).
+import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+
+const SHA1 = /^[0-9A-F]{40}$/;
+
+/**
+ * D-637: the Mac signing identity. Ad-hoc ("-") gives every build a new cdhash, and the keychain entry "Harness Safe Storage"
+ * trusts each cdhash on its own, so every new build asked for the login password. A certificate with a Team ID keeps one
+ * identity across builds: Developer ID first, then Apple Development (free Apple ID in Xcode). A self-signed certificate
+ * has no Team ID, so the keychain would still see a new cdhash: ignored. The result is the SHA-1, which electron-builder
+ * matches against `security find-identity -v` (app-builder-lib 26.17.0 codeSign/macCodeSign.js `_findIdentity`).
+ * @param {string} findIdentityOutput output of `security find-identity -v -p codesigning`
+ * @param {string | undefined} override MANDAT_MAC_IDENTITY: "-" (ad-hoc) or a SHA-1
+ * @returns {string}
+ */
+export function pickMacIdentity(findIdentityOutput, override) {
+  if (override !== undefined && override !== "") {
+    const o = override.trim().toUpperCase();
+    if (o === "-" || SHA1.test(o)) return o;
+    throw new Error('MANDAT_MAC_IDENTITY must be "-" (ad-hoc) or the SHA-1 of a certificate from `security find-identity -v -p codesigning`');
+  }
+  /** @type {Record<string, string>} */
+  const byKind = {};
+  for (const line of findIdentityOutput.split("\n")) {
+    const m = /^\s*\d+\)\s+([0-9A-F]{40})\s+"(Developer ID Application|Apple Development): /.exec(line);
+    if (m && !byKind[m[2]]) byKind[m[2]] = m[1];
+  }
+  return byKind["Developer ID Application"] ?? byKind["Apple Development"] ?? "-";
+}
+
+function macIdentity() {
+  let out = "";
+  if (process.platform === "darwin") {
+    try {
+      out = execFileSync("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      out = "";
+    }
+  }
+  return pickMacIdentity(out, process.env.MANDAT_MAC_IDENTITY);
+}
 
 // MANDAT_MAC_ARCH=arm64 builds only the Apple Silicon dmg (`pnpm site:mac`, scripts/site-local-release.mjs)
 const macArch = (process.env.MANDAT_MAC_ARCH ?? "arm64,x64").split(",").filter((a) => a === "arm64" || a === "x64");
@@ -39,11 +79,12 @@ export const config = {
   mac: {
     target: [{ target: "dmg", arch: macArch }],
     category: "public.app-category.developer-tools",
-    // D-380: ad-hoc ("-") until Simo has an Apple Developer ID (Q-053). With no signature at all (null) a downloaded app
-    // on Apple Silicon is "damaged" and cannot be opened; ad-hoc signed, Privacy & Security offers Open Anyway.
-    // Hardened runtime off: ad-hoc + hardened runtime needs extra entitlements (electron-builder warns) and buys nothing
+    // D-380: ad-hoc ("-") without a certificate. With no signature at all (null) a downloaded app on Apple Silicon is
+    // "damaged" and cannot be opened; ad-hoc signed, Privacy & Security offers Open Anyway.
+    // D-637: a Developer ID or Apple Development certificate in this Mac's keychain is used when present, so the keychain
+    // stops asking for the password after every build. Hardened runtime off: it needs extra entitlements and buys nothing
     // without notarization.
-    identity: "-",
+    identity: macIdentity(),
     hardenedRuntime: false,
     // D-580, D-596: Nova (the voice) listens; without this line macOS never asks and the microphone stays silent. No camera line.
     extendInfo: { NSMicrophoneUsageDescription: "Nova listens to you through the microphone while you talk to it." },

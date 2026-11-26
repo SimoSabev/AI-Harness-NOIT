@@ -18,6 +18,19 @@
 - **Windows**: SmartScreen показва „Windows protected your PC“ → More info → Run anyway.
 - **Linux**: AppImage и deb не се подписват по този начин; няма предупреждение (по желание: подпис на AppImage с gpg — не е нужен).
 
+## macOS на твоя Mac: без парола при всеки нов билд (D-637, безплатно)
+Ad-hoc подписът е различен при всеки билд и keychain-ът („Harness Safe Storage“) иска паролата отново. Сертификат с Team ID
+оставя подписа еднакъв между билдовете. Билдът го намира сам, без настройки и без промяна в репото.
+1. Инсталирай Xcode от App Store и го отвори веднъж (приеми лиценза и допълнителните компоненти).
+2. Xcode → Settings → Accounts → **+** → Apple ID → влез с твоя Apple ID (безплатният стига).
+3. Избери акаунта → **Manage Certificates…** → **+** → **Apple Development** → Done.
+4. Провери: `security find-identity -v -p codesigning` показва ред `"Apple Development: … (TEAMID)"`.
+5. Строй както досега (`pnpm --dir apps/desktop run dist:mac` или `pnpm site:mac`). В изхода пише `identityName=Apple Development: …`.
+6. При първото пускане на подписания Harnova macOS пита за паролата **още веднъж** → **Always Allow**. След това новите
+   билдове със същия сертификат не питат [НП — потвърждава се с първия такъв билд].
+Сертификатът Apple Development е за твоя Mac. Друг компютър пак вижда „Open Anyway“ — за това е Developer ID по-долу.
+`MANDAT_MAC_IDENTITY=-` връща ad-hoc, а `MANDAT_MAC_IDENTITY=<SHA-1>` избира точен сертификат.
+
 ## macOS: Developer ID + нотаризация
 1. Apple Developer Program на твое име или на фирма (годишен абонамент [НП]). Нужен е Apple ID с двуфакторна защита.
 2. В developer.apple.com → Certificates → създай **Developer ID Application** сертификат. Изтегли го, отвори го в
@@ -30,7 +43,7 @@
    - или профил в keychain от `xcrun notarytool store-credentials`: `APPLE_KEYCHAIN_PROFILE` (+ по избор `APPLE_KEYCHAIN`).
 5. Сертификатът за подпис: `CSC_LINK` (път до `.p12` или base64 на съдържанието му) и `CSC_KEY_PASSWORD`. На собствения
    ти Mac може и без тях — electron-builder намира „Developer ID Application“ в keychain-а.
-6. В `apps/desktop/electron-builder.config.mjs` махни реда `identity: null` (той изрично казва „не подписвай“).
+6. Нищо не се пипа в конфигурацията: щом „Developer ID Application“ е в keychain-а, билдът го избира сам (D-637).
    Hardened runtime е включен по подразбиране за mac; ако приложението не тръгне след подпис заради node-pty, добави
    entitlement `com.apple.security.cs.disable-library-validation` [НП — да се провери с подписан build].
 7. Строй: `pnpm --dir apps/desktop run dist:mac`. В изхода трябва да има „notarization successful“. Проверка:
