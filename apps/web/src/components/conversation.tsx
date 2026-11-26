@@ -354,7 +354,8 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
           {retryable ? <button type="button" className={btn.secondary} onClick={onRetry} disabled={busy}>{t("chat.retry")}</button> : <button type="button" className={btn.secondary} onClick={onNew}>{t("chat.new")}</button>}
         </div>
       )}
-      <div ref={end} />
+      {/* D-712: on a phone the page scrolls and the box sticks to the bottom; the end stops above the box, not under it */}
+      <div ref={end} className="scroll-mb-[calc(var(--composer-h,7.5rem)+1rem)] lg:scroll-mb-0" />
     </div>
   );
 }

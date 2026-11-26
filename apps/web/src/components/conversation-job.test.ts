@@ -56,7 +56,10 @@ describe("the job in the thread (D-535)", () => {
     expect(await render({})).not.toContain("chat.job");
   });
   it("D-710: the thread's scroller is a positioned box, so screen-reader-only text inside it cannot stretch the page", async () => {
-    expect(await render({ job: job({}) })).toContain('class="relative min-h-0 flex-1 space-y-4 overflow-y-auto');
+    const html = await render({ job: job({}) });
+    expect(html).toContain('class="relative min-h-0 flex-1 space-y-4 overflow-y-auto');
+    // D-712: the auto-scroll stops above the sticky box on a phone
+    expect(html).toContain("scroll-mb-[calc(var(--composer-h,7.5rem)+1rem)]");
   });
   it("D-710: the model's own invalid call is a quiet line, never the validator's message; a refused tool keeps its reason", async () => {
     const turns = [
