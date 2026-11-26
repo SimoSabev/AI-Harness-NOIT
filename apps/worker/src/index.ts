@@ -64,6 +64,7 @@ export type { HostResearchOptions } from "./online/research-host.js";
 export { MAX_STEPS, answerTurn, claimConversation, conversationLoop, loadTurns, processConversation, reapStaleConversations, runConversationOnce } from "./online/conversation.js";
 export type { ChatDeps, NewTurn } from "./online/conversation.js";
 export { chatModelFor, demoChatModel } from "./online/conversation-host.js";
+export { recordChatWindows } from "./online/limit-windows.js";
 export type { ChatModelChoice, ChatRoute, HostChatOptions } from "./online/conversation-host.js";
 export { jobTick, newJobId } from "./online/job.js";
 export type { JobDeps, JobTick } from "./online/job.js";
