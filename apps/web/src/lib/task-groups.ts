@@ -13,5 +13,5 @@ export function groupTasks<T extends { tone: Tone }>(tasks: readonly T[]): { id:
 }
 
 export function cleanTitle(s: string): string {
-  return s.replace(/^\s*(goal|цел)\s*:\s*/i, "").trim();
+  return s.replace(/^\s*(goal|\u0446\u0435\u043b)\s*:\s*/i, "").trim();
 }
