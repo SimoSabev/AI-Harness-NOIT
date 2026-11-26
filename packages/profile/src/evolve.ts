@@ -16,6 +16,8 @@ const BOUNDARY = { tests_kept: TESTS_KEPT, no_test_env: NO_TEST_ENV, no_hidden_p
 type BoundaryRule = keyof typeof BOUNDARY;
 const isBoundary = (r: string): r is BoundaryRule => r in BOUNDARY;
 const DAY = 86_400_000;
+/** D-641: the reason on a tool rule learned from a person's decisions on asks */
+const LEARNED = "learned from asks (D-641)";
 
 /** a verdict reason → the change it argues for (null: no rule for it) */
 function changeOf(reason: string): { change: ProfileChange; cls: string } | null {
@@ -43,6 +45,8 @@ const writeDeny = (glob: string) => `path:write:${glob}`;
 
 /** Does the profile already have this change, or does it lack what the change needs (a lint / typecheck command)? */
 function notNeeded(p: ProfileLayers, c: ProfileChange): boolean {
+  if (c.rule === "flaky_test") return hasChange(p, c) || (p.a.tests.flaky?.length ?? 0) >= 500;
+  if (c.rule === "tool_allow" || c.rule === "tool_deny") return hasChange(p, c) || p.c.length >= 500;
   if (isBoundary(c.rule)) return p.b.boundaries.includes(BOUNDARY[c.rule]) || p.b.boundaries.length >= 40;
   if (c.rule === "lint_hook" || c.rule === "type_hook") {
     const cmd = c.rule === "lint_hook" ? p.b.commands.lint : p.b.commands.typecheck;
@@ -79,6 +83,12 @@ export function rulesFromFailures(rows: readonly FailureRow[], profile: ProfileL
 
 /** The profile with the change applied (a new object; the input is untouched). */
 export function applyChange(p: ProfileLayers, c: ProfileChange): ProfileLayers {
+  if (c.rule === "flaky_test") return hasChange(p, c) ? p : { ...p, a: { ...p.a, tests: { ...p.a.tests, flaky: [...(p.a.tests.flaky ?? []), c.detail] } } };
+  if (c.rule === "tool_allow" || c.rule === "tool_deny") {
+    // D-641: the any-subject rule of the tool is replaced (two rules for one key would resolve to the strictest)
+    const rule: ToolRule = { subject: "any", tool: c.detail, decision: c.rule === "tool_allow" ? "allow" : "deny", reason: LEARNED };
+    return { ...p, c: [...p.c.filter((r) => !(r.subject === "any" && r.tool === c.detail)), rule] };
+  }
   if (isBoundary(c.rule)) return { ...p, b: { ...p.b, boundaries: [...p.b.boundaries, BOUNDARY[c.rule]] } };
   if (c.rule === "lint_hook" || c.rule === "type_hook") return { ...p, d: [...p.d, { event: "post_tool", matcher: null, script: HOOK[c.rule], args: {} }] };
   const rule: ToolRule = { subject: "any", tool: writeDeny(c.detail), decision: "deny", reason: "recurring failures (D-530)" };
@@ -137,6 +147,8 @@ export function predictionHeld(m: ProfileManifest, later: readonly FailureRow[])
 
 /** is this change's part in the profile */
 export function hasChange(p: ProfileLayers, c: ProfileChange): boolean {
+  if (c.rule === "flaky_test") return (p.a.tests.flaky ?? []).includes(c.detail);
+  if (c.rule === "tool_allow" || c.rule === "tool_deny") return p.c.some((r) => r.subject === "any" && r.tool === c.detail && r.decision === (c.rule === "tool_allow" ? "allow" : "deny"));
   if (isBoundary(c.rule)) return p.b.boundaries.includes(BOUNDARY[c.rule]);
   if (c.rule === "lint_hook" || c.rule === "type_hook") return p.d.some((h) => h.script === HOOK[c.rule as "lint_hook" | "type_hook"]);
   return p.c.some((r) => r.tool === writeDeny(c.detail) && r.decision === "deny" && r.subject === "any");
@@ -144,6 +156,12 @@ export function hasChange(p: ProfileLayers, c: ProfileChange): boolean {
 
 /** the profile without the part this change added (a new object; the input is untouched) */
 export function removeChange(p: ProfileLayers, c: ProfileChange): ProfileLayers {
+  if (c.rule === "flaky_test") {
+    const { flaky, ...tests } = p.a.tests;
+    const rest = (flaky ?? []).filter((x) => x !== c.detail);
+    return { ...p, a: { ...p.a, tests: rest.length > 0 ? { ...tests, flaky: rest } : tests } };
+  }
+  if (c.rule === "tool_allow" || c.rule === "tool_deny") return { ...p, c: p.c.filter((r) => !(r.subject === "any" && r.tool === c.detail && r.reason === LEARNED)) };
   if (isBoundary(c.rule)) {
     const text = BOUNDARY[c.rule];
     return { ...p, b: { ...p.b, boundaries: p.b.boundaries.filter((x) => x !== text) } };
