@@ -109,7 +109,7 @@ export function VoiceButton() {
 
   const live = nova.phase !== "idle" && nova.phase !== "error";
   return (
-    <div data-voice="never" className="fixed bottom-4 right-4 z-40">
+    <div data-voice="never" className="nova-dock fixed bottom-4 right-4 z-40">
       <NovaRibbon state={nova} t={t} open={open} onToggle={() => setOpen((o) => !o)} live={live} onStar={() => void (live ? stop() : start())} />
     </div>
   );

@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useT } from "../i18n/client";
 import { errorText, postJson } from "../lib/client/api";
 import type { Tone } from "../lib/status";
-import { Hex, btn } from "./ui";
+import { Hex, Tip, btn } from "./ui";
 import { Select } from "./select";
 import { ChatThread, useConversation } from "./conversation";
 import { ProjectProfile } from "./project-profile";
@@ -18,7 +18,11 @@ import { boxRepo, sendsOnEnter } from "../lib/chat";
 import { isAnswering } from "../lib/conversation-types";
 import type { ConversationFeed } from "../lib/conversation-types";
 import { BringReply } from "@mandat/contract";
-import type { HomeBrief } from "../lib/home";
+import type { HomeBrief, HomeQueue } from "../lib/home";
+import { composerHeight } from "../lib/side-pane";
+
+/** D-619: the start — Harnova's line and the dashboard of the list */
+export type HomeView = HomeBrief & { queue: HomeQueue<WsTask> };
 
 type TaskMode = "ask_first" | "work_now";
 
@@ -88,7 +92,7 @@ const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.w
 const ENDED = ["budget", "expired"];
 const PARKED = "harnova.parkedTask";
 
-export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null; home?: HomeBrief | null }) {
+export function NewTask({ agents, preferredModel = null, projects, canAct, initialText = "", taskMode = "ask_first", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; taskMode?: TaskMode; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -108,6 +112,14 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   /** D-611: the questions the person put off ("Later") — the seq of the asking turn */
   const [later, setLater] = useState<number | null>(null);
   const { chat, follow, reset } = useConversation(initialChat);
+  // D-621: the box is one line and grows with its text up to 40% of the window, then scrolls
+  const box = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.style.height = "0px";
+    el.style.height = `${composerHeight(el.scrollHeight, Math.round(window.innerHeight * 0.4))}px`;
+  }, [text]);
   const asking = mode === "ask_first";
   const answering = chat !== null && isAnswering(chat.row.status);
   const pick = model && current?.models.includes(model) ? { model } : {};
@@ -250,10 +262,10 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   const blocked = cannotTalk || projects.length === 0;
   const sendBlocked = asking ? cannotTalk : blocked;
   const modes = (
-    <div role="group" aria-label={t("chat.mode")} className="mx-auto inline-flex rounded-lg border border-line-strong bg-panel p-0.5 text-xs">
+    <div role="group" aria-label={t("chat.mode")} className="inline-flex rounded-full border border-line bg-canvas p-0.5 text-xs">
       {(["ask_first", "work_now"] as const).map((m) => (
         <button key={m} type="button" aria-pressed={mode === m} onClick={() => pickMode(m)}
-          className="rounded-md px-3 py-1.5 font-medium text-mute transition hover:text-ink aria-pressed:bg-accent-soft aria-pressed:text-ink">
+          className="rounded-full px-2.5 py-1 font-medium text-mute transition hover:text-ink aria-pressed:bg-raised aria-pressed:text-ink">
           {t(m === "ask_first" ? "chat.askFirst" : "chat.workNow")}
         </button>
       ))}
@@ -269,7 +281,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   // to pick and Other; "Later" closes it and the box answers in words (the questions stay in the conversation)
   const popUp = !interview && asked !== null && later !== asked.seq ? asked : null;
   const form = (
-    <form onSubmit={submit} className={interview ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3" : thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
+    <form onSubmit={submit} className={interview ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3" : "flex min-h-0 w-full flex-1 flex-col gap-3"}>
       {questions && <InterviewStep key={questions.seq} questions={questions.questions} t={t} busy={busy} onSend={(said) => { setBusy(true); setError(null); void send(said); }} />}
       {popUp && (
         <div role="dialog" aria-modal="true" aria-label={t("ask.title")} className="fixed inset-0 z-30 flex items-center justify-center bg-scrim p-3 lg:p-8">
@@ -289,56 +301,60 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           onApproveJob={(h, code) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h, ...(code ? { code } : {}) }, 200)}
           onBring={() => void bring()} brought={brought} />
       ) : (
-        home ? <HomeIntro home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
-          <>
-            <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
-            <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
-          </>
-        )
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {home ? <HomeDashboard home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 py-10">
+              <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
+              <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
+            </div>
+          )}
+        </div>
       )}
       {!interview && asked !== null && later === asked.seq && (
         <button type="button" className={`${btn.secondary} self-center`} onClick={() => setLater(null)}>{t("ask.reopen", { n: asked.questions.length })}</button>
       )}
-      {!interview && modes}
-      <div className={`rounded-xl border border-line bg-panel p-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition focus-within:border-line-strong ${questions ? "hidden" : ""}`}>
-        <textarea data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
-          onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
-          className="w-full resize-none bg-transparent px-1 text-[15px] outline-none placeholder:text-mute" />
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {agents.length > 1 ? (
-            <label className="flex items-center gap-1.5 text-xs text-mute">
-              {t("ws.agent")}
+      {/* D-621: the box sits at the bottom like in any chat — one line that grows with the text; the mode, the agent,
+          the model and the project are small chips in its bar, the send button is round */}
+      <div data-composer className={`sticky bottom-0 z-10 mx-auto w-full max-w-3xl bg-canvas pb-3 ${questions ? "hidden" : ""}`}>
+        <div className="rounded-[18px] border border-line-strong bg-panel shadow-[0_10px_30px_rgb(0_0_0/0.22)] transition focus-within:border-accent/60 focus-within:shadow-[0_0_0_3px_var(--accent-soft),0_10px_30px_rgb(0_0_0/0.22)]">
+          <textarea ref={box} data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={1} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
+            onKeyDown={(e) => { if (sendsOnEnter({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }}
+            className="block max-h-[40vh] w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pt-3.5 text-[15px] leading-6 outline-none placeholder:text-faint" />
+          <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-1">
+            {!interview && modes}
+            {agents.length > 1 ? (
               <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.limitedUntil ? `${a.label} · ${t("agent.limited", { when: whenShort(a.limitedUntil, t.lang) })}` : a.label }))} />
-            </label>
-          ) : agents[0] ? (
-            <span className="text-xs text-mute">{t("ws.agent")} <span className="text-ink">{agents[0].label}</span></span>
-          ) : (
-            <Link href="/welcome" className="text-sm text-accent underline-offset-4 hover:underline">{t("ws.signIn")}</Link>
-          )}
-          {current && current.models.length > 1 && (
-            <label className="flex items-center gap-1.5 text-xs text-mute">
-              {t("ws.model")}
+            ) : agents[0] ? (
+              <span className="px-1.5 text-xs text-mute">{agents[0].label}</span>
+            ) : (
+              <Link href="/welcome" className="px-1.5 text-xs text-accent-text underline-offset-4 hover:underline">{t("ws.signIn")}</Link>
+            )}
+            {current && current.models.length > 1 && (
               <Select size="sm" mono aria-label={t("ws.model")} value={model ?? ""} onChange={setModel} options={current.models.map((m) => ({ value: m, label: m }))} />
-            </label>
-          )}
-          {current && current.models.length === 1 && <span className="font-mono text-xs text-mute">{current.models[0]}</span>}
-          <span className="ml-auto flex items-center gap-2">
-            {asking && <button type="button" className={btn.secondary} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
-            <button type="submit" className={btn.primary} disabled={sendBlocked}>{busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")}</button>
-          </span>
+            )}
+            {current && current.models.length === 1 && <span className="px-1.5 font-mono text-xs text-mute">{current.models[0]}</span>}
+            {projects.length > 1 ? (
+              <Select size="sm" mono aria-label={t("newTask.repo")} value={repo} onChange={setRepo} options={projects.map((p) => ({ value: p.id, label: p.full_name }))} />
+            ) : projects[0] ? (
+              <span className="px-1.5 font-mono text-xs text-faint" title={t("newTask.repo")}>{projects[0].full_name}</span>
+            ) : (
+              <Link href="/projects/add" className="px-1.5 text-xs text-accent-text underline-offset-4 hover:underline">{t("add.title")}</Link>
+            )}
+            <span className="ml-auto flex items-center gap-1.5">
+              {asking && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
+              <Tip side="bottom" label={busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")} hint={t("composer.keys")}>
+                <button type="submit" disabled={sendBlocked || text.trim() === ""} aria-label={busy ? t(asking ? "chat.sending" : "ws.sending") : t(asking ? "chat.send" : "ws.send")}
+                  className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-[inset_0_-2px_0_rgb(0_0_0/0.18)] transition hover:brightness-110 disabled:bg-raised disabled:text-faint disabled:shadow-none">
+                  {busy ? <span aria-hidden="true" className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" /> : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+                  )}
+                </button>
+              </Tip>
+            </span>
+          </div>
         </div>
+        {error && <p role="alert" className="mt-2 text-center text-sm text-bad">{error}</p>}
       </div>
-      {projects.length > 1 ? (
-        <label className="mx-auto flex items-center gap-1.5 text-xs text-mute">
-          {t("newTask.repo")}
-          <Select size="sm" mono aria-label={t("newTask.repo")} value={repo} onChange={setRepo} options={projects.map((p) => ({ value: p.id, label: p.full_name }))} />
-        </label>
-      ) : projects[0] ? (
-        <p className="text-center text-xs text-mute">{t("newTask.repo")} <span className="font-mono">{projects[0].full_name}</span></p>
-      ) : (
-        <p className="text-center text-sm text-mute">{t("ws.noProject")} <Link href="/projects/add" className="text-accent underline-offset-4 hover:underline">{t("add.title")}</Link></p>
-      )}
-      {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
   );
   if (!interview) return <AgentNames agents={agents}>{form}</AgentNames>;
@@ -361,39 +377,79 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   );
 }
 
-/** D-600, D-602: the start is a conversation with Harnova — one quiet line of numbers, then its first message with buttons */
-function HomeIntro({ home, onMeet, busy }: { home: HomeBrief; onMeet: (repo: string) => void; busy: boolean }) {
+/** D-619: the start is a small dashboard — Harnova's line and its next step, four tiles (what waits for you, what runs,
+ * what is done, the projects) and the first rows of what needs you and of what runs now. The numbers are the list's own. */
+function HomeDashboard({ home, onMeet, busy }: { home: HomeView; onMeet: (repo: string) => void; busy: boolean }) {
   const t = useT();
-  const stat = (n: number, label: string, tone: string) => (
-    <span className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
-      <span className={`text-sm font-semibold tabular-nums ${n > 0 ? tone : "text-ink"}`}>{n}</span>
-      <span className="text-sm text-mute">{label}</span>
-    </span>
+  const { counts, waiting, running } = home.queue;
+  const total = counts.waiting + counts.running + counts.done;
+  const firstRunning = running[0]?.href ?? null;
+  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const tile = (o: { n: number; label: string; sub: string; tone: string; bar: string; shape: string; href: string | null; fill: number }) => {
+    const body = (
+      <>
+        <span className="flex items-center justify-between">
+          <span className="text-xs font-medium text-mute">{o.label}</span>
+          <span aria-hidden="true" className={`${o.shape} inline-block size-2.5 ${o.n > 0 ? o.bar : "bg-line-strong"}`} />
+        </span>
+        <span className={`mt-1.5 block text-[28px] font-semibold leading-none tabular-nums ${o.n > 0 ? o.tone : "text-ink"}`}>{o.n}</span>
+        <span className="mt-1.5 block truncate text-xs text-faint">{o.sub}</span>
+        <span aria-hidden="true" className="mt-3 block h-1 overflow-hidden rounded-full bg-raised">
+          <span className={`block h-full rounded-full ${o.bar} transition-[width] duration-700`} style={{ width: `${o.fill}%` }} />
+        </span>
+      </>
+    );
+    const cls = "group rounded-[14px] border border-line bg-panel p-3.5 text-left shadow-[0_1px_2px_rgb(0_0_0/0.15)] transition duration-200";
+    return o.href ? <Link href={o.href} className={`${cls} hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_10px_24px_rgb(0_0_0/0.25)]`}>{body}</Link> : <div className={cls}>{body}</div>;
+  };
+  const share = (n: number) => t("home.tile.share", { n, of: total });
+  const row = (x: WsTask, live: boolean) => (
+    <li key={x.id}>
+      <Link href={x.href} className="group flex items-center gap-3 rounded-[10px] px-3 py-2.5 transition hover:bg-raised">
+        {live ? <span aria-hidden="true" className="relative flex size-2.5 shrink-0"><span className="absolute inset-0 animate-ping rounded-full bg-info opacity-40" /><span className="relative size-2.5 rounded-full bg-info" /></span> : <Hex tone={x.tone} className="size-2.5" />}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm text-ink">{cleanTitle(x.text)}</span>
+          <span className="block truncate text-xs text-mute">{x.label} · {x.ago}</span>
+        </span>
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 shrink-0 text-faint transition group-hover:translate-x-0.5 group-hover:text-ink" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+      </Link>
+    </li>
   );
+  const interviews = home.actions.filter((a) => a.kind === "interview");
   return (
-    <div className="flex flex-col gap-6">
-      <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-        {stat(home.stats.waiting, t("home.stat.waiting"), "text-warn")}
-        <span aria-hidden="true" className="text-line-strong">·</span>
-        {stat(home.stats.running, t("home.stat.running"), "text-info")}
-        <span aria-hidden="true" className="text-line-strong">·</span>
-        {stat(home.stats.projects, t("home.stat.projects"), "text-ink")}
-        {home.stats.noBrief > 0 && <><span aria-hidden="true" className="text-line-strong">·</span>{stat(home.stats.noBrief, t("home.stat.noBrief"), "text-warn")}</>}
-      </p>
-      <div className="flex gap-3">
-        <span aria-hidden="true" className="logo-mark mt-0.5 inline-block size-5 shrink-0" />
-        <div className="min-w-0 flex-1 space-y-3">
-          <p className="text-[15px] leading-relaxed text-ink">{t(home.say.key, home.say.params)}</p>
-          {home.actions.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {home.actions.map((a, i) => a.kind === "interview" ? (
-                <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${i === 0 ? btn.primary : btn.secondary} py-1.5`}>{t(a.label.key, a.label.params)}</button>
-              ) : (
-                <Link key={a.href} href={a.href} className={`${i === 0 ? btn.primary : btn.secondary} py-1.5`}>{t(a.label.key, a.label.params)}</Link>
-              ))}
-            </div>
-          )}
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 pb-6 pt-2">
+      <header className="flex items-start gap-3">
+        <span aria-hidden="true" className="logo-mark mt-1 inline-block size-6 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-semibold tracking-[-0.01em]">{t("home.dash.title")}</h1>
+          <p className="mt-0.5 text-sm leading-relaxed text-mute">{t(home.say.key, home.say.params)}</p>
         </div>
+      </header>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {tile({ n: counts.waiting, label: t("home.tile.waiting"), sub: share(counts.waiting), tone: "text-warn", bar: "bg-warn", shape: "sig-diamond", href: waiting[0]?.href ?? null, fill: pct(counts.waiting) })}
+        {tile({ n: counts.running, label: t("home.tile.running"), sub: share(counts.running), tone: "text-info", bar: "bg-info", shape: "rounded-full", href: firstRunning, fill: pct(counts.running) })}
+        {tile({ n: counts.done, label: t("home.tile.done"), sub: share(counts.done), tone: "text-ok", bar: "bg-ok", shape: "rounded-full", href: null, fill: pct(counts.done) })}
+        {tile({ n: home.stats.projects, label: t("home.tile.projects"), sub: home.stats.noBrief > 0 ? t("home.tile.noBrief", { n: home.stats.noBrief }) : t("home.tile.allBriefs"), tone: "text-ink", bar: home.stats.noBrief > 0 ? "bg-warn" : "bg-accent", shape: "rounded-[3px]", href: "/harness", fill: home.stats.projects > 0 ? Math.round(((home.stats.projects - home.stats.noBrief) / home.stats.projects) * 100) : 0 })}
+      </div>
+      {interviews.length > 0 && (
+        <section aria-label={t("home.next")} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-warn/40 bg-warn-soft px-4 py-3">
+          <Hex tone="amber" className="size-3" />
+          <p className="min-w-0 flex-1 text-sm"><span className="font-medium text-warn">{t("home.next")}</span></p>
+          {interviews.map((a) => a.kind === "interview" && (
+            <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${btn.primary} rounded-full py-1.5`}>{t(a.label.key, a.label.params)}</button>
+          ))}
+        </section>
+      )}
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section aria-label={t("home.queue.waiting")} className="rounded-[14px] border border-line bg-panel p-1.5">
+          <p className="flex items-center gap-2 px-3 pb-1 pt-2 text-xs font-medium text-warn">{t("home.queue.waiting")}<span className="tabular-nums text-faint">{counts.waiting}</span></p>
+          {waiting.length > 0 ? <ul>{waiting.map((x) => row(x, false))}</ul> : <p className="px-3 pb-3 pt-1 text-sm text-mute">{t("home.queue.calm")}</p>}
+          {counts.waiting > waiting.length && <p className="px-3 pb-2 pt-1 text-xs text-faint">{t("home.queue.more", { n: counts.waiting - waiting.length })}</p>}
+        </section>
+        <section aria-label={t("home.queue.running")} className="rounded-[14px] border border-line bg-panel p-1.5">
+          <p className="flex items-center gap-2 px-3 pb-1 pt-2 text-xs font-medium text-info">{t("home.queue.running")}<span className="tabular-nums text-faint">{counts.running}</span></p>
+          {running.length > 0 && <ul>{running.map((x) => row(x, true))}</ul>}
+        </section>
       </div>
     </div>
   );

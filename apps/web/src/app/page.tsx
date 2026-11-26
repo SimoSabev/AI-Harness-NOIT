@@ -4,6 +4,9 @@ import { LiveTask } from "../components/live-task";
 import { TaskDetails, TaskShots } from "../components/task-details";
 import { Shell } from "../components/shell";
 import { NewTask, TaskList } from "../components/workspace";
+import { SidePane } from "../components/side-pane";
+import { cookies } from "next/headers";
+import { SIDE_COOKIE, parseSide } from "../lib/side-pane";
 
 import { getT } from "../i18n/server";
 import { agentLabel } from "../lib/agents";
@@ -17,7 +20,7 @@ import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
 import { twinView } from "../lib/server/twin";
 import { accountLimits, conversationFeed, openConversations, projectBriefs } from "../lib/server/conversation";
-import { homeBrief } from "../lib/home";
+import { homeBrief, homeQueue } from "../lib/home";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
 import { taskTitle } from "../lib/task-title";
@@ -76,7 +79,10 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   }));
   const tasks = mergeByTime(taskRows, convRows).slice(0, 100).map(({ at: _at, ...rest }) => rest);
   // D-600: the start is a conversation with Harnova: the numbers on top and its first message with buttons
-  const home = homeBrief({ waiting: c.waiting ?? 0, running: tasks.filter((x) => x.tone === "blue").length, projects: briefs, firstWaiting: tasks.find((x) => x.tone === "amber")?.href ?? null });
+  // D-619: the dashboard counts the list's own groups, so its numbers are the ones the side bar shows
+  const queue = homeQueue(tasks);
+  const home = { ...homeBrief({ waiting: queue.counts.waiting, running: queue.counts.running, projects: briefs, firstWaiting: queue.waiting[0]?.href ?? null }), queue };
+  const side = parseSide((await cookies()).get(SIDE_COOKIE)?.value);
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
   let preferredModel: string | null = null;
@@ -92,15 +98,16 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   return (
     <Shell current="tasks" waiting={c.waiting} full>
       {/* D-602: the conversations are a column from tablet width up; on a phone they fold above the work */}
-      <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[minmax(200px,248px)_minmax(0,1fr)] md:gap-6">
+      {/* D-620: the list folds away and is as wide as the person drags it */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row md:gap-0">
         <details className="rounded-[10px] border border-line bg-panel px-3 py-2 md:hidden">
           <summary className="cursor-pointer text-sm font-medium">{t("ws.tasks")} · {tasks.length}</summary>
           <div className="mt-2 max-h-[50vh] overflow-y-auto"><TaskList tasks={tasks} selected={initial ? selected : chatId} /></div>
         </details>
-        <div className="hidden min-h-0 md:block md:border-r md:border-line md:pr-3">
+        <SidePane initial={side} waiting={queue.counts.waiting}>
           <TaskList tasks={tasks} selected={initial ? selected : chatId} />
-        </div>
-        <div className="flex min-h-0 min-w-0 flex-col">
+        </SidePane>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-6">
           {initial && d && sess ? (
             <LiveTask key={selected} id={selected as string} initial={initial} canAct={canAct(c.role)} agentName={agentLabel(initial.task.agent, t.lang)}
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}

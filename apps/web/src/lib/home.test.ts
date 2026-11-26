@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { homeBrief } from "./home";
+import { homeBrief, homeQueue } from "./home";
 
 // D-600: the start is one conversation with Harnova — a few numbers on top and a first message that says what matters,
 // with buttons as answers: get to know a project without a brief first, then what waits for the person, then a new task.
@@ -22,5 +22,20 @@ describe("homeBrief (D-600)", () => {
     const h = homeBrief({ waiting: 0, running: 0, projects: [], firstWaiting: null });
     expect(h.say).toEqual({ key: "home.say.noProject" });
     expect(h.actions).toEqual([{ kind: "link", href: "/projects/add", label: { key: "home.act.add" } }]);
+  });
+});
+
+// D-619: the top of the start is a small dashboard — the counts of the same list the side bar shows, what waits for the
+// person first (a few rows to open at once) and what runs now
+describe("homeQueue (D-619)", () => {
+  const row = (id: string, tone: "amber" | "red" | "blue" | "green" | "gray") => ({ id, href: `/?task=${id}`, text: id, tone, label: tone, ago: "1m" });
+  it("counts the list's own groups and keeps a few rows of what waits and what runs, in the list's order", () => {
+    const q = homeQueue([row("a", "red"), row("b", "blue"), row("c", "amber"), row("d", "green"), row("e", "amber"), row("f", "amber"), row("g", "amber"), row("h", "gray")]);
+    expect(q.counts).toEqual({ waiting: 5, running: 1, done: 2 });
+    expect(q.waiting.map((x) => x.id)).toEqual(["a", "c", "e", "f"]);
+    expect(q.running.map((x) => x.id)).toEqual(["b"]);
+  });
+  it("an empty list is an empty dashboard", () => {
+    expect(homeQueue([])).toEqual({ counts: { waiting: 0, running: 0, done: 0 }, waiting: [], running: [] });
   });
 });
