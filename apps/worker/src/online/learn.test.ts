@@ -7,7 +7,7 @@ import { learnedQuality } from "@mandat/learn";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
 import { evolveTick } from "./evolve.js";
-import { abTable, channelQualityOf, forecastFor, learnCardsTick } from "./learn.js";
+import { abTable, channelQualityOf, forecastAccuracyOf, forecastFor, learnCardsTick } from "./learn.js";
 
 // E9д (spec 5.5, PRD 6.11, D-644): the worker's side of learning — rules from the ledger's failures and asks become
 // proposals with their rule's name (AC-11.1 end to end), the learned Q of a channel moves the choice under mode auto
@@ -101,6 +101,13 @@ describe("cost forecast, A/B, regression cards (PRD 6.11 т. 4–6)", () => {
     for (const usd of [0.2, 0.4, 0.6]) await task("VERIFIED", [], { type: "css", agent: "codex", usd });
     expect(await forecastFor(db, { repo_id: DEMO_REPO_ID, task_type: "css", agent: "codex" })).toEqual({ forecast_usd: 0.4, budget_usd: 0.8, n: 3 });
     expect(await forecastFor(db, { repo_id: DEMO_REPO_ID, task_type: "css", agent: "claude" })).toBeNull();
+  });
+
+  it("AC-11.3 is measured walking forward over the database, by USD or (for subscriptions, D-646) by minutes", async () => {
+    for (const [usd, mins] of [[1, 40], [1, 30], [1, 20], [3, 10]] as const) await task("VERIFIED", [], { type: "docs", agent: "gemini", usd, minsAgo: mins });
+    // the fourth is forecast at 1 from the three before it; the real 3 is outside ±50%
+    expect(await forecastAccuracyOf(db, { by: "usd", minPrior: 3 })).toEqual({ tasks: 1, within: 0, share: 0 });
+    expect(await forecastAccuracyOf(db, { by: "minutes" })).toEqual({ tasks: 0, within: 0, share: null });
   });
 
   it("the A/B table: the current version against its parent, each task under the version approved when it was created", async () => {

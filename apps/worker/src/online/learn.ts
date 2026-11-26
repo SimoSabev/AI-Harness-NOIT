@@ -1,6 +1,6 @@
 import { LEARN_LIMITS } from "@mandat/contract";
 import type { TaskType } from "@mandat/contract";
-import { channelQuality, costForecast, modelRegression, profileAB } from "@mandat/learn";
+import { channelQuality, costForecast, forecastAccuracy, modelRegression, profileAB } from "@mandat/learn";
 import type { AbTable, AskRow, CostKey, Forecast, LearnFailureRow, Quality, VersionRow } from "@mandat/learn";
 import type { SqlClient } from "@mandat/ledger";
 
@@ -54,6 +54,19 @@ export async function forecastFor(db: SqlClient, key: CostKey): Promise<Forecast
     [key.repo_id, key.task_type, key.agent],
   );
   return costForecast(r.rows.map((x) => ({ ...key, ...x })), key);
+}
+
+/**
+ * AC-11.3 (D-646): the forecast measured walking forward over every finished task of the database, by USD or, where the
+ * tasks ran on a subscription (usd = 0), by minutes as a stand-in for the cost.
+ */
+export async function forecastAccuracyOf(db: SqlClient, o: { by: "usd" | "minutes"; minPrior?: number }): Promise<{ tasks: number; within: number; share: number | null }> {
+  const col = o.by === "usd" ? "t.usd" : "t.minutes";
+  const r = await db.query<{ repo_id: string; task_type: string; agent: string; usd: number; at: string }>(
+    `select t.repo_id::text as repo_id, t.type as task_type, t.agent, ${col}::float8 as usd, ${ISO("t.state_entered_at")} as at
+       from public.tasks t where ${col} > 0 and t.state in ${DONE} order by t.state_entered_at limit 20000`,
+  );
+  return forecastAccuracy(r.rows, o.minPrior === undefined ? {} : { minPrior: o.minPrior });
 }
 
 /** the repo's current approved version against its parent; each task counts under the version approved when it was created */
