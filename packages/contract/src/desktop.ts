@@ -139,7 +139,8 @@ export type DesktopCommand = z.infer<typeof DesktopCommand>;
  * E9g A2: what main reads from the web's existing GET /api/inbox for the tray counter and the "waiting for you"
  * notifications — only the id and the text of each waiting item; every other field is dropped.
  */
-export const DesktopInboxSnapshot = z.object({ items: z.array(z.object({ id: TaskId, text: z.string().max(100_000) })).max(500) });
+/** D-624: `waiting` is the web list's own count (a job is one row, an open conversation counts); an older web sends none */
+export const DesktopInboxSnapshot = z.object({ items: z.array(z.object({ id: TaskId, text: z.string().max(100_000) })).max(500), waiting: z.number().int().min(0).max(100_000).optional() });
 export type DesktopInboxSnapshot = z.infer<typeof DesktopInboxSnapshot>;
 
 // E9g A3 (AC-12.6, "local permissions and edits"): the grants, the local apply and the trail of local actions.
