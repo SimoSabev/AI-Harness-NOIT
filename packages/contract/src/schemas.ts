@@ -283,6 +283,8 @@ export const LedgerKind = z.enum([
   "job_restacked", // D-547
   "profile_saved", // D-552
   "project_approved", // D-557
+  "runner_change", // D-702 (E10 hosted: a runner registered or revoked)
+  "audit_export", // D-704
 ]);
 export type LedgerKind = z.infer<typeof LedgerKind>;
 export const LedgerEntry = z
