@@ -12,6 +12,11 @@ export interface GitHistory { subjects: string[]; diffLines: number[] }
 export interface ProfileProposal { profile: HarnessProfile; sources: Record<string, FieldSource>; warnings: string[]; needs_human: string[]; blocked: string[] }
 
 const INSTALL: Record<string, string> = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install --frozen-lockfile --ignore-scripts", yarn: "yarn install --frozen-lockfile --ignore-scripts" };
+const LANG_COMMANDS = {
+  python: { test: "python3 -m pytest", test_one: "python3 -m pytest {file}" },
+  go: { test: "go test ./...", test_one: "go test -run {name} ./..." },
+  rust: { test: "cargo test --offline", test_one: "cargo test --offline {name}" },
+} as const;
 const CONVENTIONAL = /^(feat|fix|docs|chore|refactor|test|perf|build|ci|style|revert)(\([^)]{1,40}\))?!?: \S/;
 const fieldSource = (s: Source): FieldSource => (s === "lockfile" ? "lockfile" : s === "ci.yml" ? "ci" : s === "baseline" ? "baseline" : s === "human" ? "human" : s.startsWith("rule:") ? "rule" : "package_json");
 
@@ -46,16 +51,24 @@ export function proposeProfile(scan: ScanResult, o: { repoId: string; version: n
   const p = propose(scan, { baseline: o.baseline ?? null });
   const sources: Record<string, FieldSource> = {};
   for (const [k, v] of Object.entries(p.field_sources)) sources[`a.${k}`] = fieldSource(v);
-  const pm = p.policy.runtime.package_manager;
+  const rt = p.policy.runtime;
   // B: what an agent should know
-  const commands: ProfileLayersInput["b"]["commands"] = { install: INSTALL[pm] as string };
-  if (scan.scripts.test) commands.test = runScript(pm, "test");
-  if (scan.scripts.lint) commands.lint = runScript(pm, "lint");
-  if (scan.scripts.typecheck) commands.typecheck = runScript(pm, "typecheck");
-  if (scan.scripts.dev) commands.dev = runScript(pm, "dev");
-  if (p.policy.tests.framework === "vitest") commands.test_one = "npx vitest run {file}";
-  if (p.policy.tests.framework === "jest") commands.test_one = "npx jest {file}";
-  sources["b.commands"] = "package_json";
+  let commands: ProfileLayersInput["b"]["commands"];
+  if ("language" in rt) {
+    // D-684: the language's own runner; nothing to install (the image has the toolchain)
+    commands = { ...LANG_COMMANDS[rt.language] };
+    sources["b.commands"] = "rule";
+  } else {
+    const pm = rt.package_manager;
+    commands = { install: INSTALL[pm] as string };
+    if (scan.scripts.test) commands.test = runScript(pm, "test");
+    if (scan.scripts.lint) commands.lint = runScript(pm, "lint");
+    if (scan.scripts.typecheck) commands.typecheck = runScript(pm, "typecheck");
+    if (scan.scripts.dev) commands.dev = runScript(pm, "dev");
+    if (p.policy.tests.framework === "vitest") commands.test_one = "npx vitest run {file}";
+    if (p.policy.tests.framework === "jest") commands.test_one = "npx jest {file}";
+    sources["b.commands"] = "package_json";
+  }
   const conventions: string[] = [];
   if (o.history && o.history.subjects.length > 0) {
     const n = o.history.subjects.length;

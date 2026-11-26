@@ -15,16 +15,20 @@ export type PolicyDetector = z.infer<typeof PolicyDetector>;
 export const MandatPolicy = z
   .object({
     version: z.literal(2),
-    runtime: z
-      .object({
-        node: z.enum(["20", "22", "24"]),
-        package_manager: z.enum(["npm", "pnpm", "yarn", "bun"]),
-        install: z.string().min(1).max(200),
-      })
-      .strict(),
+    runtime: z.union([
+      z
+        .object({
+          node: z.enum(["20", "22", "24"]),
+          package_manager: z.enum(["npm", "pnpm", "yarn", "bun"]),
+          install: z.string().min(1).max(200),
+        })
+        .strict(),
+      // D-683: Python, Go or Rust without dependencies; the toolchain is the language image's, nothing is installed
+      z.object({ language: z.enum(["python", "go", "rust"]), install: z.literal("none") }).strict(),
+    ]),
     tests: z
       .object({
-        framework: z.enum(["vitest", "jest", "mocha", "node"]),
+        framework: z.enum(["vitest", "jest", "mocha", "node", "pytest", "go", "cargo"]),
         command: z.string().min(1).max(500),
         env: z.record(EnvName, z.string().max(200)).default({}),
         test_globs: z.array(Glob).min(1),
@@ -135,9 +139,41 @@ export const INSTALL_CMD = { npm: "npm ci --ignore-scripts", pnpm: "pnpm install
 export const NODE_TEST_COMMAND = "node --test --test-reporter=/opt/mandat/reporters/node-test.mjs --test-reporter-destination=$MANDAT_REPORT";
 const nodeTestOk = (cmd: string) => /^node --test( |$)/.test(cmd) && cmd.includes("--test-reporter=/opt/mandat/reporters/node-test.mjs") && cmd.includes("--test-reporter-destination=$MANDAT_REPORT");
 
+/**
+ * D-683 (E10 languages): the command must write the report Mandat reads, at $MANDAT_REPORT. pytest: junit with file=
+ * (xunit1, D-680), no cache dir in the tree. go: test2json events on stdout. Rust: libtest JSON is unstable on stable
+ * Rust (spike 26.11.2026, cargo 1.100.0: refused without RUSTC_BOOTSTRAP=1), every target run (--no-fail-fast), cargo's
+ * stderr merged in (its `Running <target>` lines name the test binaries), nothing fetched (--offline).
+ */
+export const PYTEST_COMMAND = "python3 -m pytest -p no:cacheprovider -o junit_family=xunit1 --junitxml=$MANDAT_REPORT";
+export const GO_TEST_COMMAND = "go test -json ./... > $MANDAT_REPORT";
+export const RUST_TEST_COMMAND = "RUSTC_BOOTSTRAP=1 cargo test --offline --no-fail-fast -- -Z unstable-options --format json --report-time > $MANDAT_REPORT 2>&1";
+const LANG_RUNNER = {
+  python: { framework: "pytest", format: "pytest-junit", ok: (c: string) => /^python3? -m pytest( |$)/.test(c) && c.includes("junit_family=xunit1") && c.includes("--junitxml=$MANDAT_REPORT") },
+  go: { framework: "go", format: "go-test-json", ok: (c: string) => /^go test -json( |$)/.test(c) && /> ?\$MANDAT_REPORT\s*$/.test(c) },
+  rust: { framework: "cargo", format: "libtest-json", ok: (c: string) => c === RUST_TEST_COMMAND },
+} as const;
+
 export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoConfig } | { ok: false; reason: "unsupported_runner"; detail: string } {
-  const pm = p.runtime.package_manager;
   const fw = p.tests.framework;
+  const common = {
+    protected_paths: p.protected_paths,
+    protected_json_fields: p.protected_json_fields,
+    config_paths: p.config_paths,
+    budgets: { task_usd: p.budgets.task_usd, task_minutes: p.budgets.task_minutes },
+  };
+  if ("language" in p.runtime) {
+    const lang = p.runtime.language;
+    const runner = LANG_RUNNER[lang];
+    if (fw !== runner.framework || !runner.ok(p.tests.command)) return { ok: false, reason: "unsupported_runner", detail: `${lang}/${fw}` };
+    const config = RepoConfig.parse({
+      runtime: { install: "none", node: "24", language: lang },
+      tests: { command: p.tests.command, format: runner.format, env: p.tests.env, test_globs: p.tests.test_globs, ...(p.tests.flaky?.length ? { flaky: p.tests.flaky } : {}) },
+      ...common,
+    });
+    return { ok: true, config };
+  }
+  const pm = p.runtime.package_manager;
   // D-301: npm, pnpm (lockfile v9) and yarn v1; vitest and jest (both write the same JSON report). D-358: yarn berry, bun (text lockfile)
   const install = INSTALL_CMD[pm];
   const runner = fw === "vitest" || fw === "jest" || (fw === "node" && nodeTestOk(p.tests.command));
@@ -147,10 +183,7 @@ export function repoConfigFromPolicy(p: MandatPolicy): { ok: true; config: RepoC
   const config = RepoConfig.parse({
     runtime: { install, node: "24" },
     tests: { command: p.tests.command, format: fw === "jest" ? "jest-json" : fw === "node" ? "node-test" : "vitest-json", env: p.tests.env, test_globs: p.tests.test_globs, ...(p.tests.flaky?.length ? { flaky: p.tests.flaky } : {}) },
-    protected_paths: p.protected_paths,
-    protected_json_fields: p.protected_json_fields,
-    config_paths: p.config_paths,
-    budgets: { task_usd: p.budgets.task_usd, task_minutes: p.budgets.task_minutes },
+    ...common,
   });
   return { ok: true, config };
 }

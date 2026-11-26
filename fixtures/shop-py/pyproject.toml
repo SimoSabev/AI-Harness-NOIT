@@ -1,0 +1,10 @@
+[project]
+name = "shop"
+version = "0.1.0"
+description = "Mandat demo shop (Python): integer cents, a cart with a discount bug."
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

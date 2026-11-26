@@ -1,0 +1,77 @@
+# E10 languages (D-683): the Python twin of the demo shop. No dependencies: the language image (mandat-sandbox-python)
+# brings Python 3.11 and the pinned pytest; nothing is installed. pytest writes junit with file= (xunit1), which Mandat
+# turns into its TestReport; pytest's own configuration (pyproject.toml, conftest.py) is protected like vitest.config.*.
+version: 2
+runtime:
+  language: python
+  install: none
+tests:
+  framework: pytest
+  command: python3 -m pytest -p no:cacheprovider -o junit_family=xunit1 --junitxml=$MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs: ["tests/**", "**/test_*.py", "**/*_test.py"]
+task_types:
+  bugfix:
+    allowed_paths: ["src/**"]
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths: ["src/**", "tests/**"]
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths: ["README.md", "docs/**"]
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - ".github/**"
+  - ".mandat.yml"
+  - ".claude/**"
+  - ".mcp.json"
+  - ".npmrc"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".codex/**"
+  - "**/__snapshots__/**"
+  - "pyproject.toml"
+  - "conftest.py"
+  - "**/conftest.py"
+  - "pytest.ini"
+  - "setup.cfg"
+  - "tox.ini"
+protected_json_fields: {}
+config_paths:
+  - ".mandat.yml"
+  - "pyproject.toml"
+  - "conftest.py"
+  - "**/conftest.py"
+  - "pytest.ini"
+  - "setup.cfg"
+  - "tox.ini"
+  - ".claude/**"
+  - ".npmrc"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".codex/**"
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed: [claude, codex]
+  default: claude
+harness:
+  required_detectors: [D1, D2, D3, D4, D10]
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500

@@ -8,7 +8,10 @@ const WORD = "[A-Za-z0-9@%+=:,./_*-]+";
 const SAFE = new RegExp(`^${WORD}( ${WORD})*$`);
 const PLACEHOLDER = /\{[a-z_]+\}/g;
 
-const pnpmOf = (p: HarnessProfile): boolean => p.layers.a.runtime.package_manager === "pnpm";
+const pnpmOf = (p: HarnessProfile): boolean => {
+  const r = p.layers.a.runtime;
+  return "package_manager" in r && r.package_manager === "pnpm";
+};
 
 /** one check command → its command patterns (placeholders → *), or none when it is not a plain command */
 function formsOf(command: string, pnpm: boolean): string[] {

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { parseReport } from "@mandat/contract";
 import { mandatVerify } from "./cli.js";
 import { sh } from "./git-fixture.test-helper.js";
 import { M_TITLE, okDocker, simRunTests } from "./shop-sim.test-helper.js";
@@ -399,5 +400,66 @@ describe("mandat-verify D12 (UI)", () => {
     const g = demo();
     edit(g.repo, "src/cart.ts", fixCode);
     expect((await d12Of(g, [])).d12).toBeUndefined();
+  });
+});
+
+describe("E10 езици (D-686, D-687): shop-py през mandat-verify, тестовете — симулирани от истински pytest отчет", () => {
+  const junit = readFileSync(path.join(repoRoot, "fixtures/test-reports/pytest-xunit1.xml"), "utf8")
+    .replace(/<testcase classname="tests.test_money" name="test_(skipped|xfail)_one"[\s\S]*?<\/testcase>/g, "")
+    .replace(' skipped="2" tests="22"', ' skipped="0" tests="20"');
+  const fixedJunit = junit.replace(/(name="test_applies_10_percent_over_50"[^>]*)>[\s\S]*?<\/testcase>/, "$1 />").replace('failures="1"', 'failures="0"');
+  function pyRepo() {
+    const root = mkdtempSync(path.join(os.tmpdir(), "mandat-vcli-py-"));
+    const seed = path.join(root, "seed");
+    cpSync(path.join(repoRoot, "fixtures/shop-py"), seed, { recursive: true });
+    sh(seed, "init", "-q");
+    sh(seed, "add", "-A");
+    sh(seed, "commit", "-qm", "base");
+    const remote = path.join(root, "shop-py.git");
+    sh(root, "clone", "-q", "--bare", seed, remote);
+    const repo = path.join(root, "repo");
+    sh(root, "clone", "-q", remote, repo);
+    sh(repo, "checkout", "-q", "-b", "fix/discount");
+    return { remote, repo, home: path.join(root, "home"), root };
+  }
+  const seen: { tree: string; sandbox: string; format?: string; install?: string }[] = [];
+  const runTests = (i: TestProcedureInput) => {
+    seen.push({ tree: i.tree, sandbox: i.images.sandbox, ...(i.reportFormat ? { format: i.reportFormat } : {}), ...(i.install ? { install: i.install } : {}) });
+    const fixed = readFileSync(path.join(i.treeDir, "src/shop/cart.py"), "utf8").includes("= 5000\n");
+    const testsText = readFileSync(path.join(i.treeDir, "tests/test_cart.py"), "utf8");
+    let raw = fixed ? fixedJunit : junit;
+    if (!testsText.includes("test_applies_10_percent_over_50")) raw = fixedJunit.replace(/<testcase classname="tests.test_cart.TestCart" name="test_applies_10_percent_over_50"[^>]*\/>/, "");
+    const report = parseReport("pytest-junit", raw, { workRoot: "/m/work" });
+    const mutants = i.mutants?.map(() => ({ exit: 1, timedOut: false, report: parseReport("pytest-junit", junit, { workRoot: "/m/work" }) }));
+    return Promise.resolve({ ok: true as const, exit: report.valid && report.success ? 0 : 1, timedOut: false, raw, report, ...(mutants ? { mutants } : {}) });
+  };
+  async function verifyPy(f: { remote: string; repo: string; home: string }, images: Record<string, unknown>) {
+    let out = "";
+    const io = { stdout: (s: string) => (out += s), stderr: () => undefined, env: {}, cwd: f.repo };
+    const code = await mandatVerify(["--repo", f.repo, "--remote", `file://${f.remote}`, "--home", f.home, "--external", "--type", "bugfix", "--json"], io, {
+      docker: okDocker, images: images as typeof IMAGES, verify: { runTests, ipv6Sysctl: true, infraUser: "1000:1000" },
+    });
+    const o = JSON.parse(out.trim().split("\n").at(-1) ?? "{}") as { verdict?: { result: string; reasons: string[] }; error?: { code: string } };
+    return { code, o };
+  }
+  it("честна поправка → VERIFIED в образа на Python, без install, pytest-junit; изтрит тест → FAILED D2:missing_test", async () => {
+    const ok = pyRepo();
+    edit(ok.repo, "src/shop/cart.py", (s) => s.replace("= 50000\n", "= 5000\n"));
+    const a = await verifyPy(ok, { ...IMAGES, langs: { python: "py:t" } });
+    expect([a.o.verdict?.result, a.o.verdict?.reasons]).toEqual(["VERIFIED", []]);
+    expect(seen.length).toBeGreaterThanOrEqual(3);
+    expect(seen.every((s) => s.sandbox === "py:t" && s.format === "pytest-junit" && s.install === "none")).toBe(true);
+    const bad = pyRepo();
+    edit(bad.repo, "tests/test_cart.py", (s) => s.replace(/ {4}def test_applies_10_percent_over_50\(self\):\n.*\n\n/, ""));
+    const b = await verifyPy(bad, { ...IMAGES, langs: { python: "py:t" } });
+    expect(b.o.verdict?.result).toBe("FAILED");
+    expect(b.o.verdict?.reasons).toContain("D2:missing_test:tests/test_cart.py > TestCart > test_applies_10_percent_over_50");
+  });
+  it("без образа на езика → UNKNOWN infra:images_missing (никога JS образът)", async () => {
+    const f = pyRepo();
+    edit(f.repo, "src/shop/cart.py", (s) => s.replace("= 50000\n", "= 5000\n"));
+    const r = await verifyPy(f, IMAGES);
+    expect(r.o.verdict?.result).toBe("UNKNOWN");
+    expect(r.o.verdict?.reasons).toContain("infra:images_missing");
   });
 });

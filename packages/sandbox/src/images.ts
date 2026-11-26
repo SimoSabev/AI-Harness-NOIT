@@ -84,3 +84,24 @@ export function uiImageTag(repoRoot: string): string {
   return `mandat-sandbox-ui:pw${PLAYWRIGHT_VERSION}-${contextHash(repoRoot, files)}`;
 }
 
+
+/** D-687: the language images — the sandbox image plus one toolchain; the version is part of the tag */
+export const LANG_IMAGES = {
+  python: { repo: "mandat-sandbox-python", version: "py3.11", dir: "sandbox-python" },
+  go: { repo: "mandat-sandbox-go", version: "go1.27.4", dir: "sandbox-go" },
+  rust: { repo: "mandat-sandbox-rust", version: "rust1.100.0", dir: "sandbox-rust" },
+} as const;
+export type ImageLanguage = keyof typeof LANG_IMAGES;
+
+/** D-687: built FROM the exact sandbox tag, so the tag hashes the language's docker dir and that sandbox tag */
+export function langImageTag(repoRoot: string, lang: ImageLanguage, sandboxTag: string): string {
+  const l = LANG_IMAGES[lang];
+  const files = walk(path.join(repoRoot, "docker", l.dir));
+  const h = createHash("sha256").update(`${contextHash(repoRoot, files)}\0${sandboxTag}`).digest("hex").slice(0, 12);
+  return `${l.repo}:${l.version}-${h}`;
+}
+
+/** D-687: a Python/Go/Rust project runs every container of its task (agent, tests, mutants) in its language image */
+export function imagesForLanguage<T extends { sandbox: string }>(repoRoot: string, images: T, lang: "js" | ImageLanguage): T {
+  return lang === "js" ? images : { ...images, sandbox: langImageTag(repoRoot, lang, images.sandbox) };
+}

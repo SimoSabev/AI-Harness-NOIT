@@ -167,3 +167,49 @@ describe("runTestProcedure (фалшив docker)", () => {
     expect(r2).toMatchObject({ ok: true, ui: null });
   });
 });
+
+describe("E10 езици (D-686): без install, отчетът във формата на езика", () => {
+  const junit = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/test-reports/pytest-xunit1.xml"), "utf8");
+  it("install none: без lockfile, без врата и без install контейнер; отчетът е pytest junit; мутантите също", async () => {
+    const calls: string[][] = [];
+    const d = docker([{ match: (a) => a.join(" ").includes("head -c"), out: junit }, { match: (a) => a.join(" ").includes("python3 -m pytest"), exit: 1 }], calls);
+    const dir = mkdtempSync(path.join(os.tmpdir(), "mandat-tp-py-"));
+    writeFileSync(path.join(dir, "pyproject.toml"), "[project]\nname='x'\n");
+    const started: string[] = [];
+    const r = await runTestProcedure({
+      ...input(d, dir, { testsCommand: "python3 -m pytest -o junit_family=xunit1 --junitxml=$MANDAT_REPORT", install: "none", reportFormat: "pytest-junit" }),
+      startGate: () => Promise.resolve(void started.push("gate") as never),
+      mutants: [{ path: "src/shop/cart.py", mutated: Buffer.from("m"), original: Buffer.from("o") }],
+    });
+    expect(started).toEqual([]);
+    expect(r).toMatchObject({ ok: true, exit: 1 });
+    if (r.ok) {
+      expect(r.report).toMatchObject({ valid: true, total: 22, success: false });
+      expect(r.report.valid && r.report.tests.get("tests/test_cart.py > TestCart > test_applies_10_percent_over_50")).toBe("failed");
+      expect(r.mutants?.[0]?.report.valid).toBe(true);
+    }
+    expect(calls.some((a) => a.includes("--ignore-scripts") || a.join(" ").includes("npm ci"))).toBe(false);
+  });
+  it("go: модулът от go.mod на дървото дава пътя на пакета", async () => {
+    const jsonl = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../fixtures/test-reports/go-test.jsonl"), "utf8");
+    const d = docker([{ match: (a) => a.join(" ").includes("head -c"), out: jsonl }], []);
+    const dir = mkdtempSync(path.join(os.tmpdir(), "mandat-tp-go-"));
+    writeFileSync(path.join(dir, "go.mod"), "module example.com/shop\n\ngo 1.27\n");
+    const r = await runTestProcedure({ ...input(d, dir, { testsCommand: "go test -json ./... > $MANDAT_REPORT", install: "none", reportFormat: "go-test-json" }) });
+    expect(r.ok && r.report.valid && r.report.tests.get("cart > TestApplies10PercentOver50")).toBe("failed");
+  });
+});
+
+describe("goModuleOf (D-686)", () => {
+  it("модулът; без go.mod → нищо; symlink не се следва", async () => {
+    const { symlinkSync } = await import("node:fs");
+    const { goModuleOf } = await import("./test-procedure.js");
+    const d = mkdtempSync(path.join(os.tmpdir(), "mandat-gm-"));
+    expect(goModuleOf(d)).toEqual({});
+    writeFileSync(path.join(d, "go.mod"), '// c\nmodule "example.com/x"\n');
+    expect(goModuleOf(d)).toEqual({ goModule: "example.com/x" });
+    const e = mkdtempSync(path.join(os.tmpdir(), "mandat-gm-"));
+    symlinkSync(path.join(d, "go.mod"), path.join(e, "go.mod"));
+    expect(goModuleOf(e)).toEqual({});
+  });
+});

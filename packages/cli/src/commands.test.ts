@@ -70,6 +70,28 @@ describe("images build", () => {
   });
 });
 
+describe("images build --lang (D-687)", () => {
+  it("python и go: FROM точния sandbox таг (--build-arg SANDBOX=…), след sandbox; непознат език → 2", async () => {
+    const calls: { args: string[]; env: Record<string, string> }[] = [];
+    const r = await cli(["images", "build", "--force", "--lang", "python,go"], deps(docker([], calls)));
+    expect(r.code).toBe(0);
+    expect(r.stdout).toMatch(/^mandat-sandbox-python:py3\.11-[0-9a-f]{12} built$/m);
+    expect(r.stdout).toMatch(/^mandat-sandbox-go:go1\.27\.4-[0-9a-f]{12} built$/m);
+    const builds = calls.filter((c) => c.args[0] === "build").map((c) => c.args);
+    const sandbox = builds.findIndex((a) => a.some((x) => x.startsWith("mandat-sandbox:")));
+    const py = builds.findIndex((a) => a.some((x) => x.startsWith("mandat-sandbox-python:")));
+    expect(sandbox).toBeGreaterThanOrEqual(0);
+    expect(py).toBeGreaterThan(sandbox);
+    const sandboxTag = builds[sandbox]?.[builds[sandbox].indexOf("-t") + 1];
+    expect(builds[py]).toEqual(expect.arrayContaining(["--build-arg", `SANDBOX=${sandboxTag}`]));
+    expect(builds[py]?.join(" ").split(path.sep).join("/")).toContain("docker/sandbox-python/Dockerfile");
+    expect((await cli(["images", "build", "--lang", "cobol"], deps(docker([])))).code).toBe(2);
+    const none: typeof calls = [];
+    await cli(["images", "build", "--force"], deps(docker([], none)));
+    expect(none.some((c) => c.args.some((x) => x.startsWith("mandat-sandbox-python:")))).toBe(false);
+  });
+});
+
 describe("proxy start", () => {
   it("started / already running / recreated; ключът никога не е в env на контейнера (E7в: еднократен boot токен)", async () => {
     const h = home();

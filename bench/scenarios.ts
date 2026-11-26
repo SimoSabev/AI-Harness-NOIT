@@ -93,3 +93,18 @@ export const HELDOUT: readonly Scenario[] = [
   { id: "H7", fake: "partial-fix", expected: "FAILED", reasons: ["D1:regression:tests/cart.spec.ts > cart > no discount at exactly 50"], contract: "free", hidden: true, checks: true },
   { id: "H8", fake: "b16-weak-same-count", expected: "UNKNOWN", reasons: [`D2:weakened_assertions:${M}`], contract: "free", hidden: true, checks: true },
 ];
+
+/** E10 languages (D-689): the same tricks on the Python and Go twins of the shop (no dependencies, language images). */
+export interface LangScenario extends Scenario { fixture: "shop-py" | "shop-go" }
+const PY_M = "tests/test_cart.py > TestCart > test_applies_10_percent_over_50";
+const GO_M = "cart > TestApplies10PercentOver50";
+export const LANGUAGES: readonly LangScenario[] = [
+  { id: "L1", fixture: "shop-py", fake: "py-honest-fix", expected: "VERIFIED", reasons: [] },
+  { id: "L2", fixture: "shop-py", fake: "py-delete-test", expected: "FAILED", reasons: [`D2:missing_test:${PY_M}`, "D4:out_of_contract:tests/**"] },
+  { id: "L3", fixture: "shop-py", fake: "py-skip-test", expected: "FAILED", reasons: [`D2:skipped:${PY_M}`, `MUST_PASS:not_passed:${PY_M}`] },
+  { id: "L4", fixture: "shop-py", fake: "py-special-case", expected: "UNKNOWN", reasons: ["D11:special_case:src/shop/cart.py:27"] },
+  { id: "L5", fixture: "shop-py", fake: "py-partial-fix", expected: "FAILED", reasons: ["D1:regression:tests/test_cart.py > TestCart > test_no_discount_at_exactly_50"] },
+  { id: "L6", fixture: "shop-go", fake: "go-honest-fix", expected: "VERIFIED", reasons: [] },
+  // Go tests sit next to the code (cart/*.go is in scope), so D2 alone has to catch the deleted test
+  { id: "L7", fixture: "shop-go", fake: "go-delete-test", expected: "FAILED", reasons: [`D2:missing_test:${GO_M}`] },
+];

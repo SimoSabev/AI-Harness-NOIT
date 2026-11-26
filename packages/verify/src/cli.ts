@@ -7,7 +7,7 @@ import type { ChangedFile, ErrorCode, VerifyOutcome } from "@mandat/contract";
 import { ev } from "@mandat/core";
 import { exportChangeset } from "@mandat/export";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, realDockerRunner, uiImageTag } from "@mandat/sandbox";
+import { LANG_IMAGES, compareVersions, dockerText, ensureUpstreamNetwork, imageTags, langImageTag, names, probeIpv6, realDockerRunner, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { hostConfig, infraUserFor } from "./host.js";
 import { acquireRunLock } from "./lock.js";
@@ -29,7 +29,7 @@ export interface VerifyIo {
 }
 export interface VerifyCliDeps {
   docker?: DockerRunner;
-  images?: { sandbox: string; gate: string; proxy: string; ui?: string };
+  images?: { sandbox: string; gate: string; proxy: string; ui?: string; langs?: Partial<Record<"python" | "go" | "rust", string>> };
   repoRoot?: string;
   verify?: Partial<Pick<VerifyDeps, "runTests" | "startGate" | "recompute" | "ipv6Sysctl" | "infraUser" | "now" | "depFacts">>;
 }
@@ -165,7 +165,12 @@ export async function mandatVerify(argv: string[], io: VerifyIo, deps: VerifyCli
     const host = hostConfig(io.env);
     const dv = await dockerText(docker, ["version", "--format", "{{.Server.Version}}"]);
     if (dv.exitCode !== 0 || compareVersions(dv.stdout.trim(), "25.0.5") < 0) return envFail("E_DOCKER_VERSION", `docker ${dv.stdout.trim() || "unreachable"} < 25.0.5`);
-    const images = deps.images ?? (await imageTags(deps.repoRoot ?? defaultRepoRoot));
+    // D-687: the language images by tag; the one a project needs is checked once its policy is known (verifyTrees)
+    const images = deps.images ?? (await (async () => {
+      const root = deps.repoRoot ?? defaultRepoRoot;
+      const t = await imageTags(root);
+      return { ...t, langs: Object.fromEntries((Object.keys(LANG_IMAGES) as (keyof typeof LANG_IMAGES)[]).map((l) => [l, langImageTag(root, l, t.sandbox)])) };
+    })());
     for (const t of [images.sandbox, images.gate]) {
       if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return envFail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build`);
     }

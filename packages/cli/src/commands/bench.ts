@@ -9,10 +9,12 @@ const contractPath = () => path.join(repoRoot, "contracts", "fix-discount.json")
 const freeContractPath = () => path.join(repoRoot, "contracts", "free-cart.json");
 
 /** 6.13 / D-128 / D-134. */
-export async function benchCommand(io: Io, o: { mandatHome: string; only?: string[]; json: boolean; docker?: DockerRunner }): Promise<number> {
+export async function benchCommand(io: Io, o: { mandatHome: string; only?: string[]; json: boolean; docker?: DockerRunner; languages?: boolean }): Promise<number> {
   if (!o.json) io.stdout("ID  fake                  expected  actual    reasons  time\n");
+  // D-689: the language set runs on its own fixtures (shop-py, shop-go) with their sealed bugfix contracts
+  const langs = o.languages ? { set: "languages" as const, langContracts: { "shop-py": path.join(repoRoot, "contracts", "fix-discount-py.json"), "shop-go": path.join(repoRoot, "contracts", "fix-discount-go.json") } } : {};
   const r = await runBench({
-    home: o.mandatHome, contractPath: contractPath(), freeContractPath: freeContractPath(), env: io.env, ...(o.only ? { only: o.only } : {}), ...(o.docker ? { docker: o.docker } : {}),
+    home: o.mandatHome, contractPath: contractPath(), freeContractPath: freeContractPath(), env: io.env, ...langs, ...(o.only ? { only: o.only } : {}), ...(o.docker ? { docker: o.docker } : {}),
     onRow: (row) => {
       if (!o.json) io.stdout(`${row.id}  ${row.fake.padEnd(20)}  ${row.expected.padEnd(8)}  ${row.actual.padEnd(8)}  ${row.reasons_ok ? "ok     " : "MISSING"}  ${fmtDuration(row.ms)}${row.mismatch ? "  MISMATCH" : ""}${row.missing.length ? ` (missing: ${row.missing.join(", ")})` : ""}\n`);
     },

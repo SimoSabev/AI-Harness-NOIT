@@ -2,7 +2,7 @@ import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
 import { applyLocal } from "./commands/apply.js";
-import { ATTACKS, SCENARIOS } from "@mandat/bench";
+import { ATTACKS, LANGUAGES, SCENARIOS } from "@mandat/bench";
 import { doctor } from "./commands/doctor.js";
 import { statsCommand } from "./commands/stats.js";
 import { imagesBuild } from "./commands/images.js";
@@ -141,8 +141,9 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .command("build")
     .option("--force", "docker build --no-cache even if the tag exists")
     .option("--ui", "also the D12 browser image (Playwright + Chromium, ~2 GB)")
-    .action(async (o: { force?: boolean; ui?: boolean }) => {
-      code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env), ui: Boolean(o.ui) });
+    .option("--lang <languages>", "also the language images on top of the sandbox: python, go, rust (comma-separated)")
+    .action(async (o: { force?: boolean; ui?: boolean; lang?: string }) => {
+      code = await imagesBuild(io, deps(), { force: Boolean(o.force), host: hostConfig(io.env), ui: Boolean(o.ui), ...(o.lang ? { langs: [o.lang] } : {}) });
     });
 
   program
@@ -163,15 +164,17 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("run the bench scenarios B1–B40 (9.6, E9b)")
     .option("--only <ids>", "e.g. B1,B5")
     .option("--fail-gate", "B1 with a broken verifier: must NOT be VERIFIED (exit 1 = caught, T3-3)")
+    .option("--languages", "the language set L1–L7 (shop-py, shop-go; images build --lang python,go) instead of B1–B40 (D-689)")
     .option("--json", "machine output")
-    .action(async (o: { only?: string; json?: boolean; failGate?: boolean }) => {
+    .action(async (o: { only?: string; json?: boolean; failGate?: boolean; languages?: boolean }) => {
       if (o.failGate) {
         code = await failGateCommand(io, { mandatHome: home(), json: json(o), ...(depsIn ? { docker: depsIn.docker } : {}) });
         return;
       }
       const only = list(o.only);
-      if (only && only.some((x) => !SCENARIOS.some((s) => s.id === x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
-      code = await benchCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
+      const known = o.languages ? LANGUAGES : SCENARIOS;
+      if (only && only.some((x) => !known.some((s) => s.id === x))) throw new MandatError("E_USAGE", `unknown scenario in --only: ${o.only}`);
+      code = await benchCommand(io, { mandatHome: home(), json: json(o), ...(only ? { only } : {}), ...(o.languages ? { languages: true } : {}), ...(depsIn ? { docker: depsIn.docker } : {}) });
     });
   program
     .command("redteam", DEV)

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { testIdOf } from "./test-id.js";
+import { parseReport } from "./test-report.js";
 
 // Vitest 5.0.5 JSON reporter (4.5): unknown fields pass through, never .strict().
 export const VitestAssertion = z
@@ -18,35 +18,11 @@ export const VitestJsonReport = z
 export type TestStatus = "passed" | "failed" | "skipped" | "pending" | "todo" | "disabled";
 export type ParsedReport =
   | { valid: true; success: boolean; total: number /* = tests.size, D-124 */; tests: Map<string, TestStatus>; /** D-548: ms per test, when the reporter gave it */ durations?: Map<string, number> }
-  | { valid: false; error: "missing" | "too_large" | "json" | "schema" | "duplicate_id"; detail: string };
+  | { valid: false; error: "missing" | "too_large" | "json" | "schema" | "xml" | "duplicate_id"; detail: string };
 
 export const MAX_REPORT_BYTES = 20 * 1024 * 1024;
 
+/** D-680: through the common TestReport, like every other runner (the vitest/jest JSON shape). */
 export function parseVitestReport(raw: string | null, workRoot: string): ParsedReport {
-  if (raw === null) return { valid: false, error: "missing", detail: "no report" };
-  const bytes = Buffer.byteLength(raw, "utf8");
-  if (bytes > MAX_REPORT_BYTES) return { valid: false, error: "too_large", detail: `${bytes} bytes` };
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch (e) {
-    return { valid: false, error: "json", detail: e instanceof Error ? e.message : String(e) };
-  }
-  const r = VitestJsonReport.safeParse(json);
-  if (!r.success) {
-    const first = r.error.issues[0];
-    return { valid: false, error: "schema", detail: first ? `${first.path.join(".")}: ${first.message}` : "invalid" };
-  }
-  const tests = new Map<string, TestStatus>();
-  const durations = new Map<string, number>();
-  for (const file of r.data.testResults) {
-    for (const a of file.assertionResults) {
-      const id = testIdOf(file.name, workRoot, a.ancestorTitles, a.title);
-      if (tests.has(id)) return { valid: false, error: "duplicate_id", detail: id };
-      tests.set(id, a.status);
-      const ms = (a as { duration?: unknown }).duration;
-      if (typeof ms === "number" && Number.isFinite(ms) && ms >= 0) durations.set(id, ms);
-    }
-  }
-  return { valid: true, success: r.data.success, total: tests.size, tests, durations };
+  return parseReport("vitest-json", raw, { workRoot });
 }

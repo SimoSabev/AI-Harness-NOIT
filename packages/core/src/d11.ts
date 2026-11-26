@@ -37,6 +37,9 @@ export function addedLines(diffPatch: string): Map<string, number[]> {
   return out;
 }
 
+/** D-685: the source language of a mutated file (the project's; absent = JS/TS). */
+export type MutationLang = "js" | "python" | "go" | "rust";
+
 /** The line with string literals, template literals and comments blanked (same length), so operators inside them are not mutated. */
 function codeOnly(line: string): string {
   let out = "";
@@ -69,6 +72,85 @@ function codeOnly(line: string): string {
   return out;
 }
 
+const blank = (s: string) => s.replace(/[^\n]/g, " ");
+/**
+ * D-685: a whole file with its strings and comments blanked (same length, newlines kept), so a multi-line Python
+ * docstring, a Go raw string or a Rust block comment is never mutated. Python: `#` comments, '…' "…" and triple quotes
+ * (`//` is integer division). Go: `//` and `/* *\/` comments, "…", runes and raw `…` strings. Rust: the same, but `'a`
+ * is a lifetime, not a quote (only `'x'` / `'\n'` is a char literal).
+ */
+function codeOnlyFile(content: string, lang: Exclude<MutationLang, "js">): string {
+  let out = "";
+  let i = 0;
+  const n = content.length;
+  const take = (end: number) => {
+    out += blank(content.slice(i, end));
+    i = end;
+  };
+  const untilQuote = (q: string, from: number, multiline: boolean): number => {
+    let j = from;
+    while (j < n) {
+      const c = content[j] as string;
+      if (c === "\\" && q !== "`") j += 2;
+      else if (c === q) return j + 1;
+      else if (c === "\n" && !multiline) return j;
+      else j++;
+    }
+    return n;
+  };
+  while (i < n) {
+    const c = content[i] as string;
+    if (lang === "python") {
+      if (c === "#") {
+        const nl = content.indexOf("\n", i);
+        take(nl === -1 ? n : nl);
+        continue;
+      }
+      if (c === '"' || c === "'") {
+        const q3 = c.repeat(3);
+        if (content.startsWith(q3, i)) {
+          const end = content.indexOf(q3, i + 3);
+          take(end === -1 ? n : end + 3);
+        } else take(untilQuote(c, i + 1, false));
+        continue;
+      }
+    } else {
+      if (content.startsWith("//", i)) {
+        const nl = content.indexOf("\n", i);
+        take(nl === -1 ? n : nl);
+        continue;
+      }
+      if (content.startsWith("/*", i)) {
+        const end = content.indexOf("*/", i + 2);
+        take(end === -1 ? n : end + 2);
+        continue;
+      }
+      if (c === '"') {
+        take(untilQuote('"', i + 1, lang === "rust"));
+        continue;
+      }
+      if (c === "`" && lang === "go") {
+        take(untilQuote("`", i + 1, true));
+        continue;
+      }
+      if (c === "'") {
+        const ch = /^'(?:\\.[^']{0,8}|[^'\\\n])'/.exec(content.slice(i, i + 12));
+        if (ch) {
+          take(i + ch[0].length);
+          continue;
+        }
+        if (lang === "go") {
+          take(untilQuote("'", i + 1, false));
+          continue;
+        }
+      }
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 const OPS: { re: RegExp; to: (m: string) => string }[] = [
   { re: /===/g, to: () => "!==" },
   { re: /!==/g, to: () => "===" },
@@ -88,24 +170,53 @@ const OPS: { re: RegExp; to: (m: string) => string }[] = [
   { re: /(?<![\w.$])\d+(?:\.\d+)?(?![\w.])/g, to: (m) => (Number(m) === 0 ? "1" : "0") },
 ];
 
-function sitesOfLine(path: string, n: number, text: string): MutationSite[] {
+const COMPARE: { re: RegExp; to: (m: string) => string }[] = [
+  { re: /(?<![=!<>])==(?!=)/g, to: () => "!=" },
+  { re: /(?<![=!])!=(?!=)/g, to: () => "==" },
+  { re: /(?<![<>=!])>=(?!=)/g, to: () => ">" },
+  { re: /(?<![<>=!])<=(?!=)/g, to: () => "<" },
+  { re: /(?<=\s)>(?=\s)/g, to: () => ">=" },
+  { re: /(?<=\s)<(?=\s)/g, to: () => "<=" },
+];
+const ARITH: { re: RegExp; to: (m: string) => string }[] = [
+  { re: /(?<=\s)\+(?=\s)/g, to: () => "-" },
+  { re: /(?<=\s)-(?=\s)/g, to: () => "+" },
+  { re: /(?<![\w.$])\d+(?:\.\d+)?(?![\w.])/g, to: (m) => (Number(m) === 0 ? "1" : "0") },
+];
+/** D-685: the same kinds of mutants in each language's own spelling */
+const LANG_OPS: Record<Exclude<MutationLang, "js">, { re: RegExp; to: (m: string) => string }[]> = {
+  python: [...COMPARE, { re: /\band\b/g, to: () => "or" }, { re: /\bor\b/g, to: () => "and" }, { re: /\bTrue\b/g, to: () => "False" }, { re: /\bFalse\b/g, to: () => "True" }, ...ARITH],
+  go: [...COMPARE, { re: /&&/g, to: () => "||" }, { re: /\|\|/g, to: () => "&&" }, { re: /\btrue\b/g, to: () => "false" }, { re: /\bfalse\b/g, to: () => "true" }, ...ARITH],
+  rust: [...COMPARE, { re: /&&/g, to: () => "||" }, { re: /\|\|/g, to: () => "&&" }, { re: /\btrue\b/g, to: () => "false" }, { re: /\bfalse\b/g, to: () => "true" }, ...ARITH],
+};
+const SKIP: Record<Exclude<MutationLang, "js">, RegExp> = {
+  python: /^(import\s|from\s+\S+\s+import\s|@)/,
+  go: /^(import[\s(]|package\s)/,
+  rust: /^(use\s|mod\s|extern\s|#!?\[)/,
+};
+
+function sitesOfLine(path: string, n: number, text: string, code?: string, lang: MutationLang = "js"): MutationSite[] {
   const t = text.trimStart();
-  if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*") || t.startsWith("import ") || t.startsWith("export {")) return [];
-  const code = codeOnly(text);
+  if (lang !== "js") {
+    if (SKIP[lang].test(t)) return [];
+  } else if (t.startsWith("//") || t.startsWith("*") || t.startsWith("/*") || t.startsWith("import ") || t.startsWith("export {")) return [];
+  const c = code ?? codeOnly(text);
   const out: MutationSite[] = [];
-  for (const op of OPS) {
-    for (const m of code.matchAll(op.re)) out.push({ path, line: n, col: m.index, from: m[0], to: op.to(m[0]) });
+  for (const op of lang === "js" ? OPS : LANG_OPS[lang]) {
+    for (const m of c.matchAll(op.re)) out.push({ path, line: n, col: m.index, from: m[0], to: op.to(m[0]) });
   }
   return out.sort((a, b) => a.col - b.col);
 }
 
 /** Deterministic: files by path, lines ascending; first one site per line, then the second of each line, … up to max. */
-export function mutationSites(o: { files: { path: string; content: string }[]; added: Map<string, number[]>; max: number }): MutationSite[] {
+export function mutationSites(o: { files: { path: string; content: string }[]; added: Map<string, number[]>; max: number; lang?: MutationLang }): MutationSite[] {
+  const lang = o.lang ?? "js";
   const perLine: MutationSite[][] = [];
   for (const f of [...o.files].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))) {
     const lines = f.content.split("\n");
+    const code = lang === "js" ? null : codeOnlyFile(f.content, lang).split("\n");
     for (const n of [...(o.added.get(f.path) ?? [])].sort((a, b) => a - b)) {
-      const s = sitesOfLine(f.path, n, lines[n - 1] ?? "");
+      const s = sitesOfLine(f.path, n, lines[n - 1] ?? "", code ? (code[n - 1] ?? "") : undefined, lang);
       if (s.length > 0) perLine.push(s);
     }
   }
@@ -142,16 +253,25 @@ const NUM = "-?\\d+(?:\\.\\d+)?";
  * D-357: an added source line `if (<x> === <N>) return <M>;` where N is a number the tests pass in and M a number they
  * expect. Mutants cannot see it (the special case is exactly what the tests check), so it is evidence of its own.
  */
-export function specialCases(o: { files: { path: string; content: string }[]; added: Map<string, number[]>; tests: readonly string[] }): SpecialCase[] {
+/** D-685: the special-case line and the test's expected value in each language */
+const SPECIAL: Record<MutationLang, { line: RegExp; expected: (n: string) => RegExp }> = {
+  js: { line: new RegExp(`===?\\s*(${NUM})\\s*\\)\\s*\\{?\\s*return\\s+(${NUM})\\s*;?\\s*\\}?\\s*$`), expected: (n) => new RegExp(`\\.(?:toBe|toEqual|toStrictEqual)\\(\\s*${n}\\s*\\)`) },
+  python: { line: new RegExp(`==\\s*(${NUM})\\s*\\)?\\s*:\\s*return\\s+(${NUM})\\s*$`), expected: (n) => new RegExp(`==\\s*${n}(?![\\d.])`) },
+  go: { line: new RegExp(`==\\s*(${NUM})\\s*\\{\\s*return\\s+(${NUM})\\s*\\}?\\s*$`), expected: (n) => new RegExp(`[!=]=\\s*${n}(?![\\d.])`) },
+  rust: { line: new RegExp(`==\\s*(${NUM})\\s*\\{\\s*(?:return\\s+)?(${NUM})\\s*;?\\s*\\}?\\s*$`), expected: (n) => new RegExp(`(?:,\\s*${n}\\s*\\)|[!=]=\\s*${n}(?![\\d.]))`) },
+};
+export function specialCases(o: { files: { path: string; content: string }[]; added: Map<string, number[]>; tests: readonly string[]; lang?: MutationLang }): SpecialCase[] {
+  const lang = o.lang ?? "js";
   const t = o.tests.join("\n");
   const usedAsInput = (n: string) => new RegExp(`[(,\\[{:]\\s*${n.replace(".", "\\.")}\\s*[),\\]}]`).test(t);
-  const expected = (n: string) => new RegExp(`\\.(?:toBe|toEqual|toStrictEqual)\\(\\s*${n.replace(".", "\\.")}\\s*\\)`).test(t);
+  const expected = (n: string) => SPECIAL[lang].expected(n.replace(".", "\\.")).test(t);
   const out: SpecialCase[] = [];
-  const re = new RegExp(`===?\\s*(${NUM})\\s*\\)\\s*\\{?\\s*return\\s+(${NUM})\\s*;?\\s*\\}?\\s*$`);
+  const re = SPECIAL[lang].line;
   for (const f of o.files) {
     const lines = f.content.split("\n");
+    const code = lang === "js" ? null : codeOnlyFile(f.content, lang).split("\n");
     for (const n of o.added.get(f.path) ?? []) {
-      const m = re.exec(codeOnly(lines[n - 1] ?? "").trimEnd());
+      const m = re.exec((code ? (code[n - 1] ?? "") : codeOnly(lines[n - 1] ?? "")).trimEnd());
       if (m?.[1] && m[2] && usedAsInput(m[1]) && expected(m[2])) out.push({ path: f.path, line: n, input: m[1], output: m[2] });
     }
   }
@@ -165,12 +285,24 @@ const NODE_ENV_TEST = /process\.env(?:\.NODE_ENV|\[\s*['"`]NODE_ENV['"`]\s*\])\s
  * E9b (bench B36): an added source line that asks whether it runs under the test runner (the runner's env vars,
  * NODE_ENV === "test", import.meta.vitest). Such code can pass every test by construction; a human looks.
  */
-export function testEnvChecks(o: { files: { path: string; content: string }[]; added: Map<string, number[]> }): TestEnvCheck[] {
+/** D-685: Python asks pytest's env var or sys.modules; Go testing.Testing(); Rust cfg!(test) (not the #[cfg(test)] module attribute) */
+const LANG_TEST_ENV: Record<Exclude<MutationLang, "js">, (code: string, raw: string) => boolean> = {
+  python: (code, raw) => (/\b(?:environ|getenv)\b/.test(code) && /\bPYTEST_CURRENT_TEST\b/.test(raw)) || (/\bsys\.modules\b/.test(code) && /["']pytest["']\s+in\s+sys\.modules/.test(raw)),
+  go: (code) => /\btesting\.Testing\s*\(\s*\)/.test(code),
+  rust: (code) => /\bcfg!\s*\(\s*test\s*\)/.test(code),
+};
+export function testEnvChecks(o: { files: { path: string; content: string }[]; added: Map<string, number[]>; lang?: MutationLang }): TestEnvCheck[] {
+  const lang = o.lang ?? "js";
   const out: TestEnvCheck[] = [];
   for (const f of o.files) {
     const lines = f.content.split("\n");
+    const codeLines = lang === "js" ? null : codeOnlyFile(f.content, lang).split("\n");
     for (const n of o.added.get(f.path) ?? []) {
       const raw = lines[n - 1] ?? "";
+      if (lang !== "js") {
+        if (LANG_TEST_ENV[lang](codeLines?.[n - 1] ?? "", raw)) out.push({ path: f.path, line: n });
+        continue;
+      }
       const code = codeOnly(raw);
       const hit = /\bimport\.meta\.vitest\b/.test(code) || (/\bprocess\.env\b/.test(code) && (RUNNER_ENV.test(raw) || NODE_ENV_TEST.test(raw)));
       if (hit) out.push({ path: f.path, line: n });

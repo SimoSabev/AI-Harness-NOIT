@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { FREE_TASK_TYPE, NODE_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy, taskTypeOf } from "./policy.js";
-import { packageManagerOf } from "./schemas.js";
+import { FREE_TASK_TYPE, NODE_TEST_COMMAND, RUST_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy, taskTypeOf } from "./policy.js";
+import { languageOf, packageManagerOf } from "./schemas.js";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const demo = readFileSync(path.join(repo, "fixtures/demo-shop/.mandat.yml"), "utf8");
@@ -82,5 +82,39 @@ describe("taskTypeOf (D-360: „без ограничения“)", () => {
     const own = ok(demo.replace("task_types:\n", "task_types:\n  free:\n    allowed_paths: [\"**\"]\n    may_change_tests: true\n    risk_class: high\n")).policy;
     expect(taskTypeOf(own, "free")?.risk_class).toBe("high");
     expect(taskTypeOf({ ...p, task_types: {} }, "docs")).toBeUndefined();
+  });
+});
+
+describe("E10 езици (D-683): Python, Go, Rust без зависимости", () => {
+  const py = readFileSync(path.join(repo, "fixtures/shop-py/.mandat.yml"), "utf8");
+  const go = readFileSync(path.join(repo, "fixtures/shop-go/.mandat.yml"), "utf8");
+  it("shop-py → runtime python без install; формат pytest-junit; хешът на JS политиките не се мени", () => {
+    const r = repoConfigFromPolicy(ok(py).policy);
+    expect(r.ok && r.config.runtime).toEqual({ install: "none", node: "24", language: "python" });
+    expect(r.ok && r.config.tests.format).toBe("pytest-junit");
+    expect(r.ok && languageOf(r.config)).toBe("python");
+    expect(languageOf({ runtime: { install: "npm ci --ignore-scripts", node: "24" } })).toBe("js");
+    expect(ok(demo).config_hash).toBe(ok(demo).config_hash);
+    expect(ok(demo).policy.runtime).toEqual({ node: "24", package_manager: "npm", install: "npm ci --ignore-scripts" });
+  });
+  it("shop-go → go-test-json; Rust с RUSTC_BOOTSTRAP=1 и --format json → libtest-json", () => {
+    const g = repoConfigFromPolicy(ok(go).policy);
+    expect(g.ok && [g.config.runtime.language, g.config.tests.format]).toEqual(["go", "go-test-json"]);
+    const rs = ok(py.replace("language: python", "language: rust").replace("framework: pytest", "framework: cargo").replace(/command: .*/, `command: ${RUST_TEST_COMMAND}`));
+    const r = repoConfigFromPolicy(rs.policy);
+    expect(r.ok && [r.config.runtime.language, r.config.tests.format]).toEqual(["rust", "libtest-json"]);
+  });
+  it("рамка или команда, които не пишат отчета ни → unsupported_runner", () => {
+    const bad = (t: string) => repoConfigFromPolicy(ok(t).policy);
+    expect(bad(py.replace("framework: pytest", "framework: vitest"))).toEqual({ ok: false, reason: "unsupported_runner", detail: "python/vitest" });
+    expect(bad(py.replace(/command: .*/, "command: python3 -m pytest --junitxml=$MANDAT_REPORT"))).toEqual({ ok: false, reason: "unsupported_runner", detail: "python/pytest" });
+    expect(bad(go.replace(/command: .*/, "command: go test ./..."))).toEqual({ ok: false, reason: "unsupported_runner", detail: "go/go" });
+    expect(bad(py.replace("language: python", "language: rust").replace("framework: pytest", "framework: cargo").replace(/command: .*/, "command: cargo test"))).toEqual({ ok: false, reason: "unsupported_runner", detail: "rust/cargo" });
+  });
+  it("смесено: език с package_manager, или JS рамка pytest → невалидна политика", () => {
+    expect(parseMandatYml(py.replace("  install: none", "  install: none\n  package_manager: npm")).ok).toBe(false);
+    expect(parseMandatYml(py.replace("  install: none", "  install: pip install -r requirements.txt")).ok).toBe(false);
+    expect(parseMandatYml(demo.replace("framework: vitest", "framework: pytest")).ok).toBe(true); // valid YAML policy, but no runner:
+    expect(repoConfigFromPolicy(ok(demo.replace("framework: vitest", "framework: pytest")).policy)).toEqual({ ok: false, reason: "unsupported_runner", detail: "npm/pytest" });
   });
 });

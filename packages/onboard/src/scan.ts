@@ -4,6 +4,8 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { dangerousPatterns, findInvisible } from "./invisible.js";
+import { detectLanguage } from "./languages.js";
+import type { LanguageFacts } from "./languages.js";
 import type { InvisibleHit } from "./invisible.js";
 
 // Демо промпт т. 8.2 (2): the scanner without AI. Input is a read-only view of a clean clone (hooks off); it reads
@@ -46,6 +48,8 @@ export interface ScanResult {
   style: string[];
   /** E8e: the repo's skills (without their text); blocked = an invisible character */
   skills: Omit<RepoSkill, "text">[];
+  /** E10 (D-684): Python, Go or Rust from pyproject.toml / go.mod / Cargo.toml; null = JS/TS (or nothing recognised) */
+  language: LanguageFacts | null;
 }
 
 const LOCKFILES: [string, PackageManager][] = [["pnpm-lock.yaml", "pnpm"], ["package-lock.json", "npm"], ["yarn.lock", "yarn"], ["bun.lock", "bun"], ["bun.lockb", "bun"]];
@@ -188,6 +192,7 @@ export function scanRepo(v: RepoView): ScanResult {
     hasCss: files.some((f) => /\.(css|scss)$/.test(f)),
     style: styleFacts(v, files),
     skills: skillsFromView(v).map(({ text: _text, ...rest }) => rest),
+    language: detectLanguage(v, files, lock !== null),
   };
 }
 

@@ -1,4 +1,4 @@
-import { NODE_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy, sha256Tag } from "@mandat/contract";
+import { GO_TEST_COMMAND, NODE_TEST_COMMAND, PYTEST_COMMAND, RUST_TEST_COMMAND, parseMandatYml, repoConfigFromPolicy, sha256Tag } from "@mandat/contract";
 import type { MandatPolicy } from "@mandat/contract";
 import { stringify } from "yaml";
 import { classifyCommand } from "./commands.js";
@@ -35,14 +35,25 @@ const TEST_CMD: Record<string, string> = {
 };
 const PROTECTED_BASE = [".github/**", ".mandat.yml", ".claude/**", ".mcp.json", ".codex/**", "AGENTS.md", "CLAUDE.md", ".npmrc", "**/__snapshots__/**"];
 const CONFIG_PATHS = [".mandat.yml", ".claude/**", ".codex/**", ".npmrc", "AGENTS.md", "CLAUDE.md"];
+/**
+ * E10 languages (D-684): the runner, its test globs and the files that configure it (protected like vitest.config.*:
+ * a change there makes the verdict UNKNOWN). Go tests sit next to the code, so a bugfix may touch only `.go` files.
+ */
+const LANG = {
+  python: { command: PYTEST_COMMAND, globs: ["tests/**", "test/**", "**/test_*.py", "**/*_test.py"], config: ["pyproject.toml", "setup.py", "setup.cfg", "pytest.ini", "tox.ini", "conftest.py", "**/conftest.py", "requirements*.txt"], bugfix: null },
+  go: { command: GO_TEST_COMMAND, globs: ["**/*_test.go", "**/testdata/**"], config: ["go.mod", "go.sum", "go.work", "go.work.sum"], bugfix: ["**/*.go"] },
+  rust: { command: RUST_TEST_COMMAND, globs: ["tests/**", "benches/**"], config: ["Cargo.toml", "Cargo.lock", "build.rs", ".cargo/**", "rust-toolchain", "rust-toolchain.toml"], bugfix: null },
+} as const;
 
 export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rulesStrict?: boolean | null } = {}): Proposal {
   const src: Record<string, Source> = {};
   const needs: string[] = [];
   const riskReasons: string[] = [];
   const warnings: string[] = [];
+  const lang = scan.language;
   // E8и (D-358): bun with the text lockfile (bun.lock); the binary bun.lockb is not read
   const pm = scan.packageManager === "pnpm" || scan.packageManager === "yarn" || (scan.packageManager === "bun" && scan.lockfile === "bun.lock") ? scan.packageManager : "npm";
+  if (lang) return proposeLanguage(scan, lang, o);
   if (!scan.packageManager) needs.push("runtime.package_manager: no lockfile");
   if (scan.lockfile === "bun.lockb") needs.push("runtime.package_manager: bun.lockb is binary; run `bun install --save-text-lockfile` and commit bun.lock");
   if (/^\s*bun\s+test\b/.test(scan.scripts.test ?? "")) needs.push("tests: `bun test` writes no vitest/jest JSON report; run the tests with vitest or jest");
@@ -128,6 +139,72 @@ export function propose(scan: ScanResult, o: { baseline?: Baseline | null; rules
   const rc = repoConfigFromPolicy(parsed.policy);
   if (!rc.ok) needs.push(`runner ${rc.detail}: the sandbox runs npm, pnpm (lockfile v9), yarn (v1 or berry) or bun (bun.lock) with vitest, jest or node --test on node 24 (D-301, D-358)`);
   if (scan.monorepo.tool && ws.length === 0) needs.push(`monorepo (${scan.monorepo.tool}): no workspace package found (pnpm-workspace.yaml / package.json workspaces); set allowed_paths by hand (D-358)`);
+  return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings, suggested_tasks: suggested };
+}
+
+/** D-684: a Python/Go/Rust project — the language image runs it with nothing installed. */
+function proposeLanguage(scan: ScanResult, lang: NonNullable<ScanResult["language"]>, o: { baseline?: Baseline | null; rulesStrict?: boolean | null }): Proposal {
+  const src: Record<string, Source> = {};
+  const needs: string[] = [];
+  const warnings: string[] = [];
+  const riskReasons: string[] = [];
+  const l = LANG[lang.id];
+  src["runtime.language"] = "lockfile";
+  src["tests.framework"] = o.baseline?.report_valid ? "baseline" : "lockfile";
+  src["tests.command"] = "rule:language";
+  src["tests.test_globs"] = "rule:language";
+  if (lang.dependencies.length > 0) needs.push(`runtime.dependencies: ${lang.source} needs ${lang.dependencies.slice(0, 3).join(", ")}${lang.dependencies.length > 3 ? ", …" : ""}; the ${lang.id} sandbox does not install dependencies yet (D-683), so tasks stop until it can`);
+  if (lang.id === "rust") warnings.push("rust: libtest JSON is unstable; the test command sets RUSTC_BOOTSTRAP=1 for the test run only (D-680)");
+  const wf = scan.workflows.find((w) => w.testJobs.length > 0) ?? scan.workflows[0] ?? null;
+  if (wf) {
+    src["ci.workflow"] = "ci.yml";
+    src["ci.required_checks"] = "ci.yml";
+    if (wf.light === "red") riskReasons.push(`ci: ${wf.path} has write permissions`);
+    if (wf.light === "yellow") warnings.push(`ci: ${wf.path} has no permissions block (default token rights)`);
+  }
+  if (o.rulesStrict === false) warnings.push("ruleset: main does not require up-to-date branches (strict=false)");
+  const suggested: SuggestedTask[] = [];
+  if (o.baseline) {
+    if (o.baseline.flaky?.length) src["tests.flaky"] = "baseline";
+    if (o.baseline.test_ids_count === 0) {
+      riskReasons.push("baseline: 0 tests");
+      suggested.push({ type: "feature", title: "Add tests for the main module", text: "The project has no tests. Add a test file that covers the main behaviour of the most used module; do not change the code under test." });
+    }
+    if (o.baseline.status !== "ok") warnings.push(`baseline: ${o.baseline.status}`);
+  }
+  const blocked = scan.instructions.filter((f) => f.invisible.length > 0).map((f) => `${f.path}: ${f.invisible.length} invisible character(s) (${[...new Set(f.invisible.map((h) => h.codepoint))].slice(0, 3).join(", ")})`);
+  for (const f of scan.instructions.filter((x) => x.patterns.length > 0)) warnings.push(`${f.path}: ${f.patterns.join(", ")}`);
+  const riskCap: 1 | 3 = riskReasons.length > 0 ? 1 : 3;
+  const cap = (n: number) => Math.min(n, riskCap);
+  const risk = riskProfile(scan);
+  for (const h of risk.high) src[`protected_paths.${h.glob}`] = h.rule;
+  const srcGlobs = l.bugfix ? [...l.bugfix] : scan.srcDirs.length > 0 ? scan.srcDirs.map((d) => `${d}/**`) : ["**"];
+  src["task_types"] = "human";
+  src["risk_classes"] = riskReasons.length > 0 ? "baseline" : "human";
+  const raw = {
+    version: 2,
+    runtime: { language: lang.id, install: "none" },
+    tests: { framework: lang.framework, command: l.command, env: { CI: "true" }, test_globs: [...l.globs], ...(o.baseline?.flaky?.length ? { flaky: [...o.baseline.flaky].sort() } : {}) },
+    ci: wf ? { provider: "github_actions", workflow: wf.path, required_checks: wf.testJobs } : null,
+    task_types: {
+      bugfix: { allowed_paths: srcGlobs, may_change_tests: false, risk_class: risk.medium.length > 0 ? "medium" : "low" },
+      feature: { allowed_paths: [...new Set([...srcGlobs, ...scan.testDirs.map((d) => `${d}/**`)])], may_change_tests: true, risk_class: "medium" },
+      docs: { allowed_paths: ["README.md", "docs/**"], may_change_tests: false, risk_class: "low" },
+    },
+    risk_classes: { low: { level_cap: cap(3) }, medium: { level_cap: cap(2) }, high: { level_cap: 1, requires_second_factor: true } },
+    protected_paths: [...new Set([...PROTECTED_BASE.filter((p) => p !== ".npmrc"), ...l.config, ...risk.high.map((h) => h.glob)])],
+    protected_json_fields: {},
+    config_paths: [...CONFIG_PATHS.filter((p) => p !== ".npmrc"), ...l.config],
+    budgets: { task_usd: 2, task_minutes: 30 },
+    models: { allowed: ["claude", "codex"], default: "claude" },
+    harness: { required_detectors: ["D1", "D2", "D3", "D4", "D10"], max_level: riskCap },
+    security: { max_file_mb: 5, max_diff_mb: 20, max_files: 500 },
+  };
+  const yaml = `# Mandat policy v2, proposed by \`mandat init\` (no AI). Review every field; nothing is approved automatically.\n${stringify(raw, { lineWidth: 0 })}`;
+  const parsed = parseMandatYml(yaml);
+  if (!parsed.ok) throw new Error(`proposal does not validate: ${parsed.error}`);
+  const rc = repoConfigFromPolicy(parsed.policy);
+  if (!rc.ok) needs.push(`runner ${rc.detail}: not runnable in the ${lang.id} sandbox (D-683)`);
   return { policy: parsed.policy, yaml, sha256: sha256Tag(yaml), field_sources: src, risk_cap: riskCap, risk_reasons: riskReasons, needs_human: needs, blocked, warnings, suggested_tasks: suggested };
 }
 

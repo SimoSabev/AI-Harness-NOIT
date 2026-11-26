@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildFixture } from "./fixtures.js";
+import { FIXTURES, buildFixture } from "./fixtures.js";
 import { repoRoot } from "./testing.js";
 
 // D-367: Mandat moves the mirror's main forward (a change applied by itself); the next `pnpm local` must keep it.
@@ -26,4 +26,21 @@ describe("buildFixture and a mirror Mandat moved forward (D-367)", () => {
     execFileSync("git", ["push", "-q", "-f", "origin", "HEAD:main"], { cwd: w, env });
     expect(() => buildFixture({ repoRoot, mandatHome: home, force: false, name: "demo-shop" })).toThrow(/E_FIXTURE_MISMATCH|base_commit/);
   });
+});
+
+describe("E10 езици (D-688): shop-py и shop-go", () => {
+  const list = (dir: string, rel = ""): string[] =>
+    readdirSync(path.join(dir, rel), { withFileTypes: true }).flatMap((e) => {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      return e.isDirectory() ? (e.name === "__pycache__" ? [] : list(dir, r)) : [r];
+    });
+  for (const name of ["shop-py", "shop-go"] as const) {
+    it(`${name}: списъкът е точно файловете на папката; mirror-ът е детерминистичен`, () => {
+      const root = path.resolve(import.meta.dirname, "../../..");
+      expect([...FIXTURES[name]].sort()).toEqual(list(path.join(root, "fixtures", name)).sort());
+      const h1 = mkdtempSync(path.join(os.tmpdir(), "mandat-fx-"));
+      const h2 = mkdtempSync(path.join(os.tmpdir(), "mandat-fx-"));
+      expect(buildFixture({ repoRoot: root, mandatHome: h1, force: false, name }).sha).toBe(buildFixture({ repoRoot: root, mandatHome: h2, force: false, name }).sha);
+    });
+  }
 });

@@ -1,0 +1,25 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (target/debug/build/shop/4a140c1bcfba55fe/out/shop-4a140c1bcfba55fe)
+{ "type": "suite", "event": "started", "test_count": 3 }
+{ "type": "test", "event": "started", "name": "tests::adds" }
+{ "type": "test", "event": "started", "name": "tests::applies_10_percent_over_50" }
+{ "type": "test", "event": "started", "name": "tests::ignored_one" }
+{ "type": "test", "name": "tests::ignored_one", "event": "ignored" }
+{ "type": "test", "name": "tests::adds", "event": "ok", "exec_time": 0.00000025 }
+{ "type": "test", "name": "tests::applies_10_percent_over_50", "event": "failed", "exec_time": 0.000061958, "stdout": "\nthread 'tests::applies_10_percent_over_50' (20) panicked at src/lib.rs:16:39:\nassertion `left == right` failed\n  left: 0\n right: 1000\nnote: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n" }
+{ "type": "suite", "event": "failed", "passed": 1, "failed": 1, "ignored": 1, "measured": 0, "filtered_out": 0, "exec_time": 0.000255875 }
+error: test failed, to rerun pass `--lib`
+     Running tests/cart.rs (target/debug/build/shop/30a5ea8bf4869725/out/cart-30a5ea8bf4869725)
+{ "type": "suite", "event": "started", "test_count": 2 }
+{ "type": "test", "event": "started", "name": "adds" }
+{ "type": "test", "event": "started", "name": "no_discount_at_exactly_50" }
+{ "type": "test", "name": "adds", "event": "ok", "exec_time": 0.000000125 }
+{ "type": "test", "name": "no_discount_at_exactly_50", "event": "ok", "exec_time": 0.000000125 }
+{ "type": "suite", "event": "ok", "passed": 2, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 0.000171875 }
+   Doc-tests shop
+{ "type": "suite", "event": "started", "test_count": 1 }
+{ "type": "test", "event": "started", "name": "src/lib.rs - add (line 2)" }
+{ "type": "test", "name": "src/lib.rs - add (line 2)", "event": "ok", "exec_time": 0.069450625 }
+{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 0.069856875 }
+error: 1 target failed:
+    `--lib`
