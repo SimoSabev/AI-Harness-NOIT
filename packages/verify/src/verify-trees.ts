@@ -1,16 +1,17 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import type { D8Dependency } from "@mandat/core";
 import path from "node:path";
-import { hashJcs, packageManagerOf, parseVitestReport } from "@mandat/contract";
+import { hashJcs, languageOf, packageManagerOf, parseReport } from "@mandat/contract";
 import type { ChangedFile, ErrorCode, Evidence, ParsedReport, RepoConfig } from "@mandat/contract";
 import { addedDependencies, addedLines, anyMatch, applySite, d1, d10Lockfile, d12Ui, d14Perf, d5Hidden, d8Static, splitHidden, d11Mutation, d11Oracle, d2, d3, d3CoveredPaths, d4, declaredTestCount, ev, mustPass, mutationSites, na, specialCases, testEnvChecks, weakenedAssertions } from "@mandat/core";
 import type { MutationSite } from "@mandat/core";
 import type { CoreSecurityHint } from "@mandat/core";
 import { cleanClone, readLockfile, removeTree } from "@mandat/export";
+import { dockerText } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import type { startRunGate } from "./gate.js";
 import { writeHiddenTests } from "./hidden-copy.js";
-import { runTestProcedure } from "./test-procedure.js";
+import { goModuleOf, runTestProcedure } from "./test-procedure.js";
 import type { CheckResult, TestProcedureResult } from "./test-procedure.js";
 import { registryFacts } from "./registry-facts.js";
 import { buildVerifyTree, listFiles, snapshot } from "./trees.js";
@@ -39,7 +40,8 @@ export interface VerifyTreesInput {
   runDir: string;
   mandatHome: string;
   home: string;
-  images: { sandbox: string; gate: string; proxy: string };
+  /** D-687: `langs` = the language images (Python/Go/Rust); a language project runs only in its own */
+  images: { sandbox: string; gate: string; proxy: string; langs?: Partial<Record<"python" | "go" | "rust", string>> };
   infraUser: string;
   extraCa?: string;
   ipv6Sysctl: boolean;
@@ -84,6 +86,9 @@ export interface VerifyTreesResult {
   cachedBaseline: boolean;
 }
 
+/** D-685: the source files whose changed lines get mutants, by the project's language */
+const SOURCE_EXT = { js: /\.[cm]?[jt]sx?$/, python: /\.py$/, go: /\.go$/, rust: /\.rs$/ } as const;
+
 /** Test files changed in the diff (by the repo test globs), for the AST check. */
 function changedTestFiles(files: ChangedFile[], rc: RepoConfig): string[] {
   return files.filter((f) => f.status !== "D" && !f.binary && anyMatch(rc.tests.test_globs, f.path) && /\.[cm]?[jt]sx?$/.test(f.path)).map((f) => f.path);
@@ -93,16 +98,27 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   const rc = i.rc;
   const evidence: Evidence[] = [];
   const runTests = i.runTests ?? runTestProcedure;
+  // D-687: a Python/Go/Rust project's tests run in its language image (given by the caller), never in the JS one
+  const lang = languageOf(rc);
+  let images = i.images;
+  if (lang !== "js") {
+    const tag = i.images.langs?.[lang];
+    if (tag === undefined) infra("E_IMAGES_MISSING", `no ${lang} image; run pnpm mandat images build --lang ${lang}`);
+    else if ((await dockerText(i.docker, ["image", "inspect", tag])).exitCode !== 0) infra("E_IMAGES_MISSING", `${tag} missing; run pnpm mandat images build --lang ${lang}`);
+    else images = { ...i.images, sandbox: tag };
+  }
   const testsInput = (tree: "base" | "a" | "b", treeDir: string) => ({
     docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, tree, treeDir, testsCommand: rc.tests.command,
-    testsEnv: rc.tests.env, images: i.images, timeoutMs: 600_000, packageManager: packageManagerOf(rc), infraUser: i.infraUser, ipv6Sysctl: i.ipv6Sysctl, ...(i.extraCa ? { extraCa: i.extraCa } : {}),
+    testsEnv: rc.tests.env, images, timeoutMs: 600_000, packageManager: packageManagerOf(rc), infraUser: i.infraUser, ipv6Sysctl: i.ipv6Sysctl, ...(i.extraCa ? { extraCa: i.extraCa } : {}),
+    // D-686: a language project installs nothing; D-680: its runner's own report becomes the TestReport
+    reportFormat: rc.tests.format, ...(rc.runtime.install === "none" ? { install: "none" as const } : {}),
     ...(i.startGate ? { startGate: i.startGate } : {}),
   });
   // 1) baseline (cache D-018, D-097)
   const cacheFile = path.join(i.mandatHome, "cache", "baseline", `${i.baseSha}-${hashJcs(rc.tests).slice("sha256:".length)}.json`);
   let baseline: ParsedReport | null = null;
   if (existsSync(cacheFile)) {
-    const p = parseVitestReport(readFileSync(cacheFile, "utf8"), "/m/work");
+    const p = parseReport(rc.tests.format, readFileSync(cacheFile, "utf8"), { workRoot: "/m/work", ...(rc.tests.format === "go-test-json" ? goModuleOf(i.baseDir) : {}) });
     if (p.valid) baseline = p;
     else rmSync(cacheFile, { force: true });
   }
@@ -185,8 +201,9 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
       return b && h ? [{ path: p, base: b.toString("utf8"), head: h.toString("utf8") }] : [];
     }),
   );
-  let declared: number | null = 0;
-  for (const p of listFiles(head.dir).filter((f) => anyMatch(rc.tests.test_globs, f) && /\.(spec|test)\.[cm]?[jt]sx?$/.test(f))) {
+  // D-685: the static count is JS/TS only (the test AST); another language has no count, so D2 never compares it
+  let declared: number | null = lang === "js" ? 0 : null;
+  if (lang === "js") for (const p of listFiles(head.dir).filter((f) => anyMatch(rc.tests.test_globs, f) && /\.(spec|test)\.[cm]?[jt]sx?$/.test(f))) {
     const n = declaredTestCount(readFileSync(path.join(head.dir, p), "utf8"), p);
     declared = n === null || declared === null ? null : declared + n;
   }
@@ -196,13 +213,13 @@ export async function verifyTrees(i: VerifyTreesInput): Promise<VerifyTreesResul
   buildVerifyTree({ baseDir: i.baseDir, headDir: head.dir, outDir: bDir, rc, kind: "b" });
   removeTree(head.dir);
   // D-300: mutation sites on the changed SOURCE lines of tree B (not tests, not protected files)
-  const sources = i.files.filter((f) => (f.status === "A" || f.status === "M") && !f.binary && /\.[cm]?[jt]sx?$/.test(f.path) && !anyMatch(rc.tests.test_globs, f.path) && !anyMatch(rc.protected_paths, f.path));
+  const sources = i.files.filter((f) => (f.status === "A" || f.status === "M") && !f.binary && SOURCE_EXT[lang].test(f.path) && !anyMatch(rc.tests.test_globs, f.path) && !anyMatch(rc.protected_paths, f.path));
   const sourceFiles = sources.flatMap((f) => (existsSync(path.join(bDir, f.path)) ? [{ path: f.path, content: readFileSync(path.join(bDir, f.path), "utf8") }] : []));
   const added = addedLines(i.diffPatch.toString("utf8"));
-  const sites: MutationSite[] = mutationSites({ files: sourceFiles, added, max: i.maxMutants ?? MAX_MUTANTS });
+  const sites: MutationSite[] = mutationSites({ files: sourceFiles, added, max: i.maxMutants ?? MAX_MUTANTS, lang });
   // D-357: an answer hard-coded for the tests' own inputs passes every mutant; D11 looks for it in the changed lines
-  const testEnv = testEnvChecks({ files: sourceFiles, added });
-  const special = specialCases({ files: sourceFiles, added, tests: listFiles(bDir).filter((f) => anyMatch(rc.tests.test_globs, f)).slice(0, 200).map((f) => readFileSync(path.join(bDir, f), "utf8")) });
+  const testEnv = testEnvChecks({ files: sourceFiles, added, lang });
+  const special = specialCases({ files: sourceFiles, added, lang, tests: listFiles(bDir).filter((f) => anyMatch(rc.tests.test_globs, f)).slice(0, 200).map((f) => readFileSync(path.join(bDir, f), "utf8")) });
   const mutants = sites.map((st) => {
     const original = readFileSync(path.join(bDir, st.path));
     return { path: st.path, original, mutated: Buffer.from(applySite(original.toString("utf8"), st), "utf8") };

@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { LOCKFILE, installCommand, isBerryLock, lockAllowlist, parseUiResult, parseVitestReport } from "@mandat/contract";
-import type { PackageManager, ParsedReport, UiRunResult } from "@mandat/contract";
+import { LOCKFILE, installCommand, isBerryLock, lockAllowlist, parseReport, parseUiResult } from "@mandat/contract";
+import type { PackageManager, ParsedReport, ReportFormat, ReportContext, UiRunResult } from "@mandat/contract";
 import { packTree } from "@mandat/export";
 import { dockerText, names } from "@mandat/sandbox";
 import type { DockerRunner, Tree } from "@mandat/sandbox";
@@ -32,6 +32,10 @@ export interface TestProcedureInput {
   mutants?: { path: string; mutated: Buffer; original: Buffer }[];
   /** D-301: npm (default), pnpm or yarn v1 — the lockfile and the install command */
   packageManager?: PackageManager;
+  /** D-686: "none" = a Python/Go/Rust project without dependencies: no lockfile, no gate, no install container */
+  install?: "none";
+  /** D-680: what the test command writes to $MANDAT_REPORT (default vitest-json) */
+  reportFormat?: ReportFormat;
   mutantTimeoutMs?: number;
   /** v5 E9б (D8): the project's lint and typecheck, run last on the same installed volume with no network */
   checks?: { name: "lint" | "typecheck"; command: string }[];
@@ -100,6 +104,14 @@ async function runUiCheck(ctx: SandboxCtx, i: TestProcedureInput & { ui: NonNull
   }
 }
 
+/** D-680: the module path of the tree's go.mod (read on the host, never executed); none → full import paths */
+export function goModuleOf(treeDir: string): { goModule?: string } {
+  const f = path.join(treeDir, "go.mod");
+  if (!existsSync(f) || !lstatSync(f).isFile()) return {}; // a symlink is never followed on the host
+  const m = /^module\s+("?)([^\s"]+)\1\s*$/m.exec(readFileSync(f, "utf8").slice(0, 64 * 1024));
+  return m?.[2] ? { goModule: m[2] } : {};
+}
+
 /** 7.8(4): own volume, own gate (install phase, lockfile allowlist), install, then tests with --network none. */
 export async function runTestProcedure(i: TestProcedureInput): Promise<TestProcedureResult> {
   const tree = i.tree as Tree;
@@ -107,30 +119,38 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
   const ctx = { docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, image: i.images.sandbox, ipv6Sysctl: i.ipv6Sysctl ?? true };
   const installCode = i.tree === "base" ? "E_INSTALL_BASE" : "E_INSTALL_TREE";
   const pm = i.packageManager ?? "npm";
+  const noInstall = i.install === "none";
   const lockFile = path.join(i.treeDir, LOCKFILE[pm]);
-  const lockText = existsSync(lockFile) ? readFileSync(lockFile, "utf8") : null;
-  const allow = lockAllowlist(pm, lockText);
+  const lockText = !noInstall && existsSync(lockFile) ? readFileSync(lockFile, "utf8") : null;
+  const allow = noInstall ? { ok: true as const, routes: [] } : lockAllowlist(pm, lockText);
   if (!allow.ok) return { ok: false, code: i.tree === "base" ? "E_LOCKFILE_BASE" : "E_INSTALL_TREE" };
+  // D-680: the report is parsed on the host by the runner's adapter; go test ids are package paths relative to the module
+  const format = i.reportFormat ?? "vitest-json";
+  const rctx: ReportContext = { workRoot: "/m/work", ...(format === "go-test-json" ? goModuleOf(i.treeDir) : {}) };
+  const parse = (raw: string | null): ParsedReport => parseReport(format, raw, rctx);
   let gate: RunGate | undefined;
   try {
     await dockerText(i.docker, ["volume", "create", "--label", `mandat.run=${i.runId}`, vol]);
     const seed = await runSandbox(ctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["tar", "-x", "-C", "/m/work"], stdin: packTree(i.treeDir), timeoutMs: 120_000 });
     if (seed.exitCode !== 0) return { ok: false, code: installCode };
-    try {
-      gate = await (i.startGate ?? startRunGate)(
-        { docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, tree, gateImage: i.images.gate, user: i.infraUser ?? "1000:1000", extraCa: i.extraCa },
-        { phase: "install", routes: allow.routes },
-      );
-    } catch (e) {
-      return { ok: false, code: (e as { code?: string }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START" };
+    // D-686: a language project without dependencies has nothing to fetch: no gate, no install container
+    if (!noInstall) {
+      try {
+        gate = await (i.startGate ?? startRunGate)(
+          { docker: i.docker, runId: i.runId, runDir: i.runDir, mandatHome: i.mandatHome, home: i.home, tree, gateImage: i.images.gate, user: i.infraUser ?? "1000:1000", extraCa: i.extraCa },
+          { phase: "install", routes: allow.routes },
+        );
+      } catch (e) {
+        return { ok: false, code: (e as { code?: string }).code === "E_GATE_POLICY" ? "E_GATE_POLICY" : "E_GATE_START" };
+      }
+      const inst = await runSandbox(ctx, { role: "install", volume: vol, network: gate.net, tree, env: { phase: "install" }, cmd: installCommand(pm, isBerryLock(lockText)), timeoutMs: 300_000 });
+      await gate.stop();
+      gate = undefined;
+      if (inst.exitCode !== 0 || inst.timedOut) return { ok: false, code: installCode };
     }
-    const inst = await runSandbox(ctx, { role: "install", volume: vol, network: gate.net, tree, env: { phase: "install" }, cmd: installCommand(pm, isBerryLock(lockText)), timeoutMs: 300_000 });
-    await gate.stop();
-    gate = undefined;
-    if (inst.exitCode !== 0 || inst.timedOut) return { ok: false, code: installCode };
     const t = await runSandbox(ctx, { role: "test", volume: vol, network: "none", env: { phase: "test", testsEnv: i.testsEnv }, cmd: ["/bin/sh", "-c", i.testsCommand], timeoutMs: i.timeoutMs });
     const raw = (await safeReadVolume(ctx, { volume: vol, file: "/m/out/report.json", limit: REPORT_LIMIT, role: "test" }))?.toString("utf8") ?? null;
-    const report = parseVitestReport(raw, "/m/work");
+    const report = parse(raw);
     // D8: after everything else (a check that writes files cannot change a mutant run); exit null = timed out
     const runChecks = async (): Promise<CheckResult[] | undefined> => {
       if (!i.checks || i.checks.length === 0) return undefined;
@@ -171,7 +191,7 @@ export async function runTestProcedure(i: TestProcedureInput): Promise<TestProce
         // the old report must not stand in for a mutant run that never wrote one
         const mt = await runSandbox(ctx, { role: "test", volume: vol, network: "none", env: { phase: "test", testsEnv: i.testsEnv }, cmd: ["/bin/sh", "-c", `rm -f /m/out/report.json; ${i.testsCommand}`], timeoutMs: i.mutantTimeoutMs ?? i.timeoutMs });
         const mraw = (await safeReadVolume(ctx, { volume: vol, file: "/m/out/report.json", limit: REPORT_LIMIT, role: "test" }))?.toString("utf8") ?? null;
-        mutants.push({ exit: mt.timedOut ? null : mt.exitCode, timedOut: mt.timedOut, report: parseVitestReport(mraw, "/m/work") });
+        mutants.push({ exit: mt.timedOut ? null : mt.exitCode, timedOut: mt.timedOut, report: parse(mraw) });
         if (!(await put(m.path, m.original))) break;
       }
     } finally {

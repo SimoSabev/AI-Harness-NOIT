@@ -20,7 +20,8 @@ export const EVIDENCE_ORDER = ["POLICY", "EXPORT", "INTEGRITY", "D10.lockfile", 
 
 export interface VerifyDeps {
   docker: DockerRunner;
-  images: { sandbox: string; gate: string; proxy: string };
+  /** D-687: `langs` = the language images (Python/Go/Rust); a language project runs only in its own */
+  images: { sandbox: string; gate: string; proxy: string; langs?: Partial<Record<"python" | "go" | "rust", string>> };
   infraUser: string;
   extraCa?: string;
   ipv6Sysctl: boolean;

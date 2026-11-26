@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import {
-  MandatError, Verdict, contractForAgent, createStreamCtx, encodeProviderNotice, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, streamEvent, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
+  MandatError, Verdict, contractForAgent, createStreamCtx, languageOf, encodeProviderNotice, hashJcs, isResearchMcp, parseContract, renderAgentContract, sha256Tag, streamEvent, ulid, installCommand, isBerryLock, lockAllowlist, packageManagerOf, profileHash,
   AgentCli,
   isKeyCli,
   JOB_IN,
@@ -29,7 +29,7 @@ import { cleanClone, exportChangeset, packTree, readLockfile, recomputeTreeSha }
 import type { ChangesetExport } from "@mandat/contract";
 import { mintTaskToken } from "@mandat/llm-proxy";
 import { createRedactor } from "@mandat/redaction";
-import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans, uiImageTag } from "@mandat/sandbox";
+import { compareVersions, dockerText, ensureUpstreamNetwork, imageTags, langImageTag, names, probeIpv6, profileVolume, realDockerRunner, sweepOrphans, uiImageTag } from "@mandat/sandbox";
 import type { DockerRunner } from "@mandat/sandbox";
 import { RunWriter, VerifyInfraError, acquireRunLock, checksFromCommands, hostConfig, infraUserFor, oracleFromChange, readGateLog, runSandbox, safeReadVolume, startRunGate, verifyTrees } from "@mandat/verify";
 import type { HiddenTests, OracleChangeResult, RunGate, UiCheck, runTestProcedure } from "@mandat/verify";
@@ -101,7 +101,7 @@ export interface RunInternals {
   startGate?: typeof startRunGate;
   runTests?: typeof runTestProcedure;
   recompute?: typeof recomputeTreeSha;
-  images?: { sandbox: string; gate: string; proxy: string; ui?: string };
+  images?: { sandbox: string; gate: string; proxy: string; ui?: string; langs?: Partial<Record<"python" | "go" | "rust", string>> };
   gitVersion?: () => string | null;
   /** E9б: the advisor's model call (through llm-proxy; none configured → the advisor is skipped) */
   reviewCall?: ReviewCall;
@@ -269,9 +269,14 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
     if (dv.exitCode !== 0 || compareVersions(dv.stdout.trim(), "25.0.5") < 0) return fail("E_DOCKER_VERSION", `docker ${dv.stdout.trim() || "unreachable"} < 25.0.5`);
     const gv = (x.gitVersion ?? gitVersion)();
     if (gv === null || compareVersions(gv, "2.43.0") < 0) return fail("E_GIT_VERSION", `git ${gv ?? "missing"} < 2.43.0`);
-    const images = x.images ?? (await imageTags(repoRoot));
+    // D-687: a Python/Go/Rust task runs every container (agent, tests, mutants) in its language image
+    const baseImages = x.images ?? (await imageTags(repoRoot));
+    const lang = languageOf(contract.repo_config);
+    const langTag = lang === "js" ? null : (x.images?.langs?.[lang] ?? langImageTag(repoRoot, lang, baseImages.sandbox));
+    const images = langTag === null ? baseImages : { ...baseImages, sandbox: langTag, langs: { [lang]: langTag } };
+    const noInstall = contract.repo_config.runtime.install === "none";
     for (const t of [images.sandbox, images.gate]) {
-      if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return fail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build`);
+      if ((await dockerText(docker, ["image", "inspect", t])).exitCode !== 0) return fail("E_IMAGES_MISSING", `${t} missing; пусни pnpm mandat images build${langTag === null ? "" : ` --lang ${lang}`}`);
     }
     const proxyUp = await (x.healthz ?? realHealthz)(host.proxyAdminPort);
     // D-295: a subscription profile run never touches the proxy
@@ -380,8 +385,9 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       await timed("provision", async () => {
         const clone = await cleanClone({ mirrorPath, baseSha: contract.base_commit, tmpRoot, name: "base" });
         baseDir = clone.dir;
-        const b = readLockfile(baseDir, pm);
-        const allow = lockAllowlist(pm, b ? b.toString("utf8") : null);
+        // D-686: a language project without dependencies has no lockfile and nothing to install (no install routes)
+        const b = noInstall ? null : readLockfile(baseDir, pm);
+        const allow: ReturnType<typeof lockAllowlist> = noInstall ? { ok: true, routes: [], packages: 0 } : lockAllowlist(pm, b ? b.toString("utf8") : null);
         berry = isBerryLock(b ? b.toString("utf8") : null);
         if (!allow.ok) infra("E_LOCKFILE_BASE", `base lockfile rejected: ${allow.reason}`);
         if ((await dockerText(docker, ["volume", "create", "--label", `mandat.run=${runId}`, vol])).exitCode !== 0) infra("E_DOCKER", "volume create failed");
@@ -421,6 +427,10 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
       // ---------- INSTALL (7.5)
       phase("install");
       await timed("install", async () => {
+        if (noInstall) {
+          out(`[install]   none (${lang} image)`);
+          return;
+        }
         const r = await runSandbox(sctx, { role: "install", volume: vol, network: (gate as RunGate).net, tree: "agent", env: { phase: "install" }, cmd: installCommand(pm, berry), timeoutMs: 300_000 });
         if (r.exitCode !== 0 || r.timedOut) infra("E_INSTALL_BASE", `${pm} install exit ${r.exitCode}`);
         out(`[install]   ${contract.repo_config.runtime.install} via gate`);
