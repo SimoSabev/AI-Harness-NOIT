@@ -200,6 +200,9 @@ describe("units, final check, seal and delivery (D-535)", () => {
     await jobTick(s.jd); // seal
     const j = await s.job();
     expect(j.status).toBe("sealed");
+    // D-708: the final check's own export (the whole job over its base) is kept for the card, under the final task
+    const fin = (await s.db.query<{ final_task_id: string }>("select final_task_id from public.jobs where id = 'j_t1'")).rows[0]?.final_task_id;
+    expect((await s.db.query("select job_id, diff, omitted_bytes from public.job_diffs where task_id = $1", [fin])).rows).toEqual([{ job_id: "j_t1", diff: patchFor("unit-3.txt"), omitted_bytes: null }]);
     const seal = SessionSeal.parse(j.seal);
     expect(seal).toMatchObject({ spec_hash: SPEC, oracle_hash: ORACLE, profile: "feature", verdict: "VERIFIED", result_ref: head2, unchecked: [] });
     expect(seal.ledger_head).toMatch(/^sha256:/);
