@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { jcs, sha256Tag } from "@mandat/contract";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { asService } from "./sql";
-import { usageRows } from "./usage";
+import { accountWindows, usageRows } from "./usage";
 import { webDb } from "./web-db.test-helper";
 
 // D-629: the facts behind Settings → Models → Usage — every task and conversation of the org in the window, with its spend
@@ -20,5 +21,21 @@ describe("usageRows (D-629)", () => {
     const rows = (await usageRows(db, DEMO_ORG_ID, 30)).filter((r) => r.agent === "claude@use");
     expect(rows.map((r) => [r.kind, r.model, r.usd, r.minutes, r.result]).sort()).toEqual([["chat", "m-chat", 0.4, 0, null], ["task", "m-new", 1.25, 3, "VERIFIED"]]);
     expect(rows.every((r) => !Number.isNaN(Date.parse(r.at)))).toBe(true);
+  });
+});
+
+describe("accountWindows (D-647)", () => {
+  it("the newest limit_windows per agent of the org; a broken payload does not count", async () => {
+    const w = (used: number) => [{ id: "seven_day", minutes: 10080, used, resets_at: "2026-12-01T09:00:00.000Z", status: "allowed" }];
+    const put = async (org: string, payload: unknown) => {
+      const text = jcs(payload);
+      await asService(db, (sql) => sql.query("select private.ledger_append($1::uuid, 'limit_windows', null, $2, $3)", [org, text, sha256Tag(text)]));
+    };
+    await put(DEMO_ORG_ID, { agent: "claude@win", at: "2026-11-26T09:00:00.000Z", windows: w(0.2) });
+    await put(DEMO_ORG_ID, { agent: "claude@win", at: "2026-11-26T10:00:00.000Z", windows: w(0.3) });
+    await put(DEMO_ORG_ID, { agent: "claude@bad", at: "2026-11-26T10:00:00.000Z", windows: "nope" });
+    const got = await accountWindows(db, DEMO_ORG_ID);
+    expect(got["claude@win"]?.windows[0]?.used).toBe(0.3);
+    expect(got["claude@bad"]).toBeUndefined();
   });
 });
