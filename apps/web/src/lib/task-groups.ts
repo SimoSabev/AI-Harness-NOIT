@@ -1,7 +1,7 @@
 import type { Key } from "../i18n/t";
 import type { Tone } from "./status";
 
-// D-611: the list of conversations in three groups, like a product's inbox — what waits for the person (amber, red),
+// D-613: the list of conversations in three groups, like a product's inbox — what waits for the person (amber, red),
 // what runs (blue), what is done (green, gray); each group keeps the list's order (newest first). Titles lose the
 // model's "Goal:" prefix.
 export type GroupId = "waiting" | "running" | "done";

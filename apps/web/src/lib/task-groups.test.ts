@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { cleanTitle, groupTasks } from "./task-groups";
 
-// D-611: the list of conversations in three groups — what waits for you, what runs, what is done — and titles without
+// D-613: the list of conversations in three groups — what waits for you, what runs, what is done — and titles without
 // the model's "Goal:" prefix.
 const row = (id: string, tone: "amber" | "red" | "blue" | "green" | "gray") => ({ id, href: `/?chat=${id}`, text: id, tone, label: "x", ago: "y" });
 
-describe("task groups (D-611)", () => {
+describe("task groups (D-613)", () => {
   it("waiting (amber and red) first, then running (blue), then done; each keeps its order", () => {
     const g = groupTasks([row("a", "gray"), row("b", "amber"), row("c", "blue"), row("d", "red"), row("e", "green")]);
     expect(g.map((x) => [x.id, x.items.map((i) => i.id)])).toEqual([["waiting", ["b", "d"]], ["running", ["c"]], ["done", ["a", "e"]]]);

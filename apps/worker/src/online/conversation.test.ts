@@ -480,7 +480,7 @@ describe("the interview of a whole project (D-557)", () => {
     const r = await answerTurn({ ...base, client: m.client, turns: [human("x")], purpose: "project" });
     expect(r.turns.at(-1)).toMatchObject({ kind: "assistant", questions: ["Who uses the shop?"], choices: [{ options: ["Customers", "Staff"], multi: true }] });
   });
-  it("a task conversation also offers answers to pick for its questions (D-609)", async () => {
+  it("a task conversation also offers answers to pick for its questions (D-611)", async () => {
     expect(CHAT_SYSTEM).toContain('"choices"');
     expect(CHAT_SYSTEM).toContain("one at a time");
     const m = script({ say: "", call: { tool: "ask_user", questions: ["Which page?", "Anything else?"], choices: [{ options: ["Cart", "Checkout"], multi: false }, null] } });

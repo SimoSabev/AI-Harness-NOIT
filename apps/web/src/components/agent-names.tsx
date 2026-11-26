@@ -3,7 +3,7 @@ import { createContext, useContext } from "react";
 import { agentLabel } from "../lib/agents";
 import type { Lang } from "../i18n/t";
 
-// D-610: whose subscription runs what — the agents the box offers (with the account's email and its limit), shared with
+// D-612: whose subscription runs what — the agents the box offers (with the account's email and its limit), shared with
 // the conversation, the oracle and the job's roles so each says who runs it and whether that account is out of its limit.
 interface Named { id: string; label: string; limitedUntil?: string | null | undefined }
 const Names = createContext<ReadonlyMap<string, Named>>(new Map());

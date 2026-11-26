@@ -50,7 +50,7 @@ export function agentChoices(o: { accounts: string[]; keys: string[]; demo: bool
 }
 
 /** D-393: one way to run a task, with the models it can use (the task box, the default on the first-run page). */
-export interface TaskAgent { id: string; label: string; models: string[]; defaultModel: string | null; local: boolean; /** D-610: an account out of its subscription limit, until when (ISO) */ limitedUntil?: string | null }
+export interface TaskAgent { id: string; label: string; models: string[]; defaultModel: string | null; local: boolean; /** D-612: an account out of its subscription limit, until when (ISO) */ limitedUntil?: string | null }
 const catalog = (p: keyof typeof PROVIDERS): string[] => PROVIDERS[p].models.map((m) => m.id);
 const rec = (p: keyof typeof PROVIDERS): string | null => PROVIDERS[p].models.find((m) => m.recommended)?.id ?? PROVIDERS[p].models[0]?.id ?? null;
 
@@ -65,7 +65,7 @@ export function taskAgents(o: { accounts: { agent: string; loggedIn: boolean; em
     const p = canSignIn(r.cli) ? SUBSCRIPTIONS[r.cli].connectionProvider : null;
     if (p === null) continue;
     const c = saved(r.via.name);
-    // D-610: whose subscription it is — the account's email when known — and until when it is out of its limit
+    // D-612: whose subscription it is — the account's email when known — and until when it is out of its limit
     const label = a.email ? translate(lang, r.cli === "codex" ? "agent.codexEmail" : "agent.email", { email: a.email }) : agentLabel(a.agent, lang);
     out.push({ id: a.agent, label, models: c ? c.models : catalog(p), defaultModel: c ? c.defaultModel : rec(p), local: false, limitedUntil: o.limits?.[a.agent] ?? null });
   }

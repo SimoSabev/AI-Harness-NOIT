@@ -59,7 +59,7 @@ export function JobGates({ job, t }: { job: JobView; t: T }) {
   );
 }
 
-/** D-610: a role's agent as the person knows it (the account's email) and its limit */
+/** D-612: a role's agent as the person knows it (the account's email) and its limit */
 function RoleAgent({ agent, model, t }: { agent: string; model: string | null; t: T }) {
   const name = useAgentName(t.lang)(agent);
   return (

@@ -82,7 +82,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   let preferredModel: string | null = null;
   let taskMode: "ask_first" | "work_now" = "ask_first";
   if (!initial) {
-    // D-610: which accounts are out of their subscription limit, so the box and the conversation say it
+    // D-612: which accounts are out of their subscription limit, so the box and the conversation say it
     const v = await agentsView(t.lang, process.env, await accountLimits(db(), c.org));
     if (v.local && v.agents.length === 0 && !v.prefs.onboarded) redirect("/welcome");
     agents = v.agents;

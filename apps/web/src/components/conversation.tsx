@@ -129,7 +129,7 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
       <p className="text-xs font-medium text-mute">{t("chat.spec")} · {t(`chat.taskProfile.${s.profile}` as Key)}</p>
       <p className="mt-1 text-base font-semibold leading-snug">{cleanTitle(s.goal)}</p>
       {s.product.trim() !== "" && <p className="mt-1 whitespace-pre-wrap">{s.product}</p>}
-      {/* D-612: the criteria as rows with their id; past four they fold, so a long spec stays readable */}
+      {/* D-614: the criteria as rows with their id; past four they fold, so a long spec stays readable */}
       <p className="mt-4 text-xs font-medium text-mute">{t("chat.spec.criteria")} · {s.criteria.length}</p>
       <ol className="mt-2 divide-y divide-line rounded-[10px] border border-line">
         {s.criteria.slice(0, SPEC_SHOWN).map((c) => <Criterion key={c.id} c={c} warn={turn.untestable.includes(c.id)} t={t} />)}
@@ -305,7 +305,7 @@ export function stopText(t: T, status: ConversationRow["status"], error: string 
 }
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
-/** D-610: who runs this conversation — the account (its email) and the model, and whether that account is out of its limit */
+/** D-612: who runs this conversation — the account (its email) and the model, and whether that account is out of its limit */
 function Runner({ agent, model, t }: { agent: string; model: string | null; t: T }) {
   const name = useAgentName(t.lang)(agent);
   return (

@@ -49,7 +49,7 @@ describe("the interview first (D-600)", () => {
   });
 });
 
-describe("accounts out of their limit (D-610)", () => {
+describe("accounts out of their limit (D-612)", () => {
   it("an account whose conversation stopped on its subscription limit is limited until the reset, while it is in the future", async () => {
     const { accountLimits } = await import("./conversation");
     await asService(db, async (sql) => {

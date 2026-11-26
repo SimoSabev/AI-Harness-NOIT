@@ -35,7 +35,7 @@ async function nextSeq(db: Db, id: string): Promise<number> {
   return (await asService(db, (sql) => sql.query<{ n: number }>("select coalesce(max(seq), -1)::int + 1 as n from public.conversation_turns where conversation_id = $1", [id]))).rows[0]?.n ?? 0;
 }
 
-/** D-610: the subscription accounts out of their limit, until when — from the conversations that stopped on it (D-591) */
+/** D-612: the subscription accounts out of their limit, until when — from the conversations that stopped on it (D-591) */
 export async function accountLimits(db: Db, org: string, now: number = Date.now()): Promise<Record<string, string>> {
   const rows = (await asService(db, (sql) => sql.query<{ agent: string; error: string | null }>("select agent, error from public.conversations where org_id = $1::uuid and status = 'limit' and updated_at > now() - interval '8 days'", [org]))).rows;
   const out: Record<string, string> = {};

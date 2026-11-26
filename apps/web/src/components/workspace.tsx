@@ -25,7 +25,7 @@ type TaskMode = "ask_first" | "work_now";
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
-export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-610 */ limitedUntil?: string | null | undefined }
+export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-612 */ limitedUntil?: string | null | undefined }
 
 const DONE_SHOWN = 5;
 
@@ -56,7 +56,7 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
         {t("ws.new")}
       </Link>
       {tasks.length === 0 && <p className="px-2 pt-3 text-sm text-mute">{t("ws.noTasks")}</p>}
-      {/* D-611: three groups — what waits for you, what runs, what is done (the done ones fold after a few) */}
+      {/* D-613: three groups — what waits for you, what runs, what is done (the done ones fold after a few) */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {groupTasks(tasks).map((g) => (
           <section key={g.id} aria-label={t(GROUP_LABEL[g.id])} className="pt-3">
@@ -105,7 +105,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<TaskMode>(taskMode);
-  /** D-609: the questions the person put off ("Later") — the seq of the asking turn */
+  /** D-611: the questions the person put off ("Later") — the seq of the asking turn */
   const [later, setLater] = useState<number | null>(null);
   const { chat, follow, reset } = useConversation(initialChat);
   const asking = mode === "ask_first";
@@ -265,7 +265,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   // D-600: in the interview, the open questions are cards; the box comes back when nothing is asked
   const asked = thread && !answering ? openQuestions(chat.turns) : null;
   const questions = interview ? asked : null;
-  // D-609: in a task conversation too, Harnova's questions open the same pop-up — one large question at a time, answers
+  // D-611: in a task conversation too, Harnova's questions open the same pop-up — one large question at a time, answers
   // to pick and Other; "Later" closes it and the box answers in words (the questions stay in the conversation)
   const popUp = !interview && asked !== null && later !== asked.seq ? asked : null;
   const form = (
