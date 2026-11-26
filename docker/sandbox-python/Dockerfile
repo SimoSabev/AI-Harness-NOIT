@@ -15,8 +15,11 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     python3 -m venv /opt/mandat/py; \
     /opt/mandat/py/bin/pip install --no-cache-dir --disable-pip-version-check --require-hashes --only-binary=:all: --no-deps -r /opt/mandat/py-requirements.lock; \
     /opt/mandat/py/bin/python -m pytest --version | grep -F "pytest 9.2.0"; \
-    chmod -R a+rX,go-w /opt/mandat/py
-# the venv first: `python3 -m pytest` is the pinned pytest; no .pyc next to the repo's files, no user site-packages
-ENV PATH=/opt/mandat/py/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PIP_NO_INDEX=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+    chmod -R a+rX,go-w /opt/mandat/py; \
+    for b in python3 python pytest; do printf '#!/bin/sh\nexec /opt/mandat/py/bin/%s "$@"\n' "$b" > "/usr/local/bin/$b"; chmod 0755 "/usr/local/bin/$b"; done; \
+    env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp python3 -m pytest --version | grep -F "pytest 9.2.0"
+# the sandbox sets its own PATH (/usr/local/bin:/usr/bin:/bin, SANDBOX_HARDENING env): the wrappers above in /usr/local/bin
+# run the venv (found through its own path), so `python3 -m pytest` is the pinned pytest; no .pyc next to the repo's files
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONNOUSERSITE=1 PIP_NO_INDEX=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 USER 1000:1000
 WORKDIR /m/work

@@ -26,8 +26,8 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
     mkdir /tmp/rust && tar -xJf /tmp/rust.tar.xz -C /tmp/rust --strip-components=1; rm /tmp/rust.tar.xz; \
     /tmp/rust/install.sh --prefix=/usr/local --components="rustc,cargo,rust-std-${T}" --disable-ldconfig; \
     rm -rf /tmp/rust; \
-    rustc --version | grep -F "rustc ${RUST_VERSION} "; cargo --version | grep -F "cargo ${RUST_VERSION} "
-# nothing is fetched (CARGO_NET_OFFLINE), cargo's home and the build output live in the tmpfs home, never in the tree
+    env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp sh -c 'rustc --version && cargo --version' | grep -F "cargo ${RUST_VERSION} "
+# rustc and cargo are in /usr/local/bin (the sandbox's own PATH); nothing is fetched (CARGO_NET_OFFLINE), cargo's home and the build output live in the tmpfs home, never in the tree
 ENV CARGO_HOME=/home/agent/.cargo CARGO_TARGET_DIR=/home/agent/target CARGO_NET_OFFLINE=true CARGO_INCREMENTAL=0
 USER 1000:1000
 WORKDIR /m/work

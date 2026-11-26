@@ -20,10 +20,11 @@ RUN --mount=type=secret,id=extra_ca,required=false set -eu; \
       "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH:-amd64}.tar.gz"; \
     echo "${SUM}  /tmp/go.tgz" | sha256sum -c -; \
     tar -xzf /tmp/go.tgz -C /usr/local; rm /tmp/go.tgz; \
-    /usr/local/go/bin/go version | grep -F "go${GO_VERSION} "
-# no toolchain download, no module proxy, no checksum database, no telemetry: a project's go.mod cannot fetch anything;
-# the build cache lives in the tmpfs home
-ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTELEMETRY=off \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go; ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt; \
+    env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp go version | grep -F "go${GO_VERSION} "
+# the sandbox sets its own PATH (/usr/local/bin:/usr/bin:/bin): go is linked there. No toolchain download, no module
+# proxy, no checksum database, no telemetry: a project's go.mod cannot fetch anything; the build cache is in the tmpfs home
+ENV GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off GOTELEMETRY=off \
     GOCACHE=/home/agent/.cache/go-build GOPATH=/home/agent/go CGO_ENABLED=0
 USER 1000:1000
 WORKDIR /m/work
