@@ -1,10 +1,12 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import type { Server } from "node:http";
 import path from "node:path";
 import { runBench } from "@mandat/bench";
 import { fakeGitHub, octokitGitHub } from "@mandat/gate-github";
 import type { BenchRunner, EvolveTick, JobTick, NightTick, SelfFinishTick, TwinTick } from "@mandat/worker";
 import type { GitHubPort } from "@mandat/gate-github";
-import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, sweepOverdue, twinTick, vetMcpDocker } from "@mandat/worker";
+import type { SqlClient } from "@mandat/ledger";
+import { broadcasterFromEnv, chatModelFor, closeExpiredHeld, conversationLoop, dbUrl, drainHarnessOutbox, evolveTick, heldDays, hostedFromEnv, jobTick, hostConfig, isDbConnectionError, isProcessing, nightShiftTick, openDb, selfFinishTick, pgKeyStore, pollCi, runBaseline, runDaemonOnce, startHostedServer, sweepOverdue, twinTick, vetMcpDocker, workerRole } from "@mandat/worker";
 import { loadKek } from "@mandat/llm-proxy";
 import { realDockerRunner } from "@mandat/sandbox";
 import { profilePrintExec, researchDeps, researchLoop } from "./research.js";
@@ -160,9 +162,48 @@ export async function workerSlots(o: SlotLoop): Promise<void> {
   if (o.once) await o.drain(); // effects of the task(s) just finished (e.g. an approval PR)
 }
 
+/**
+ * E10 hosted (D-700): with MANDAT_HOSTED=1 the worker opens MANDAT_WEBHOOK_HOST:MANDAT_WEBHOOK_PORT (Caddy in front):
+ * /healthz, the runner protocol and the GitHub webhooks. Without it nothing listens (pnpm local, the desktop).
+ */
+export async function serveHosted(io: Io, o: { db: SqlClient; env: NodeJS.ProcessEnv }): Promise<Server | null> {
+  const h = hostedFromEnv(o.env, o.db, (f) => readFileSync(f, "utf8"), (l) => io.stderr(`${l}\n`));
+  if (!h) return null;
+  const host = o.env.MANDAT_WEBHOOK_HOST ?? "127.0.0.1";
+  const port = Number(o.env.MANDAT_WEBHOOK_PORT ?? 8790);
+  const s = await startHostedServer(h, { host, port });
+  io.stderr(`mandat worker: hosted port ${host}:${port} · runner protocol ${h.runner ? "on" : "off"} · webhooks ${h.webhook ? "on" : "off"}\n`);
+  return s;
+}
+
+const untilStopped = (signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal?.aborted) return resolve();
+    signal?.addEventListener("abort", () => resolve(), { once: true });
+    process.once("SIGTERM", () => resolve());
+    process.once("SIGINT", () => resolve());
+  });
+
 export async function workerCommand(io: Io, o: { home: string; once: boolean; pollMs?: number; signal?: AbortSignal; slots?: number }): Promise<number> {
   const env = io.env;
   const db = openDb(dbUrl(env));
+  const role = workerRole(env);
+  const server = await serveHosted(io, { db, env });
+  const closeServer = (): Promise<void> => new Promise((r) => (server ? server.close(() => r()) : r()));
+  if (role === "api") {
+    // a hosted front only: the runner protocol and webhooks; tasks and effects run elsewhere (remote runners, another worker)
+    try {
+      if (!server) {
+        io.stderr("MANDAT_WORKER_ROLE=api needs MANDAT_HOSTED=1\n");
+        return 2;
+      }
+      await untilStopped(o.signal);
+      return 0;
+    } finally {
+      await closeServer();
+      await db.end();
+    }
+  }
   const repo = env.GITHUB_DEMO_REPO ?? "mandat-demo/shop";
   const gh: GitHubPort =
     env.GITHUB_WRITER_APP_ID && env.GITHUB_WRITER_PRIVATE_KEY && env.GITHUB_WRITER_INSTALLATION_ID
@@ -246,6 +287,7 @@ export async function workerCommand(io: Io, o: { home: string; once: boolean; po
     await chat;
     return 0;
   } finally {
+    await closeServer();
     await db.end();
   }
 }

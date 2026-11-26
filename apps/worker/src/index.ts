@@ -71,3 +71,5 @@ export type { RunnerApiDeps } from "./online/runner-api.js";
 export { HttpOutbox, RunnerClient, RunnerHttpError } from "./online/runner-client.js";
 export type { FetchLike } from "./online/runner-client.js";
 export { mintRunnerJwt, runnerJwtSecret, verifyRunnerJwt } from "./online/runner-jwt.js";
+export { hostedFromEnv, workerRole } from "./online/hosted-env.js";
+export type { WorkerRole } from "./online/hosted-env.js";
