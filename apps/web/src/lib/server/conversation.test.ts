@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fakeModel } from "@mandat/research";
 import type { ModelClient, RouterChannel } from "@mandat/research";
-import { DEMO_ORG_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
+import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID } from "../../../../worker/src/online/seed";
 import { runConversationOnce } from "../../../../worker/src/online/conversation";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -46,6 +46,17 @@ describe("the interview first (D-600)", () => {
     expect(r).toEqual({ status: 409, body: { error: "project_interview_required", repo: "d0000000-0000-4000-8000-0000000000c1" } });
     expect((await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { ...fresh, purpose: "project" } })).status).toBe(201);
     expect((await sendMessage(db, { uid: U.approver, org: DEMO_ORG_ID, body: { text: "no project", agent: "fake:honest-fix" } })).status).toBe(201);
+  });
+});
+
+describe("accounts out of their limit (D-610)", () => {
+  it("an account whose conversation stopped on its subscription limit is limited until the reset, while it is in the future", async () => {
+    const { accountLimits } = await import("./conversation");
+    await asService(db, async (sql) => {
+      await sql.query("insert into public.conversations (id, org_id, created_by, agent, model, budget_usd, expires_at, status, error) values ('c_lim1', $1::uuid, $2::uuid, 'claude@lichno', 'm', 0.5, now() + interval '1 hour', 'limit', 'subscription_limit resets 2099-01-01T09:00:00.000Z'), ('c_lim2', $1::uuid, $2::uuid, 'claude@old', 'm', 0.5, now() + interval '1 hour', 'limit', 'subscription_limit resets 2000-01-01T09:00:00.000Z')", [DEMO_ORG_ID, DEMO_OWNER_ID]);
+    });
+    const now = Date.parse("2026-11-26T08:00:00.000Z");
+    expect(await accountLimits(db, DEMO_ORG_ID, now)).toEqual({ "claude@lichno": "2099-01-01T09:00:00.000Z" });
   });
 });
 

@@ -1894,4 +1894,8 @@ export const bg: Record<Key, string> = {
   "ask.title": "Harnova пита, преди да работи",
   "ask.later": "По-късно",
   "ask.reopen": "Отговори на въпросите ({n})",
+  // D-610: whose subscription runs it
+  "agent.email": "Claude · {email}",
+  "agent.codexEmail": "Codex · {email}",
+  "agent.limited": "лимит до {when}",
 };

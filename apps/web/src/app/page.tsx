@@ -16,7 +16,7 @@ import { agentsView } from "../lib/server/connections";
 import { canAct, pageCtx } from "../lib/server/page";
 import { board, repos, taskDetail } from "../lib/server/queries";
 import { twinView } from "../lib/server/twin";
-import { conversationFeed, openConversations, projectBriefs } from "../lib/server/conversation";
+import { accountLimits, conversationFeed, openConversations, projectBriefs } from "../lib/server/conversation";
 import { homeBrief } from "../lib/home";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
@@ -82,7 +82,8 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   let preferredModel: string | null = null;
   let taskMode: "ask_first" | "work_now" = "ask_first";
   if (!initial) {
-    const v = await agentsView(t.lang);
+    // D-610: which accounts are out of their subscription limit, so the box and the conversation say it
+    const v = await agentsView(t.lang, process.env, await accountLimits(db(), c.org));
     if (v.local && v.agents.length === 0 && !v.prefs.onboarded) redirect("/welcome");
     agents = v.agents;
     taskMode = v.prefs.taskMode;

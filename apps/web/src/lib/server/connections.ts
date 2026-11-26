@@ -16,13 +16,13 @@ export interface AgentsView {
 
 const NO_PREFS: Preferences = { defaultAgent: null, defaultModel: null, onboarded: false, taskMode: "ask_first" };
 
-export async function agentsView(lang: Lang, env: Record<string, string | undefined> = process.env): Promise<AgentsView> {
+export async function agentsView(lang: Lang, env: Record<string, string | undefined> = process.env, limits?: Record<string, string>): Promise<AgentsView> {
   const ctl = controlKeys(env);
   if (!ctl) return { local: false, agents: [], connections: [], prefs: NO_PREFS, accountName: "lichno" };
   const [status, accounts, conns] = await Promise.all([ctl.status(), ctl.accounts(), ctl.connections()]);
   const connections = conns?.connections ?? [];
   const prefs = conns?.preferences ?? NO_PREFS;
-  const agents = taskAgents({ accounts, keys: status.providers, connections, demo: env.MANDAT_DEMO_AGENTS === "1", preferred: prefs.defaultAgent }, lang);
+  const agents = taskAgents({ accounts, keys: status.providers, connections, demo: env.MANDAT_DEMO_AGENTS === "1", preferred: prefs.defaultAgent, ...(limits ? { limits } : {}) }, lang);
   const taken = new Set(accounts.map((a) => a.name));
   const accountName = ["lichno", "moy", "main", "work"].find((n) => !taken.has(n)) ?? `acct-${taken.size + 1}`;
   return { local: true, agents, connections, prefs, accountName };

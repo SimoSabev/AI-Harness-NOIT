@@ -7,6 +7,7 @@ import { pathOf } from "../lib/task-path";
 import { answeringLine } from "../lib/chat";
 import { TaskPath } from "./task-path";
 import { OracleGrid } from "./oracle-grid";
+import { useAgentName, whenShort } from "./agent-names";
 import type { Key, T } from "../i18n/t";
 import { isAnswering, isFollowing } from "../lib/conversation-types";
 import type { ConversationFeed, ConversationRow, JobView, OracleView } from "../lib/conversation-types";
@@ -288,6 +289,18 @@ export function stopText(t: T, status: ConversationRow["status"], error: string 
 }
 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
+/** D-610: who runs this conversation — the account (its email) and the model, and whether that account is out of its limit */
+function Runner({ agent, model, t }: { agent: string; model: string | null; t: T }) {
+  const name = useAgentName()(agent);
+  return (
+    <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 text-xs text-mute">
+      <span className="text-ink">{name.label}</span>
+      {model && <span className="font-mono">{model}</span>}
+      {name.limitedUntil && <span className="rounded-md bg-warn-soft px-1.5 py-0.5 text-warn">{t("agent.limited", { when: whenShort(name.limitedUntil, t.lang) })}</span>}
+    </p>
+  );
+}
+
 export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: (note?: string) => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
@@ -303,6 +316,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
       {chat.row.purpose === "task" && (
         <div className="sticky -top-5 z-10 -mt-5 border-b border-line bg-canvas pb-3 pt-5">
           <TaskPath stops={pathOf({ conversation: chat.row, turns: chat.turns, oracle_required: chat.oracleRequired ?? false, oracle: chat.oracle ?? null, job: chat.job ?? null })} t={t} />
+          <Runner agent={chat.row.agent} model={chat.row.model} t={t} />
         </div>
       )}
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}

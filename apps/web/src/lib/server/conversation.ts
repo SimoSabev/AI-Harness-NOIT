@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleBuildBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, SurvivedMutant, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, personNote, sha256Tag, specHash, specText, survivedNote } from "@mandat/contract";
+import { CHAT_BUDGET_USD, CHAT_MINUTES, CHAT_TEXT_MAX, ChatApproveBody, ChatMessageBody, ChatRetryBody, ChatTurn, OracleApproveBody, OracleBuildBody, OracleManifest, OracleProblem, OracleStatus, PROFILES_NEED_TESTS, Spec, SurvivedMutant, TaskAxes, briefText, jcs, oracleHash, oracleTaskText, personNote, sha256Tag, specHash, specText, survivedNote, limitResetsAt } from "@mandat/contract";
 import { deriveProfile } from "@mandat/core";
 import type { Brief } from "@mandat/contract";
 import { canAct, createTask } from "./actions";
@@ -33,6 +33,17 @@ async function owned(db: Db, id: string, org: string): Promise<Owned | null> {
 }
 async function nextSeq(db: Db, id: string): Promise<number> {
   return (await asService(db, (sql) => sql.query<{ n: number }>("select coalesce(max(seq), -1)::int + 1 as n from public.conversation_turns where conversation_id = $1", [id]))).rows[0]?.n ?? 0;
+}
+
+/** D-610: the subscription accounts out of their limit, until when — from the conversations that stopped on it (D-591) */
+export async function accountLimits(db: Db, org: string, now: number = Date.now()): Promise<Record<string, string>> {
+  const rows = (await asService(db, (sql) => sql.query<{ agent: string; error: string | null }>("select agent, error from public.conversations where org_id = $1::uuid and status = 'limit' and updated_at > now() - interval '8 days'", [org]))).rows;
+  const out: Record<string, string> = {};
+  for (const r of rows) {
+    const at = limitResetsAt(r.error);
+    if (at && Date.parse(at) > now && (!out[r.agent] || at > (out[r.agent] as string))) out[r.agent] = at;
+  }
+  return out;
 }
 
 /** D-600: the projects of the org and whether each has its approved brief (the start page asks for the missing ones) */

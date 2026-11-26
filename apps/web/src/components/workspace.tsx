@@ -9,6 +9,7 @@ import { Hex, btn } from "./ui";
 import { Select } from "./select";
 import { ChatThread, useConversation } from "./conversation";
 import { ProjectProfile } from "./project-profile";
+import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
 import { taskTypeFor } from "../lib/agents";
@@ -23,7 +24,7 @@ type TaskMode = "ask_first" | "work_now";
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
-export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null }
+export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-610 */ limitedUntil?: string | null | undefined }
 
 export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: string | null }) {
   const t = useT();
@@ -284,7 +285,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           {agents.length > 1 ? (
             <label className="flex items-center gap-1.5 text-xs text-mute">
               {t("ws.agent")}
-              <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.label }))} />
+              <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.limitedUntil ? `${a.label} · ${t("agent.limited", { when: whenShort(a.limitedUntil, t.lang) })}` : a.label }))} />
             </label>
           ) : agents[0] ? (
             <span className="text-xs text-mute">{t("ws.agent")} <span className="text-ink">{agents[0].label}</span></span>
@@ -317,8 +318,9 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
   );
-  if (!interview) return form;
+  if (!interview) return <AgentNames agents={agents}>{form}</AgentNames>;
   return (
+    <AgentNames agents={agents}>
     <div role="dialog" aria-modal="true" aria-label={t("interview.title")} className="fixed inset-0 z-30 flex items-stretch justify-center bg-scrim p-3 lg:p-8">
       <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-[16px] border border-line-strong bg-panel shadow-[0_30px_80px_rgb(0_0_0/0.5)]">
         <div className="flex items-center gap-3 border-b border-line px-5 py-3">
@@ -332,6 +334,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
         </div>
       </div>
     </div>
+    </AgentNames>
   );
 }
 

@@ -1918,6 +1918,10 @@ export const en = {
   "ask.title": "Harnova asks before it works",
   "ask.later": "Later",
   "ask.reopen": "Answer the questions ({n})",
+  // D-610: whose subscription runs it
+  "agent.email": "Claude · {email}",
+  "agent.codexEmail": "Codex · {email}",
+  "agent.limited": "limit until {when}",
 } as const;
 
 export type Key = keyof typeof en;

@@ -69,6 +69,12 @@ describe("taskAgents (D-393)", () => {
     expect(r.find((a) => a.id === "claude+ollama")?.label).toBe("Claude Code · Ollama");
     expect(r.find((a) => a.id === "claude+ollama")?.local).toBe(true);
   });
+  it("D-610: a subscription account says whose it is (its email) and until when it is out of its limit", () => {
+    const withMail = [{ agent: "claude@lichno", loggedIn: true, email: "simo@example.com" }, { agent: "claude@lichno-2", loggedIn: true, email: null }];
+    const r = taskAgents({ accounts: withMail, keys: [], connections: [], demo: false, preferred: null, limits: { "claude@lichno": "2026-11-26T09:00:00.000Z" } }, "en");
+    expect(r.find((a) => a.id === "claude@lichno")).toMatchObject({ label: "Claude · simo@example.com", limitedUntil: "2026-11-26T09:00:00.000Z" });
+    expect(r.find((a) => a.id === "claude@lichno-2")).toMatchObject({ label: "Claude Code · lichno-2", limitedUntil: null });
+  });
   it("the remembered default comes first; a gone default changes nothing", () => {
     expect(taskAgents({ accounts, keys: [], connections: conns, demo: false, preferred: "claude+deepseek" }, "en")[0]?.id).toBe("claude+deepseek");
     expect(taskAgents({ accounts, keys: [], connections: conns, demo: false, preferred: "claude+gone" }, "en")[0]?.id).toBe("claude@lichno");
