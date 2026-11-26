@@ -132,3 +132,14 @@ describe("contract", () => {
     expect(() => AgentContract.parse(a)).not.toThrow();
   });
 });
+
+describe("E10 езици (D-684): договорът на агента казва командата на езика", () => {
+  it("python/go/rust: нищо за инсталиране и тестовете на езика; JS както досега", () => {
+    const sample = loadSample() as { repo_config: { runtime: Record<string, unknown>; tests: Record<string, unknown> } };
+    const lang = (language: string, format: string) => reseal({ ...sample, repo_config: { ...sample.repo_config, runtime: { install: "none", node: "24", language }, tests: { ...sample.repo_config.tests, format } } });
+    expect(contractForAgent(lang("python", "pytest-junit")).commands).toEqual({ install: "none (the sandbox has Python and pytest)", test: "python3 -m pytest" });
+    expect(contractForAgent(lang("go", "go-test-json")).commands).toEqual({ install: "none (the sandbox has Go; no module downloads)", test: "go test ./..." });
+    expect(contractForAgent(lang("rust", "libtest-json")).commands).toEqual({ install: "none (the sandbox has Rust; cargo runs offline)", test: "cargo test --offline" });
+    expect(contractForAgent(parseContract(loadSample())).commands).toEqual({ install: "npm ci --ignore-scripts", test: "npx vitest run" });
+  });
+});

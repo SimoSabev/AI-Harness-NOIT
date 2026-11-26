@@ -1,6 +1,16 @@
 import { AgentContract } from "./schemas.js";
 import type { Contract } from "./schemas.js";
 
+/** D-684: what the agent is told to run; a language project installs nothing (the language image has the toolchain). */
+const LANG_COMMANDS = {
+  python: { install: "none (the sandbox has Python and pytest)", test: "python3 -m pytest" },
+  go: { install: "none (the sandbox has Go; no module downloads)", test: "go test ./..." },
+  rust: { install: "none (the sandbox has Rust; cargo runs offline)", test: "cargo test --offline" },
+} as const;
+function commandsFor(rt: Contract["repo_config"]["runtime"]): AgentContract["commands"] {
+  return rt.language ? { ...LANG_COMMANDS[rt.language] } : { install: rt.install, test: "npx vitest run" };
+}
+
 /** 6.2: the agent never sees hidden_tests, channel, memory_hash, risk_cap or hashes. */
 export function contractForAgent(c: Contract, memoryBlock: string | null = null): AgentContract {
   return AgentContract.parse({
@@ -10,7 +20,7 @@ export function contractForAgent(c: Contract, memoryBlock: string | null = null)
     may_change_tests: c.may_change_tests,
     must_pass: c.must_pass,
     limits: c.security,
-    commands: { install: c.repo_config.runtime.install, test: "npx vitest run" },
+    commands: commandsFor(c.repo_config.runtime),
     memory_block: memoryBlock,
   });
 }

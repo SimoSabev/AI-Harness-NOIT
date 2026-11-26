@@ -38,10 +38,14 @@ export const SecurityLimits = z.object({
 export type SecurityLimits = z.infer<typeof SecurityLimits>;
 export const RepoConfig = z.object({
   // D-301: the install command names the package manager (packageManagerOf); its lockfile decides the gate allowlist
-  runtime: z.object({ install: z.enum(["npm ci --ignore-scripts", "pnpm install --frozen-lockfile --ignore-scripts", "yarn install --frozen-lockfile --ignore-scripts", "bun install --frozen-lockfile --ignore-scripts"]), node: z.literal("24") }),
+  // D-683: a Python/Go/Rust project without dependencies installs nothing ("none"); its toolchain is the language image's.
+  // `language` is optional so every existing contract keeps its hash; absent = JS/TS.
+  runtime: z.object({ install: z.enum(["npm ci --ignore-scripts", "pnpm install --frozen-lockfile --ignore-scripts", "yarn install --frozen-lockfile --ignore-scripts", "bun install --frozen-lockfile --ignore-scripts", "none"]), node: z.literal("24"), language: z.enum(["python", "go", "rust"]).optional() }),
   tests: z.object({
     command: z.string().min(1).max(500), // run with /bin/sh -c in the test sandbox
-    format: z.enum(["vitest-json", "jest-json", "node-test"]), // D-301: jest --json has the same shape (testResults[].assertionResults[]); D-358: so does the node --test reporter
+    // D-301: jest --json has the same shape (testResults[].assertionResults[]); D-358: so does the node --test reporter;
+    // D-680: pytest junit, go test -json and libtest JSON become the common TestReport
+    format: z.enum(["vitest-json", "jest-json", "node-test", "pytest-junit", "go-test-json", "libtest-json"]),
     env: z.record(z.string().regex(/^[A-Z_][A-Z0-9_]*$/), z.string().max(200)),
     test_globs: z.array(Glob).min(1),
     /** E7г / D-314: optional, so contracts without it keep their hash */
@@ -53,6 +57,11 @@ export const RepoConfig = z.object({
   budgets: z.object({ task_usd: z.number().positive().max(20), task_minutes: z.number().int().min(1).max(120) }),
 });
 export type RepoConfig = z.infer<typeof RepoConfig>;
+export type Language = "js" | "python" | "go" | "rust";
+/** D-683: the project's language (absent = JS/TS); it picks the sandbox image and the mutation operators. */
+export function languageOf(rc: Pick<RepoConfig, "runtime">): Language {
+  return rc.runtime.language ?? "js";
+}
 export function packageManagerOf(rc: Pick<RepoConfig, "runtime">): "npm" | "pnpm" | "yarn" | "bun" {
   const i = rc.runtime.install;
   return i.startsWith("pnpm ") ? "pnpm" : i.startsWith("yarn ") ? "yarn" : i.startsWith("bun ") ? "bun" : "npm";
@@ -98,7 +107,7 @@ export const AgentContract = z
     may_change_tests: z.boolean(),
     must_pass: z.array(TestId),
     limits: SecurityLimits,
-    commands: z.object({ install: z.string(), test: z.literal("npx vitest run") }),
+    commands: z.object({ install: z.string(), test: z.enum(["npx vitest run", "python3 -m pytest", "go test ./...", "cargo test --offline"]) }),
     memory_block: z.string().max(12_000).nullable(), // D-400 (E0: always null, D-022)
   })
   .strict();

@@ -1,0 +1,70 @@
+# E10 languages (D-683): the Go twin of the demo shop. No dependencies: the language image (mandat-sandbox-go) brings Go 1.27.4
+# with no module proxy; nothing is installed. `go test -json` (test2json) becomes Mandat's TestReport.
+version: 2
+runtime:
+  language: go
+  install: none
+tests:
+  framework: go
+  command: go test -json ./... > $MANDAT_REPORT
+  env:
+    CI: "true"
+  test_globs: ["**/*_test.go", "**/testdata/**"]
+task_types:
+  bugfix:
+    allowed_paths: ["cart/*.go", "money/*.go"]
+    may_change_tests: false
+    risk_class: low
+  feature:
+    allowed_paths: ["cart/**", "money/**"]
+    may_change_tests: true
+    risk_class: medium
+  docs:
+    allowed_paths: ["README.md", "docs/**"]
+    may_change_tests: false
+    risk_class: low
+risk_classes:
+  low:
+    level_cap: 3
+  medium:
+    level_cap: 2
+  high:
+    level_cap: 1
+    requires_second_factor: true
+protected_paths:
+  - ".github/**"
+  - ".mandat.yml"
+  - ".claude/**"
+  - ".mcp.json"
+  - ".npmrc"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".codex/**"
+  - "**/__snapshots__/**"
+  - "go.mod"
+  - "go.sum"
+  - "go.work"
+protected_json_fields: {}
+config_paths:
+  - ".mandat.yml"
+  - "go.mod"
+  - "go.sum"
+  - "go.work"
+  - ".claude/**"
+  - ".npmrc"
+  - "AGENTS.md"
+  - "CLAUDE.md"
+  - ".codex/**"
+budgets:
+  task_usd: 2
+  task_minutes: 30
+models:
+  allowed: [claude, codex]
+  default: claude
+harness:
+  required_detectors: [D1, D2, D3, D4, D10]
+  max_level: 3
+security:
+  max_file_mb: 5
+  max_diff_mb: 20
+  max_files: 500
