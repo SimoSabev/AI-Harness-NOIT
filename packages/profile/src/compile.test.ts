@@ -70,6 +70,13 @@ describe("compile for Claude Code (E8а)", () => {
     expect(md).toContain("Run `npx vitest run` before you finish");
     expect(md).toContain("on its own, not chained with `&&`, `;` or `|`");
   });
+  it("D-707: the instructions ask for the judge's own static checks before finishing, and a check of each criterion", () => {
+    const md = file(m, "instructions.md")?.bytes ?? "";
+    expect(md).toContain("Run `npx tsc --noEmit` before you finish and make it pass");
+    expect(md).toContain("Run `npx eslint` on the files you changed before you finish");
+    expect(md).toContain("Mandat's final check runs these too");
+    expect(md).toContain("check your change against each acceptance criterion of the task");
+  });
   it("argv and env: settings + strict MCP; subagent limits from layer G", () => {
     expect(m.argv).toEqual(["--settings", "/m/in/harness/claude/settings.json", "--mcp-config", "/m/in/harness/claude/mcp.json", "--strict-mcp-config"]);
     expect(m.env).toEqual({ CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2", CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "1", CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: "3" });
