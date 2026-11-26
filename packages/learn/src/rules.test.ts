@@ -21,7 +21,7 @@ describe("rulesFromFailures (AC-11.1)", () => {
   it("three FAILED D4:out_of_contract:infra/** in 30 days → add infra/** to the protected paths, origin rule:d4_repeat", () => {
     const rows = [1, 2, 3].map((i) => fail(`t_${i}`, ["D4:out_of_contract:infra/**"], { d: i * 9 }));
     const out = rulesFromFailures({ failures: rows, asks: [] }, base(), NOW);
-    expect(out).toEqual([{ needs_person: false, manifest: { change: { rule: "protect_path", layer: "c", detail: "infra/**" }, evidence: ["t_1", "t_2", "t_3"], reason_class: "D4:out_of_contract", prediction: { task_type: "bugfix", next_n: 10, max_repeats: 0 }, source: "rule:d4_repeat" } }]);
+    expect(out).toEqual([{ weakens: false, manifest: { change: { rule: "protect_path", layer: "c", detail: "infra/**" }, evidence: ["t_1", "t_2", "t_3"], reason_class: "D4:out_of_contract", prediction: { task_type: "bugfix", next_n: 10, max_repeats: 0 }, source: "rule:d4_repeat" } }]);
     expect(ProfileManifest.parse(out[0]?.manifest)).toEqual(out[0]?.manifest);
   });
 
@@ -38,9 +38,9 @@ describe("rulesFromFailures (AC-11.1)", () => {
 
 describe("flaky (spec 5.5: 2× flaky → tests.flaky)", () => {
   const T = "tests/cart.test.ts > adds an item";
-  it("a test that failed D1 in two tasks a person labelled as not the agent's → tests.flaky, waits for a person", () => {
+  it("a test that failed D1 in two tasks a person labelled as not the agent's → tests.flaky, a change that can weaken (D-650)", () => {
     const out = rulesFromFailures({ failures: [fail("t_1", [`D1:regression:${T}`], { label: NOT_AGENT }), fail("t_2", [`D1:regression:${T}`], { label: { layer: "infra", label: "x" }, type: "feature" })], asks: [] }, base(), NOW);
-    expect(out).toEqual([{ needs_person: true, manifest: { change: { rule: "flaky_test", layer: "a", detail: T }, evidence: ["t_1", "t_2"], reason_class: "D1:regression", prediction: { task_type: "bugfix", next_n: 10, max_repeats: 0 }, source: "rule:flaky_repeat" } }]);
+    expect(out).toEqual([{ weakens: true, manifest: { change: { rule: "flaky_test", layer: "a", detail: T }, evidence: ["t_1", "t_2"], reason_class: "D1:regression", prediction: { task_type: "bugfix", next_n: 10, max_repeats: 0 }, source: "rule:flaky_repeat" } }]);
   });
 
   it("an unlabelled or agent-labelled regression is a real one: nothing; a test already flaky: nothing; once: nothing", () => {
@@ -56,12 +56,13 @@ describe("flaky (spec 5.5: 2× flaky → tests.flaky)", () => {
 });
 
 describe("asks (spec 5.5: 5× ask for one tool → allow / deny)", () => {
-  it("five tasks where a person let the tool through → allow (newest first); five denials → deny; both wait for a person", () => {
+  it("five tasks where a person let the tool through → allow (newest first); five denials → deny; an allow can weaken, a deny cannot (D-650)", () => {
     const granted = ["t_1", "t_2", "t_3", "t_4", "t_5"].map((t, i) => ask(t, "bash:pnpm add *", i % 2 ? "once" : "always", i + 1));
     const out = rulesFromFailures({ failures: [], asks: granted }, base(), NOW);
-    expect(out).toEqual([{ needs_person: true, manifest: { change: { rule: "tool_allow", layer: "c", detail: "bash:pnpm add *" }, evidence: ["t_1", "t_2", "t_3", "t_4", "t_5"], reason_class: "ASK:tool_ask", prediction: { task_type: "feature", next_n: 10, max_repeats: 0 }, source: "rule:ask_repeat" } }]);
+    expect(out).toEqual([{ weakens: true, manifest: { change: { rule: "tool_allow", layer: "c", detail: "bash:pnpm add *" }, evidence: ["t_1", "t_2", "t_3", "t_4", "t_5"], reason_class: "ASK:tool_ask", prediction: { task_type: "feature", next_n: 10, max_repeats: 0 }, source: "rule:ask_repeat" } }]);
     const denied = ["t_1", "t_2", "t_3", "t_4", "t_5"].map((t) => ask(t, "net:api.segment.io", "denied"));
-    expect(rulesFromFailures({ failures: [], asks: denied }, base(), NOW)[0]?.manifest.change).toEqual({ rule: "tool_deny", layer: "c", detail: "net:api.segment.io" });
+    const d = rulesFromFailures({ failures: [], asks: denied }, base(), NOW)[0];
+    expect([d?.manifest.change, d?.weakens]).toEqual([{ rule: "tool_deny", layer: "c", detail: "net:api.segment.io" }, false]);
   });
 
   it("four tasks, a split decision, pending asks, one task asking five times: nothing", () => {

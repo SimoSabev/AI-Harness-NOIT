@@ -3,6 +3,7 @@ import Link from "next/link";
 import { HarnessActions } from "../../components/harness-actions";
 import { ProfileActions } from "../../components/profile-actions";
 import { HiddenTestsPanel } from "../../components/hidden-tests-panel";
+import { TrialRevert } from "../../components/trial-revert";
 import { hiddenSets } from "../../lib/server/hidden";
 import { Live } from "../../components/live";
 import { Shell } from "../../components/shell";
@@ -115,7 +116,7 @@ export default async function HarnessPage() {
             ) : (
               <p className="mt-3 text-sm">{t("harness.noProposal")}</p>
             )}
-            <Trials t={t} trials={trials[r.id] ?? []} />
+            <Trials t={t} trials={trials[r.id] ?? []} canRevert={c.role === "owner"} />
             <details className="mt-5 border-t border-line pt-4" open={waiting !== null}>
               <summary className="cursor-pointer text-sm font-medium text-mute hover:text-ink">{t("harness.advanced")}</summary>
               <ProfilePanel t={t} repoId={r.id} view={profiles.get(r.id)} canApprove={c.role === "owner"} />
@@ -138,8 +139,11 @@ export default async function HarnessPage() {
 
 const TRIAL_TONE: Record<TrialView["status"], "green" | "amber" | "gray" | "red"> = { proposed: "amber", benched: "amber", accepted: "green", refused: "gray", rolled_back: "red" };
 
-/** D-530: what Mandat tightened by itself from recurring failures — the change, the evidence, the prediction, the bench */
-function Trials({ t, trials }: { t: T; trials: TrialView[] }) {
+/**
+ * D-530: what Mandat changed by itself from recurring failures and asks — the change, the evidence, the prediction, the
+ * bench. D-650: nothing waits for a person; an applied change has a Revert button for the owner.
+ */
+function Trials({ t, trials, canRevert }: { t: T; trials: TrialView[]; canRevert: boolean }) {
   if (trials.length === 0) return null;
   return (
     <section aria-label={t("evolve.title")} className="mt-5 border-t border-line pt-4">
@@ -154,10 +158,11 @@ function Trials({ t, trials }: { t: T; trials: TrialView[] }) {
                 <span className="font-medium">{t(`evolve.rule.${m.change.rule}`, { p: m.change.detail })}</span>
                 <StatusBadge tone={TRIAL_TONE[x.status]} label={t(`evolve.status.${x.status}`)} />
               </div>
-              {m.source && <p className="mt-1 text-xs text-mute">{t("evolve.source", { s: m.source })}{x.needs_person ? ` · ${t("evolve.needs_person")}` : ""}</p>}
+              {m.source && <p className="mt-1 text-xs text-mute">{t("evolve.source", { s: m.source })}{x.weakens ? ` · ${t("evolve.weakens")}` : ""}</p>}
               <p className="mt-1 text-xs text-mute">{t("evolve.evidence", { n: m.evidence.length, cls: m.reason_class, type: m.prediction.task_type })}</p>
               <p className="text-xs text-mute">{t("evolve.prediction", { cls: m.reason_class, n: m.prediction.next_n })}</p>
               {x.bench && <p className="text-xs text-mute">{t("evolve.bench", { a: x.bench.after.pass, at: x.bench.after.total, b: x.bench.before.pass, bt: x.bench.before.total })}</p>}
+              {canRevert && x.revertable && <TrialRevert trialId={x.id} widens={!x.weakens} />}
             </li>
           );
         })}

@@ -75,6 +75,13 @@ export function nightPushPayload(o: { shift_id: string; report: NightReport }): 
   return JSON.stringify({ shift_id: o.shift_id, kind: "night_report", title });
 }
 
+/** D-650: Mandat applied or rolled back a learned change by itself — the rule's name only, never the detail (a test, a tool) */
+export function learnPushPayload(o: { trial_id: string; status: "accepted" | "rolled_back"; source: string | null }): string {
+  const rule = o.source ?? "правило";
+  const title = o.status === "accepted" ? `Мандат научи и приложи сам: ${rule}` : `Мандат върна сам наученото: ${rule}`;
+  return JSON.stringify({ trial_id: o.trial_id, kind: "profile_learn", status: o.status, title: [...title].slice(0, 80).join("") });
+}
+
 // ---- sending (the worker only; outbox kind web_push). web-push builds the encrypted, VAPID-signed request; we send it
 // ourselves so the connection goes to the IP we checked (no DNS rebinding), never follows redirects, times out in 10 s.
 export interface PushSub { id: string; endpoint: string; p256dh: string; auth: string }
@@ -127,6 +134,7 @@ export function webPushHandler(d: { db: { query<T = Record<string, unknown>>(t: 
   return async (row: { payload: Record<string, unknown> }): Promise<void> => {
     const vapid = vapidFromEnv(d.env ?? process.env);
     if (row.payload.kind === "night_report") return nightPush(row.payload, vapid);
+    if (row.payload.kind === "profile_learn") return learnPush(row.payload, vapid);
     const taskId = String(row.payload.task_id ?? "");
     const kind = String(row.payload.kind ?? "") as NotifyKind;
     if (!/^t_[a-z0-9_]{1,40}$/.test(taskId) || !["waiting", "failed", "merged", "expired", "reverted"].includes(kind)) throw new Error("web_push: bad payload");
@@ -145,6 +153,18 @@ export function webPushHandler(d: { db: { query<T = Record<string, unknown>>(t: 
       if (!r.ok && r.gone) await d.db.query("delete from public.push_subscriptions where id = $1::uuid", [s.id]);
       d.log?.(`[push] ${label} → ${r.ok ? r.status : r.reason}`);
     }
+  }
+  async function learnPush(payload: Record<string, unknown>, vapid: Vapid | null): Promise<void> {
+    const trialId = String(payload.trial_id ?? "");
+    const status = payload.status;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(trialId) || (status !== "accepted" && status !== "rolled_back")) throw new Error("web_push: bad payload");
+    if (!vapid) {
+      d.log?.("[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)");
+      return;
+    }
+    const t = (await d.db.query<{ org_id: string; source: string | null }>("select org_id::text as org_id, source from public.profile_trials where id = $1::uuid", [trialId])).rows[0];
+    if (!t) return;
+    await sendAll(t.org_id, learnPushPayload({ trial_id: trialId, status, source: t.source }), `learn ${trialId} ${status}`, vapid);
   }
   async function nightPush(payload: Record<string, unknown>, vapid: Vapid | null): Promise<void> {
     const shiftId = String(payload.shift_id ?? "");

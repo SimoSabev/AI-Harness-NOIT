@@ -4,7 +4,7 @@ import type net from "node:net";
 import webpush from "web-push";
 import { pgliteDb } from "./pglite-db.test-helper.js";
 import { DEMO_ORG_ID, DEMO_OWNER_ID, DEMO_REPO_ID, seedMinimal } from "./seed.js";
-import { checkPushEndpoint, isPrivateIp, nightPushPayload, pushPayload, sendWebPush, webPushHandler } from "./push.js";
+import { checkPushEndpoint, isPrivateIp, learnPushPayload, nightPushPayload, pushPayload, sendWebPush, webPushHandler } from "./push.js";
 
 const pub = () => Promise.resolve(["142.250.180.10"]);
 
@@ -65,6 +65,28 @@ describe("нощен доклад (E9а)", () => {
       await expect(webPushHandler({ db, env: {} })({ payload: { shift_id: "nope", kind: "night_report" } })).rejects.toThrow();
       const logs: string[] = [];
       await webPushHandler({ db, env: {}, log: (l) => logs.push(l) })({ payload: { shift_id: "50000000-0000-4000-8000-000000000001", kind: "night_report" } });
+      expect(logs).toEqual(["[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)"]);
+    } finally {
+      await db.end();
+    }
+  });
+});
+
+describe("ученето се промени само (D-650)", () => {
+  it("заглавие с правилото, никога с детайла (тест, инструмент); само trial_id, kind, status, title", () => {
+    const p = JSON.parse(learnPushPayload({ trial_id: "50000000-0000-4000-8000-000000000002", status: "accepted", source: "rule:flaky_repeat" })) as Record<string, unknown>;
+    expect(Object.keys(p).sort()).toEqual(["kind", "status", "title", "trial_id"]);
+    expect(p.title).toBe("Мандат научи и приложи сам: rule:flaky_repeat");
+    expect(JSON.parse(learnPushPayload({ trial_id: "50000000-0000-4000-8000-000000000002", status: "rolled_back", source: null })).title).toBe("Мандат върна сам наученото: правило");
+  });
+  it("outbox web_push {trial_id, kind: profile_learn}: лош trial_id или статус → грешка; без VAPID → SKIPPED", async () => {
+    const db = await pgliteDb();
+    try {
+      await seedMinimal(db, { remoteUrl: "file:///x" });
+      await expect(webPushHandler({ db, env: {} })({ payload: { trial_id: "nope", kind: "profile_learn", status: "accepted" } })).rejects.toThrow();
+      await expect(webPushHandler({ db, env: {} })({ payload: { trial_id: "50000000-0000-4000-8000-000000000002", kind: "profile_learn", status: "proposed" } })).rejects.toThrow();
+      const logs: string[] = [];
+      await webPushHandler({ db, env: {}, log: (l) => logs.push(l) })({ payload: { trial_id: "50000000-0000-4000-8000-000000000002", kind: "profile_learn", status: "accepted" } });
       expect(logs).toEqual(["[push] SKIPPED: VAPID keys are not set (docs/setup/push.md)"]);
     } finally {
       await db.end();
