@@ -153,11 +153,15 @@ export function unitTaskText(s: Spec, unit: Pick<WorkUnit, "id" | "title" | "cri
   return clip(text, JOB_TEXT_MAX);
 }
 
-/** a retry note of a unit: the ids of the criteria whose hidden checks failed, never a test's name or content */
-export function unitRetryNote(attempt: number, failing: readonly string[]): string {
-  return failing.length > 0
-    ? `Mandat started attempt ${attempt} by itself: the hidden acceptance checks of ${failing.join(", ")} still fail. Make exactly these criteria work; the checks themselves are hidden.`
-    : `Mandat started attempt ${attempt} by itself: the last attempt did not pass the checks of this unit.`;
+/**
+ * a retry note of a unit: the ids of the criteria whose hidden checks failed and, D-711, the titles of the failed hidden
+ * tests of its own criteria (core failingTitles: the sentence only, never a path, body or value); the checks stay hidden
+ */
+export function unitRetryNote(attempt: number, failing: readonly string[], titles: readonly string[] = []): string {
+  if (failing.length === 0) return `Mandat started attempt ${attempt} by itself: the last attempt did not pass the checks of this unit.`;
+  const head = `Mandat started attempt ${attempt} by itself: the hidden acceptance checks of ${failing.join(", ")} still fail.`;
+  if (titles.length === 0) return `${head} Make exactly these criteria work; the checks themselves are hidden.`;
+  return `${head}\nThe failed checks, by name:\n${titles.map((x) => `- ${x}`).join("\n")}\nMake exactly these work; the checks themselves stay hidden.`;
 }
 
 // D-542 (М2 Х6, docs/prd/heavy-process.md §6): a unit that stopped after its normal attempts gets a fresh start: a

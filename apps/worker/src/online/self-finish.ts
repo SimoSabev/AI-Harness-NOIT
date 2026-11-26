@@ -1,4 +1,4 @@
-import { nextMove } from "@mandat/core";
+import { failingCriteria, failingTitles, nextMove } from "@mandat/core";
 import type { SelfFinishInput } from "@mandat/core";
 import { appendLedgerOnline } from "@mandat/ledger";
 import type { SqlClient } from "@mandat/ledger";
@@ -17,6 +17,8 @@ interface Row {
   ci_rounds: number; ci_cap: number | null; held_since: string; night: boolean; auto_retries: number; resets_at: string | null; reasons: unknown;
   /** D-535: a unit of a job (its retry note names the failing criteria) */
   job_id: string | null; failing: unknown;
+  /** D-711: the D5 evidence of the last verdict (the failed hidden tests' ids), the unit's criteria, and the task kind */
+  d5: unknown; criteria: unknown; kind: string | null;
 }
 
 const pick = (where: string) => `
@@ -26,7 +28,9 @@ const pick = (where: string) => `
          (select count(*)::int from public.task_activities a where a.task_id = t.id and a.kind = 'self') as auto_retries,
          (select l.payload ->> 'resets_at' from public.ledger l where l.task_id = t.id and l.kind = 'channel_limit' order by l.seq desc limit 1) as resets_at,
          (select v.reasons from public.verdicts v where v.task_id = t.id and v.attempt = t.attempt order by v.created_at desc limit 1) as reasons,
-         t.job_id, (select u.failing from public.job_units u where u.job_id = t.job_id and u.unit_id = t.unit_id) as failing
+         t.job_id, (select u.failing from public.job_units u where u.job_id = t.job_id and u.unit_id = t.unit_id) as failing,
+         (select e.data from public.evidence e join public.verdicts v on v.id = e.verdict_id where v.task_id = t.id and v.attempt = t.attempt and e.detector = 'D5.hidden' order by v.created_at desc, e.id limit 1) as d5,
+         (select u.criteria from public.job_units u where u.job_id = t.job_id and u.unit_id = t.unit_id) as criteria, t.kind
     from public.tasks t
    where t.state in ('HELD', 'BLOCKED') and ${where}
    order by t.state_entered_at
@@ -57,14 +61,21 @@ export async function selfFinishTick(db: SqlClient, o: { now: Date }): Promise<S
     const m = moveOf(t, o.now);
     if (m.move === "wait") out.waiting.push(t.id);
     if (m.move !== "retry") continue;
-    // D-535: a unit's note names the criteria whose hidden checks failed (ids only; never a test's name or content)
+    // D-535: a unit's note names the criteria whose hidden checks failed; D-711: and the failed hidden tests' titles of
+    // its own criteria (built here from the last verdict, never stored on the unit). M4's single-agent arm gets the same,
+    // so the comparison stays fair (D-615).
     const failing = Array.isArray(t.failing) ? t.failing.filter((x): x is string => typeof x === "string") : [];
+    const d5 = [{ detector: "D5.hidden", status: "fail" as const, data: (t.d5 ?? {}) as Record<string, unknown> }];
+    const criteria = Array.isArray(t.criteria) ? t.criteria.filter((x): x is string => typeof x === "string") : [];
+    const compare = t.kind === "compare" && m.why === "failed" ? failingCriteria(d5) : null;
     const note = t.job_id !== null && m.why === "failed"
-      ? unitRetryNote(t.attempt + 1, failing)
+      ? unitRetryNote(t.attempt + 1, failing, failingTitles(d5, criteria))
+      : compare && compare.length > 0
+      ? unitRetryNote(t.attempt + 1, compare, failingTitles(d5, compare))
       : m.why === "failed"
       ? `${whatStopped({ result: "FAILED", reasons }, t.attempt)}. ${proposalFor(reasons)}`
       : `Mandat started attempt ${t.attempt + 1} by itself: the last one waited on ${m.why}.`;
-    if (await retry(db, t, m.retry_reason, m.why, note.slice(0, 500))) out.retried.push(t.id);
+    if (await retry(db, t, m.retry_reason, m.why, note.slice(0, t.job_id !== null || compare ? 1200 : 500))) out.retried.push(t.id);
   }
   return out;
 }
