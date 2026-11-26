@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdtempSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -84,5 +84,15 @@ describe("harness (Поток 1)", () => {
     const id = (await db.query<{ id: string }>("select id::text as id from public.harness_proposals where jsonb_array_length(blocked) > 0")).rows[0]?.id as string;
     const r = await approveHarness(db, { uid: U.owner, repoId: DEMO_REPO_ID, body: { proposal_id: id, generate: true, code: totpAt(TEST_TOTP, Date.now()) }, secondFactor: devSecondFactor(db) });
     expect(r).toEqual({ status: 409, body: { error: "blocked_invisible_characters" } });
+  });
+  // D-683: a Python/Go/Rust .mandat.yml has runtime {language, install: none} and no package manager; approving it with
+  // generated files still works (AGENTS.md lists no package.json scripts for it)
+  it("a language project's .mandat.yml (runtime.language) is approved and its files are generated (D-683)", async () => {
+    const yaml = readFileSync(path.join(repoRoot, "fixtures/shop-py/.mandat.yml"), "utf8");
+    await db.query("update public.harness_proposals set status = 'superseded' where repo_id = $1 and status = 'proposed'", [DEMO_REPO_ID]).catch(() => undefined);
+    const id = (await db.query<{ id: string }>("insert into public.harness_proposals (org_id, repo_id, status, policy_yaml, blocked) select org_id, id, 'proposed', $2, '[]' from public.repos where id = $1 returning id::text as id", [DEMO_REPO_ID, yaml])).rows[0]?.id as string;
+    const r = await approveHarness(db, { uid: U.owner, repoId: DEMO_REPO_ID, body: { proposal_id: id, generate: true, code: totpAt(TEST_TOTP, Date.now()) }, secondFactor: devSecondFactor(db) });
+    expect(r.status).toBe(200);
+    expect((r.body.files as { path: string }[]).map((f) => f.path)).toContain(".mandat.yml");
   });
 });

@@ -52,7 +52,7 @@ export async function approveHarness(db: Db, o: { uid: string; repoId: string; b
   const sha = sha256Tag(yaml);
   const existing: Existing = hp.scan.existing ?? { ".mandat.yml": null, "AGENTS.md": null, "CLAUDE.md": null };
   const files = o.body.generate
-    ? generateHarnessFiles({ policy: parsed.policy, scripts: hp.scan.scripts ?? {}, packageManager: hp.scan.package_manager ?? parsed.policy.runtime.package_manager, configSha256: sha, version: hp.config_version + 1, links: hp.scan.links ?? [], existingAgents: existing["AGENTS.md"], existingClaude: existing["CLAUDE.md"], yaml })
+    ? generateHarnessFiles({ policy: parsed.policy, scripts: hp.scan.scripts ?? {}, packageManager: hp.scan.package_manager ?? ("package_manager" in parsed.policy.runtime ? parsed.policy.runtime.package_manager : "none"), configSha256: sha, version: hp.config_version + 1, links: hp.scan.links ?? [], existingAgents: existing["AGENTS.md"], existingClaude: existing["CLAUDE.md"], yaml })
     : [{ path: ".mandat.yml", content: yaml, sha256: sha }];
   const generated = files.map((f) => ({ ...f, before: existing[f.path as keyof Existing] ?? null }));
   if (generated.some((f) => findInvisible(f.content).length > 0)) return err(400, "generated_invisible_characters");
