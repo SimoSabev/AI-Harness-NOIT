@@ -1922,6 +1922,11 @@ export const en = {
   "agent.email": "Claude · {email}",
   "agent.codexEmail": "Codex · {email}",
   "agent.limited": "limit until {when}",
+  // D-611: the groups of the list
+  "ws.group.waiting": "Waiting for you",
+  "ws.group.running": "Running",
+  "ws.group.done": "Done",
+  "ws.group.more": "{n} more",
 } as const;
 
 export type Key = keyof typeof en;

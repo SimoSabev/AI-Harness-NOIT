@@ -1898,4 +1898,9 @@ export const bg: Record<Key, string> = {
   "agent.email": "Claude · {email}",
   "agent.codexEmail": "Codex · {email}",
   "agent.limited": "лимит до {when}",
+  // D-611: the groups of the list
+  "ws.group.waiting": "Чака теб",
+  "ws.group.running": "Работи",
+  "ws.group.done": "Готови",
+  "ws.group.more": "Още {n}",
 };

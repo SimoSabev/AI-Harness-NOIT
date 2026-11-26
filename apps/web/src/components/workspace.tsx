@@ -9,6 +9,7 @@ import { Hex, btn } from "./ui";
 import { Select } from "./select";
 import { ChatThread, useConversation } from "./conversation";
 import { ProjectProfile } from "./project-profile";
+import { GROUP_LABEL, cleanTitle, groupTasks } from "../lib/task-groups";
 import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
@@ -26,6 +27,24 @@ export interface WsTask { id: string; href: string; text: string; tone: Tone; la
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
 export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-610 */ limitedUntil?: string | null | undefined }
 
+const DONE_SHOWN = 5;
+
+function TaskRowItem({ x, selected }: { x: WsTask; selected: string | null }) {
+  const title = cleanTitle(x.text);
+  return (
+    <li>
+      <Link href={x.href} aria-current={selected === x.id ? "page" : undefined} title={title}
+        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-raised aria-[current=page]:bg-raised">
+        <Hex tone={x.tone} className="size-2" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] leading-5 text-ink">{title}</span>
+          <span className="block truncate text-xs leading-4 text-mute">{x.label} · {x.ago}</span>
+        </span>
+      </Link>
+    </li>
+  );
+}
+
 export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: string | null }) {
   const t = useT();
   return (
@@ -36,22 +55,26 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
         <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 text-mute" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
         {t("ws.new")}
       </Link>
-      <p className="px-2 pb-1 pt-3 text-xs font-medium text-mute">{t("ws.tasks")}</p>
-      {tasks.length === 0 && <p className="px-2 text-sm text-mute">{t("ws.noTasks")}</p>}
-      <ul className="min-h-0 flex-1 overflow-y-auto">
-        {tasks.map((x) => (
-          <li key={x.id}>
-            <Link href={x.href} aria-current={selected === x.id ? "page" : undefined} title={x.text}
-              className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-raised aria-[current=page]:bg-raised">
-              <Hex tone={x.tone} className="size-2" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] leading-5 text-ink">{x.text}</span>
-                <span className="block truncate text-xs leading-4 text-mute">{x.label} · {x.ago}</span>
-              </span>
-            </Link>
-          </li>
+      {tasks.length === 0 && <p className="px-2 pt-3 text-sm text-mute">{t("ws.noTasks")}</p>}
+      {/* D-611: three groups — what waits for you, what runs, what is done (the done ones fold after a few) */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {groupTasks(tasks).map((g) => (
+          <section key={g.id} aria-label={t(GROUP_LABEL[g.id])} className="pt-3">
+            <p className={`flex items-center gap-2 px-2 pb-1 text-xs font-medium ${g.id === "waiting" ? "text-warn" : "text-mute"}`}>
+              {t(GROUP_LABEL[g.id])}<span className="tabular-nums text-faint">{g.items.length}</span>
+            </p>
+            <ul>
+              {(g.id === "done" ? g.items.slice(0, DONE_SHOWN) : g.items).map((x) => <TaskRowItem key={x.id} x={x} selected={selected} />)}
+            </ul>
+            {g.id === "done" && g.items.length > DONE_SHOWN && (
+              <details>
+                <summary className="cursor-pointer list-none px-2 py-1.5 text-xs text-mute hover:text-ink">{t("ws.group.more", { n: g.items.length - DONE_SHOWN })}</summary>
+                <ul>{g.items.slice(DONE_SHOWN).map((x) => <TaskRowItem key={x.id} x={x} selected={selected} />)}</ul>
+              </details>
+            )}
+          </section>
         ))}
-      </ul>
+      </div>
     </nav>
   );
 }
