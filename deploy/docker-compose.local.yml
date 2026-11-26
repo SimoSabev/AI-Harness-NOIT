@@ -1,0 +1,38 @@
+# E10 hosted (D-705): the same stack on THIS computer, for the integration test and a look before the VPS:
+#   docker compose -p mandat-hosted-local -f deploy/docker-compose.core.yml -f deploy/docker-compose.local.yml up -d --build
+# Differences from the VPS: a Postgres container plays "the user's Postgres" (shim + migrations); Caddy serves
+# https://localhost with its internal CA on 127.0.0.1 only; the worker runs MANDAT_WORKER_ROLE=api (the hosted port,
+# no task slots), so it needs no Docker socket. Nothing here listens on anything but 127.0.0.1.
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${MANDAT_LOCAL_PG_PASSWORD:?set MANDAT_LOCAL_PG_PASSWORD (random, this terminal only)}
+      POSTGRES_DB: mandat
+    volumes:
+      - ../supabase:/mandat/supabase:ro
+      - ./local/initdb.sh:/docker-entrypoint-initdb.d/00-mandat.sh:ro
+      - mandat-local-pg:/var/lib/postgresql/data
+    ports: ["127.0.0.1:${MANDAT_LOCAL_PG_PORT:-55432}:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mandat"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    networks: [localdb]
+  caddy:
+    ports: !override ["127.0.0.1:${MANDAT_LOCAL_HTTPS_PORT:-18443}:443"]
+  worker:
+    environment:
+      MANDAT_WORKER_ROLE: api
+    volumes: !override
+      - mandat-home:/home/mandat/.mandat
+      - mandat-proxy:/home/mandat/.mandat/proxy:ro
+    networks: [edge, internal, research, localdb]
+    depends_on:
+      postgres: { condition: service_healthy }
+networks:
+  localdb: {}
+volumes:
+  mandat-local-pg: {}

@@ -1,5 +1,8 @@
-# Демо промпт т. 9.8 (S19): only caddy publishes a port (443). The worker and the LLM proxy live on the internal
-# network; the proxy (the real keys) has NO public path. Deployed by Simo (docs/setup/vps.md), never by the coder.
+# Демо промпт т. 9.8 (S19) + E10 hosted (v5 т. 6.1, D-700, D-705): only caddy publishes a port (443). The worker, the
+# LLM proxy and the research sidecar live on internal networks; the proxy (the real keys) has NO public path and is the
+# only service that gets a key (AGENTS.md rule 2). Postgres/Supabase is the user's (MANDAT_DB_URL); this file starts no
+# database. Deployed by Simo (docs/setup/hosted.md, docs/setup/vps.md), never by the coder.
+# Local test of the same stack: docker-compose.local.yml on top (docs/setup/hosted.md, "Локално").
 name: mandat-core
 services:
   caddy:
@@ -11,21 +14,29 @@ services:
     environment:
       MANDAT_DOMAIN: ${MANDAT_DOMAIN:?set MANDAT_DOMAIN}
     networks: [edge]
+    depends_on:
+      worker: { condition: service_healthy }
     restart: unless-stopped
   worker:
     build: { context: .., dockerfile: docker/worker/Dockerfile }
     expose: ["8790"]
     environment:
       MANDAT_MODE: worker
+      # D-700: the hosted port — /healthz, /api/runner/* (runner protocol), /api/webhooks/github/*
+      MANDAT_HOSTED: "1"
+      MANDAT_WORKER_ROLE: ${MANDAT_WORKER_ROLE:-all}
       MANDAT_WEBHOOK_HOST: 0.0.0.0
       MANDAT_WEBHOOK_PORT: "8790"
+      MANDAT_RUNNER_JWT_SECRET: ${MANDAT_RUNNER_JWT_SECRET:?set MANDAT_RUNNER_JWT_SECRET (≥ 32 random characters)}
       MANDAT_DB_URL: ${MANDAT_DB_URL:?set MANDAT_DB_URL}
+      MANDAT_SEARXNG_URL: http://research:8080
       SUPABASE_URL: ${SUPABASE_URL:-}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       GITHUB_WRITER_APP_ID: ${GITHUB_WRITER_APP_ID:-}
       GITHUB_WRITER_PRIVATE_KEY: ${GITHUB_WRITER_PRIVATE_KEY:-}
       GITHUB_WRITER_INSTALLATION_ID: ${GITHUB_WRITER_INSTALLATION_ID:-}
       GITHUB_WRITER_WEBHOOK_SECRET: ${GITHUB_WRITER_WEBHOOK_SECRET:-}
+      GITHUB_OBSERVER_WEBHOOK_SECRET: ${GITHUB_OBSERVER_WEBHOOK_SECRET:-}
       GITHUB_DEMO_REPO: ${GITHUB_DEMO_REPO:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
@@ -35,8 +46,26 @@ services:
       # the host's ROOTLESS Docker of the user mandat (sandboxes are started with SANDBOX_HARDENING; docs/setup/vps.md)
       - ${MANDAT_ROOTLESS_DOCKER_SOCK:?set MANDAT_ROOTLESS_DOCKER_SOCK}:/run/mandat/docker.sock
       - mandat-home:/home/mandat/.mandat
-    networks: [edge, internal]
+      # the proxy's token secret (mdt_ tokens), read-only; never a key
+      - mandat-proxy:/home/mandat/.mandat/proxy:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8790/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    networks: [edge, internal, research]
+    depends_on:
+      llm-proxy: { condition: service_started }
     restart: unless-stopped
+  # the proxy's token secret, made once (32 random bytes); the proxy reads it, the worker mounts it read-only
+  proxy-init:
+    image: ${MANDAT_LLM_PROXY_IMAGE:?pnpm mandat images build}
+    user: "0:0"
+    entrypoint: ["node", "-e", "const fs=require('fs'),c=require('crypto'),d='/var/lib/mandat-proxy',f=d+'/secret';if(!fs.existsSync(f))fs.writeFileSync(f,c.randomBytes(32));fs.chmodSync(f,0o440);fs.chownSync(f,1000,1001);fs.chownSync(d,1000,1001);fs.chmodSync(d,0o750)"]
+    volumes:
+      - mandat-proxy:/var/lib/mandat-proxy
+    network_mode: none
+    restart: "no"
   llm-proxy:
     image: ${MANDAT_LLM_PROXY_IMAGE:?pnpm mandat images build}
     expose: ["8787", "8788"]
@@ -51,10 +80,31 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    depends_on:
+      proxy-init: { condition: service_completed_successfully }
+    restart: unless-stopped
+  # D-705: the research sidecar (SearXNG, the same pinned image and settings as `mandat research engine start`); it
+  # needs the internet for search, so it is on its own network, never on `internal` with the proxy
+  research:
+    image: searxng/searxng:2026.10.19-81371861f@sha256:5ed0323b5f5f8701264ef65e239a2bd83cb57098f2b971fa30bf79c06eeae271
+    expose: ["8080"]
+    environment:
+      SEARXNG_SECRET: ${MANDAT_SEARXNG_SECRET:?set MANDAT_SEARXNG_SECRET (random)}
+      GRANIAN_HOST: 0.0.0.0
+    volumes:
+      - ../docker/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    tmpfs: ["/var/cache/searxng:rw,nosuid,nodev,size=64m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1
+    networks: [research]
     restart: unless-stopped
 networks:
   edge: {}
   internal: { internal: true }
+  research: {}
 volumes:
   caddy-data: {}
   mandat-home: {}

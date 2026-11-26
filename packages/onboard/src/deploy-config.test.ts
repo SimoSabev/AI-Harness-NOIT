@@ -19,31 +19,55 @@ describe("compose-config", () => {
     expect(compose.services["llm-proxy"]?.networks).toEqual(["internal"]);
     expect(compose.networks.internal?.internal).toBe(true);
   });
-  it("Caddyfile: само /api/webhooks/* → worker; няма /proxy и llm-proxy", () => {
+  it("E10 hosted (D-700, D-705): worker с hosted порта; ключ само в llm-proxy; research sidecar извън вътрешната мрежа", () => {
+    const w = compose.services.worker?.environment ?? {};
+    expect(w.MANDAT_HOSTED).toBe("1");
+    expect(w.MANDAT_SEARXNG_URL).toBe("http://research:8080");
+    const keyed = Object.entries(compose.services).filter(([, s]) => Object.keys(s.environment ?? {}).some((k) => /_API_KEY$/.test(k))).map(([n]) => n);
+    expect(keyed).toEqual(["llm-proxy"]);
+    expect(compose.services.research?.networks).toEqual(["research"]);
+    expect(compose.services.research?.expose).toEqual(["8080"]);
+    expect(compose.services.worker?.networks).toEqual(["edge", "internal", "research"]);
+    expect(compose.networks.research?.internal).toBeUndefined();
+  });
+  it("Caddyfile: само /api/webhooks/* и /api/runner/* → worker; няма /proxy и llm-proxy", () => {
     const c = readFileSync(path.join(repo, "deploy/Caddyfile"), "utf8").split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
     expect(c).toContain("handle /api/webhooks/*");
+    expect(c).toContain("handle /api/runner/*");
     expect(c).toContain("reverse_proxy worker:8790");
-    expect(c).not.toMatch(/\/proxy|llm-proxy|8787|8788/);
+    expect(c.match(/reverse_proxy [^\n]+/g)).toEqual(["reverse_proxy worker:8790", "reverse_proxy worker:8790"]);
+    expect(c).not.toMatch(/\/proxy|llm-proxy|8787|8788|research|8080/);
   });
+  const env = { ...process.env, MANDAT_DOMAIN: "mandat.example", MANDAT_DB_URL: "postgresql://x", MANDAT_ROOTLESS_DOCKER_SOCK: "/run/user/1001/docker.sock", MANDAT_LLM_PROXY_IMAGE: "mandat-llm-proxy:test", ANTHROPIC_API_KEY: "placeholder", MANDAT_RUNNER_JWT_SECRET: "x".repeat(32), MANDAT_SEARXNG_SECRET: "y", MANDAT_LOCAL_PG_PASSWORD: "z" };
+  const config = (files: string[]) => JSON.parse(execFileSync("docker", ["compose", ...files.flatMap((f) => ["-f", path.join(repo, f)]), "config", "--format", "json"], { env, encoding: "utf8" })) as { services: Record<string, { ports?: { host_ip?: string; published?: string }[]; environment?: Record<string, string>; volumes?: { source?: string }[] }> };
   it("docker compose config → валиден (ако има docker compose)", () => {
-    let have = true;
-    try {
-      execFileSync("docker", ["compose", "version"], { stdio: "ignore" });
-    } catch {
-      have = false;
-    }
-    if (!have) return;
-    const env = { ...process.env, MANDAT_DOMAIN: "mandat.example", MANDAT_DB_URL: "postgresql://x", MANDAT_ROOTLESS_DOCKER_SOCK: "/run/user/1001/docker.sock", MANDAT_LLM_PROXY_IMAGE: "mandat-llm-proxy:test", ANTHROPIC_API_KEY: "placeholder" };
-    const out = execFileSync("docker", ["compose", "-f", path.join(repo, "deploy/docker-compose.core.yml"), "config", "--format", "json"], { env, encoding: "utf8" });
-    const j = JSON.parse(out) as { services: Record<string, { ports?: unknown[] }> };
-    expect(Object.keys(j.services).sort()).toEqual(["caddy", "llm-proxy", "worker"]);
+    if (!haveCompose()) return;
+    const j = config(["deploy/docker-compose.core.yml"]);
+    expect(Object.keys(j.services).sort()).toEqual(["caddy", "llm-proxy", "proxy-init", "research", "worker"]);
     expect(Object.entries(j.services).filter(([, s]) => s.ports && s.ports.length > 0).map(([n]) => n)).toEqual(["caddy"]);
+  });
+  it("локалният overlay (D-705): Postgres и Caddy само на 127.0.0.1; worker role api без Docker сокет", () => {
+    if (!haveCompose()) return;
+    const j = config(["deploy/docker-compose.core.yml", "deploy/docker-compose.local.yml"]);
+    const published = Object.entries(j.services).flatMap(([n, s]) => (s.ports ?? []).map((p) => [n, p.host_ip]));
+    expect(published.sort()).toEqual([["caddy", "127.0.0.1"], ["postgres", "127.0.0.1"]]);
+    expect(j.services.worker?.environment?.MANDAT_WORKER_ROLE).toBe("api");
+    expect(JSON.stringify(j.services.worker?.volumes)).not.toContain("docker.sock");
   });
   it("docker/worker/Dockerfile: без Claude Code и Codex (K2)", () => {
     const d = readFileSync(path.join(repo, "docker/worker/Dockerfile"), "utf8").split("\n").filter((l) => !l.trim().startsWith("#")).join("\n");
     expect(d).not.toMatch(/claude-code|@openai\/codex/);
   });
 });
+
+function haveCompose(): boolean {
+  try {
+    execFileSync("docker", ["compose", "version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("ci-yml (S32)", () => {
   const raw = readFileSync(path.join(repo, "fixtures/demo-shop/.github/workflows/ci.yml"), "utf8");

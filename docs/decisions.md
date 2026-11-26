@@ -5779,3 +5779,74 @@ channel_limit`, а агентът трябва да е в списъка на с
 Граница: празни папки, останали след изтриване, остават. Ако бъде прекъснато насред записа (диск, ток), част от файловете
 може да е записана, а `mandat.synced` да е старият. Следващото „Внеси“ тогава казва „dirty“, без да пише.
 Тестове: worker bring-to-folder.test.ts (+4), add-project.test.ts (+1). Статус: решено от Симо.
+
+## D-700 Hosted порт на worker-а: `MANDAT_HOSTED=1`, роля `all|api` (E10 hosted, 26.11.2026)
+Решение: `mandat worker` отваря `MANDAT_WEBHOOK_HOST:MANDAT_WEBHOOK_PORT` само при `MANDAT_HOSTED=1` (`pnpm local` и десктопът
+не слушат нищо ново). Пътища: `GET /healthz`, `POST /api/runner/*` (D-701), `POST /api/webhooks/github/*` (подписът през
+@octokit/webhooks, записът в `sync_events` за org-а на хранилището; непознато хранилище → 202 без запис). Всичко друго е 404.
+`MANDAT_WORKER_ROLE=api` пуска само порта (фронт за отдалечени runner-и; без слотове и без Docker сокет); `all` (по
+подразбиране) — порта + слотовете + ефектите. Част без тайна е изключена и го казва, без да печата стойност.
+Защо: сървърът за webhooks съществуваше (демо т. 6.5), но никой не го пускаше; Caddy вече водеше натам.
+Тестове: hosted-env.test.ts, hosted-worker.test.ts, runner-api.test.ts. Статус: решено от кодера.
+
+## D-701 Runner протокол `/api/runner/*` с еднократна регистрация и кратък JWT (26.11.2026)
+Решение: (1) Собственик на екипа (`settings.manage`) прави `mrr_` токен (`public.runner_registration_create`, 1–1440 мин,
+пази се само sha256). (2) `POST /api/runner/register {token, name, kinds}` → `{runner_id, secret: mrs_…, org_id}` веднъж;
+пази се само хешът на тайната. (3) `POST /api/runner/token {runner_id, secret}` → HS256 JWT ≤ 15 мин (`iss mandat-hosted`,
+`aud mandat-runner`, `sub`, `org`, `kinds`, `jti`). Подписът е с node:crypto (без нова зависимост); хедърът е един фиксиран
+низ, затова няма избор на `alg` („none“ и смяна на ключа отпадат). Ключ: `MANDAT_RUNNER_JWT_SECRET` (≥ 32) или `…_FILE`.
+(4) Всяка заявка с JWT пита базата (`private.runner_seen`): отнет runner е отказан веднага, каквото и да казва токенът.
+(5) Rate limit: 10 регистрации и 60 токена на минута за адрес. Схемите са в packages/contract (`runner.ts`), zod на ръба.
+Защо: v5 т. 6.1; runner-ът не държи URL на базата, service ключ или API ключ (правило 2) — само своята тайна.
+Алтернативи: дълготраен API ключ на runner (няма изтичане, по-трудно отнемане); mTLS (изисква CA при Симо); JWT библиотека
+(нова зависимост за 30 реда). Тестове: runner.test.ts, runner-jwt.test.ts, runner-api.test.ts, runners.test.sql.
+Статус: решено от кодера.
+
+## D-702 Outbox през runner: lease вместо транзакция (26.11.2026)
+Решение: `outbox.lease_owner/lease_until`; `private.runner_outbox_claim` взима редовете на своя екип от своите `kinds`
+(днес `baseline`, `mcp_vet`, `harness_scan` — ефектите с Docker; GitHub ефектите остават на hosted worker-а), без жив lease,
+`FOR UPDATE SKIP LOCKED`, lease 60 s (удължаване до 900 s). `done/failed/extend` минават само за притежателя на жив lease
+(иначе 409 `lease_lost`); провалът връща реда в pending с attempts + 1 (failed при 8, както `drainOutbox`). Собственият
+`PgOutbox` на hosted worker-а прескача ред с жив lease. На runner-а `HttpOutbox` е същият `OutboxStore`, така `drainOutbox`
+и обработчиците вървят непроменени. Регистрация и отнемане → ред `runner_change` в дневника на екипа.
+Защо: v5 т. 6.1 „outbox през runner“; идемпотентността по ключ (T3-2) остава. Статус: решено от кодера.
+
+## D-703 Екип = org; RLS „друг екип не вижда нищо“ се проверява по всяка таблица с org_id (26.11.2026)
+Решение: не добавяме нова таблица „teams“: org-ът е екипът, членовете са с ролите на E8в (D-349). pgTAP
+`teams_rls.test.sql` минава по ВСИЧКИ таблици и изгледи в public с колона org_id (не по ръчен списък): всяка има
+RLS enabled+forced; всеки изглед, четим от authenticated, е security_invoker; член на друг екип вижда 0 реда навсякъде;
+нова таблица без RLS чупи теста по име. `runners`/`runner_registrations`: членовете виждат runner-ите на екипа (без хеша на
+тайната — права по колони), токените за регистрация вижда само `settings.manage`.
+Защо: целта на E10 („екип ≥ 2 души с роли … с RLS“) и правилото на модела „всяка таблица има org_id и RLS“ (PRD).
+Алтернативи: отделни teams в org (второ ниво на права без нужда днес). Статус: решено от кодера.
+
+## D-704 Одитен износ `mandat audit export --task|--period` + `verify-log --audit` (26.11.2026)
+Решение: файлът `mandat.audit/v1` носи цялата верига на екипа (seq 1..N, хешове) и payload само на редовете от избора
+(задачата или ts ∈ [from, to)); ред извън избора пази payload_hash, така веригата се проверява офлайн без да показва чужди
+payload-и. Проверката (`verifyAuditExport`, packages/ledger): веригата (същата формула като E0), всеки включен payload
+(хеш + JCS), изборът е честен (скрит избран ред или показан чужд → E_SELECTION), всяка присъда в records е назована от
+включен ред `verdict` с нейния verdict_hash (иначе E_UNANCHORED). `--as <user>` чете като потребителя под RLS и иска
+`ledger.export` (owner, worker); viewer и друг екип → изход 4. Самият износ се записва в дневника (`audit_export` с sha256 на
+файла). Периодът: `YYYY-MM`, `YYYY-MM-DD..YYYY-MM-DD` (двата дни включени) или ISO/ISO, UTC.
+Защо: v5 т. 6.1; одиторът проверява без достъп до базата. Тестове: audit.test.ts (contract, ledger, cli), docker тестът.
+Статус: решено от кодера.
+
+## D-705 Compose: research sidecar, proxy-init, локален overlay (26.11.2026)
+Решение: `deploy/docker-compose.core.yml`: caddy (само 443), worker (`MANDAT_HOSTED=1`, healthcheck `/healthz`), llm-proxy
+(единственият с `*_API_KEY`, само `internal`), `proxy-init` (еднократно прави тайната на проксито, 0440 1000:1001 — worker-ът
+я чете само за mdt_ токени), `research` (SearXNG, същият прикован образ и settings като `mandat research engine`, своя мрежа
+с изход, cap_drop ALL). Caddy води `/api/webhooks/*` и `/api/runner/*`. `docker-compose.local.yml` (само за тази машина):
+Postgres 17 със shim + миграциите (`deploy/local/initdb.sh`), портове само на 127.0.0.1 (`!override`), worker `api` без сокет.
+Защо: „всичко се проверява локално“; локалният стек е същият файл плюс overlay, не отделен compose.
+[НП]: worker-ът в compose стига проксито по име (`llm-proxy`), а задачите/ресърчът търсят 127.0.0.1 — при деплоя (чеклист 37).
+Тестове: deploy-config.test.ts, hosted-compose.docker.test.ts. Статус: решено от кодера.
+
+## D-706 `MANDAT_SANDBOX_RUNTIME=runsc|sbx` — само спайк, [НП] (26.11.2026)
+Решение: не променяме SANDBOX_HARDENING и кода на пясъчника. Спайк docs/spikes/RUNSC.md + `spikes/runsc-probe.mjs`. Находки:
+gVisor е само за Linux (няма го на Docker Desktop за macOS; пробата тук: runtimes runc); под gVisor DNS-ът в user-defined
+мрежа не работи (https://gvisor.dev/docs/user_guide/FAQ/, 26.11.2026), а агентът стига вратата по име → нужно е `--add-host`
+с IP на вратата; rootless + runsc е документиран само с Netstack през TAP+Slirp
+(https://gvisor.dev/docs/user_guide/rootless/, 26.11.2026); Docker Sandboxes (`sbx`) е microVM със собствен Docker за целия
+агент, без docker-run флагове (https://docs.docker.com/ai/sandboxes/, 26.11.2026) → отделен адаптер, не стойност на флаг;
+microVM при hosted иска /dev/kvm. Следва: пробата на Linux хост с runsc (чеклист 38), после решение за флага.
+Статус: [НП] спайк.
