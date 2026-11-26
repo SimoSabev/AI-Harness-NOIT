@@ -27,6 +27,7 @@ const patchOf = (mirror: string): Buffer => {
   return execFileSync("git", ["diff", "--binary"], { cwd: w, env });
 };
 
+// D-661: without ssh-keygen (OpenSSH) Mandat does not sign, so there is nothing to test
 describe.skipIf(!hasKeygen)("commit signing (D-661)", () => {
   it("the key is made once in $MANDAT_HOME/keys (dir 0700, key 0600) with its .pub and allowed_signers", async () => {
     const home = mkdtempSync(path.join(os.tmpdir(), "mandat-sig-"));

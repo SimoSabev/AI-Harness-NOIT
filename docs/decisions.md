@@ -5779,3 +5779,119 @@ channel_limit`, а агентът трябва да е в списъка на с
 Граница: празни папки, останали след изтриване, остават. Ако бъде прекъснато насред записа (диск, ток), част от файловете
 може да е записана, а `mandat.synced` да е старият. Следващото „Внеси“ тогава казва „dirty“, без да пише.
 Тестове: worker bring-to-folder.test.ts (+4), add-project.test.ts (+1). Статус: решено от Симо.
+
+## D-660 Revert на слято в 7 дни → `outcomes.failure` и стъпка надолу по стълбата (E9е, 26.11.2026)
+Решение: Observer App-ът праща `push` към `/api/webhooks/github/observer` (D-215). `mandat worker` вдига този сървър само
+когато има `GITHUB_OBSERVER_WEBHOOK_SECRET` (и никога с `--once`), на `MANDAT_WEBHOOK_HOST:MANDAT_WEBHOOK_PORT`
+(127.0.0.1:8790). Записващата функция (`observerRecorder`) пази само `push` към проект, който Мандат познава: един ред в
+`sync_events` на X-GitHub-Delivery (повторна доставка = нищо), с ref, новия sha и броя комити — без текстовете на
+комитите (недоверен текст). Нов push пуска `observePush`, а той пита чистата `findReverts` (gate-github) кои пушнати
+комити връщат промяна, слята от Мандат в последните 7 дни. Сигналите са три. Силните са два: редът на `git revert`
+„This reverts commit <sha на сливането>.“ и тялото на PR от бутона Revert „Reverts <owner>/<repo>#<n>“. Третият е
+заглавието „Revert "<заглавието на PR-а> (#n)"“. Слаб сигнал е заглавието без номер: важи само ако една-единствена
+отворена промяна има това заглавие. Revert на revert не се брои. Прозорецът се мери от сливането до момента, в който
+push-ът е видян, никога по датата на комита, защото нея я пише авторът. За всяко попадение има една транзакция:
+`outcomes` (result `failure`, reason `revert`, revert_sha; уникален индекс → най-много един на changeset), стъпка
+`failure` по стълбата на (repo, вид, агент) чрез общата `writeLadderStep` (s_up −1,099, s_down +1,099; при s_down ≥ 3,5
+нивото пада с 1 и има ред `ladder_change`), ред `outcome` в дневника с reason/revert_sha/signal, активност `reverted` на
+картата и известие `web_push` с вид „reverted“ („Върната (revert): …“). Задачата остава CLOSED.
+Миграция: `20261126000660_revert_outcome.sql` (`outcomes.reason` по подразбиране `merge`, `revert_sha`, индексът).
+Факти: редът на `git revert` е проверен локално с git 2.54.0 (26.11.2026). В https://git-scm.com/docs/git-revert пише
+само „This reverts <full-object-name>“. Масивът `commits` в push има най-много 2048 елемента
+(https://docs.github.com/en/webhooks/webhook-events-and-payloads#push, 26.11.2026). [НП] текстът на PR от бутона Revert:
+https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/incorporating-changes-from-a-pull-request/reverting-a-pull-request
+казва само, че се прави нов PR, който връща сливането. [НП] полетата `id` и `message` в `commits[]` не са изброени в документацията;
+fakeGitHub ги дава като GitHub. Проверката на живо е ред 39 в чеклиста.
+Защо: v5 5.6, AC-9.5. Слятото е кредитирано като успех веднага (D-217), затова revert е истинският изход на същата промяна
+и трябва да я дебитира, иначе стълбата вярва на промени, които хората са върнали.
+Граница: брои се всяко сливане с успех в `outcomes` (и ниво 1 след човешко одобрение, защото и то е кредитирано).
+Revert на локален проект (огледалото) не се следи, защото там няма push webhook. Не се гледат дърветата: revert, който не
+оставя следа в текста (ръчно върнат файл), не се хваща. GitLab push (`pushFromGitLab`) е готов в договора, но още няма
+GitLab webhook и GitLab проекти (D-662).
+Тестове: contract forge.test.ts (4), gate-github revert.test.ts (9), worker revert.test.ts (4: AC-9.5 с fakeGitHub,
+повторна доставка, 7 дни / друг клон / друго репо, спад на нивото), observer.test.ts (2), push.test.ts (+1).
+Статус: решено; на живо чака Симо (Observer App с webhook).
+
+## D-661 Подпис на комитите при локално прилагане със SSH ключа на харнеса (E9е, 26.11.2026)
+Решение: комитът, който Мандат прави на компютъра — клонът `mandat/<задача>-a<n>` в огледалото и одобрените правила
+`mandat/harness-<…>` (D-388) — се подписва със собствен SSH ключ на харнеса. Ключът се прави веднъж при първа нужда с
+`ssh-keygen -t ed25519 -N ""` в `$MANDAT_HOME/keys/commit-signing-ed25519`. Папката е 0700, ключът е 0600 и не се
+заменя никога. До ключа стоят `.pub` и `allowed_signers` (`mandat@localhost namespaces="git" <ключ>`). git подписва с
+`-c gpg.format=ssh -c user.signingKey=<път до частния ключ> commit -S`, без ssh-agent. Проверката е
+`git -c gpg.ssh.allowedSignersFile=$MANDAT_HOME/keys/allowed_signers log --format=%G?` → `G`. `mandat apply` (D-356) е
+ff-only, затова подписът стига до работното копие непроменен. `MANDAT_SIGN_COMMITS=0` изключва подписа. Без ssh-keygen
+комитът остава неподписан, както преди, без грешка.
+Ключът не влиза в пясъчника: `buildRunArgs` позволява само ro файлове под `etc/` на рън-а (D-066); тестът опитва ключа и
+папката му и получава отказ. В лог или грешка не влиза съдържанието на ключа, само пътят му в `-c` (както при всеки git).
+Без парола е, защото worker-ът подписва без човек. Защитата е 0600 и потребителят на ОС.
+Факти: `gpg.format=ssh` иска git ≥ 2.34 (https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification,
+26.11.2026). `user.signingKey` може да е път към частния ключ. `gpg.ssh.allowedSignersFile` е за `verify-commit`
+(https://git-scm.com/docs/git-config, 26.11.2026). Подписът без ssh-agent е проверен локално с git 2.54.0 и OpenSSH на
+macOS (26.11.2026). [НП] Windows (OpenSSH в системата) и Linux без ssh-keygen: там комитът остава неподписан.
+M3: keyless подпис с gitsign и запис в Rekor (Sigstore). Изисква OIDC вход и мрежа към Fulcio/Rekor, затова не е тук.
+Защо: v5 5.6. Човекът вижда кои комити са на Мандат и че никой не ги е пипал след присъдата.
+Тестове: worker signing.test.ts (4): ключът (права, един път), `G` срещу `N`, изключване и липсващ ssh-keygen, пясъчникът
+отказва ключа. Статус: решено.
+
+## D-662 GitLab порт = същият GitHubPort над REST v4 (E9е, 26.11.2026; изпълнява D-331)
+Решение: `gitlabPort({ baseUrl, token, materialize, cloneBase?, fetch?, treeOf? })` в packages/gate-github дава точно
+`GitHubPort`. Затова `deliver`, `autoMerge`, `humanApproved` и кръговете на CI вървят без промяна; тестът го доказва с
+тях. Съответствията са:
+(1) PR = merge request: `number` е iid, head е `sha`, base е `diff_refs.base_sha`. Чернова е префикс „Draft: “ в
+заглавието, а „готов за ревю“ маха префикса. `author_association` е винаги `NONE`, защото GitLab няма такова поле и
+най-строгият клон за външни остава. Fork се вижда като `gitlab-project:<id>`.
+(2) Check run е commit status (`POST /projects/:id/statuses/:sha`). GitLab няма `action_required`, затова UNKNOWN става
+`failed` със заглавие „UNKNOWN: …“ (резервата на D-209). Същото състояние и текст не се пращат втори път.
+(3) Одобрение е статусът „Мандат approval“. MR approval rules са Premium, а одобрението е на Мандат.
+(4) CI: pipelines за sha са check runs (`pipeline #<id>`, `gitlab-ci`), а останалите commit statuses са statuses.
+(5) Правила: „Pipelines must succeed“ прави двата статуса на Мандат задължителни. Ако е изключено, задължителни няма и
+ниво ≥ 2 остава с таван (D-231). Ultimate добавя имената на external status checks. `strict` е merge_method ff или
+rebase_merge. merge trains се броят за опашка.
+(6) Сливане: `PUT …/merge` със `sha` и `squash`. 409 значи друг head, 405 не може, 401/403 → 403, 406 → 405.
+(7) Комит: `POST /repository/commits` на временен клон `mandat/tmp-<хеш>` от `start_sha`, със `force`, create/update
+според `HEAD /repository/files`, плюс `chmod` за 100755. После истинският клон се прави от този sha, а временният се
+трие. API-то не дава висящ комит.
+(8) Дървото на комит идва от `git fetch --depth=1` на sha, защото API-то за комити няма tree. Тайната за git е в
+`GIT_CONFIG_*` env като `Authorization: Basic oauth2:<токен>`, никога в argv. В HTTP тя е само в `PRIVATE-TOKEN`.
+Грешките носят метода, пътя и кода, никога токена.
+fakeGitLab е in-memory REST зад `fetch` и налага 409/405/400/404 и „pipeline must succeed“. Live тестът
+`gitlab.live.test.ts` (GL1–GL3) иска `GITLAB_TOKEN`, `GITLAB_DEMO_PROJECT` и `MANDAT_LIVE_MR`; без тях е SKIPPED.
+Факти (docs.gitlab.com, прочетени 26.11.2026):
+- MR полетата `sha`, `draft`, `diff_refs`; `squash` при създаване; при сливане 409 „SHA does not match HEAD of source
+  branch“, 405 „cannot merge“, 401, `merge_commit_sha`/`squash_commit_sha` — https://docs.gitlab.com/api/merge_requests/
+- `POST /repository/commits` с `branch`, `start_sha`, `force`, actions create/delete/move/update/chmod, `encoding`
+  base64, `execute_filemode`; няма tree в отговора за комит; състоянията на statuses; `GET …/commits/:sha/statuses` —
+  https://docs.gitlab.com/api/commits/
+- `POST /repository/branches` (branch, ref), `DELETE` 204 — https://docs.gitlab.com/api/branches/
+- `HEAD /repository/files/:path?ref=` — https://docs.gitlab.com/api/repository_files/
+- `GET /pipelines?sha=` и състоянията — https://docs.gitlab.com/api/pipelines/
+- external status checks са Ultimate — https://docs.gitlab.com/api/status_checks/
+- approval rules са Premium; състоянието на одобрение е и във Free — https://docs.gitlab.com/api/merge_request_approvals/
+[НП] до GL1–GL3:
+- префиксът „Draft:“: страницата за MR API няма параметър `draft`;
+- 400 при съществуващ клон (документацията не казва кода);
+- 404 от HEAD на липсващ файл;
+- повторно същото състояние на status;
+- external commit statuses влизат в „pipeline must succeed“ (GL3);
+- `refs/merge-requests/<iid>/head` може да се fetch-не (в документацията е само ref на pipeline);
+- git през HTTPS с `oauth2:<токен>`;
+- GitLab push webhook (`X-Gitlab-Event: Push Hook`, `X-Gitlab-Token`), който `pushFromGitLab` чете;
+- PRIVATE-TOKEN (https://docs.gitlab.com/api/rest/authentication/ не е прочетена; всички примери го ползват).
+Защо: v5 5.6, D-331. Един интерфейс означава една логика на доставката и една на присъдата за двата форджа.
+Граница: worker-ът още не избира GitLab за проект. `repos.provider` е `local|github`, няма GitLab webhook и няма
+„Добави GitLab проект“. Това е следващ ход след GL1–GL3, по D-331 след стабилен GitHub. Без нова зависимост: само `fetch`.
+Тестове: gate-github gitlab.test.ts (9), gitlab.live.test.ts (3, SKIPPED без токен). Статус: решено; на живо чака Симо.
+
+## D-663 Комитите на Writer App през REST са „Verified“ — проверка L4 (E9е, 26.11.2026)
+Решение: Мандат не подписва комитите, които Writer App прави през REST (`POST /git/commits` в octokit.ts), и не им
+задава автор, committer или подпис. Според GitHub такъв комит от App е верифициран: „verified and authenticated as the
+GitHub App or bot and contains no custom author information, custom committer information, and no custom signature
+information“
+(https://docs.github.com/en/authentication/managing-commit-signature-verification/about-commit-signature-verification,
+26.11.2026). Документацията не казва изрично, че Git Data API (`/git/commits`) влиза тук: [НП]. Live тестът L4 в
+`github.live.test.ts` прави комит, който не е на нито един клон, и иска `verification.verified = true`,
+`reason = "valid"`. Без App-а е SKIPPED. Ако L4 падне, резервата е Contents API (`PUT /contents`) за един файл или
+GraphQL `createCommitOnBranch`; това се решава след L4.
+Защо: v5 5.6 [Ф, security-terms §5.2]: „Verified“ в GitHub показва, че комитът е на Writer App, а не на човек с
+токен. Тестът не може да го провери офлайн.
+Тестове: github.live.test.ts L4 (SKIPPED). Статус: чака Симо (чеклист ред 37, docs/setup/github-apps.md §5).

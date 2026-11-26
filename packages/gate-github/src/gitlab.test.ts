@@ -110,7 +110,7 @@ describe("GitLab port (D-662)", () => {
     const p = await port.getPull(P, 1);
     expect(p).toMatchObject({ number: 1, head_ref: "mandat/t_gl-a1", base_ref: "main", author_login: "mandat-bot", author_type: "Bot", author_association: "NONE", head_repo_full_name: P, draft: true });
     expect((await port.listOpenPulls(P)).map((x) => x.number)).toEqual([1]);
-    const e = await port.getPull(P, 99).catch((x: unknown) => x as Error & { status?: number });
+    const e = (await port.getPull(P, 99).then(() => new Error("no error"), (x: unknown) => x)) as Error & { status?: number };
     expect(e.status).toBe(404);
     expect(String(e.message)).not.toContain(TOKEN);
     const n = gl.state.calls.length;

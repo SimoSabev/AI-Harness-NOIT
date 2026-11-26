@@ -31,8 +31,8 @@ describe("GitHub live (L1–L3)", () => {
     const r = await gh().mergePull(repo, pr, { sha: p.head_sha, merge_method: "squash" });
     expect(r.ok).toBe(false);
   });
-  // E9f (D-663, v5 5.6): needs GITHUB_WRITER_APP_ID, GITHUB_WRITER_PRIVATE_KEY, GITHUB_WRITER_INSTALLATION_ID, GITHUB_DEMO_REPO.
-  // A commit the Writer App makes through REST (no custom author/committer/signature) must show as „Verified“ on GitHub.
+  // E9f (v5 5.6): a commit the Writer App makes through REST (no custom author/committer/signature) must be „Verified“.
+  // D-663: needs GITHUB_WRITER_APP_ID, GITHUB_WRITER_PRIVATE_KEY, GITHUB_WRITER_INSTALLATION_ID, GITHUB_DEMO_REPO
   it.skipIf(!(E.GITHUB_WRITER_APP_ID && E.GITHUB_WRITER_PRIVATE_KEY && E.GITHUB_WRITER_INSTALLATION_ID && E.GITHUB_DEMO_REPO))("L4: a Writer App commit through REST is verified by GitHub", async () => {
     const rest = (await new App({ appId: E.GITHUB_WRITER_APP_ID ?? "", privateKey: E.GITHUB_WRITER_PRIVATE_KEY ?? "" }).getInstallationOctokit(Number(E.GITHUB_WRITER_INSTALLATION_ID))) as unknown as Rest;
     const [owner, name] = repo.split("/");
