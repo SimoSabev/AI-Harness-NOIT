@@ -307,7 +307,7 @@ export function stopText(t: T, status: ConversationRow["status"], error: string 
 /** the turns, the "thinking" line while the worker answers, and a clear stop with its way out */
 /** D-610: who runs this conversation — the account (its email) and the model, and whether that account is out of its limit */
 function Runner({ agent, model, t }: { agent: string; model: string | null; t: T }) {
-  const name = useAgentName()(agent);
+  const name = useAgentName(t.lang)(agent);
   return (
     <p className="mt-2 flex flex-wrap items-center justify-center gap-x-2 text-xs text-mute">
       <span className="text-ink">{name.label}</span>
