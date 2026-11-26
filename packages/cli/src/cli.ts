@@ -1,6 +1,7 @@
 import { Command, CommanderError } from "commander";
 import { contractSeal, contractShowAgent } from "./commands/contract.js";
 import { verifyLog, verifyLogOnline } from "./commands/verify-log.js";
+import { auditExport, verifyAuditFile } from "./commands/audit.js";
 import { applyLocal } from "./commands/apply.js";
 import { ATTACKS, SCENARIOS } from "@mandat/bench";
 import { doctor } from "./commands/doctor.js";
@@ -61,9 +62,14 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
     .description("verify the hash chain of the ledger")
     .option("--ledger <path>", "ledger file (default <MANDAT_HOME>/ledger.jsonl)")
     .option("--org <org>", "o_local (file ledger) or an org uuid (Postgres, MANDAT_DB_URL)", "o_local")
+    .option("--audit <file>", "an audit export (mandat audit export): checked offline, no database")
     .option("--json", "machine output")
-    .action(async (o: { ledger?: string; org: string; json?: boolean }) => {
+    .action(async (o: { ledger?: string; org: string; audit?: string; json?: boolean }) => {
       const g = globals();
+      if (o.audit !== undefined) {
+        code = verifyAuditFile(io, { file: o.audit, json: Boolean(o.json ?? g.json) });
+        return;
+      }
       if (o.org !== "o_local") {
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(o.org)) throw new MandatError("E_USAGE", `--org must be o_local or a uuid: ${o.org}`);
         code = await verifyLogOnline(io, { org: o.org, json: Boolean(o.json ?? g.json), db: depsIn?.db ?? openDb(dbUrl(io.env)) });
@@ -71,6 +77,30 @@ export async function runCli(argv: string[], io: Io, depsIn?: CliDeps): Promise<
       }
       const ledger = o.ledger ?? path.join(mandatHome({ home: g.home, env: io.env }), "ledger.jsonl");
       code = verifyLog(io, { ledger, org: "o_local", json: Boolean(o.json ?? g.json) });
+    });
+
+  // E10 hosted (D-704): the audit export of a team's ledger — the whole chain, the payloads of a task or a period
+  program
+    .command("audit")
+    .description("audit export of a team's ledger (verify it with mandat verify-log --audit)")
+    .command("export")
+    .description("write the team's hash chain and the payloads of a task or a period to a JSON file")
+    .option("--task <id>", "one task (t_…); its team is the org")
+    .option("--period <p>", "YYYY-MM, YYYY-MM-DD..YYYY-MM-DD or ISO/ISO (needs --org)")
+    .option("--org <uuid>", "the team (org uuid)")
+    .option("--as <user>", "export as this user under RLS; needs ledger.export in the team (E8в roles)")
+    .option("--out <file>", "the JSON file (default audit-<org>-<selection>.json)")
+    .option("--json", "machine output")
+    .action(async (o: { task?: string; period?: string; org?: string; as?: string; out?: string; json?: boolean }) => {
+      code = await auditExport(io, {
+        db: depsIn?.db ?? openDb(dbUrl(io.env)),
+        json: json(o),
+        ...(o.task !== undefined ? { task: o.task } : {}),
+        ...(o.period !== undefined ? { period: o.period } : {}),
+        ...(o.org !== undefined ? { org: o.org } : {}),
+        ...(o.as !== undefined ? { as: o.as } : {}),
+        ...(o.out !== undefined ? { out: o.out } : {}),
+      });
     });
 
   // E8g (D-356, AC-9.3): bring Mandat's branch for a task into your working copy (merge --ff-only; it never overwrites your work)
