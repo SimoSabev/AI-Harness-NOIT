@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { HarnessProfile, NightRules, ORACLE_GLOB, ORACLE_MIN_KILL, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
+import { HarnessProfile, JOB_TEXT_MAX, NightRules, ORACLE_GLOB, ORACLE_MIN_KILL, agentFailedReason, effectiveLevel, frameUntrusted, hashJcs, parseMandatYml, profileHash, repoConfigFromPolicy, sealContract, taskTypeOf } from "@mandat/contract";
 import type { ChannelRef, Contract, MandatPolicy, Sha256, TaskType, Verdict } from "@mandat/contract";
 import { autoApply, decideDelivery, diffStat, ladderStepFor } from "@mandat/core";
 import { nextCooldownS, onLimit, selectChannel } from "@mandat/channels";
@@ -104,9 +104,11 @@ function nightProfile(hp: HarnessProfile, forbid: readonly string[]): HarnessPro
 const patchLines = (patch: Buffer): number => patch.toString("utf8").split("\n").filter((l) => (l.startsWith("+") && !l.startsWith("+++")) || (l.startsWith("-") && !l.startsWith("---"))).length;
 
 /** Contract from the policy on the trusted base (К-1). Pure. */
-const CONTRACT_TEXT_MAX = 4000;
+// D-618 (live test 26.11, run 9): the contract carries a job task's whole text (D-604: the spec and the oracle's API);
+// at 4000 every unit's and the single arm's API was cut and the writers guessed the names
+const CONTRACT_TEXT_MAX = JOB_TEXT_MAX;
 /**
- * live test 21.11 (D-569): the task text and its notes in the contract's 4000 chars. A retry note on a task already near
+ * live test 21.11 (D-569): the task text and its notes in the contract's chars. A retry note on a task already near
  * the limit threw in sealContract and took the whole worker down; now the notes stay whole and the task text gives way.
  */
 export function contractText(text: string, notes: readonly (string | null)[]): string {

@@ -373,9 +373,24 @@ describe("daemon (MANDAT_MODE=worker, D-275)", () => {
     const p = parseMandatYml(readFileSync(path.join(repoRoot, "fixtures/demo-shop/.mandat.yml"), "utf8"));
     if (!p.ok) throw new Error(p.error);
     const note = "Note from Mandat: attempt 2, the failing criteria are AC-3, AC-7.";
+    // D-618: the limit is JOB_TEXT_MAX now (the near-limit case is in the D-618 test below)
     const c = contractForTask({ id: "t_x", type: "bugfix", text: "x".repeat(4000), agent: "claude" }, p.policy, "a".repeat(40), undefined, note);
-    expect(c.text.length).toBeLessThanOrEqual(4000);
+    expect(c.text.startsWith("x".repeat(4000))).toBe(true);
     expect(c.text.endsWith(note)).toBe(true);
+  });
+  it("D-618 (live test 26.11, run 9): a job task's text up to JOB_TEXT_MAX reaches the contract whole (D-604 stopped at the task)", async () => {
+    const { parseMandatYml, JOB_TEXT_MAX } = await import("@mandat/contract");
+    const { readFileSync } = await import("node:fs");
+    const p = parseMandatYml(readFileSync(path.join(repoRoot, "fixtures/demo-shop/.mandat.yml"), "utf8"));
+    if (!p.ok) throw new Error(p.error);
+    const text = `${"spec ".repeat(1100)}\nPublic API the hidden checks use (provide exactly these exports):\n- \`src/loyalty/points.ts\`: \`awardPointsForOrder(store, order): number\``;
+    expect(text.length).toBeGreaterThan(5000);
+    const c = contractForTask({ id: "t_x", type: "free", text, agent: "claude" }, p.policy, "a".repeat(40));
+    expect(c.text).toBe(text);
+    const note = "Note from Mandat: attempt 2, the failing criteria are AC-1.";
+    const big = contractForTask({ id: "t_x", type: "free", text: "x".repeat(JOB_TEXT_MAX), agent: "claude" }, p.policy, "a".repeat(40), undefined, note);
+    expect(big.text.length).toBeLessThanOrEqual(JOB_TEXT_MAX);
+    expect(big.text.endsWith(note)).toBe(true);
   });
   it("D-533: the approved spec's hash is sealed into the contract; a task without one keeps the old contract", async () => {
     const { parseMandatYml, parseContract } = await import("@mandat/contract");
