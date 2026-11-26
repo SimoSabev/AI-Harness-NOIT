@@ -81,6 +81,8 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<TaskMode>(taskMode);
+  /** D-609: the questions the person put off ("Later") — the seq of the asking turn */
+  const [later, setLater] = useState<number | null>(null);
   const { chat, follow, reset } = useConversation(initialChat);
   const asking = mode === "ask_first";
   const answering = chat !== null && isAnswering(chat.row.status);
@@ -237,10 +239,26 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   // D-599: the interview of a whole project is a sheet over the app, the brief written live beside the conversation
   const interview = thread && chat.row.purpose === "project";
   // D-600: in the interview, the open questions are cards; the box comes back when nothing is asked
-  const questions = interview && !answering ? openQuestions(chat.turns) : null;
+  const asked = thread && !answering ? openQuestions(chat.turns) : null;
+  const questions = interview ? asked : null;
+  // D-609: in a task conversation too, Harnova's questions open the same pop-up — one large question at a time, answers
+  // to pick and Other; "Later" closes it and the box answers in words (the questions stay in the conversation)
+  const popUp = !interview && asked !== null && later !== asked.seq ? asked : null;
   const form = (
     <form onSubmit={submit} className={interview ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3" : thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
       {questions && <InterviewStep key={questions.seq} questions={questions.questions} t={t} busy={busy} onSend={(said) => { setBusy(true); setError(null); void send(said); }} />}
+      {popUp && (
+        <div role="dialog" aria-modal="true" aria-label={t("ask.title")} className="fixed inset-0 z-30 flex items-center justify-center bg-scrim p-3 lg:p-8">
+          <div className="flex max-h-full w-full max-w-3xl flex-col gap-3 overflow-y-auto rounded-[16px] border border-line-strong bg-panel p-4 shadow-[0_30px_80px_rgb(0_0_0/0.5)] lg:p-5">
+            <div className="flex items-center gap-3">
+              <span aria-hidden="true" className="logo-mark inline-block size-5" />
+              <p className="flex-1 text-sm font-medium">{t("ask.title")}</p>
+              <button type="button" className={btn.ghost} onClick={() => setLater(popUp.seq)}>{t("ask.later")}</button>
+            </div>
+            <InterviewStep key={popUp.seq} questions={popUp.questions} t={t} busy={busy} onSend={(said) => { setBusy(true); setError(null); void send(said); }} />
+          </div>
+        </div>
+      )}
       {thread ? (
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={(note) => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, note ? { note } : {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
@@ -253,6 +271,9 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
             <p className="text-center text-sm text-mute">{t(asking ? "chat.askFirstHint" : "ws.askHint")}</p>
           </>
         )
+      )}
+      {!interview && asked !== null && later === asked.seq && (
+        <button type="button" className={`${btn.secondary} self-center`} onClick={() => setLater(null)}>{t("ask.reopen", { n: asked.questions.length })}</button>
       )}
       {!interview && modes}
       <div className={`rounded-xl border border-line bg-panel p-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition focus-within:border-line-strong ${questions ? "hidden" : ""}`}>

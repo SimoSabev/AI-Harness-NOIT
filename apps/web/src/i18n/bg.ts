@@ -1890,4 +1890,8 @@ export const bg: Record<Key, string> = {
   "home.meetText": "Опознай проекта и ме интервюирай, за да направим описанието и профила му.",
   "harness.briefOk": "Описанието е одобрено",
   "harness.briefMissing": "Без описание: задачите чакат интервюто",
+  // D-609: the questions of a task conversation in the pop-up
+  "ask.title": "Harnova пита, преди да работи",
+  "ask.later": "По-късно",
+  "ask.reopen": "Отговори на въпросите ({n})",
 };
