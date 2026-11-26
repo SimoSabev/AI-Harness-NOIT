@@ -84,6 +84,13 @@ describe("release manifest (E9g B)", () => {
     expect(readdirSync(path.join(site, "public", "downloads"))).toEqual(["Harnova-0.3.0-mac-arm64.dmg"]);
     expect(readFileSync(path.join(site, "public", "downloads", "Harnova-0.3.0-mac-arm64.dmg"), "utf8")).toBe("dmg");
   });
+  it("D-639: a local site build that misses one of the chosen kinds fails and names it", async () => {
+    const release = mkdtempSync(path.join(os.tmpdir(), "release-"));
+    const site = mkdtempSync(path.join(os.tmpdir(), "site-"));
+    writeFileSync(path.join(release, "Harnova-0.3.0-mac-arm64.dmg"), "dmg");
+    writeFileSync(path.join(release, "Harnova-0.3.0-linux-x64.AppImage"), "appimage");
+    await expect(writeLocalSiteRelease({ releaseDir: release, siteDir: site, kinds: ["mac-arm64", "linux-appimage", "linux-deb"] })).rejects.toThrow(/missing linux-deb/);
+  });
   it("a local site build with none of the chosen installers fails instead of writing an empty page", async () => {
     const release = mkdtempSync(path.join(os.tmpdir(), "release-"));
     const site = mkdtempSync(path.join(os.tmpdir(), "site-"));

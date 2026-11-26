@@ -78,6 +78,9 @@ export async function writeLocalSiteRelease(o) {
   if (names.length === 0) throw new Error(`release-manifest: no installer of ${o.kinds.join(", ")} in ${o.releaseDir}`);
   const files = await Promise.all(names.map(async (name) => ({ name, sha256: await sha256(path.join(o.releaseDir, name)), size: statSync(path.join(o.releaseDir, name)).size })));
   const m = SiteReleaseManifest.parse({ ...buildManifest(files, o.version), host: "site" });
+  // D-639: every chosen kind must be there, or the page would quietly say "coming soon" for a build that failed
+  const missing = o.kinds.filter((k) => !m.assets.some((a) => a.kind === k));
+  if (missing.length > 0) throw new Error(`release-manifest: missing ${missing.join(", ")} in ${o.releaseDir}`);
   const downloads = path.join(o.siteDir, "public", "downloads");
   rmSync(downloads, { recursive: true, force: true });
   mkdirSync(downloads, { recursive: true });
