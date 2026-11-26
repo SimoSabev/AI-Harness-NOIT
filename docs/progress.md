@@ -49,6 +49,7 @@
 | 23 | E9е подписани комити, revert, GitLab | phase/e9f-delivery-2 | E8ж | не е започната | 0/— | L4 |
 | 24 | E9ж професионален десктоп + сайт | phase/e9g-desktop-pro | E7в, E7е | ГОТОВО (подпис, Windows/Linux и деплоят на сайта чакат Симо) (docs/reports/E9g.md) | AC-12.4–12.10 ✓ (12.8: Linux/Windows отложени); AC-12.1: dmg ✓, подпис чака | подписване, Windows/Linux от CI, деплой на сайта, десктопът на живо (чеклист 25–29) |
 | 25 | E10 екипи и навсякъде | phase/e10-* | E9 | не е започната | 0/— | VPS, екип |
+| 25а | E10 hosted (т. 6.1 + спайк 6.2) | claude/phase-e10-hosted-7de353 | E8в, E9 | ГОТОВО (VPS и домейн чакат Симо) (docs/reports/E10-hosted.md) | екип с роли на локалния compose ✓, audit export + verify-log ✓, runsc само спайк [НП] | VPS + домейн (чеклист 37), runsc на Linux (чеклист 38) |
 | 26 | E11 платформа | phase/e11-* | E10 | не е започната | 0/— | — |
 
 ## Текуща задача
