@@ -15,6 +15,7 @@ import type { KeysClient, LoginReply } from "./keys";
 import { board, changesetShot, inbox, membership, taskDetail } from "./queries";
 import { createRole, hasCap, listRoles, setMemberRole, updateRole } from "./roles";
 import { ProfileApproveBody, ProfileRollbackBody, approveProfile, rollbackProfile } from "./profile";
+import { TrialDecisionBody, decideTrial } from "./evolve";
 import { steerTask } from "./steer";
 import { localActivity } from "./local-activity";
 import { taskFeed } from "./chat-feed";
@@ -583,6 +584,16 @@ export async function postProfileRollback(req: Request, d: ApiDeps, repoId: stri
   const b = ProfileRollbackBody.safeParse(p.body);
   if (!b.success) return json(400, { error: "bad_body" });
   return done(await rollbackProfile(d.db, { uid: p.uid, repoId, body: b.data, secondFactor: d.secondFactor }), d);
+}
+
+// E9e (D-645): a person approves (fresh TOTP) or refuses a learned proposal for the profile
+export async function postTrialDecision(req: Request, d: ApiDeps, trialId: string): Promise<Response> {
+  if (!UUID.test(trialId)) return json(404, { error: "unknown_proposal" });
+  const p = await post(req, d);
+  if (p instanceof Response) return p;
+  const b = TrialDecisionBody.safeParse(p.body);
+  if (!b.success) return json(400, { error: "bad_body" });
+  return done(await decideTrial(d.db, { uid: p.uid, trialId, body: b.data, secondFactor: d.secondFactor }), d);
 }
 
 // E8g (v5 p. 4.4, AC-8.1): a person decides an ask of a HELD tool_approval task; the permission matrix is editable
