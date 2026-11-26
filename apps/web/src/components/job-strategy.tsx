@@ -1,5 +1,6 @@
 "use client";
 import type { Key, T } from "../i18n/t";
+import { useAgentName, whenShort } from "./agent-names";
 import type { JobView } from "../lib/conversation-types";
 import type { GateStatus } from "../lib/job-strategy";
 
@@ -30,7 +31,7 @@ export function JobStrategy({ job, t }: { job: JobView; t: T }) {
         <dd className="space-y-0.5">
           {s.roles.map((r) => (
             <p key={r.role}>
-              <span className="text-mute">{t(`job.role.${r.role}` as Key)}:</span> <span className="font-mono">{r.agent}{r.model ? ` · ${r.model}` : ""}</span>
+              <span className="text-mute">{t(`job.role.${r.role}` as Key)}:</span> <RoleAgent agent={r.agent} model={r.model} t={t} />
             </p>
           ))}
         </dd>
@@ -55,5 +56,17 @@ export function JobGates({ job, t }: { job: JobView; t: T }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+/** D-612: a role's agent as the person knows it (the account's email) and its limit */
+function RoleAgent({ agent, model, t }: { agent: string; model: string | null; t: T }) {
+  const name = useAgentName(t.lang)(agent);
+  return (
+    <span>
+      <span className="text-ink">{name.label}</span>
+      {model && <span className="font-mono text-mute"> · {model}</span>}
+      {name.limitedUntil && <span className="ml-1.5 rounded-md bg-warn-soft px-1.5 py-0.5 text-xs text-warn">{t("agent.limited", { when: whenShort(name.limitedUntil, t.lang) })}</span>}
+    </span>
   );
 }

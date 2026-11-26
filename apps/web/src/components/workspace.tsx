@@ -9,6 +9,8 @@ import { Hex, btn } from "./ui";
 import { Select } from "./select";
 import { ChatThread, useConversation } from "./conversation";
 import { ProjectProfile } from "./project-profile";
+import { GROUP_LABEL, cleanTitle, groupTasks } from "../lib/task-groups";
+import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
 import { taskTypeFor } from "../lib/agents";
@@ -23,7 +25,25 @@ type TaskMode = "ask_first" | "work_now";
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsTask { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
-export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null }
+export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-612 */ limitedUntil?: string | null | undefined }
+
+const DONE_SHOWN = 5;
+
+function TaskRowItem({ x, selected }: { x: WsTask; selected: string | null }) {
+  const title = cleanTitle(x.text);
+  return (
+    <li>
+      <Link href={x.href} aria-current={selected === x.id ? "page" : undefined} title={title}
+        className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-raised aria-[current=page]:bg-raised">
+        <Hex tone={x.tone} className="size-2" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] leading-5 text-ink">{title}</span>
+          <span className="block truncate text-xs leading-4 text-mute">{x.label} · {x.ago}</span>
+        </span>
+      </Link>
+    </li>
+  );
+}
 
 export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: string | null }) {
   const t = useT();
@@ -35,22 +55,26 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
         <svg viewBox="0 0 24 24" aria-hidden="true" className="size-4 text-mute" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
         {t("ws.new")}
       </Link>
-      <p className="px-2 pb-1 pt-3 text-xs font-medium text-mute">{t("ws.tasks")}</p>
-      {tasks.length === 0 && <p className="px-2 text-sm text-mute">{t("ws.noTasks")}</p>}
-      <ul className="min-h-0 flex-1 overflow-y-auto">
-        {tasks.map((x) => (
-          <li key={x.id}>
-            <Link href={x.href} aria-current={selected === x.id ? "page" : undefined} title={x.text}
-              className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition hover:bg-raised aria-[current=page]:bg-raised">
-              <Hex tone={x.tone} className="size-2" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] leading-5 text-ink">{x.text}</span>
-                <span className="block truncate text-xs leading-4 text-mute">{x.label} · {x.ago}</span>
-              </span>
-            </Link>
-          </li>
+      {tasks.length === 0 && <p className="px-2 pt-3 text-sm text-mute">{t("ws.noTasks")}</p>}
+      {/* D-613: three groups — what waits for you, what runs, what is done (the done ones fold after a few) */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {groupTasks(tasks).map((g) => (
+          <section key={g.id} aria-label={t(GROUP_LABEL[g.id])} className="pt-3">
+            <p className={`flex items-center gap-2 px-2 pb-1 text-xs font-medium ${g.id === "waiting" ? "text-warn" : "text-mute"}`}>
+              {t(GROUP_LABEL[g.id])}<span className="tabular-nums text-faint">{g.items.length}</span>
+            </p>
+            <ul>
+              {(g.id === "done" ? g.items.slice(0, DONE_SHOWN) : g.items).map((x) => <TaskRowItem key={x.id} x={x} selected={selected} />)}
+            </ul>
+            {g.id === "done" && g.items.length > DONE_SHOWN && (
+              <details>
+                <summary className="cursor-pointer list-none px-2 py-1.5 text-xs text-mute hover:text-ink">{t("ws.group.more", { n: g.items.length - DONE_SHOWN })}</summary>
+                <ul>{g.items.slice(DONE_SHOWN).map((x) => <TaskRowItem key={x.id} x={x} selected={selected} />)}</ul>
+              </details>
+            )}
+          </section>
         ))}
-      </ul>
+      </div>
     </nav>
   );
 }
@@ -81,6 +105,8 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<TaskMode>(taskMode);
+  /** D-611: the questions the person put off ("Later") — the seq of the asking turn */
+  const [later, setLater] = useState<number | null>(null);
   const { chat, follow, reset } = useConversation(initialChat);
   const asking = mode === "ask_first";
   const answering = chat !== null && isAnswering(chat.row.status);
@@ -237,10 +263,26 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
   // D-599: the interview of a whole project is a sheet over the app, the brief written live beside the conversation
   const interview = thread && chat.row.purpose === "project";
   // D-600: in the interview, the open questions are cards; the box comes back when nothing is asked
-  const questions = interview && !answering ? openQuestions(chat.turns) : null;
+  const asked = thread && !answering ? openQuestions(chat.turns) : null;
+  const questions = interview ? asked : null;
+  // D-611: in a task conversation too, Harnova's questions open the same pop-up — one large question at a time, answers
+  // to pick and Other; "Later" closes it and the box answers in words (the questions stay in the conversation)
+  const popUp = !interview && asked !== null && later !== asked.seq ? asked : null;
   const form = (
     <form onSubmit={submit} className={interview ? "flex min-h-0 min-w-0 flex-1 flex-col gap-3" : thread ? "flex min-h-0 w-full flex-1 flex-col gap-3 pb-4" : "m-auto flex w-full max-w-2xl flex-col gap-4 py-10"}>
       {questions && <InterviewStep key={questions.seq} questions={questions.questions} t={t} busy={busy} onSend={(said) => { setBusy(true); setError(null); void send(said); }} />}
+      {popUp && (
+        <div role="dialog" aria-modal="true" aria-label={t("ask.title")} className="fixed inset-0 z-30 flex items-center justify-center bg-scrim p-3 lg:p-8">
+          <div className="flex max-h-full w-full max-w-3xl flex-col gap-3 overflow-y-auto rounded-[16px] border border-line-strong bg-panel p-4 shadow-[0_30px_80px_rgb(0_0_0/0.5)] lg:p-5">
+            <div className="flex items-center gap-3">
+              <span aria-hidden="true" className="logo-mark inline-block size-5" />
+              <p className="flex-1 text-sm font-medium">{t("ask.title")}</p>
+              <button type="button" className={btn.ghost} onClick={() => setLater(popUp.seq)}>{t("ask.later")}</button>
+            </div>
+            <InterviewStep key={popUp.seq} questions={popUp.questions} t={t} busy={busy} onSend={(said) => { setBusy(true); setError(null); void send(said); }} />
+          </div>
+        </div>
+      )}
       {thread ? (
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={(note) => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, note ? { note } : {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
@@ -254,6 +296,9 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           </>
         )
       )}
+      {!interview && asked !== null && later === asked.seq && (
+        <button type="button" className={`${btn.secondary} self-center`} onClick={() => setLater(null)}>{t("ask.reopen", { n: asked.questions.length })}</button>
+      )}
       {!interview && modes}
       <div className={`rounded-xl border border-line bg-panel p-3 shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition focus-within:border-line-strong ${questions ? "hidden" : ""}`}>
         <textarea data-voice="prompt" value={text} onChange={(e) => { setText(e.target.value); setError(null); }} rows={thread ? 2 : 4} maxLength={4000} aria-label={t("newTask.what")} placeholder={t(asking ? "chat.placeholder" : "ws.placeholder")} autoFocus
@@ -263,7 +308,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
           {agents.length > 1 ? (
             <label className="flex items-center gap-1.5 text-xs text-mute">
               {t("ws.agent")}
-              <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.label }))} />
+              <Select size="sm" aria-label={t("ws.agent")} value={agent} onChange={pickAgent} options={agents.map((a) => ({ value: a.id, label: a.limitedUntil ? `${a.label} · ${t("agent.limited", { when: whenShort(a.limitedUntil, t.lang) })}` : a.label }))} />
             </label>
           ) : agents[0] ? (
             <span className="text-xs text-mute">{t("ws.agent")} <span className="text-ink">{agents[0].label}</span></span>
@@ -296,8 +341,9 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
       {error && <p role="alert" className="text-center text-sm text-bad">{error}</p>}
     </form>
   );
-  if (!interview) return form;
+  if (!interview) return <AgentNames agents={agents}>{form}</AgentNames>;
   return (
+    <AgentNames agents={agents}>
     <div role="dialog" aria-modal="true" aria-label={t("interview.title")} className="fixed inset-0 z-30 flex items-stretch justify-center bg-scrim p-3 lg:p-8">
       <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-[16px] border border-line-strong bg-panel shadow-[0_30px_80px_rgb(0_0_0/0.5)]">
         <div className="flex items-center gap-3 border-b border-line px-5 py-3">
@@ -311,6 +357,7 @@ export function NewTask({ agents, preferredModel = null, projects, canAct, initi
         </div>
       </div>
     </div>
+    </AgentNames>
   );
 }
 

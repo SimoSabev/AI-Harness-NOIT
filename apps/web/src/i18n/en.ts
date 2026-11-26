@@ -1914,6 +1914,20 @@ export const en = {
   "home.meetText": "Get to know the project and interview me, so we make its brief and profile.",
   "harness.briefOk": "Brief approved",
   "harness.briefMissing": "No brief: tasks wait for the interview",
+  // D-611: the questions of a task conversation in the pop-up
+  "ask.title": "Harnova asks before it works",
+  "ask.later": "Later",
+  "ask.reopen": "Answer the questions ({n})",
+  // D-612: whose subscription runs it
+  "agent.email": "Claude · {email}",
+  "agent.codexEmail": "Codex · {email}",
+  "agent.limited": "limit until {when}",
+  // D-613: the groups of the list
+  "ws.group.waiting": "Waiting for you",
+  "ws.group.running": "Running",
+  "ws.group.done": "Done",
+  "ws.group.more": "{n} more",
+  "chat.spec.more": "Show {n} more",
 } as const;
 
 export type Key = keyof typeof en;

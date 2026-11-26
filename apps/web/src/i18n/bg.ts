@@ -1890,4 +1890,18 @@ export const bg: Record<Key, string> = {
   "home.meetText": "Опознай проекта и ме интервюирай, за да направим описанието и профила му.",
   "harness.briefOk": "Описанието е одобрено",
   "harness.briefMissing": "Без описание: задачите чакат интервюто",
+  // D-611: the questions of a task conversation in the pop-up
+  "ask.title": "Harnova пита, преди да работи",
+  "ask.later": "По-късно",
+  "ask.reopen": "Отговори на въпросите ({n})",
+  // D-612: whose subscription runs it
+  "agent.email": "Claude · {email}",
+  "agent.codexEmail": "Codex · {email}",
+  "agent.limited": "лимит до {when}",
+  // D-613: the groups of the list
+  "ws.group.waiting": "Чака теб",
+  "ws.group.running": "Работи",
+  "ws.group.done": "Готови",
+  "ws.group.more": "Още {n}",
+  "chat.spec.more": "Покажи още {n}",
 };
