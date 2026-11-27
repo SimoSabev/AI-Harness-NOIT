@@ -23,6 +23,7 @@ import { homeBrief, homeQueue } from "../lib/home";
 import { sessionOf } from "../lib/server/workbench";
 import { taskProjects } from "../lib/projects";
 import { showChat } from "../lib/chat";
+import { authMode } from "../lib/server/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
   const tasks = await requestList(c.uid, c.org, t.lang);
   // D-619: the dashboard counts the list's own groups, so its numbers are the ones the side bar shows
   const queue = homeQueue(tasks);
-  const home = { ...homeBrief({ waiting: queue.counts.waiting, running: queue.counts.running, projects: briefs, firstWaiting: queue.waiting[0]?.href ?? null }), queue };
+  const home = { ...homeBrief({ waiting: queue.counts.waiting, running: queue.counts.running, projects: briefs, firstWaiting: queue.waiting[0]?.href ?? null, firstReview: canAct(c.role) ? (tasks.find((x) => x.review)?.href ?? null) : null }), queue };
   const side = parseSide((await cookies()).get(SIDE_COOKIE)?.value);
   // D-393: the remembered default first; nothing can run yet and the first-run page was never finished → open it
   let agents: TaskAgent[] = [];
@@ -89,7 +90,7 @@ export default async function WorkspacePage({ searchParams }: { searchParams: Pr
               view={{ evidence: d.evidence, diff: c.role === "viewer" ? null : d.diff, diffOmitted: c.role === "viewer" ? null : d.diffOmitted, asks: d.asks, repoId: d.task.repo_id, twin }}
               shots={<TaskShots d={d} />} details={<TaskDetails d={d} sess={sess} />} switchTo={switchTo} />
           ) : (
-            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} initialChat={showChat(chat)} home={home} />
+            <NewTask key={chatId ?? "new"} agents={agents} preferredModel={preferredModel} projects={taskProjects(projects, process.env.MANDAT_DEMO_AGENTS === "1")} canAct={canAct(c.role)} initialText={prefill} initialChat={showChat(chat)} home={home} localApproval={authMode() === "local"} />
           )}
         </div>
       </div>

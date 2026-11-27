@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionSeal } from "@mandat/contract";
 import type { PlanUnit, Spec } from "@mandat/contract";
-import { failingCriteria, fileTags, sealable, unitLands, jobMode, oracleFilesFor, scopedOracleFiles, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
+import { failingCriteria, failingTitles, fileTags, sealable, unitLands, jobMode, oracleFilesFor, scopedOracleFiles, pilotSize, pilotUnits, sealFor, siteTable, uncheckedOf, unitWaves, unitsToStart, validatePlan, validateSites } from "./job.js";
 
 // D-535: the plan check table, the oracle files a unit's tree B gets, failing criteria from D5, and the seal.
 const spec: Spec = {
@@ -183,5 +183,31 @@ describe("what a unit may leave to the final check (live test 20.11)", () => {
     expect(unitLands("UNKNOWN", ["D11:survived:src/a.ts:3", "D3:protected_path:src/payments/**"])).toBe(false);
     expect(unitLands("UNKNOWN", [])).toBe(false);
     expect(unitLands("FAILED", ["D11:survived:src/a.ts:3"])).toBe(false);
+  });
+});
+
+// D-711 (night 27.11.2026): a blind retry knew only "AC-1 still fails" and passed 1 time in 16; the failing hidden
+// test's own title says what is missing. Only titles of the unit's own criteria, only the sentence (never the path, the
+// describe chain or the body), and never one that carries a number or a quote (a literal invites hardcoding).
+describe("the titles of the failed hidden tests for a retry (D-711)", () => {
+  const ev = (failed: string[]) => [{ detector: "D5.hidden", status: "fail" as const, data: { failed } }];
+  it("the sentence after the tag, in scope only, without numbers or quotes, each once", () => {
+    const f = ev([
+      "tests/__hidden__/loyalty.spec.ts > loyalty points > AC-1: points count the whole total, including the gift card part",
+      "tests/__hidden__/loyalty.spec.ts > loyalty points > AC-1: points count the whole total, including the gift card part",
+      "tests/__hidden__/x.spec.ts > AC-2: 1250 cents give 12 points",
+      "tests/__hidden__/x.spec.ts > AC-3: rejects an \"EXPIRED\" card",
+      "tests/__hidden__/x.spec.ts > AC-9: refunds the card once",
+      "tests/__hidden__/x.spec.ts > U-1: keeps the cart rules",
+    ]);
+    expect(failingTitles(f, ["AC-1", "AC-2", "AC-3", "U-1"])).toEqual(["AC-1: points count the whole total, including the gift card part"]);
+    expect(failingTitles(f, ["AC-9"])).toEqual(["AC-9: refunds the card once"]);
+    expect(failingTitles([{ detector: "D5.hidden", status: "pass" as const, data: { failed: [] } }], ["AC-1"])).toEqual([]);
+  });
+  it("a long title is cut, and at most six", () => {
+    const many = ev(Array.from({ length: 9 }, (_, i) => `t.spec.ts > AC-1: case ${"abcdefghi"[i]} ${"x".repeat(200)}`));
+    const out = failingTitles(many, ["AC-1"]);
+    expect(out).toHaveLength(6);
+    for (const x of out) expect(x.length).toBeLessThanOrEqual(160);
   });
 });

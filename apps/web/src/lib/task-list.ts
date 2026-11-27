@@ -76,3 +76,26 @@ export function byProject<T extends { project: string | null; projectName: strin
   const all = [...groups.values()];
   return [...all.filter((g) => g.id !== null), ...all.filter((g) => g.id === null)];
 }
+
+// D-709: a conversation's session takes its state from its latest job (a sealed job is the person's decision even though
+// every task under it is closed), and keeps under it only what waits for the person: the attempts, the comparison and
+// the earlier runs are in the job card. A conversation without a job keeps the state of its newest task.
+export interface LatestJob { id: string; status: "planning" | "running" | "converging" | "parked" | "sealed" | "approved" | "delivered" | "failed"; /** a parked unit or a question while the rest works (D-542) */ waits?: boolean }
+export type SessionState<Tone> = { tone: Tone; label: string } | { tone: "amber" | "blue" | "green" | "red"; say: "task.job.review" | "task.job.waiting" | "task.job.working" | "task.job.merged" | "task.job.failed" };
+
+export function sessionState<Tone extends string>(job: LatestJob | null, newest: { tone: Tone; label: string }): SessionState<Tone> {
+  if (!job) return newest;
+  if (job.status === "sealed") return { tone: "amber", say: "task.job.review" };
+  if (job.status === "parked" || (job.waits === true && ["planning", "running", "converging"].includes(job.status))) return { tone: "amber", say: "task.job.waiting" };
+  if (job.status === "delivered") return { tone: "green", say: "task.job.merged" };
+  if (job.status === "failed") return { tone: "red", say: "task.job.failed" };
+  return { tone: "blue", say: "task.job.working" };
+}
+
+/** a job's own tasks: its units and final check (t_j<id>_…) and its single-agent comparison (t_cmp_<id>) */
+const ofJob = (taskId: string, jobId: string): boolean => taskId.startsWith(`t_j${jobId.slice(2)}_`) || taskId === `t_cmp_${jobId.slice(2)}`.slice(0, 44);
+
+export function sessionSubs<T extends { id: string; tone: string; internal_role?: string | null }>(rows: readonly T[], job: LatestJob | null): T[] {
+  const jobTask = (r: T) => r.internal_role === "unit" || r.internal_role === "final" || r.internal_role === "compare";
+  return rows.filter((r) => r.tone === "amber" && (!job || !jobTask(r) || ofJob(r.id, job.id)));
+}

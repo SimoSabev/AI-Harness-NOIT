@@ -109,6 +109,14 @@ export async function finishJobTask(db: Db, t: JobTaskRef, o: { mirror: string; 
       );
       if (commit) await tx.query("update public.jobs set head_sha = $2, updated_at = now() where id = $1", [t.job_id, commit]);
     }
+    // D-708: the final check exported the whole job over its base; the card shows it before "Approve and merge"
+    // (only the non-redacted patch reaches here, as for changeset_diffs; over 1 MB only its size)
+    // D-713: a retried final check that exported nothing leaves no older attempt's change behind under its task
+    if (t.job_role === "final" && o.diffPatch.length === 0) await tx.query("delete from public.job_diffs where task_id = $1", [t.id]);
+    if (t.job_role === "final" && o.diffPatch.length > 0) {
+      const big = o.diffPatch.length > 1048576;
+      await tx.query("insert into public.job_diffs (task_id, job_id, org_id, diff, omitted_bytes, diff_hash) values ($1, $2, $3::uuid, $4, $5, $6) on conflict (task_id) do update set diff = excluded.diff, omitted_bytes = excluded.omitted_bytes, diff_hash = excluded.diff_hash", [t.id, t.job_id, t.org_id, big ? "" : o.diffPatch.toString("utf8"), big ? o.diffPatch.length : null, v.diff_hash]);
+    }
     await setTask(tx, t.id, state, { wait_reason: wait, last_result: v.result, usd, minutes: o.minutes });
   });
   return { state, wait_reason: wait };

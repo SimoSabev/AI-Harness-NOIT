@@ -37,3 +37,6 @@ export function checkPatterns(p: HarnessProfile): string[] {
 /** A pattern as Claude Code Bash rules: the command alone and with more arguments ([НП] the inner * of --filter). */
 export const bashRules = (pattern: string): string[] => (pattern.endsWith("*") ? [`Bash(${pattern})`] : [`Bash(${pattern} *)`, `Bash(${pattern})`]);
 
+
+/** D-707: whether a check command is one the writer's shell may run as written (no shell syntax) */
+export const plainCheck = (command: string): boolean => formsOf(command, false).length > 0;

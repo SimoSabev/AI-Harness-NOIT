@@ -103,7 +103,7 @@ export function scopedOracleFiles<F extends { path: string; data: Buffer }>(file
 
 const byNumber = (a: string, b: string) => Number(a.slice(3)) - Number(b.slice(3));
 
-/** the criteria whose hidden tests failed (from D5.hidden's failed test ids); ids only, never a test name */
+/** the criteria whose hidden tests failed (from D5.hidden's failed test ids), ids only; the titles for a retry are failingTitles (D-711) */
 export function failingCriteria(evidence: readonly JobEvidence[]): string[] {
   const d5 = evidence.find((e) => e.detector === "D5.hidden" && e.status === "fail");
   const failed = (d5?.data as { failed?: unknown } | undefined)?.failed;
@@ -113,6 +113,29 @@ export function failingCriteria(evidence: readonly JobEvidence[]): string[] {
     if (t?.startsWith("AC-")) ids.add(t);
   }
   return [...ids].sort(byNumber);
+}
+
+/**
+ * D-711: the titles of the failed hidden tests of a unit's own criteria, for its retry note — the sentence of the test
+ * (after its last " > "), never its path, describe chain or body; a title with a number or a quote is left out (a
+ * literal value invites hardcoding), so is anything outside the scope (D-595). At most six, each cut to 160 chars.
+ */
+export function failingTitles(evidence: readonly JobEvidence[], scope: readonly string[]): string[] {
+  const d5 = evidence.find((e) => e.detector === "D5.hidden" && e.status === "fail");
+  const failed = (d5?.data as { failed?: unknown } | undefined)?.failed;
+  const inScope = new Set(scope);
+  const out: string[] = [];
+  for (const f of Array.isArray(failed) ? failed : []) {
+    if (typeof f !== "string") continue;
+    const tag = oracleTag(f);
+    if (!tag?.startsWith("AC-") || !inScope.has(tag)) continue;
+    const title = (f.split(" > ").at(-1) ?? "").trim();
+    if (!title.startsWith(`${tag}:`) || /[0-9"'`]/.test(title.slice(tag.length + 1))) continue;
+    const line = title.length > 160 ? `${title.slice(0, 159)}…` : title;
+    if (!out.includes(line)) out.push(line);
+    if (out.length === 6) break;
+  }
+  return out;
 }
 
 /** what the final check left unchecked: criteria a person must prove, and every check that did not run or decide */

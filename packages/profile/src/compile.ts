@@ -17,7 +17,7 @@ export function compileProfile(profile: HarnessProfile, target: CompileTarget, c
   const rules = rulesFor(p, ctx.subjects);
   return Materialized.parse({
     files: [
-      { path: "instructions.md", bytes: instructions(p), mode: "0444" },
+      { path: "instructions.md", bytes: instructions(p, ctx.role), mode: "0444" },
       { path: "policy.json", bytes: policyJson(p, ctx), mode: "0444" },
     ],
     argv: [],

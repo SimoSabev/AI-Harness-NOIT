@@ -200,6 +200,9 @@ describe("units, final check, seal and delivery (D-535)", () => {
     await jobTick(s.jd); // seal
     const j = await s.job();
     expect(j.status).toBe("sealed");
+    // D-708: the final check's own export (the whole job over its base) is kept for the card, under the final task
+    const fin = (await s.db.query<{ final_task_id: string }>("select final_task_id from public.jobs where id = 'j_t1'")).rows[0]?.final_task_id;
+    expect((await s.db.query("select job_id, diff, omitted_bytes, diff_hash from public.job_diffs where task_id = $1", [fin])).rows).toEqual([{ job_id: "j_t1", diff: patchFor("unit-3.txt"), omitted_bytes: null, diff_hash: `sha256:${"c".repeat(64)}` }]);
     const seal = SessionSeal.parse(j.seal);
     expect(seal).toMatchObject({ spec_hash: SPEC, oracle_hash: ORACLE, profile: "feature", verdict: "VERIFIED", result_ref: head2, unchecked: [] });
     expect(seal.ledger_head).toMatch(/^sha256:/);
@@ -339,7 +342,7 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect((await s.ledger("criterion_moved"))[0]).toMatchObject({ unit: "u1", moved: { "AC-1": "u2" } });
     expect((await s.db.query<{ n: number }>("select count(*)::int as n from public.ledger where kind = 'unit_rescued'")).rows[0]?.n).toBe(0);
   });
-  it("a failed unit is retried with the failing criterion ids only; at the cap the job parks with a question", async () => {
+  it("a failed unit is retried with the failing criterion ids and, D-711, the failed checks' titles of its own criteria; at the cap the job parks with a question", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: d5fail("AC-1", "U-1") }) });
     // D-571: a rescue try gets the oracle's API too (the live test's rescue wrote without it and guessed names)
     const withApiM = OracleManifest.parse({ ...MANIFEST, api: ["`src/cart.ts`: `couponCents(code: string): number` — the coupon value"] });
@@ -359,11 +362,14 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(notes.length).toBe(2);
     for (const n of notes) {
       expect(n).toContain("AC-1");
-      expect(n).not.toContain(SECRET_NAME);
+      // D-711: the title of the failed check (its sentence), never its file, describe chain or body; U-n stays out
+      expect(n).toContain(`- AC-1: ${SECRET_NAME}`);
+      expect(n).not.toContain("__hidden__");
       expect(n).not.toContain("U-1");
     }
     expect(s.contracts[1]?.text).toContain("Note from Mandat");
-    expect(s.contracts[1]?.text).not.toContain(SECRET_NAME);
+    expect(s.contracts[1]?.text).toContain(`AC-1: ${SECRET_NAME}`);
+    expect(s.contracts[1]?.text).not.toContain("__hidden__");
     expect(s.runs).toHaveLength(3);
     // D-542: at the cap a model advises (it never sees a test) and two fresh tries start at once, one attempt each
     expect((await jobTick(s.jd)).started).toEqual(["j_t1"]);
@@ -394,6 +400,19 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(j.question).not.toContain(SECRET_NAME);
   });
 
+  it("D-713: a retry note with six long titles fits (Mandat's own note may be 1200 chars) and the retry is whole", async () => {
+    const long = Array.from({ length: 6 }, (_, i) => `packages/shop/test/__hidden__/x.spec.ts > AC-1: case ${"abcdef"[i]} ${"y".repeat(200)}`);
+    const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: [ev("D5.hidden", "fail", { failed: long })] }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    expect((await selfFinishTick(s.db, { now: new Date() })).retried).toHaveLength(1);
+    const note = (await s.db.query<{ text: string }>("select text from public.task_activities where kind = 'self'")).rows[0]?.text ?? "";
+    expect(note.length).toBeGreaterThan(500);
+    expect(note.length).toBeLessThanOrEqual(1200);
+    expect(note.match(/^- AC-1: case /gm)).toHaveLength(6);
+    expect((await s.ledger("task_retry")).length).toBe(1);
+  });
   it("a rescue try that passes lands; a second one that passes too does not land again (D-542)", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: (_c, n) => (n <= 3 ? { result: "FAILED", evidence: d5fail("AC-1") } : { result: "VERIFIED" }) });
     await jobTick(s.jd);
@@ -671,6 +690,24 @@ describe("М4: the same spec by the process and by one agent (D-565)", () => {
     rep = await compareReport(s.db, { job: "j_t1" });
     expect(rep?.process).toMatchObject({ verdict: null, hidden_passed: 0, done: true });
     expect(rep?.comparison.winner).toBe("single");
+  });
+  it("D-711: a failed single arm is retried with the same kind of note as a unit — the failed checks' titles, never the file", async () => {
+    const pass = [ev("D5.hidden", "pass", { passed: 3, total: 3 })];
+    const s = await setup({ plans: [GOOD_PLAN], outcome: (c) => (c.task_id === "t_cmp_t1" ? { result: "FAILED", evidence: d5fail("AC-2") } : { result: "VERIFIED", notes: handoff(`did ${c.task_id}`), evidence: pass }) });
+    await jobTick(s.jd);
+    for (let k = 0; k < 2; k++) {
+      await jobTick(s.jd);
+      await runDaemonOnce(s.deps);
+    }
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    await jobTick(s.jd);
+    expect((await startSingleArm(s.db, { job: "j_t1" })).ok).toBe(true);
+    await runDaemonOnce(s.deps);
+    expect((await selfFinishTick(s.db, { now: new Date() })).retried).toContain("t_cmp_t1");
+    const note = (await s.db.query<{ text: string }>("select text from public.task_activities where task_id = 't_cmp_t1' and kind = 'self'")).rows[0]?.text ?? "";
+    expect(note).toContain(`- AC-2: ${SECRET_NAME}`);
+    expect(note).not.toContain("__hidden__");
   });
 });
 

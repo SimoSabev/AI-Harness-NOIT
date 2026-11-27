@@ -40,11 +40,12 @@ export function NovaRibbon({ state, t, open, onToggle, live, onStar }: { state: 
           )}
         </section>
       )}
-      <div className={`flex max-w-[26rem] items-center gap-3 rounded-full border bg-panel py-1.5 pl-2 pr-4 shadow-[0_12px_32px_rgb(0_0_0/0.35)] ${state.phase === "error" ? "border-bad" : "border-line-strong"}`}>
+      {/* D-712: on a phone an idle Nova is only its star, so it does not cover the card under it; its words come back while it is live */}
+      <div className={`flex max-w-[26rem] items-center gap-3 rounded-full border bg-panel py-1.5 pl-2 pr-4 shadow-[0_12px_32px_rgb(0_0_0/0.35)] ${live || state.phase === "error" ? "" : "max-sm:pr-2"} ${state.phase === "error" ? "border-bad" : "border-line-strong"}`}>
         <button type="button" onClick={onStar} aria-pressed={live} aria-label={live ? t("voice.stop") : t("voice.talk")} className="rounded-full p-0.5 transition hover:bg-raised">
           <NovaStar phase={state.phase} />
         </button>
-        <button type="button" onClick={live || state.steps.length > 0 ? onToggle : onStar} aria-expanded={open} className="flex min-w-0 flex-col items-start text-left">
+        <button type="button" onClick={live || state.steps.length > 0 ? onToggle : onStar} aria-expanded={open} className={`flex min-w-0 flex-col items-start text-left ${live || state.phase === "error" ? "" : "max-sm:hidden"}`}>
           <span className={`text-xs font-medium ${state.phase === "error" ? "text-bad" : "text-accent-text"}`}>{t(`nova.kind.${state.phase}`)}</span>
           <span className="max-w-[18rem] truncate text-[13.5px] leading-snug text-ink" aria-live="polite">{line}</span>
         </button>

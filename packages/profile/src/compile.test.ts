@@ -70,6 +70,23 @@ describe("compile for Claude Code (E8а)", () => {
     expect(md).toContain("Run `npx vitest run` before you finish");
     expect(md).toContain("on its own, not chained with `&&`, `;` or `|`");
   });
+  it("D-707: a writer is asked for the judge's own static checks before finishing, and a check of each criterion", () => {
+    const md = file(m, "instructions.md")?.bytes ?? "";
+    expect(md).toContain("Run `npx tsc --noEmit` before you finish and make it pass");
+    expect(md).toContain("Run `npx eslint <the files you changed>` before you finish");
+    expect(md).toContain("A failure that is already there without your change is not yours");
+    expect(md).toContain("check your change against each acceptance criterion of the task");
+  });
+  it("D-707: never the oracle's writer (its tests must stay red), and never a command the shell would refuse", () => {
+    const oracle = compileProfile(profile(), "claude", { runId: "r_1", subjects: ["agent:claude"], role: "oracle" });
+    const md = oracle.files.find((f) => f.path === "instructions.md")?.bytes ?? "";
+    expect(md).not.toContain("npx tsc --noEmit` before you finish");
+    expect(md).not.toContain("each acceptance criterion");
+    const l = demoProfileLayers();
+    const chained = sealProfile({ version: 1, repo_id: "local", layers: { ...l, b: { ...l.b, commands: { ...l.b.commands, typecheck: "tsc --noEmit && echo ok" } } }, sources: {}, approved_by: null, approved_at: null });
+    const md2 = compileProfile(chained, "claude", { runId: "r_1", subjects: ["agent:claude"] }).files.find((f) => f.path === "instructions.md")?.bytes ?? "";
+    expect(md2).not.toContain("echo ok` before you finish");
+  });
   it("argv and env: settings + strict MCP; subagent limits from layer G", () => {
     expect(m.argv).toEqual(["--settings", "/m/in/harness/claude/settings.json", "--mcp-config", "/m/in/harness/claude/mcp.json", "--strict-mcp-config"]);
     expect(m.env).toEqual({ CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: "2", CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: "1", CLAUDE_CODE_STOP_HOOK_BLOCK_CAP: "3" });

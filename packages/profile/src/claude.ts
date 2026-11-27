@@ -27,7 +27,7 @@ export function compileClaude(p: HarnessProfile, ctx: CompileCtx): Materialized 
   const files: Files = [
     { path: "claude/settings.json", bytes: JSON.stringify(settings, null, 2) + "\n", mode: "0444" },
     { path: "policy.json", bytes: policyJson(p, ctx), mode: "0444" },
-    { path: "instructions.md", bytes: instructions(p), mode: "0444" },
+    { path: "instructions.md", bytes: instructions(p, ctx.role), mode: "0444" },
   ];
   const mcp = p.layers.e.mcp;
   files.push({ path: "claude/mcp.json", bytes: JSON.stringify({ mcpServers: Object.fromEntries(mcp.map((m) => [m.name, { type: "http", url: m.transport === "http" && m.url ? m.url : `http://egress-gate/mcp/${m.name}` }])) }, null, 2) + "\n", mode: "0444" });

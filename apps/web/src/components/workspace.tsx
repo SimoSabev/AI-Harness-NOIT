@@ -13,7 +13,7 @@ import { cleanTitle } from "../lib/task-groups";
 import { AgentNames, whenShort } from "./agent-names";
 import { InterviewStep } from "./interview-step";
 import { openQuestions } from "../lib/interview";
-import { NEW_PROJECT, boxRepo, projectChoices, sendsOnEnter, withAdded } from "../lib/chat";
+import { NEW_PROJECT, boxRepo, canStartWork, projectChoices, sendsOnEnter, withAdded } from "../lib/chat";
 import { byProject } from "../lib/task-list";
 import { AddProject } from "./local-access";
 import type { AddedProject } from "./add-project-form";
@@ -30,7 +30,7 @@ export type HomeView = HomeBrief & { queue: HomeQueue<WsTask> };
 // The workspace's left column (the tasks, like the chats of an assistant) and the empty state: one box to start a task.
 export interface WsSub { id: string; href: string; text: string; tone: Tone; label: string; ago: string }
 /** D-633: a session of the list — a conversation (its tasks are `subs`) or a task on its own — and its project */
-export interface WsTask extends WsSub { project: string | null; projectName: string; subs?: WsSub[] }
+export interface WsTask extends WsSub { project: string | null; projectName: string; subs?: WsSub[]; /** D-709: a sealed job waits for the person's review */ review?: boolean }
 /** D-393: an agent of the task box with the models it can use (lib/agents.ts taskAgents) */
 export interface WsAgent { id: string; label: string; models: string[]; defaultModel: string | null; /** D-612 */ limitedUntil?: string | null | undefined }
 
@@ -101,7 +101,7 @@ export function TaskList({ tasks, selected }: { tasks: WsTask[]; selected: strin
       </Link>
       {tasks.length === 0 && <p className="px-2 pt-3 text-sm text-mute">{t("ws.noTasks")}</p>}
       {/* D-633: by project only; each project folds, and a conversation folds its sub-sessions */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         {byProject(tasks).map((g) => {
           const key = `p:${g.id ?? "none"}`;
           const waiting = g.items.filter((x) => x.tone === "amber" || x.tone === "red").length;
@@ -131,7 +131,7 @@ const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.w
 const ENDED = ["budget", "expired"];
 const PARKED = "harnova.parkedTask";
 
-export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
+export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", initialChat = null, home = null, localApproval = false }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; initialChat?: ConversationFeed | null; home?: HomeView | null; /** D-710: this computer approves by presence */ localApproval?: boolean }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -335,9 +335,9 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={(note) => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, note ? { note } : {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
           onApproveJob={(h, code) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h, ...(code ? { code } : {}) }, 200)}
-          onBring={() => void bring()} brought={brought} />
+          onBring={() => void bring()} brought={brought} localApproval={localApproval} />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="relative min-h-0 flex-1 overflow-y-auto">
           {home ? <HomeDashboard home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
             <div className="flex h-full flex-col items-center justify-center gap-2 py-10">
               <h1 className="text-center font-display text-3xl font-semibold tracking-tight">{t("ws.ask")}</h1>
@@ -375,7 +375,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
                 options={projectChoices(projects, { none: t("newTask.noProject"), add: t("newTask.newProject") })} />
             )}
             <span className="ml-auto flex items-center gap-1.5">
-              {thread && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
+              {thread && canStartWork(chat.row, chat.job ?? null) && <button type="button" className={`${btn.secondary} rounded-full px-3 py-1.5 text-xs`} onClick={() => void startWork()} disabled={blocked}>{t("chat.start")}</button>}
               <Tip side="top-end" label={busy ? t("chat.sending") : t("chat.send")} hint={t("composer.keys")}>
                 <button type="submit" disabled={cannotTalk || text.trim() === ""} aria-label={busy ? t("chat.sending") : t("chat.send")}
                   className="flex size-9 items-center justify-center rounded-full bg-accent text-accent-ink shadow-[inset_0_-2px_0_rgb(0_0_0/0.18)] transition hover:brightness-110 disabled:bg-raised disabled:text-faint disabled:shadow-none">
@@ -465,6 +465,8 @@ function HomeDashboard({ home, onMeet, busy }: { home: HomeView; onMeet: (repo: 
     </li>
   );
   const interviews = home.actions.filter((a) => a.kind === "interview");
+  // D-709: a finished job waiting for review is the next step, before any interview
+  const review = home.actions.find((a) => a.kind === "link" && a.label.key === "home.act.review");
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 pb-6 pt-2">
       <header className="flex items-start gap-3">
@@ -480,12 +482,13 @@ function HomeDashboard({ home, onMeet, busy }: { home: HomeView; onMeet: (repo: 
         {tile({ n: counts.done, label: t("home.tile.done"), sub: share(counts.done), tone: "text-ok", bar: "bg-ok", shape: "rounded-full", href: null, fill: pct(counts.done) })}
         {tile({ n: home.stats.projects, label: t("home.tile.projects"), sub: home.stats.noBrief > 0 ? t("home.tile.noBrief", { n: home.stats.noBrief }) : t("home.tile.allBriefs"), tone: "text-ink", bar: home.stats.noBrief > 0 ? "bg-warn" : "bg-accent", shape: "rounded-[3px]", href: "/harness", fill: home.stats.projects > 0 ? Math.round(((home.stats.projects - home.stats.noBrief) / home.stats.projects) * 100) : 0 })}
       </div>
-      {interviews.length > 0 && (
+      {(review || interviews.length > 0) && (
         <section aria-label={t("home.next")} className="flex flex-wrap items-center gap-3 rounded-[14px] border border-warn/40 bg-warn-soft px-4 py-3">
           <Hex tone="amber" className="size-3" />
           <p className="min-w-0 flex-1 text-sm"><span className="font-medium text-warn">{t("home.next")}</span></p>
+          {review?.kind === "link" && <Link href={review.href} className={`${btn.primary} rounded-full py-1.5`}>{t(review.label.key, review.label.params)}</Link>}
           {interviews.map((a) => a.kind === "interview" && (
-            <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${btn.primary} rounded-full py-1.5`}>{t(a.label.key, a.label.params)}</button>
+            <button key={a.repo} type="button" disabled={busy} onClick={() => onMeet(a.repo)} className={`${review ? btn.secondary : btn.primary} rounded-full py-1.5`}>{t(a.label.key, a.label.params)}</button>
           ))}
         </section>
       )}

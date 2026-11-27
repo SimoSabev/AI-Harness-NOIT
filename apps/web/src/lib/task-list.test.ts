@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byProject, foldJobs, mergeByTime, openConversationsToList, sessionsOf } from "./task-list";
+import { byProject, foldJobs, mergeByTime, openConversationsToList, sessionState, sessionSubs, sessionsOf } from "./task-list";
 import type { OpenConversation } from "./task-list";
 
 // D-554 (screens 19.11.2026): a job's internal tasks (oracle, units, final check) crowded the task list, one row each;
@@ -85,5 +85,30 @@ describe("the list by project (D-633)", () => {
       [null, "", ["b"]],
     ]);
     expect(byProject([])).toEqual([]);
+  });
+});
+
+// D-709 (night 27.11.2026, the UX critic): a sealed job is the one decision the person has to make, yet the list showed
+// it grey "Closed" (the tone of its newest task). The state of a conversation's session comes from its latest job; under
+// it only what needs the person (attempts, comparisons and oracles live in the job card).
+describe("a session's state comes from its latest job (D-709)", () => {
+  // statusOf's own object carries a `key` too (StatusKey): the job's state must not be mistaken for it
+  const newest = { key: "closed", tone: "gray" as const, label: "Closed" };
+  it("sealed and parked wait for the person; a running job works; a merged one is merged; no job keeps the task's state", () => {
+    expect(sessionState({ id: "j_1", status: "sealed" }, newest)).toEqual({ tone: "amber", say: "task.job.review" });
+    expect(sessionState({ id: "j_1", status: "parked" }, newest)).toEqual({ tone: "amber", say: "task.job.waiting" });
+    // D-542: a unit waits for the person while the rest of the job goes on
+    expect(sessionState({ id: "j_1", status: "running", waits: true }, newest)).toEqual({ tone: "amber", say: "task.job.waiting" });
+    for (const s of ["planning", "running", "converging", "approved"] as const) expect(sessionState({ id: "j_1", status: s }, newest)).toEqual({ tone: "blue", say: "task.job.working" });
+    expect(sessionState({ id: "j_1", status: "delivered" }, newest)).toEqual({ tone: "green", say: "task.job.merged" });
+    expect(sessionState({ id: "j_1", status: "failed" }, newest)).toEqual({ tone: "red", say: "task.job.failed" });
+    expect(sessionState(null, newest)).toEqual(newest);
+    expect("say" in sessionState(null, newest)).toBe(false);
+  });
+  it("only what waits for the person stays under the session, and only from the latest job", () => {
+    const r = (id: string, tone: "amber" | "gray" | "red", role: "unit" | "final" | "compare" | "oracle" | null = "unit") => ({ id, tone, internal_role: role });
+    const rows = [r("t_jabc_5", "amber"), r("t_jabc_4", "gray"), r("t_jold_2", "amber"), r("t_cmp_abc", "red", "compare"), r("t_or", "amber", "oracle"), r("t_plain", "amber", null)];
+    expect(sessionSubs(rows, { id: "j_abc", status: "parked" }).map((x) => x.id)).toEqual(["t_jabc_5", "t_or", "t_plain"]);
+    expect(sessionSubs(rows, null).map((x) => x.id)).toEqual(["t_jabc_5", "t_jold_2", "t_or", "t_plain"]);
   });
 });

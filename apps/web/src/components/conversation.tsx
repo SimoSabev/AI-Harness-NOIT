@@ -88,6 +88,9 @@ type AxesTurn = Extract<ChatTurn, { kind: "axes" }>;
 type SpecTurn = Extract<ChatTurn, { kind: "spec" }>;
 
 function ToolLine({ turn, t }: { turn: ToolTurn; t: T }) {
+  // D-710: the model's own malformed call goes back to the model (D-590), which fixes it; the person sees a quiet line,
+  // not the validator's words ("Too big: expected string to have <=40 characters")
+  if (!turn.ok && turn.target === "call") return <p className="text-xs text-faint">{t("chat.tool.selfFixed")}</p>;
   return (
     <p className="text-xs text-mute">
       {t(`chat.tool.${turn.tool}` as Key, { target: turn.target })}
@@ -169,7 +172,7 @@ function SpecCard({ turn, t, a }: { turn: SpecTurn; t: T; a: SpecActions }) {
   );
 }
 
-export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: (note?: string) => void; onApprove: (hash: string) => void; jobParked?: boolean }
+export interface OracleActions { canApprove: boolean; busy: boolean; onBuild: (note?: string) => void; onApprove: (hash: string) => void; jobParked?: boolean; /** D-710: the job is sealed, approved or merged */ jobDecided?: boolean }
 
 function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: OracleActions }) {
   const s = oracle?.status ?? null;
@@ -178,6 +181,9 @@ function OracleCard({ oracle, t, a }: { oracle: OracleView | null; t: T; a: Orac
   // D-593: building again, the person may say what the last oracle got wrong (it reaches the oracle agent as their words)
   const [note, setNote] = useState("");
   const again = canBuild && s !== null;
+  // D-710 (critic 27.11): once the job is decided, the oracle's "red, as it should be" chips above the verdict read as
+  // failures; one quiet line instead — the verdict below says how the criteria ended
+  if (a.jobDecided && s === "approved" && oracle) return <p className="px-1 text-xs text-mute">{t("chat.oracle.decided", { n: oracle.red_on_base.length })}</p>;
   return (
     <section aria-label={t("chat.oracle")} className="rounded-[12px] border border-line bg-panel px-5 py-4 text-sm shadow-[0_1px_2px_rgb(0_0_0/0.15)]">
       <p className="text-xs font-medium text-mute">{t("chat.oracle")}</p>
@@ -317,7 +323,7 @@ function Runner({ agent, model, t }: { agent: string; model: string | null; t: T
   );
 }
 
-export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: (note?: string) => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null }) {
+export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onApprove = () => undefined, onBuildOracle = () => undefined, onApproveOracle = () => undefined, onApproveJob = () => undefined, onBring, brought = null, localApproval = false }: { chat: Chat; onRetry: () => void; onNew: () => void; busy: boolean; canApprove?: boolean; onApprove?: (hash: string) => void; onBuildOracle?: (note?: string) => void; onApproveOracle?: (hash: string) => void; onApproveJob?: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null; /** D-710 */ localApproval?: boolean }) {
   const t = useT();
   const end = useRef<HTMLDivElement | null>(null);
   // a block body: newer Chromium returns a Promise from scrollIntoView, and React would call it as the cleanup
@@ -327,7 +333,7 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
   const stop = stopText(t, chat.row.status, chat.row.error);
   const retryable = chat.row.status === "overloaded" || chat.row.status === "failed" || chat.row.status === "limit";
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
+    <div className="relative min-h-0 flex-1 space-y-4 overflow-y-auto py-5 pr-1" aria-live="polite" aria-relevant="additions">
       {/* D-599: the path of the task (the strap), above the conversation; not for the interview of a whole project */}
       {chat.row.purpose === "task" && (
         <div className="sticky -top-5 z-10 -mt-5 border-b border-line bg-canvas pb-3 pt-5">
@@ -336,8 +342,8 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
         </div>
       )}
       {chat.turns.map((x) => <Turn key={x.seq} turn={x} t={t} a={{ row: chat.row, canApprove, busy, onApprove }} />)}
-      {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle, jobParked: chat.job?.status === "parked" }} />}
-      {chat.job && <JobCard job={chat.job} t={t} a={{ canApprove, busy, onApprove: onApproveJob, brought, ...(onBring ? { onBring } : {}) }} />}
+      {chat.row.approved_spec_hash !== null && chat.oracleRequired && <OracleCard oracle={chat.oracle ?? null} t={t} a={{ canApprove, busy, onBuild: onBuildOracle, onApprove: onApproveOracle, jobParked: chat.job?.status === "parked", jobDecided: chat.job !== undefined && chat.job !== null && ["sealed", "approved", "delivered"].includes(chat.job.status) }} />}
+      {chat.job && <JobCard job={chat.job} t={t} conversation={chat.row.id} a={{ canApprove, busy, onApprove: onApproveJob, brought, localApproval, ...(onBring ? { onBring } : {}) }} />}
       {isAnswering(chat.row.status) && (
         <p className="flex items-center gap-2 text-sm text-mute">
           <span aria-hidden="true" className="inline-flex gap-1"><span className="size-1.5 animate-bounce rounded-full bg-mute" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:150ms]" /><span className="size-1.5 animate-bounce rounded-full bg-mute [animation-delay:300ms]" /></span>
@@ -351,7 +357,8 @@ export function ChatThread({ chat, onRetry, onNew, busy, canApprove = false, onA
           {retryable ? <button type="button" className={btn.secondary} onClick={onRetry} disabled={busy}>{t("chat.retry")}</button> : <button type="button" className={btn.secondary} onClick={onNew}>{t("chat.new")}</button>}
         </div>
       )}
-      <div ref={end} />
+      {/* D-712: on a phone the page scrolls and the box sticks to the bottom; the end stops above the box, not under it */}
+      <div ref={end} className="scroll-mb-[calc(var(--composer-h,7.5rem)+1rem)] lg:scroll-mb-0" />
     </div>
   );
 }

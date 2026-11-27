@@ -16,6 +16,8 @@ describe("NovaRibbon (D-599)", () => {
     expect(html).toContain('aria-label="voice.talk"');
     expect(html).toContain('data-phase="idle"');
     expect(html).toContain("nova.kind.idle");
+    // D-712: on a phone at rest only the star shows (the words would cover the card under it)
+    expect(html).toContain("max-sm:hidden");
   });
   it("acting, it says the verb and the target, never only thinking", () => {
     const s = novaReducer(novaReducer(NOVA_START, { type: "connecting" }), { type: "tool", key: "nova.act.press", params: { target: "Прати" }, at: 1 });
@@ -24,5 +26,6 @@ describe("NovaRibbon (D-599)", () => {
     expect(html).toContain('aria-label="voice.stop"');
     expect(html).toContain("nova.timeline");
     expect(html).toContain('data-phase="acting"');
+    expect(html).not.toContain("max-sm:hidden");
   });
 });

@@ -39,3 +39,13 @@ describe("homeQueue (D-619)", () => {
     expect(homeQueue([])).toEqual({ counts: { waiting: 0, running: 0, done: 0 }, waiting: [], running: [] });
   });
 });
+
+// D-709: a sealed job is the person's one real decision: it is the next step, before any interview
+describe("a job ready for review comes first (D-709)", () => {
+  it("is the first action and the line, even when a project has no brief yet", () => {
+    const b = homeBrief({ waiting: 3, running: 0, projects: [{ id: "r1", name: "local/test", brief: false }], firstWaiting: "/?chat=c_x", firstReview: "/?chat=c_seal" });
+    expect(b.say).toEqual({ key: "home.say.review", params: { n: 3 } });
+    expect(b.actions[0]).toEqual({ kind: "link", href: "/?chat=c_seal", label: { key: "home.act.review" } });
+    expect(b.actions.some((a) => a.kind === "interview")).toBe(true);
+  });
+});

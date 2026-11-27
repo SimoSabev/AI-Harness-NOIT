@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxRepo, chatItems, NEW_PROJECT, projectChoices, withAdded, sendsOnEnter, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
+import { boxRepo, canStartWork, chatItems, NEW_PROJECT, projectChoices, withAdded, sendsOnEnter, lastReply, liveStatusOf, showChat, toolIcon, usageOf, whyOf } from "./chat";
 
 const L = (seq: number, kind: string, text: string, at = `2026-10-23T10:00:${String(seq).padStart(2, "0")}Z`) => ({ seq, kind, text, at });
 
@@ -180,5 +180,22 @@ describe("answeringLine (D-599)", () => {
   it("without a message of the person it says Harnova reads the project", async () => {
     const { answeringLine } = await import("./chat");
     expect(answeringLine([])).toEqual({ key: "chat.answeringStart" });
+  });
+});
+
+// D-710 (critics, 27.11.2026): "Start work" sat enabled on a sealed job and next to a spec waiting for approval (a
+// misclick then ran the chat text as an unverified task). It shows only when the work can start from here.
+describe("when Start work is offered (D-710)", () => {
+  const row = { phase: "conversation", spec_ready: false, spec_hash: null as string | null, approved_spec_hash: null as string | null };
+  it("in a plain conversation and on an approved spec; again after a parked or stopped job", () => {
+    expect(canStartWork(row, null)).toBe(true);
+    expect(canStartWork({ ...row, spec_ready: true, spec_hash: "h", approved_spec_hash: "h" }, null)).toBe(true);
+    expect(canStartWork({ ...row, phase: "work" }, { status: "parked" })).toBe(true);
+    expect(canStartWork({ ...row, phase: "work" }, { status: "failed" })).toBe(true);
+  });
+  it("never while a proposed spec waits, while a job works or waits for review, or after the task started", () => {
+    expect(canStartWork({ ...row, spec_ready: true, spec_hash: "h2", approved_spec_hash: "h" }, null)).toBe(false);
+    for (const s of ["planning", "running", "converging", "sealed", "approved", "delivered"]) expect(canStartWork({ ...row, phase: "work" }, { status: s })).toBe(false);
+    expect(canStartWork({ ...row, phase: "work" }, null)).toBe(false);
   });
 });
