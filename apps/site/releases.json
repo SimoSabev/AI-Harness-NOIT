@@ -1,4 +1,35 @@
 {
-  "version": null,
-  "assets": []
+  "version": "0.1.0",
+  "assets": [
+    {
+      "kind": "mac-arm64",
+      "file": "Harnova-0.1.0-mac-arm64.dmg",
+      "sha256": "3291a39f0f7e0804e47b8cfe362ffd7ea6574766a4604f9c6aeb8a013c675650",
+      "size": 286249440
+    },
+    {
+      "kind": "mac-x64",
+      "file": "Harnova-0.1.0-mac-x64.dmg",
+      "sha256": "9e7a41a613505913d1cf54670fe758631f25e422df23f52163b95ddf2c5175f1",
+      "size": 293052812
+    },
+    {
+      "kind": "win-x64",
+      "file": "Harnova-0.1.0-win-x64.exe",
+      "sha256": "dfc3fbf998c227b7afae393179affc07ad503c5913a2154a0e051da8ec134490",
+      "size": 258198694
+    },
+    {
+      "kind": "linux-appimage",
+      "file": "Harnova-0.1.0-linux-x86_64.AppImage",
+      "sha256": "d99abe8bccc722fb1592d96da51fdd95d8a02b4df6dab86990aa44369adb0656",
+      "size": 236035790
+    },
+    {
+      "kind": "linux-deb",
+      "file": "Harnova-0.1.0-linux-amd64.deb",
+      "sha256": "73101322e0d3f17b07649eb14cb68b74bb41973df979ebfedafe183ceb6594a4",
+      "size": 275931832
+    }
+  ]
 }
