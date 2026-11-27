@@ -1,4 +1,4 @@
-import type { T } from "../i18n/t";
+import type { Key, T } from "../i18n/t";
 import type { Stop, StopState } from "../lib/task-path";
 
 // D-599: the strap of the brand kit — the five stops of a task on one track, each a ring: done is cyan, running is
@@ -21,10 +21,13 @@ function fact(s: Stop, t: T): string | null {
   return null;
 }
 
+/** D-710: a seal waiting for the person is "ready for your review", the same words as the list */
+const stateKey = (s: Stop): Key => (s.id === "seal" && s.state === "you" ? "path.state.review" : `path.state.${s.state}`);
+
 export function TaskPath({ stops, t, compact = false }: { stops: Stop[]; t: T; compact?: boolean }) {
   if (compact) {
     return (
-      <span role="img" aria-label={stops.map((s) => `${t(s.label)}: ${t(`path.state.${s.state}`)}`).join(", ")} className="inline-flex items-center">
+      <span role="img" aria-label={stops.map((s) => `${t(s.label)}: ${t(stateKey(s))}`).join(", ")} className="inline-flex items-center">
         {stops.map((s, i) => (
           <span key={s.id} className="inline-flex items-center">
             {i > 0 && <span className={`h-0.5 w-2.5 ${stops[i - 1]?.state === "done" ? "bg-ok" : "bg-line-strong"}`} />}
@@ -44,7 +47,7 @@ export function TaskPath({ stops, t, compact = false }: { stops: Stop[]; t: T; c
           </span>
           <span className="text-[13px] font-medium leading-tight">{t(s.label)}</span>
           <span className="text-xs font-medium text-faint">
-            <span className="sr-only">{t(`path.state.${s.state}`)} · </span>
+            <span className="sr-only">{t(stateKey(s))} · </span>
             {fact(s, t) ?? (s.state === "you" ? t("path.state.you") : "")}
           </span>
         </li>

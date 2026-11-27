@@ -18,7 +18,7 @@ import { btn, input } from "./ui";
 // While the job works the units stay in view: they are what is happening.
 
 // D-540: "Bring into my folder" — the person's click moves their own folder forward to the merged change (or says why not)
-export interface JobActions { canApprove: boolean; busy: boolean; onApprove: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null }
+export interface JobActions { canApprove: boolean; busy: boolean; onApprove: (sealHash: string, code?: string) => void; onBring?: () => void; brought?: BringReply | null; /** D-710: this computer approves by presence (D-368), no code */ localApproval?: boolean }
 
 const UNIT_TONE: Record<string, string> = { passed: "text-ok", failed: "text-warn", blocked: "text-warn", parked: "text-warn", running: "text-ink", pending: "text-mute" };
 const UNIT_STATUSES = ["pending", "running", "passed", "failed", "blocked", "parked"] as const;
@@ -168,22 +168,30 @@ function Brought({ r, t }: { r: BringReply; t: T }) {
   );
 }
 
-/** D-598: Approve and merge; an UNKNOWN seal also takes the person's code — D-710: asked after the click, with why */
+/** D-710: the approve step, pure — an UNKNOWN seal asks once more after the click: on this computer "Merge anyway?"
+ * (presence, D-368), elsewhere the second factor's code (the button waits for six digits) */
+export function approveStep(o: { unknown: boolean; asking: boolean; local: boolean; code: string }): { hint: Key; label: Key; input: boolean; ready: boolean; send: "ask" | "approve"; code: string | undefined } {
+  if (!o.asking) return { hint: "chat.job.approveHint", label: "chat.job.approve", input: false, ready: true, send: o.unknown ? "ask" : "approve", code: undefined };
+  if (o.local) return { hint: "job.code.local", label: "job.code.merge", input: false, ready: true, send: "approve", code: undefined };
+  return { hint: "job.code.why", label: "job.code.confirm", input: true, ready: o.code.length === 6, send: "approve", code: o.code.length === 6 ? o.code : undefined };
+}
+
+/** D-598: Approve and merge; the UNKNOWN step is approveStep's */
 function ApproveSeal({ hash, unknown, t, a }: { hash: string; unknown: boolean; t: T; a: JobActions }) {
   const [code, setCode] = useState("");
   const [asking, setAsking] = useState(false);
+  const st = approveStep({ unknown, asking, local: a.localApproval === true, code });
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-3">
-      <p className="min-w-0 flex-1 text-xs text-mute">{asking ? t("job.code.why") : t("chat.job.approveHint")}</p>
-      {asking && (
+    <div className="mt-4 flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <p className="min-w-0 flex-1 text-xs text-mute">{t(st.hint)}</p>
+      {st.input && (
         <label className="text-xs text-mute">
           {t("chat.job.code")}
           <input className={`${input} ml-2 w-28 font-mono`} inputMode="numeric" autoComplete="one-time-code" maxLength={6} autoFocus value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
         </label>
       )}
-      <button type="button" className={btn.primary} disabled={a.busy}
-        onClick={() => (unknown && !asking ? setAsking(true) : a.onApprove(hash, unknown && code.length === 6 ? code : undefined))}>
-        {asking ? t("job.code.confirm") : t("chat.job.approve")}
+      <button type="button" className={btn.primary} disabled={a.busy || !st.ready} onClick={() => (st.send === "ask" ? setAsking(true) : a.onApprove(hash, st.code))}>
+        {t(st.label)}
       </button>
     </div>
   );

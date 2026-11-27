@@ -87,7 +87,7 @@ describe("the job in the thread (D-535)", () => {
     expect(html).toContain("job.criteria(2|3)");
     expect(html).toContain("job.decide.title<");
     expect(html).toContain("AC-3 is proved by you, not by tests");
-    expect(html).toContain("job.notRun(The lockfile check)");
+    expect(html).toContain("job.notRun(whether the lockfile matches the code)");
     expect(html).toContain("job.change.loading");
     expect(html).toContain("chat.job.approve<");
     // the units, gates and result are under Details once the job is decided; never a detector code in the main view
@@ -104,13 +104,31 @@ describe("the job in the thread (D-535)", () => {
     const html = await render({ job: unknown });
     expect(html).toContain("job.head.unknown");
     expect(html).toContain("src/a.ts:3 (0 → 1)");
-    expect(html).toContain("on purpose and the tests still passed");
+    expect(html).toContain("broke nothing the tests check");
+    expect(html).not.toContain("Mandat");
     expect(html).not.toContain("a person decides");
     expect(html).toContain("chat.job.approve<");
     expect(html).not.toContain("chat.job.code");
     const verified = await render({ job: job({ status: "sealed", current: null, seal: { hash: `sha256:${"a".repeat(64)}`, verdict: "VERIFIED", result_ref: "b".repeat(40), checked: ["AC-1"], unchecked: [] } }) });
     expect(verified).not.toContain("job.decide.title");
     expect(verified).not.toContain("chat.job.code");
+  });
+  it("D-710: the approve step — VERIFIED approves at once; UNKNOWN asks once more: presence here, six digits elsewhere", async () => {
+    const { approveStep } = await import("./job-card");
+    expect(approveStep({ unknown: false, asking: false, local: false, code: "" })).toMatchObject({ send: "approve", input: false, code: undefined });
+    expect(approveStep({ unknown: true, asking: false, local: true, code: "" })).toMatchObject({ send: "ask", label: "chat.job.approve" });
+    expect(approveStep({ unknown: true, asking: true, local: true, code: "" })).toEqual({ hint: "job.code.local", label: "job.code.merge", input: false, ready: true, send: "approve", code: undefined });
+    expect(approveStep({ unknown: true, asking: true, local: false, code: "123" })).toMatchObject({ input: true, ready: false, code: undefined });
+    expect(approveStep({ unknown: true, asking: true, local: false, code: "123456" })).toMatchObject({ ready: true, code: "123456" });
+  });
+  it("D-710: once the job is decided, the oracle is one quiet line, not red chips above the verdict", async () => {
+    const oracle = { id: "o_x", status: "approved" as const, spec_hash: "s", oracle_hash: "h", problems: [], red_on_base: [{ criterion_id: "AC-1", red: true }, { criterion_id: "AC-2", red: true }] };
+    const r = { ...row, approved_spec_hash: "s" };
+    const sealed = job({ status: "sealed", current: null, seal: { hash: `sha256:${"a".repeat(64)}`, verdict: "VERIFIED", result_ref: "b".repeat(40), checked: ["AC-1", "AC-2"], unchecked: [] } });
+    const { ChatThread } = await import("./conversation");
+    const html = (j: JobView) => renderToStaticMarkup(createElement(ChatThread, { chat: { row: r, turns: [], oracleRequired: true, oracle, job: j }, onRetry: () => undefined, onNew: () => undefined, busy: false, canApprove: true }));
+    expect(html(sealed)).toContain("chat.oracle.decided(2)");
+    expect(html(job({}))).not.toContain("chat.oracle.decided");
   });
 });
 

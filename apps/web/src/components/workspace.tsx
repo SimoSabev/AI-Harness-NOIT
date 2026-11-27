@@ -131,7 +131,7 @@ const CHAT_ERRORS = { answering: "chat.err.answering", work_started: "chat.err.w
 const ENDED = ["budget", "expired"];
 const PARKED = "harnova.parkedTask";
 
-export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", initialChat = null, home = null }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; initialChat?: ConversationFeed | null; home?: HomeView | null }) {
+export function NewTask({ agents, preferredModel = null, projects: given, canAct, initialText = "", initialChat = null, home = null, localApproval = false }: { agents: WsAgent[]; preferredModel?: string | null; projects: { id: string; full_name: string }[]; canAct: boolean; initialText?: string; initialChat?: ConversationFeed | null; home?: HomeView | null; /** D-710: this computer approves by presence */ localApproval?: boolean }) {
   const t = useT();
   const router = useRouter();
   const [text, setText] = useState(initialText);
@@ -335,7 +335,7 @@ export function NewTask({ agents, preferredModel = null, projects: given, canAct
         <ChatThread chat={chat} onRetry={() => void retry()} onNew={fresh} busy={busy} canApprove={canAct} onApprove={(h) => void approve(h)}
           onBuildOracle={(note) => void oracleCall(`/api/conversations/${chat.row.id}/oracle`, note ? { note } : {}, 201)} onApproveOracle={(h) => void oracleCall(`/api/conversations/${chat.row.id}/oracle/approve`, { oracle_hash: h }, 200)}
           onApproveJob={(h, code) => void oracleCall(`/api/conversations/${chat.row.id}/job/approve`, { seal_hash: h, ...(code ? { code } : {}) }, 200)}
-          onBring={() => void bring()} brought={brought} />
+          onBring={() => void bring()} brought={brought} localApproval={localApproval} />
       ) : (
         <div className="relative min-h-0 flex-1 overflow-y-auto">
           {home ? <HomeDashboard home={home} onMeet={(r) => void meet(r)} busy={busy} /> : (
