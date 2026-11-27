@@ -411,7 +411,7 @@ export async function runTask(i: RunTaskInput): Promise<RunTaskOutput> {
           const prof = granted.length > 0 ? { ...i.profile, layers: { ...i.profile.layers, c: grantOnce(i.profile.layers.c, granted) } } : i.profile;
           // E8e (D-354): skills are materialized only when their text has the hash the profile was approved with
           const sk = skillTexts(prof.layers.e.skills, { ...(i.catalogSkills ?? {}), ...Object.fromEntries(scanSkills(baseDir).filter((k) => k.blocked === null).map((k) => [k.name, k.text])) });
-          const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])], skills: sk.texts });
+          const m = compileProfile({ ...prof, profile_hash: granted.length > 0 ? profileHash(prof.layers) : prof.profile_hash }, target, { runId, subjects: [`agent:${base}`, ...(i.subjects ?? [])], skills: sk.texts, role: i.oracle ? "oracle" : "writer" });
           harness = { target, argv: m.argv, env: m.env, hash: await seedHarness(sctx, vol, m.files), enforced: m.enforced_by_harness, unsupported: [...m.unsupported, ...sk.dropped], files: m.files, granted };
           if (target === "codex") {
             const cp = await runSandbox(sctx, { role: "seed", volume: vol, network: "none", env: { phase: "none" }, cmd: ["sh", "-c", "mkdir -p /m/codex-home && cp -R /m/in/harness/codex/. /m/codex-home/ && chmod -R u+w /m/codex-home"], timeoutMs: 60_000 });

@@ -103,7 +103,7 @@ export function scopedOracleFiles<F extends { path: string; data: Buffer }>(file
 
 const byNumber = (a: string, b: string) => Number(a.slice(3)) - Number(b.slice(3));
 
-/** the criteria whose hidden tests failed (from D5.hidden's failed test ids); ids only, never a test name */
+/** the criteria whose hidden tests failed (from D5.hidden's failed test ids), ids only; the titles for a retry are failingTitles (D-711) */
 export function failingCriteria(evidence: readonly JobEvidence[]): string[] {
   const d5 = evidence.find((e) => e.detector === "D5.hidden" && e.status === "fail");
   const failed = (d5?.data as { failed?: unknown } | undefined)?.failed;

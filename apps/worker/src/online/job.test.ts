@@ -400,6 +400,19 @@ describe("units, final check, seal and delivery (D-535)", () => {
     expect(j.question).not.toContain(SECRET_NAME);
   });
 
+  it("D-713: a retry note with six long titles fits (Mandat's own note may be 1200 chars) and the retry is whole", async () => {
+    const long = Array.from({ length: 6 }, (_, i) => `packages/shop/test/__hidden__/x.spec.ts > AC-1: case ${"abcdef"[i]} ${"y".repeat(200)}`);
+    const s = await setup({ plans: [GOOD_PLAN], outcome: () => ({ result: "FAILED", evidence: [ev("D5.hidden", "fail", { failed: long })] }) });
+    await jobTick(s.jd);
+    await jobTick(s.jd);
+    await runDaemonOnce(s.deps);
+    expect((await selfFinishTick(s.db, { now: new Date() })).retried).toHaveLength(1);
+    const note = (await s.db.query<{ text: string }>("select text from public.task_activities where kind = 'self'")).rows[0]?.text ?? "";
+    expect(note.length).toBeGreaterThan(500);
+    expect(note.length).toBeLessThanOrEqual(1200);
+    expect(note.match(/^- AC-1: case /gm)).toHaveLength(6);
+    expect((await s.ledger("task_retry")).length).toBe(1);
+  });
   it("a rescue try that passes lands; a second one that passes too does not land again (D-542)", async () => {
     const s = await setup({ plans: [GOOD_PLAN], outcome: (_c, n) => (n <= 3 ? { result: "FAILED", evidence: d5fail("AC-1") } : { result: "VERIFIED" }) });
     await jobTick(s.jd);

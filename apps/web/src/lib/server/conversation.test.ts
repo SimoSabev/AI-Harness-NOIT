@@ -460,7 +460,7 @@ describe("the oracle in the web (D-534)", () => {
       await sql.query("update public.jobs set status = 'sealed', seal = $2::jsonb, seal_hash = $3, final_task_id = $4 where id = $1", [job, JSON.stringify(seal), hashJcs(seal), fin]);
     });
     const read = async () => {
-      const r = await getJobDiff(get(`/api/conversations/${id}/job/diff`), deps, id);
+      const r = await getJobDiff(get(`/api/conversations/${id}/job/diff?job=${job}`), deps, id);
       return { status: r.status, body: (await r.json()) as unknown };
     };
     expect(await read()).toEqual({ status: 200, body: { diff, omitted_bytes: null } });
@@ -468,9 +468,15 @@ describe("the oracle in the web (D-534)", () => {
     expect((await read()).status).toBe(404);
     who = U.approver;
     expect((await getJobDiff(get("/api/conversations/x/job/diff"), deps, "../x")).status).toBe(404);
+    expect((await getJobDiff(get(`/api/conversations/${id}/job/diff`), deps, id)).status).toBe(400);
+    // another job of the conversation is not this card's
+    expect((await getJobDiff(get(`/api/conversations/${id}/job/diff?job=j_other`), deps, id)).status).toBe(404);
     // a diff that is not the one the final check judged is never shown as the change
     await asService(db, (sql) => sql.query("update public.job_diffs set diff = $2 where task_id = $1", [fin, `${diff}+more\n`]));
     expect(await read()).toEqual({ status: 409, body: { error: "diff_changed" } });
+    // kept before the verdict's hash was kept with it: nothing ties it to the check, so it is not shown
+    await asService(db, (sql) => sql.query("update public.job_diffs set diff_hash = null where task_id = $1", [fin]));
+    expect((await read()).status).toBe(404);
     // main moved: the job is built and checked again; the old final check's change is not this seal's
     await asService(db, (sql) => sql.query("update public.jobs set status = 'running', seal = null, seal_hash = null, final_task_id = null where id = $1", [job]));
     expect((await read()).status).toBe(404);

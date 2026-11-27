@@ -436,7 +436,7 @@ export async function processTask(d: DaemonDeps, taskId: string): Promise<{ stat
         home: d.home, contractPath: cfile, agent: (route.ref ? route.run : t.agent) as RunTaskInput["agent"], keep: false, json: true, mirror: path.basename(mirror, ".git"), mirrorPath: mirror,
         ...(d.docker ? { docker: d.docker } : {}), ...(d.runInternals ? { internals: d.runInternals } : {}),
         hooks: { onStream: (ev) => rec.push(ev), onUsage: (runId, usd) => rec.usd(runId, usd), ...(steerable ? { steer: steerHook } : {}), stopRequested },
-        ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : []), ...(t.kind === "oracle" ? ["oracle"] : [])] } : {}),
+        ...(hp ? { profile: night ? nightProfile(hp, night.forbid_tools) : hp, subjects: [...(profile ? [`account:${profile}`] : []), ...(night ? ["night"] : [])] } : {}),
         ...(job?.ok && job.jobFiles ? { jobFiles: job.jobFiles } : {}), ...(hidden ? { hidden } : {}), ...(hidden && (job?.ok ? job.grade : t.oracle_hash) ? { oracleGrade: { threshold: ORACLE_MIN_KILL } } : {}), ...(t.kind === "oracle" ? { oracle: true } : {}),
         ...(hp?.layers.g.review === "advisory" ? { review: "advisory" as const } : {}),
         ...(grants.length > 0 ? { grantOnce: grants } : {}),

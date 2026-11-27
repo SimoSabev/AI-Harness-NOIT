@@ -16,7 +16,7 @@ export function compileCodex(p: HarnessProfile, ctx: CompileCtx): Materialized {
     'approval_policy = "never"',
     'sandbox_mode = "workspace-write"',
     "project_doc_max_bytes = 0",
-    `developer_instructions = ${multi(instructions(p, ctx.subjects))}`,
+    `developer_instructions = ${multi(instructions(p, ctx.role))}`,
     "",
     "[sandbox_workspace_write]",
     'writable_roots = ["/m/work"]',
@@ -36,7 +36,7 @@ export function compileCodex(p: HarnessProfile, ctx: CompileCtx): Materialized {
     { path: "codex/config.toml", bytes: toml.join("\n"), mode: "0444" },
     { path: "codex/hooks.json", bytes: JSON.stringify({ hooks }, null, 2) + "\n", mode: "0444" },
     { path: "policy.json", bytes: policyJson(p, ctx), mode: "0444" },
-    { path: "instructions.md", bytes: instructions(p, ctx.subjects), mode: "0444" },
+    { path: "instructions.md", bytes: instructions(p, ctx.role), mode: "0444" },
   ];
   for (const r of p.layers.f.roles) files.push({ path: `codex/agents/${r.role}.toml`, bytes: [`model = ${str(r.model)}`, `developer_instructions = ${str(r.description)}`, ""].join("\n"), mode: "0444" });
   const unsupported: Materialized["unsupported"] = [];

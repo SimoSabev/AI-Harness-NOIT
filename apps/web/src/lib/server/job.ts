@@ -161,21 +161,23 @@ export async function bringJob(db: Db, keys: KeysClient | undefined, o: { uid: s
 }
 
 /**
- * D-710: the whole change of the conversation's sealed (or approved, or merged) job — its current final check's own
+ * D-710: the whole change of the card's sealed (or approved, or merged) job — its current final check's own
  * export (job_diffs, D-708), read as the person (approver+ by RLS). Only the text whose sha256 is the final verdict's
  * diff_hash counts as the change; anything else is refused. Its own route, not the feed (that reloads every 400 ms).
  */
-export async function jobDiff(db: Db, uid: string, conversation: string): Promise<Result> {
+export async function jobDiff(db: Db, uid: string, conversation: string, job: string): Promise<Result> {
   return asUser(db, uid, async (sql) => {
     const r = await sql.query<{ diff: string; omitted_bytes: string | null; diff_hash: string | null }>(
       `select d.diff, d.omitted_bytes::text as omitted_bytes, d.diff_hash from public.jobs j join public.job_diffs d on d.task_id = j.final_task_id
-        where j.conversation_id = $1 and j.status in ('sealed', 'approved', 'delivered') order by j.created_at desc limit 1`,
-      [conversation],
+        where j.conversation_id = $1 and j.id = $2 and j.status in ('sealed', 'approved', 'delivered')`,
+      [conversation, job],
     );
     const row = r.rows[0];
     if (!row) return err(404, "no_diff");
     if (row.omitted_bytes !== null) return { status: 200, body: { diff: "", omitted_bytes: Number(row.omitted_bytes) } };
-    if (row.diff_hash === null || sha256Tag(Buffer.from(row.diff, "utf8")) !== row.diff_hash) return err(409, "diff_changed");
+    // a row without the verdict's hash was kept before D-710: nothing to tie it to, so it is not shown as the change
+    if (row.diff_hash === null) return err(404, "no_diff");
+    if (sha256Tag(Buffer.from(row.diff, "utf8")) !== row.diff_hash) return err(409, "diff_changed");
     return { status: 200, body: { diff: row.diff, omitted_bytes: null } };
   });
 }

@@ -7,6 +7,8 @@ export interface CompileCtx {
   subjects: string[];
   /** SKILL.md contents by name (approved, from the skills catalog); a skill without content is reported unsupported */
   skills?: Record<string, string>;
+  /** D-707/D-713: whose run this is — the oracle's writer gets no "make typecheck pass" (its tests must stay red) */
+  role?: "writer" | "oracle";
 }
 export const HARNESS_DIR = "/m/in/harness";
 export const HOOKS = "/opt/mandat/hooks";
@@ -24,7 +26,7 @@ export function policyJson(p: HarnessProfile, ctx: CompileCtx): string {
 }
 
 /** Layer B (+ the definition of done from G) as plain instructions for any agent. */
-export function instructions(p: HarnessProfile, subjects: readonly string[] = []): string {
+export function instructions(p: HarnessProfile, role: CompileCtx["role"] = "writer"): string {
   const b = p.layers.b;
   const out: string[] = ["# Project instructions (from the harness profile; the repo's own instruction files are not read)", ""];
   if (b.summary) out.push(b.summary, "");
@@ -36,7 +38,7 @@ export function instructions(p: HarnessProfile, subjects: readonly string[] = []
   // D-707: the final check also runs the profile's typecheck and lint (D8, packages/verify checks.ts), so a writer runs
   // them itself before it stops — only commands its shell may run as written (checks.ts), and never the oracle's writer,
   // whose tests import modules that do not exist yet (they must stay red)
-  const writer = !subjects.includes("oracle");
+  const writer = role !== "oracle";
   const typecheck = writer && b.commands.typecheck && plainCheck(b.commands.typecheck) && !b.commands.typecheck.includes("{") ? b.commands.typecheck : null;
   const lint = writer && b.commands.lint && plainCheck(b.commands.lint) ? b.commands.lint.replace(/\{[a-z_]+\}/g, "<the files you changed>") : null;
   if (cmds.length) {

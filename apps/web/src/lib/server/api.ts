@@ -832,7 +832,9 @@ export async function getJobDiff(req: Request, d: ApiDeps, id: string): Promise<
   if (!CID.test(id)) return json(404, { error: "unknown_conversation" });
   const c = await ctx(req, d);
   if (c instanceof Response) return c;
-  const r = await jobDiff(d.db, c.uid, id);
+  const job = new URL(req.url).searchParams.get("job") ?? "";
+  if (!/^j_[a-z0-9]{1,40}$/.test(job)) return json(400, { error: "bad_job" });
+  const r = await jobDiff(d.db, c.uid, id, job);
   return json(r.status, r.body);
 }
 /** D-540: "Bring into my folder" on a delivered job; only from a person's session, CSRF and origin checked */

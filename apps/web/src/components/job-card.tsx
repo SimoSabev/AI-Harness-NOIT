@@ -74,7 +74,7 @@ export function JobCard({ job, t, a, conversation }: { job: JobView; t: T; a: Jo
         </div>
       )}
       {decided && sum && sum.notRun.length > 0 && <p className="mt-2 text-xs text-faint">{t("job.notRun", { list: sum.notRun.join(", ") })}</p>}
-      {decided && a.canApprove && <JobChange conversation={conversation} t={t} />}
+      {decided && a.canApprove && job.seal && <JobChange conversation={conversation} job={job.id} seal={job.seal.hash} t={t} />}
       {s === "sealed" && job.seal && a.canApprove && <ApproveSeal hash={job.seal.hash} unknown={job.seal.verdict === "UNKNOWN"} t={t} a={a} />}
       {s === "delivered" && job.merged_sha && a.canApprove && a.onBring && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -122,12 +122,12 @@ function Units({ job, t }: { job: JobView; t: T }) {
 
 type Change = { state: "loading" } | { state: "ok"; diff: string } | { state: "omitted"; bytes: number } | { state: "changed" } | { state: "none" };
 
-/** D-710: the whole change, from its own route (approver+), when the card shows a decided job */
-function JobChange({ conversation, t }: { conversation: string; t: T }) {
+/** D-710: the whole change of this card's job, from its own route (approver+), when the card shows a decided job */
+function JobChange({ conversation, job, seal, t }: { conversation: string; job: string; seal: string; t: T }) {
   const [c, setC] = useState<Change>({ state: "loading" });
   useEffect(() => {
     let live = true;
-    fetch(`/api/conversations/${conversation}/job/diff`, { cache: "no-store" })
+    fetch(`/api/conversations/${conversation}/job/diff?job=${encodeURIComponent(job)}`, { cache: "no-store" })
       .then(async (r) => {
         const b = (await r.json().catch(() => ({}))) as { diff?: unknown; omitted_bytes?: unknown };
         if (!live) return;
@@ -140,7 +140,8 @@ function JobChange({ conversation, t }: { conversation: string; t: T }) {
     return () => {
       live = false;
     };
-  }, [conversation]);
+    // a new seal (main moved, the job was checked again) is a new change
+  }, [conversation, job, seal]);
   return (
     <div className="mt-4">
       <p className="mb-2 text-xs font-medium text-mute">{t("job.change.title")}</p>

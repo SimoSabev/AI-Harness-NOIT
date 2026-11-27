@@ -70,16 +70,6 @@ type OracleRowT = { status: string; problems: { kind: string; id: string }[]; re
 const oracleRow = async (db: Awaited<ReturnType<typeof pgliteDb>>) => (await db.query<OracleRowT>("select status, problems, red_on_base, manifest, oracle_hash, hidden_version from public.oracles where id = 'o_or1'")).rows[0]!;
 
 describe("the oracle task (D-534)", () => {
-  it("D-707: with an approved profile the oracle's writer is its own subject (no 'make typecheck pass' for red tests)", async () => {
-    const s = await setup(ok("failed", "passed"));
-    const { demoProfileLayers, sealProfile } = await import("@mandat/contract");
-    const p = sealProfile({ version: 1, repo_id: DEMO_REPO_ID, layers: demoProfileLayers(), sources: {}, approved_by: null, approved_at: null });
-    const id = (await s.db.query<{ id: string }>("insert into public.harness_profiles (org_id, repo_id, version, layers, sources, profile_hash, status, approved_at) values ($1, $2, 1, $3::jsonb, '{}', $4, 'approved', now()) returning id::text as id", [DEMO_ORG_ID, DEMO_REPO_ID, JSON.stringify(p.layers), p.profile_hash])).rows[0]?.id;
-    await s.db.query("update public.repos set profile_id = $2 where id = $1", [DEMO_REPO_ID, id]);
-    await runDaemonOnce(s.deps);
-    expect(s.runs[0]?.profile).toBeDefined();
-    expect(s.runs[0]?.subjects).toContain("oracle");
-  });
   it("runs like a task, may write only tests in __hidden__ folders, and gets no hidden tests itself", async () => {
     const s = await setup(ok("failed", "passed"));
     await runDaemonOnce(s.deps);

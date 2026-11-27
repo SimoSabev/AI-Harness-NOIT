@@ -78,7 +78,7 @@ describe("compile for Claude Code (E8а)", () => {
     expect(md).toContain("check your change against each acceptance criterion of the task");
   });
   it("D-707: never the oracle's writer (its tests must stay red), and never a command the shell would refuse", () => {
-    const oracle = compileProfile(profile(), "claude", { runId: "r_1", subjects: ["agent:claude", "oracle"] });
+    const oracle = compileProfile(profile(), "claude", { runId: "r_1", subjects: ["agent:claude"], role: "oracle" });
     const md = oracle.files.find((f) => f.path === "instructions.md")?.bytes ?? "";
     expect(md).not.toContain("npx tsc --noEmit` before you finish");
     expect(md).not.toContain("each acceptance criterion");

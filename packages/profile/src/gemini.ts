@@ -33,7 +33,7 @@ export function compileGemini(p: HarnessProfile, ctx: CompileCtx): Materialized 
   }
   const files: Files = [
     { path: "gemini/policies/mandat.toml", bytes: toml.join("\n"), mode: "0444" },
-    { path: "instructions.md", bytes: instructions(p, ctx.subjects), mode: "0444" },
+    { path: "instructions.md", bytes: instructions(p, ctx.role), mode: "0444" },
     { path: "policy.json", bytes: policyJson(p, ctx), mode: "0444" },
   ];
   const unsupported: Materialized["unsupported"] = [
